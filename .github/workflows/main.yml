@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -40,9 +41,9 @@ jobs:
       # Step 5: Format code check (black)
       - name: Check code formatting (black)
         run: |
-          black --check .
+          make format
 
       # Step 6: Run tests
       - name: Run tests
         run: |
-          pytest
+          make test

@@ -18,5 +18,5 @@ class AIAgent(BaseAgent):
             sender_id=self.agent_id,
             receiver_id=message.sender_id,
             content=response_content,
-            message_type=MessageType.RESPONSE
+            message_type=MessageType.RESPONSE,
         )

@@ -14,13 +14,17 @@ class BaseAgent(ABC):
         self.message_queue = asyncio.Queue()
         self.message_history: List[Message] = []
 
-    async def send_message(self, receiver: 'BaseAgent', content: str,
-                          message_type: MessageType = MessageType.TEXT) -> Message:
+    async def send_message(
+        self,
+        receiver: "BaseAgent",
+        content: str,
+        message_type: MessageType = MessageType.TEXT,
+    ) -> Message:
         message = Message.create(
             sender_id=self.agent_id,
             receiver_id=receiver.agent_id,
             content=content,
-            message_type=message_type
+            message_type=message_type,
         )
         await receiver.receive_message(message)
         self.message_history.append(message)

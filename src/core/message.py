@@ -17,8 +17,13 @@ class Message:
     metadata: Optional[Dict] = None
 
     @classmethod
-    def create(cls, sender_id: str, receiver_id: str, content: str,
-               message_type: MessageType = MessageType.TEXT) -> 'Message':
+    def create(
+        cls,
+        sender_id: str,
+        receiver_id: str,
+        content: str,
+        message_type: MessageType = MessageType.TEXT,
+    ) -> "Message":
         return cls(
             id=str(uuid.uuid4()),
             sender_id=sender_id,
@@ -26,5 +31,5 @@ class Message:
             content=content,
             message_type=message_type,
             timestamp=datetime.now(),
-            metadata={}
+            metadata={},
         )

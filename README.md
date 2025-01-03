@@ -44,8 +44,8 @@ This will automatically set up all the necessary packages and dependencies for t
 
 You're now ready to start working with the project!
 
-```
 # Project structure
+```
 ai_agent_system/
 ├── README.md
 ├── requirements.txt

@@ -44,7 +44,7 @@ This will automatically set up all the necessary packages and dependencies for t
 
 You're now ready to start working with the project!
 
-
+```
 # Project structure
 ai_agent_system/
 ├── README.md
@@ -78,6 +78,7 @@ ai_agent_system/
     └── test_communication/
         ├── __init__.py
         └── test_hub.py
+```
 
 1. **Core Components**:
    - `core/`: Contains base classes and fundamental types

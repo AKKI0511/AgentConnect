@@ -4,6 +4,7 @@ from src.core.agent import BaseAgent
 from src.core.types import AgentType, MessageType
 from src.core.message import Message
 
+
 class AIAgent(BaseAgent):
     def __init__(self, agent_id: str, name: str, capabilities: List[str] = None):
         super().__init__(agent_id, AgentType.AI, name)

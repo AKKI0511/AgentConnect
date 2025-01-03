@@ -1,8 +1,9 @@
-from typing import List, Optional
+from typing import Optional
 
 from src.core.agent import BaseAgent
-from src.core.types import AgentType, MessageType
+from src.core.types import AgentType
 from src.core.message import Message
+
 
 class HumanAgent(BaseAgent):
     def __init__(self, agent_id: str, name: str):

@@ -35,7 +35,7 @@ jobs:
       # Step 4: Lint code
       - name: Run linter (flake8)
         run: |
-          flake8 .
+          make lint
 
       # Step 5: Format code check (black)
       - name: Check code formatting (black)

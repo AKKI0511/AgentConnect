@@ -5,6 +5,7 @@ from typing import List, Optional
 from src.core.message import Message
 from src.core.types import AgentType, MessageType
 
+
 class BaseAgent(ABC):
     def __init__(self, agent_id: str, agent_type: AgentType, name: str):
         self.agent_id = agent_id
@@ -13,7 +14,7 @@ class BaseAgent(ABC):
         self.message_queue = asyncio.Queue()
         self.message_history: List[Message] = []
 
-    async def send_message(self, receiver: 'BaseAgent', content: str, 
+    async def send_message(self, receiver: 'BaseAgent', content: str,
                           message_type: MessageType = MessageType.TEXT) -> Message:
         message = Message.create(
             sender_id=self.agent_id,

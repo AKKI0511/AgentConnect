@@ -5,6 +5,7 @@ from typing import Dict, Optional
 
 from src.core.types import MessageType
 
+
 @dataclass
 class Message:
     id: str
@@ -16,7 +17,7 @@ class Message:
     metadata: Optional[Dict] = None
 
     @classmethod
-    def create(cls, sender_id: str, receiver_id: str, content: str, 
+    def create(cls, sender_id: str, receiver_id: str, content: str,
                message_type: MessageType = MessageType.TEXT) -> 'Message':
         return cls(
             id=str(uuid.uuid4()),

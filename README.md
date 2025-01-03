@@ -2,9 +2,6 @@
 # AgentConnect
 A scalable skeleton for human-agent and agent-agent interactions with future extensibility for payments, data exchange, and decentralized identities.
 
-Here’s a section for your `README.md` detailing the steps to clone and install dependencies:
-
-
 ## Setup and Installation
 
 Follow the steps below to clone the repository and set up the environment:

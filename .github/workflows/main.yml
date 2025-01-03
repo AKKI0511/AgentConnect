@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.10, 3.11, 3.12] # Specify Python versions
+
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          make install
+
+      # Step 4: Lint code
+      - name: Run linter (flake8)
+        run: |
+          flake8 .
+
+      # Step 5: Format code check (black)
+      - name: Check code formatting (black)
+        run: |
+          black --check .
+
+      # Step 6: Run tests
+      - name: Run tests
+        run: |
+          pytest

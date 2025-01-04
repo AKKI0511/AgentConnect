@@ -13,6 +13,8 @@ class BaseAgent(ABC):
         self.name = name
         self.message_queue = asyncio.Queue()
         self.message_history: List[Message] = []
+        self.is_running = True
+        self.hub = None  # Will be set when registering with hub
 
     async def send_message(
         self,
@@ -37,3 +39,21 @@ class BaseAgent(ABC):
     @abstractmethod
     async def process_message(self, message: Message) -> Optional[Message]:
         pass
+
+    async def run(self):
+        """Process messages from the queue continuously"""
+        while self.is_running:
+            try:
+                message = await self.message_queue.get()
+                response = await self.process_message(message)
+                if response:
+                    # Put the response in the message history
+                    self.message_history.append(response)
+                    # Get receiver from the hub we're registered with
+                    if self.hub:
+                        receiver = self.hub.get_agent(response.receiver_id)
+                        if receiver:
+                            await receiver.message_queue.put(response)
+                self.message_queue.task_done()
+            except Exception as e:
+                print(f"Error processing message: {e}")

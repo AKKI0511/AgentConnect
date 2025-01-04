@@ -10,6 +10,7 @@ class CommunicationHub:
 
     def register_agent(self, agent: BaseAgent):
         self.agents[agent.agent_id] = agent
+        agent.hub = self  # Set the hub reference in the agent
 
     def unregister_agent(self, agent_id: str):
         self.agents.pop(agent_id, None)

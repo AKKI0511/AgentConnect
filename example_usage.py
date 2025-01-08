@@ -57,12 +57,6 @@ async def main():
         # Clean up
         ai_assistant.is_running = False  # Stop the AI agent's loop
         await ai_task  # Wait for AI agent to finish
-        print("AI chat history:\n", str([f'{m.sender_id}: {m.content}\n' for m in ai_assistant.message_history]))
-        print("-"*60)
-        print("Human chat history:\n", [f'{m.sender_id}: {m.content}\n' for m in human.message_history])
-        print("-"*60)
-        print("AI conversation history:\n", str([f'{m.sender_id}: {m.content}\n' for m in ai_assistant.conversation_history]))
-
 
         hub.unregister_agent(human.agent_id)
         hub.unregister_agent(ai_assistant.agent_id)

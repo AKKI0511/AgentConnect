@@ -1,7 +1,9 @@
 import anthropic
-from typing import List, Dict
+from typing import List, Dict, Any
 from .base_provider import BaseProvider
 from ..core.types import ModelName
+from langchain_anthropic.chat_models import ChatAnthropic
+from langchain_core.language_models.chat_models import BaseChatModel
 
 
 class AnthropicProvider(BaseProvider):
@@ -16,21 +18,9 @@ class AnthropicProvider(BaseProvider):
         **kwargs,
     ) -> str:
         try:
-            # Convert messages to Anthropic format
-            system_message = next(
-                (m["content"] for m in messages if m["role"] == "system"), None
-            )
-            message_content = " ".join(
-                m["content"] for m in messages if m["role"] != "system"
-            )
-
-            response = await self.client.messages.create(
-                model=model.value,
-                max_tokens=kwargs.get("max_tokens", 1024),
-                system=system_message,
-                messages=[{"role": "user", "content": message_content}],
-            )
-            return response.content[0].text
+            llm = self.get_langchain_llm(model, **kwargs)
+            response = await llm.ainvoke(messages)
+            return response.content
         except Exception as e:
             return f"Anthropic Error: {str(e)}"
 
@@ -40,3 +30,9 @@ class AnthropicProvider(BaseProvider):
             ModelName.CLAUDE_3_SONNET,
             ModelName.CLAUDE_3_HAIKU,
         ]
+
+    def get_langchain_llm(self, model_name: ModelName, **kwargs) -> BaseChatModel:
+        return ChatAnthropic(model=model_name.value, api_key=self.api_key, **kwargs)
+
+    def _get_provider_config(self) -> Dict[str, Any]:
+        return {"anthropic_api_key": self.api_key, "model_provider": "anthropic"}

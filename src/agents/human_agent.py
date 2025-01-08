@@ -38,7 +38,7 @@ class HumanAgent(BaseAgent):
                     response = await asyncio.wait_for(
                         self.message_queue.get(), timeout=5.0
                     )
-                    print(f"\n{target_agent.name}> {response.content}\n")
+                    print(f"\n{target_agent.name} ==========>\n{response.content}\n")
                 except asyncio.TimeoutError:
                     print("\nNo response received from AI agent (timeout)\n")
 

@@ -1,5 +1,4 @@
-from groq import AsyncGroq
-from typing import List, Dict
+from typing import List, Dict, Any
 from .base_provider import BaseProvider
 from ..core.types import ModelName
 
@@ -7,7 +6,6 @@ from ..core.types import ModelName
 class GroqProvider(BaseProvider):
     def __init__(self, api_key: str):
         super().__init__(api_key)
-        self.client = AsyncGroq(api_key=api_key)
 
     async def generate_response(
         self,
@@ -16,10 +14,9 @@ class GroqProvider(BaseProvider):
         **kwargs,
     ) -> str:
         try:
-            response = await self.client.chat.completions.create(
-                messages=messages, model=model.value, **kwargs
-            )
-            return response.choices[0].message.content
+            llm = self.get_langchain_llm(model, **kwargs)
+            response = await llm.ainvoke(messages)
+            return response.content
         except Exception as e:
             return f"Groq Error: {str(e)}"
 
@@ -32,3 +29,6 @@ class GroqProvider(BaseProvider):
             ModelName.GEMMA2_90B,
             ModelName.LLAMA_GUARD3_8B,
         ]
+
+    def _get_provider_config(self) -> Dict[str, Any]:
+        return {"groq_api_key": self.api_key, "model_provider": "groq"}

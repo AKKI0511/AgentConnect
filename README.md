@@ -1,61 +1,55 @@
 [![CI](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml)
-# AgentConnect
+# AgentConnect: Decentralized Agent Framework
 
 A scalable skeleton for human-agent and agent-agent interactions with future extensibility for payments, data exchange, and decentralized identities.
 
+## Features
+
+- **Autonomous Agent Interactions**: Agents can communicate, negotiate, and exchange information independently
+- **Secure Identity System**: Built-in DID (Decentralized Identifier) based identity verification
+- **Multi-Provider Support**: Works with OpenAI, Anthropic, Groq, and Google AI models
+- **Flexible Communication**: Supports both agent-to-agent and human-to-agent interactions
+- **Message Verification**: Cryptographic message signing and verification
+- **Capability Discovery**: Agents can discover and interact based on capabilities
+
 ## Setup and Installation
 
-Follow the steps below to clone the repository and set up the environment:
-
 ### 1. Clone the Repository
-
-Start by cloning the project repository to your local machine:
 
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
 ```
 
-### 2. Create a Virtual Environment
-
-Create a virtual environment to isolate the project dependencies:
+### 2. Create and Activate Virtual Environment
 
 ```bash
+# Create virtual environment
 python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
 ```
 
-Activate the virtual environment:
-
-- **For macOS/Linux**:
-  ```bash
-  source venv/bin/activate
-  ```
-
-- **For Windows**:
-  ```bash
-  venv\Scripts\activate
-  ```
-
-### 3. Install Dependencies
-
-Use the `Makefile` to install all required dependencies:
+### 3. Install Dependencies using Make
 
 ```bash
+# Install all required packages
 make install
 ```
 
-This command will upgrade `pip` and install all necessary packages and dependencies listed in `requirements.txt`.
+### 4. Configuration
 
-### 4. Environment Configuration
-
-Copy the `example.env` file to `.env` and add your API keys for the providers you intend to use:
+Copy the `example.env` file to `.env`:
 
 ```bash
 cp example.env .env
 ```
 
-Edit the `.env` file to include your API keys:
-
+Edit the `.env` file with your API keys:
 ```plaintext
 OPENAI_API_KEY=your_openai_api_key
 ANTHROPIC_API_KEY=your_anthropic_api_key
@@ -63,24 +57,65 @@ GROQ_API_KEY=your_groq_api_key
 GOOGLE_API_KEY=your_google_api_key
 ```
 
-## Usage
+## Development Commands
 
-### Running the Example
+The project includes a Makefile with the following commands:
 
-To see the system in action, run the `example_usage.py` script:
+```bash
+# Install dependencies
+make install
+
+# Run code linting
+make lint
+
+# Format code using black
+make format
+
+# Run tests
+make test
+
+# Run all commands (install, lint, format, test)
+make all
+```
+
+## Usage Examples
+
+### Agent-to-Agent Interaction
+
+Run the e-commerce analysis demo where two AI agents collaborate:
+
+```bash
+python example_multi_agent.py
+```
+
+### Human-to-Agent Interaction
+
+Start an interactive session with an AI agent:
 
 ```bash
 python example_usage.py
 ```
 
-This script will guide you through selecting a provider and model, and then initiate a conversation between a human agent and an AI agent.
+## Core Components
 
-### Key Features
+### 1. Communication Hub
+- Central message routing
+- Agent registration and discovery
+- Protocol enforcement
+- Message history tracking
 
-- **Modular Design**: Easily extendable to add new providers, models, and functionalities.
-- **Memory Management**: Supports different memory types (buffer, summary, Redis) for maintaining conversation context.
-- **Prompt Engineering**: Utilizes LangChain and LangGraph for advanced prompt engineering and memory integration.
-- **Provider Integration**: Seamlessly integrates with multiple AI providers (OpenAI, Anthropic, Groq, Google) using a provider factory pattern.
+### 2. Agent System
+- Identity management (DID-based)
+- Capability declaration
+- Message signing/verification
+- Autonomous processing
+
+### 3. Provider Integration
+Supported AI providers:
+- OpenAI (GPT-4, GPT-3.5)
+- Anthropic (Claude 3)
+- Groq (Mixtral, LLaMA)
+- Google (Gemini)
 
 ## Project Structure
 
@@ -88,7 +123,8 @@ This script will guide you through selecting a provider and model, and then init
 ai_agent_system/
 ├── README.md
 ├── requirements.txt
-├── example_usage.py        # Usage example
+├── example_multi_agent.py  # Agent-Agent Uage Example
+├── example_usage.py        # Human-Agent Usage example
 ├── setup.py
 ├── src/
 │   ├── __init__.py
@@ -96,6 +132,7 @@ ai_agent_system/
 │   │   ├── __init__.py
 │   │   ├── agent.py          # Base agent classes
 │   │   ├── message.py        # Message definitions
+│   │   ├── registry.py        # Central registry for agents
 │   │   └── types.py          # Common types and enums
 │   ├── agents/
 │   │   ├── __init__.py
@@ -104,7 +141,7 @@ ai_agent_system/
 │   ├── communication/
 │   │   ├── __init__.py
 │   │   ├── hub.py           # Communication hub
-│   │   └── protocols.py     # Communication protocols
+│   │   └── protocols/     # Communication protocols
 │   ├── prompts/
 │   │   ├── __init__.py
 │   │   ├── chain_factory.py # Conversation chain creation
@@ -118,48 +155,22 @@ ai_agent_system/
 │       ├── groq_provider.py # Groq provider
 │       └── google_provider.py # Google provider
 └── tests/
-    ├── __init__.py
-    ├── test_agents/
-    │   ├── __init__.py
-    │   ├── test_human_agent.py
-    │   └── test_ai_agent.py
-    └── test_communication/
-        ├── __init__.py
-        └── test_hub.py
 ```
 
-## Future Integration Points
+## Security Features
 
-- **Identity Management**: Can be added as a new module under `src/identity/`
-- **Payment System**: Can be added as `src/payments/`
-- **Storage**: Can be added as `src/storage/`
-- **API Layer**: Can be added as `src/api/`
+- DID-based identity verification
+- Message signing and validation
+- Protocol version checking
+- Secure API key handling
 
-## Additional Commands
+## Contributing
 
-- **Lint the Code**: Check the code for style issues using `flake8`:
-
-  ```bash
-  make lint
-  ```
-
-- **Format the Code**: Automatically format the code using `black`:
-
-  ```bash
-  make format
-  ```
-
-- **Run Tests**: Execute the test suite using `pytest`:
-
-  ```bash
-  make test
-  ```
-
-- **Run All**: Perform installation, linting, formatting, and testing in sequence:
-
-  ```bash
-  make all
-  ```
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 

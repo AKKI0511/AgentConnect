@@ -18,3 +18,4 @@ langchain-community
 langchain-anthropic
 langchain-groq
 redis
+cryptography

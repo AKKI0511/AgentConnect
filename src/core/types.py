@@ -1,4 +1,7 @@
 from enum import Enum
+from typing import List, Optional, Dict
+from dataclasses import dataclass, field
+from datetime import datetime
 
 
 class ModelProvider(Enum):
@@ -50,8 +53,62 @@ class AgentType(Enum):
     AI = "ai"
 
 
+class InteractionMode(Enum):
+    HUMAN_TO_AGENT = "human_to_agent"
+    AGENT_TO_AGENT = "agent_to_agent"
+
+
+class ProtocolVersion(Enum):
+    V1_0 = "1.0"
+    V1_1 = "1.1"
+
+
+class VerificationStatus(Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    FAILED = "failed"
+
+
+@dataclass
+class AgentIdentity:
+    """Decentralized Identity for Agents"""
+
+    did: str  # Decentralized Identifier
+    public_key: str
+    private_key: Optional[str] = None
+    verification_status: VerificationStatus = VerificationStatus.PENDING
+    created_at: datetime = field(default_factory=datetime.now)
+    metadata: Dict = field(default_factory=dict)
+
+
+@dataclass
+class AgentMetadata:
+    agent_id: str
+    agent_type: AgentType
+    identity: AgentIdentity
+    organization_id: Optional[str] = None
+    capabilities: List[str] = field(default_factory=list)
+    interaction_modes: List[InteractionMode] = field(default_factory=list)
+    verification_status: bool = False
+    metadata: Dict = field(default_factory=dict)
+
+
 class MessageType(Enum):
     TEXT = "text"
     COMMAND = "command"
     RESPONSE = "response"
     ERROR = "error"
+    VERIFICATION = "verification"  # New: For identity verification
+    CAPABILITY = "capability"
+    PROTOCOL = "protocol"
+
+
+class NetworkMode(Enum):
+    STANDALONE = "standalone"
+    NETWORKED = "networked"
+
+
+class SecurityError(Exception):
+    """Raised when message verification fails"""
+
+    pass

@@ -1,7 +1,9 @@
-[![CI](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml)
 # AgentConnect: Decentralized Agent Framework
 
-A scalable skeleton for human-agent and agent-agent interactions with future extensibility for payments, data exchange, and decentralized identities.
+[![CI](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml)
+
+## Overview
+AgentConnect is a scalable skeleton for human-agent and agent-agent interactions with future extensibility for payments, data exchange, and decentralized identities.
 
 ## Features
 
@@ -11,6 +13,7 @@ A scalable skeleton for human-agent and agent-agent interactions with future ext
 - **Flexible Communication**: Supports both agent-to-agent and human-to-agent interactions
 - **Message Verification**: Cryptographic message signing and verification
 - **Capability Discovery**: Agents can discover and interact based on capabilities
+- **Extensible Architecture**: Easily add new AI providers, communication protocols, and memory systems
 
 ## Setup and Installation
 
@@ -128,6 +131,9 @@ ai_agent_system/
 ├── setup.py
 ├── src/
 │   ├── __init__.py
+│   ├── utils/
+│   │   ├── logging_config.py # Logging configuration
+│   │   └── interaction_control.py # Token management
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── agent.py          # Base agent classes
@@ -163,6 +169,14 @@ ai_agent_system/
 - Message signing and validation
 - Protocol version checking
 - Secure API key handling
+
+## Roadmap
+
+- [x] MVP with basic agent-to-agent and human-to-agent interactions
+- [ ] Secure data exchange between agents
+- [ ] Decentralized payment integration
+- [ ] Additional AI providers and communication protocols
+- [ ] Advanced memory systems (Redis, PostgreSQL)
 
 ## Contributing
 

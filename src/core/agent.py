@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import asyncio
 from typing import List, Optional, Dict, TYPE_CHECKING
+import time
+import logging
 
 from src.core.message import Message
 from src.core.types import (
@@ -16,6 +18,8 @@ from src.core.types import (
 if TYPE_CHECKING:
     from src.communication.hub import CommunicationHub
     from src.core.registry import AgentRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class BaseAgent(ABC):
@@ -43,6 +47,8 @@ class BaseAgent(ABC):
         self.is_running = True
         self.registry: Optional["AgentRegistry"] = None
         self.hub: Optional["CommunicationHub"] = None
+        self.active_conversations = {}
+        self.cooldown_until = 0
 
     async def _verify_ethereum_did(self) -> bool:
         """Verify Ethereum-based DID"""
@@ -134,14 +140,22 @@ class BaseAgent(ABC):
         while self.is_running:
             try:
                 message = await self.message_queue.get()
-                response = await self.process_message(message)
-                if response:
-                    await self.send_message(
-                        receiver_id=response.receiver_id,
-                        content=response.content,
-                        message_type=response.message_type,
-                        metadata=response.metadata,
+
+                if message.message_type == MessageType.COOLDOWN:
+                    logger.info(
+                        f"Received cooldown message from {message.sender_id}. Cooldown duration: {message.metadata['cooldown_remaining']} seconds."
                     )
+                    # No need to sleep here, just continue processing other messages
+                else:
+                    response = await self.process_message(message)
+                    if response:
+                        await self.send_message(
+                            receiver_id=response.receiver_id,
+                            content=response.content,
+                            message_type=response.message_type,
+                            metadata=response.metadata,
+                        )
+
                 self.message_queue.task_done()
             except Exception as e:
                 print(f"Error processing message: {e}")
@@ -156,3 +170,47 @@ class BaseAgent(ABC):
         await network.register_agent(self)
         # Broadcast availability with capabilities
         await network.broadcast_availability(self.agent_id, self.metadata.capabilities)
+
+    def set_cooldown(self, duration: int) -> None:
+        """Set a cooldown period for the agent"""
+        self.cooldown_until = time.time() + duration
+
+    def is_in_cooldown(self) -> bool:
+        """Check if agent is in cooldown"""
+        return time.time() < self.cooldown_until
+
+    def end_conversation(self, other_agent_id: str) -> None:
+        """End conversation with another agent"""
+        if other_agent_id in self.active_conversations:
+            # Log final conversation stats
+            conversation_data = self.active_conversations[other_agent_id]
+            conversation_duration = time.time() - conversation_data.get("start_time", 0)
+            message_count = conversation_data.get("message_count", 0)
+
+            logger.info(
+                f"Ending conversation between {self.agent_id} and {other_agent_id}. "
+                f"Duration: {int(conversation_duration)}s, Messages: {message_count}"
+            )
+
+            # Clean up conversation data
+            del self.active_conversations[other_agent_id]
+
+    async def can_send_message(self, receiver_id: str) -> bool:
+        """Check if agent can send message"""
+        if self.is_in_cooldown():
+            return False
+        if receiver_id not in self.active_conversations:
+            self.active_conversations[receiver_id] = {
+                "start_time": time.time(),
+                "message_count": 0,
+            }
+        return True
+
+    async def can_receive_message(self, sender_id: str) -> bool:
+        """Check if the agent can receive a message from the sender"""
+        if self.is_in_cooldown():
+            return False
+        if sender_id not in self.active_conversations:
+            return True
+        # Add any other conditions as needed
+        return True

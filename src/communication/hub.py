@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional
 
 from src.core.agent import BaseAgent
-from src.core.types import InteractionMode, SecurityError
+from src.core.types import AgentType, InteractionMode, MessageType, SecurityError
 from src.core.message import Message
 from src.core.registry import AgentRegistration, AgentRegistry
 from src.communication.protocols.agent import SimpleAgentProtocol
@@ -95,6 +95,12 @@ class CommunicationHub:
                 f"Routing message from {message.sender_id} to {message.receiver_id}"
             )
 
+            # Special handling for system messages
+            if message.message_type == MessageType.SYSTEM:
+                self._message_history.append(message)
+                logger.info(f"Added system message to history: {message.content}")
+                return True
+
             # Get sender and receiver
             sender = self.active_agents.get(message.sender_id)
             receiver = self.active_agents.get(message.receiver_id)
@@ -104,6 +110,12 @@ class CommunicationHub:
                     f"Sender or receiver not found. Sender: {bool(sender)}, Receiver: {bool(receiver)}"
                 )
                 return False
+
+            # Handle special message types
+            if message.message_type == MessageType.COOLDOWN:
+                return await self._handle_cooldown_message(message, receiver)
+            elif message.message_type == MessageType.STOP:
+                return await self._handle_stop_message(message, sender, receiver)
 
             # Verify identities
             logger.debug("Verifying sender identity")
@@ -163,6 +175,24 @@ class CommunicationHub:
         except Exception as e:
             logger.exception(f"Error routing message: {str(e)}")
             return False
+
+    async def _handle_cooldown_message(
+        self, message: Message, receiver: BaseAgent
+    ) -> bool:
+        # Only forward cooldown message if receiver is human
+        if receiver.metadata.agent_type == AgentType.HUMAN:
+            await receiver.receive_message(message)
+        return True
+
+    async def _handle_stop_message(
+        self, message: Message, sender: BaseAgent, receiver: BaseAgent
+    ) -> bool:
+        logger.info(
+            f"Received STOP message from {sender.agent_id} to {receiver.agent_id}"
+        )
+        # Forward the STOP message to the receiver
+        await receiver.receive_message(message)
+        return True
 
     def get_agent(self, agent_id: str) -> Optional[BaseAgent]:
         """Get an active agent by ID"""

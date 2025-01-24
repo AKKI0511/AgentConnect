@@ -22,12 +22,13 @@ class GroqProvider(BaseProvider):
 
     def get_available_models(self) -> List[ModelName]:
         return [
-            ModelName.MIXTRAL,
+            ModelName.LLAMA33_70B_VTL,
+            ModelName.LLAMA3_1_8B_INSTANT,
             ModelName.LLAMA3_70B,
             ModelName.LLAMA3_8B,
-            ModelName.LLAMA33_70B_VTL,
-            ModelName.GEMMA2_90B,
             ModelName.LLAMA_GUARD3_8B,
+            ModelName.MIXTRAL,
+            ModelName.GEMMA2_90B,
         ]
 
     def _get_provider_config(self) -> Dict[str, Any]:

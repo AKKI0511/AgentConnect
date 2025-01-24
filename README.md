@@ -37,11 +37,14 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-### 3. Install Dependencies using Make
+### 3. Install Dependencies
 
 ```bash
-# Install all required packages
+# If Make is installed:
 make install
+
+# If Make is not installed (alternative method):
+pip install -r requirements.txt
 ```
 
 ### 4. Configuration
@@ -49,6 +52,9 @@ make install
 Copy the `example.env` file to `.env`:
 
 ```bash
+# On Windows:
+copy example.env .env
+# On macOS/Linux:
 cp example.env .env
 ```
 
@@ -115,8 +121,8 @@ python example_usage.py
 
 ### 3. Provider Integration
 Supported AI providers:
-- OpenAI (GPT-4, GPT-3.5)
-- Anthropic (Claude 3)
+- OpenAI (GPT, o1)
+- Anthropic (Claude)
 - Groq (Mixtral, LLaMA)
 - Google (Gemini)
 

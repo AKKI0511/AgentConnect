@@ -10,7 +10,7 @@ class GoogleProvider(BaseProvider):
     async def generate_response(
         self,
         messages: List[Dict[str, str]],
-        model: ModelName = ModelName.GEMINI_PRO,
+        model: ModelName = ModelName.GEMINI1_5_FLASH,
         **kwargs,
     ) -> str:
         try:
@@ -21,7 +21,7 @@ class GoogleProvider(BaseProvider):
             return f"Google AI Error: {str(e)}"
 
     def get_available_models(self) -> List[ModelName]:
-        return [ModelName.GEMINI_PRO, ModelName.GEMINI_PRO_VISION]
+        return [ModelName.GEMINI1_5_FLASH, ModelName.GEMINI1_5_PRO]
 
     def _get_provider_config(self) -> Dict[str, Any]:
-        return {"google_api_key": self.api_key, "model_provider": "google"}
+        return {"gemini_api_key": self.api_key, "model_provider": "google_genai"}

@@ -18,6 +18,7 @@ langsmith
 langchain-community
 langchain-anthropic
 langchain-groq
+langchain-google-genai
 redis
 cryptography
 tiktoken

@@ -14,7 +14,7 @@ class AnthropicProvider(BaseProvider):
     async def generate_response(
         self,
         messages: List[Dict[str, str]],
-        model: ModelName = ModelName.CLAUDE_3_SONNET,
+        model: ModelName = ModelName.CLAUDE_3_5_HAIKU,
         **kwargs,
     ) -> str:
         try:
@@ -26,6 +26,8 @@ class AnthropicProvider(BaseProvider):
 
     def get_available_models(self) -> List[ModelName]:
         return [
+            ModelName.CLAUDE_3_5_SONNET,
+            ModelName.CLAUDE_3_5_HAIKU,
             ModelName.CLAUDE_3_OPUS,
             ModelName.CLAUDE_3_SONNET,
             ModelName.CLAUDE_3_HAIKU,

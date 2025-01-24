@@ -75,7 +75,7 @@ class TokenConfig:
 @dataclass
 class InteractionControl:
     token_config: TokenConfig
-    max_turns: int = 1
+    max_turns: int = 20
     current_turn: int = 0
     last_interaction_time: float = time.time()
 

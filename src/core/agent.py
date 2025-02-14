@@ -137,28 +137,83 @@ class BaseAgent(ABC):
 
     async def run(self):
         """Process messages from the queue continuously"""
-        while self.is_running:
-            try:
-                message = await self.message_queue.get()
-
-                if message.message_type == MessageType.COOLDOWN:
-                    logger.info(
-                        f"Received cooldown message from {message.sender_id}. Cooldown duration: {message.metadata['cooldown_remaining']} seconds."
+        try:
+            while self.is_running:
+                try:
+                    # Use wait_for to prevent hanging on message_queue.get()
+                    message = await asyncio.wait_for(
+                        self.message_queue.get(), timeout=5.0
                     )
-                    # No need to sleep here, just continue processing other messages
-                else:
-                    response = await self.process_message(message)
-                    if response:
-                        await self.send_message(
-                            receiver_id=response.receiver_id,
-                            content=response.content,
-                            message_type=response.message_type,
-                            metadata=response.metadata,
-                        )
 
-                self.message_queue.task_done()
-            except Exception as e:
-                print(f"Error processing message: {e}")
+                    if message.message_type == MessageType.COOLDOWN:
+                        logger.info(
+                            f"Received cooldown message from {message.sender_id}. Cooldown duration: {message.metadata['cooldown_remaining']} seconds."
+                        )
+                        self.message_queue.task_done()
+                        continue
+
+                    try:
+                        response = await asyncio.wait_for(
+                            self.process_message(message), timeout=25.0
+                        )
+                        if response:
+                            await self.send_message(
+                                receiver_id=response.receiver_id,
+                                content=response.content,
+                                message_type=response.message_type,
+                                metadata=response.metadata,
+                            )
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            f"Timeout processing message from {message.sender_id}"
+                        )
+                        await self.send_message(
+                            receiver_id=message.sender_id,
+                            content="Processing timeout - the operation took too long",
+                            message_type=MessageType.ERROR,
+                            metadata={"error": "timeout"},
+                        )
+                    except Exception as e:
+                        logger.error(f"Error processing message: {str(e)}")
+                        await self.send_message(
+                            receiver_id=message.sender_id,
+                            content=f"Error processing message: {str(e)}",
+                            message_type=MessageType.ERROR,
+                            metadata={"error": str(e)},
+                        )
+                    finally:
+                        # Ensure task_done is called in all cases
+                        self.message_queue.task_done()
+
+                except asyncio.TimeoutError:
+                    # This is normal - just continue waiting for new messages
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in message processing loop: {str(e)}")
+                    # Ensure we mark the task as done even on error
+                    if not self.message_queue.empty():
+                        self.message_queue.task_done()
+                    continue
+
+        except asyncio.CancelledError:
+            logger.info(f"Agent {self.agent_id} task cancelled, cleaning up...")
+            raise
+        finally:
+            # Cleanup when the loop ends
+            self.is_running = False
+            # Clean up any remaining messages
+            while not self.message_queue.empty():
+                try:
+                    self.message_queue.get_nowait()
+                    self.message_queue.task_done()
+                except Exception as e:
+                    logger.exception(f"Error cleaning up remaining messages: {str(e)}")
+
+            # End all active conversations
+            for agent_id in list(self.active_conversations.keys()):
+                self.end_conversation(agent_id)
+
+            logger.info(f"Agent {self.agent_id} cleanup completed")
 
     # Note: We can remove join_network as it's not required for MVP
     # The registry handles all agent discovery and communication

@@ -18,6 +18,7 @@ class AgentRegistration:
     interaction_modes: list[InteractionMode]
     capabilities: list[str]
     identity: AgentIdentity
+    owner_id: Optional[str] = None
     metadata: Dict = field(default_factory=dict)
 
 
@@ -32,6 +33,7 @@ class AgentRegistry:
             mode: set() for mode in InteractionMode
         }
         self._organization_index: Dict[str, Set[str]] = {}
+        self._owner_index: Dict[str, Set[str]] = {}
         self._verified_agents: Set[str] = set()
 
     async def register(self, registration: AgentRegistration) -> bool:
@@ -83,6 +85,12 @@ class AgentRegistry:
                 self._organization_index[registration.organization_id].add(
                     registration.agent_id
                 )
+
+            # Update owner index
+            if registration.owner_id:
+                if registration.owner_id not in self._owner_index:
+                    self._owner_index[registration.owner_id] = set()
+                self._owner_index[registration.owner_id].add(registration.agent_id)
 
             logger.debug("Successfully updated all indexes")
 
@@ -258,3 +266,14 @@ class AgentRegistry:
             registration.metadata.update(updates["metadata"])
 
         return registration
+
+    async def get_by_owner(self, owner_id: str) -> List[AgentRegistration]:
+        """Find agents by owner"""
+        agent_ids = self._owner_index.get(owner_id, set())
+        return [self._agents[agent_id] for agent_id in agent_ids]
+
+    async def verify_owner(self, agent_id: str, owner_id: str) -> bool:
+        """Verify if a user owns an agent"""
+        if agent_id not in self._agents:
+            return False
+        return self._agents[agent_id].owner_id == owner_id

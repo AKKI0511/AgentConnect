@@ -2,6 +2,7 @@ from asyncio.log import logger
 import time
 from typing import List, Optional
 from langchain_core.messages import HumanMessage
+import asyncio
 
 from src.core.agent import BaseAgent
 from src.core.types import (
@@ -37,6 +38,7 @@ class AIAgent(BaseAgent):
         interaction_modes: List[InteractionMode] = None,
         max_tokens_per_minute: int = 5500,
         max_tokens_per_hour: int = 100000,
+        is_ui_mode: bool = False,
     ):
         super().__init__(
             agent_id=agent_id,
@@ -48,6 +50,12 @@ class AIAgent(BaseAgent):
             organization_id=organization_id,
         )
         self.name = name
+        self.is_ui_mode = is_ui_mode
+        self.last_processed_message_id = None
+        self.provider_type = provider_type
+        self.model_name = model_name
+        self.personality = personality
+        self.processing_lock = asyncio.Lock()
 
         # Initialize token counter and interaction control
         token_config = TokenConfig(
@@ -72,6 +80,114 @@ class AIAgent(BaseAgent):
             api_key=api_key,
             system_config=system_config,
         )
+
+    async def run(self):
+        """Process messages from the queue continuously"""
+        try:
+            while self.is_running:
+                try:
+                    # Use wait_for to prevent hanging on message_queue.get()
+                    message = await asyncio.wait_for(
+                        self.message_queue.get(), timeout=5.0
+                    )
+
+                    # Skip if we've already processed this message (for UI mode)
+                    if (
+                        self.is_ui_mode
+                        and message.metadata.get("message_id")
+                        == self.last_processed_message_id
+                    ):
+                        self.message_queue.task_done()
+                        continue
+
+                    async with self.processing_lock:
+                        if message.message_type == MessageType.COOLDOWN:
+                            logger.info(
+                                f"Received cooldown message from {message.sender_id}. Cooldown duration: {message.metadata['cooldown_remaining']} seconds."
+                            )
+                            self.message_queue.task_done()
+                            continue
+                        else:
+                            try:
+                                response = await asyncio.wait_for(
+                                    self.process_message(message), timeout=25.0
+                                )
+                                if response:
+                                    await self.send_message(
+                                        receiver_id=response.receiver_id,
+                                        content=response.content,
+                                        message_type=response.message_type,
+                                        metadata=response.metadata,
+                                    )
+
+                                    # Update last processed message ID for UI mode
+                                    if self.is_ui_mode:
+                                        self.last_processed_message_id = (
+                                            message.metadata.get("message_id")
+                                        )
+
+                            except asyncio.TimeoutError:
+                                logger.error(
+                                    f"Timeout processing message from {message.sender_id}"
+                                )
+                                await self.send_message(
+                                    receiver_id=message.sender_id,
+                                    content="Processing timeout - the operation took too long",
+                                    message_type=MessageType.ERROR,
+                                    metadata={"error": "timeout"},
+                                )
+                            except Exception as e:
+                                logger.error(f"Error processing message: {str(e)}")
+                                await self.send_message(
+                                    receiver_id=message.sender_id,
+                                    content=f"Error processing message: {str(e)}",
+                                    message_type=MessageType.ERROR,
+                                    metadata={"error": str(e)},
+                                )
+                            finally:
+                                self.message_queue.task_done()
+
+                except asyncio.TimeoutError:
+                    # This is normal - just continue waiting for new messages
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in message processing loop: {str(e)}")
+                    # Ensure we mark the task as done even on error
+                    if not self.message_queue.empty():
+                        self.message_queue.task_done()
+                    continue
+
+        except asyncio.CancelledError:
+            logger.info(f"Agent {self.agent_id} task cancelled, cleaning up...")
+            raise
+        finally:
+            # Cleanup when the loop ends
+            self.is_running = False
+
+            # Release the processing lock if held
+            if self.processing_lock.locked():
+                self.processing_lock.release()
+
+            # Clean up any remaining messages
+            while not self.message_queue.empty():
+                try:
+                    self.message_queue.get_nowait()
+                    self.message_queue.task_done()
+                except Exception as e:
+                    logger.exception(f"Error cleaning up remaining messages: {str(e)}")
+
+            # End all active conversations
+            for agent_id in list(self.active_conversations.keys()):
+                self.end_conversation(agent_id)
+
+            # Clean up conversation chain if needed
+            if hasattr(self, "conversation_chain"):
+                try:
+                    await self.conversation_chain.aclose()
+                except Exception as e:
+                    logger.exception(f"Error closing conversation chain: {str(e)}")
+
+            logger.info(f"AI Agent {self.agent_id} cleanup completed")
 
     async def process_message(self, message: Message) -> Optional[Message]:
         """Process incoming message and generate response"""

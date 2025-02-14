@@ -24,3 +24,18 @@ class ProviderFactory:
         if not provider_class:
             raise ValueError(f"Unsupported provider type: {provider_type}")
         return provider_class(api_key)
+
+    @classmethod
+    def get_available_providers(cls) -> Dict[str, Dict]:
+        """Get all available providers and their models"""
+        providers = {}
+        for provider_type, provider_class in cls._providers.items():
+            try:
+                providers[provider_type.value] = {
+                    "name": provider_type.value.title(),
+                    "models": provider_class.get_available_models(),
+                }
+            except Exception:
+                # Skip providers that fail to initialize
+                continue
+        return providers

@@ -8,14 +8,16 @@ from cryptography.hazmat.backends import default_backend
 import base64
 
 
-class ModelProvider(Enum):
+class ModelProvider(str, Enum):
+    """Supported model providers"""
+
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GROQ = "groq"
     GOOGLE = "google"
 
 
-class ModelName(Enum):
+class ModelName(str, Enum):
     # OpenAI Models
     GPT4O = "gpt-4o"
     GPT4O_MINI = "gpt-4o-mini"
@@ -42,23 +44,38 @@ class ModelName(Enum):
     GEMINI1_5_FLASH = "gemini-1.5-flash"
     GEMINI1_5_PRO = "gemini-1.5-pro"
 
+    @classmethod
+    def get_default_for_provider(cls, provider: ModelProvider) -> "ModelName":
+        """Get the default model for a given provider"""
+        defaults = {
+            ModelProvider.OPENAI: cls.GPT4O,
+            ModelProvider.ANTHROPIC: cls.CLAUDE_3_SONNET,
+            ModelProvider.GROQ: cls.LLAMA33_70B_VTL,
+            ModelProvider.GOOGLE: cls.GEMINI1_5_PRO,
+        }
 
-class AgentType(Enum):
+        if provider not in defaults:
+            raise ValueError(f"No default model defined for provider {provider}")
+
+        return defaults[provider]
+
+
+class AgentType(str, Enum):
     HUMAN = "human"
     AI = "ai"
 
 
-class InteractionMode(Enum):
+class InteractionMode(str, Enum):
     HUMAN_TO_AGENT = "human_to_agent"
     AGENT_TO_AGENT = "agent_to_agent"
 
 
-class ProtocolVersion(Enum):
+class ProtocolVersion(str, Enum):
     V1_0 = "1.0"
     V1_1 = "1.1"
 
 
-class VerificationStatus(Enum):
+class VerificationStatus(str, Enum):
     PENDING = "pending"
     VERIFIED = "verified"
     FAILED = "failed"
@@ -189,7 +206,7 @@ class AgentMetadata:
     metadata: Dict = field(default_factory=dict)
 
 
-class MessageType(Enum):
+class MessageType(str, Enum):
     TEXT = "text"
     COMMAND = "command"
     RESPONSE = "response"
@@ -202,7 +219,7 @@ class MessageType(Enum):
     COOLDOWN = "cooldown"
 
 
-class NetworkMode(Enum):
+class NetworkMode(str, Enum):
     STANDALONE = "standalone"
     NETWORKED = "networked"
 

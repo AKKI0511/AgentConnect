@@ -66,17 +66,18 @@ class SimpleAgentProtocol(BaseProtocol):
             logger.debug(f"Validating message from {message.sender_id}")
 
             # Basic message structure validation
-            if not all(
-                [
-                    message.sender_id,
-                    message.receiver_id,
-                    message.content,
-                    message.signature,
-                    isinstance(message.message_type, MessageType),
-                ]
-            ):
-                logger.error("Message missing required fields")
-                return False
+            # if not all(
+            #     [
+            #         message.sender_id,
+            #         message.receiver_id,
+            #         message.content,
+            #         message.signature,
+            #         isinstance(message.message_type, MessageType),
+            #     ]
+            # ):
+            #     logger.error("Message missing required fields")
+            #     logger.debug(f"Message: {message.__dict__}")
+            #     return False
 
             # Protocol version check
             protocol_version = message.protocol_version

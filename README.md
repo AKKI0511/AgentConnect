@@ -1,180 +1,186 @@
 # AgentConnect: Decentralized Agent Framework
 
 [![CI](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml)
+[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Overview
-AgentConnect is a scalable skeleton for human-agent and agent-agent interactions with future extensibility for payments, data exchange, and decentralized identities.
+## 📖 Overview
 
-## Features
+AgentConnect is a scalable framework for human-agent and agent-agent interactions, providing a robust foundation for building AI-powered applications. The framework enables real-time, autonomous agent interactions while maintaining security and extensibility.
 
-- **Autonomous Agent Interactions**: Agents can communicate, negotiate, and exchange information independently
-- **Secure Identity System**: Built-in DID (Decentralized Identifier) based identity verification
-- **Multi-Provider Support**: Works with OpenAI, Anthropic, Groq, and Google AI models
-- **Flexible Communication**: Supports both agent-to-agent and human-to-agent interactions
-- **Message Verification**: Cryptographic message signing and verification
-- **Capability Discovery**: Agents can discover and interact based on capabilities
-- **Extensible Architecture**: Easily add new AI providers, communication protocols, and memory systems
+### Key Features
 
-## Setup and Installation
+- **🤖 Autonomous Agents**: Independent communication with async processing loops
+- **⚡ Real-time Communication**: WebSocket-based updates for seamless interactions
+- **🔌 Multi-Provider Support**: OpenAI, Anthropic, Groq, and Google AI integration
+- **🔒 Security**: DID-based identity and cryptographic message verification
+- **🎯 Capability System**: Dynamic discovery and interaction
+- **🔧 Extensible Design**: Modular architecture with automatic session management
 
-### 1. Clone the Repository
+## 🚀 Quick Start
 
+### Prerequisites
+
+- Python 3.11 or higher
+- Poetry (Python package manager)
+- Redis server
+- Node.js and npm (for frontend)
+
+### Installation
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
 ```
 
-### 2. Create and Activate Virtual Environment
+2. Install Poetry:
+Visit [Poetry's official installation guide](https://python-poetry.org/docs/#installation) and follow the instructions for your operating system.
 
+3. Install dependencies:
 ```bash
-# Create virtual environment
-python -m venv venv
+# Install all dependencies (recommended)
+poetry install --with demo,dev --no-root
 
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
+# For production only (without dev tools)
+poetry install --without dev --no-root
 ```
 
-### 3. Install Dependencies
-
+4. Set up environment:
 ```bash
-# If Make is installed:
-make install
+# Copy environment file
+copy example.env .env  # Windows
+cp example.env .env    # Linux/Mac
 
-# If Make is not installed (alternative method):
-pip install -r requirements.txt
-```
+# Edit .env and configure at least one provider API key
+# The default provider is 'groq', but you can change it:
+DEFAULT_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key
 
-### 4. Configuration
-
-Copy the `example.env` file to `.env`:
-
-```bash
-# On Windows:
-copy example.env .env
-# On macOS/Linux:
-cp example.env .env
-```
-
-Edit the `.env` file with your API keys:
-```plaintext
+# Optional: Configure other providers
 OPENAI_API_KEY=your_openai_api_key
 ANTHROPIC_API_KEY=your_anthropic_api_key
-GROQ_API_KEY=your_groq_api_key
 GOOGLE_API_KEY=your_google_api_key
+
+# Optional: Configure other settings (see example.env for all options)
+API_PORT=8000
+DEBUG=True
 ```
 
-## Development Commands
+> **Note**: Only the API key matching your `DEFAULT_PROVIDER` is required. Other settings have sensible defaults.
 
-The project includes a Makefile with the following commands:
+## 🎮 Usage
 
+### Quick Demo
+
+Run the backend API server:
 ```bash
-# Install dependencies
-make install
-
-# Run code linting
-make lint
-
-# Format code using black
-make format
-
-# Run tests
-make test
-
-# Run all commands (install, lint, format, test)
-make all
+poetry run python demos/run_demo.py --backend-only
 ```
 
-## Usage Examples
+The API will be available at:
+- API Endpoints: `http://localhost:8000`
+- Interactive API Documentation: `http://localhost:8000/docs`
+- Alternative API Documentation: `http://localhost:8000/redoc`
 
-### Agent-to-Agent Interaction
+### Example Applications
 
-Run the e-commerce analysis demo where two AI agents collaborate:
-
+1. **Interactive Chat Demo**
 ```bash
-python example_multi_agent.py
+poetry run python example_usage.py
 ```
-
-### Human-to-Agent Interaction
-
-Start an interactive session with an AI agent:
-
-```bash
-python example_usage.py
-```
-
-## Core Components
-
-### 1. Communication Hub
-- Central message routing
-- Agent registration and discovery
-- Protocol enforcement
+- Real-time chat with AI agents
+- Multiple provider/model selection
 - Message history tracking
 
-### 2. Agent System
-- Identity management (DID-based)
-- Capability declaration
-- Message signing/verification
-- Autonomous processing
-
-### 3. Provider Integration
-Supported AI providers:
-- OpenAI (GPT, o1)
-- Anthropic (Claude)
-- Groq (Mixtral, LLaMA)
-- Google (Gemini)
-
-## Project Structure
-
+2. **Multi-Agent Analysis Demo**
+```bash
+poetry run python example_multi_agent.py
 ```
-ai_agent_system/
-├── README.md
-├── requirements.txt
-├── example_multi_agent.py  # Agent-Agent Uage Example
-├── example_usage.py        # Human-Agent Usage example
-├── setup.py
-├── src/
-│   ├── __init__.py
-│   ├── utils/
-│   │   ├── logging_config.py # Logging configuration
-│   │   └── interaction_control.py # Token management
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── agent.py          # Base agent classes
-│   │   ├── message.py        # Message definitions
-│   │   ├── registry.py        # Central registry for agents
-│   │   └── types.py          # Common types and enums
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── human_agent.py    # Human agent implementation
-│   │   └── ai_agent.py       # AI agent implementation
-│   ├── communication/
-│   │   ├── __init__.py
-│   │   ├── hub.py           # Communication hub
-│   │   └── protocols/     # Communication protocols
-│   ├── prompts/
-│   │   ├── __init__.py
-│   │   ├── chain_factory.py # Conversation chain creation
-│   │   ├── memory_manager.py # Memory management
-│   │   └── templates/       # Prompt templates
-│   └── providers/
-│       ├── __init__.py
-│       ├── base_provider.py # Base provider class
-│       ├── openai_provider.py # OpenAI provider
-│       ├── anthropic_provider.py # Anthropic provider
-│       ├── groq_provider.py # Groq provider
-│       └── google_provider.py # Google provider
-└── tests/
+- Autonomous agent interaction
+- Real-time conversation visualization
+- Structured data analysis
+
+## 🛠️ Development
+
+### Development Commands
+
+#### Using Poetry (Local Development)
+```bash
+# Install dependencies
+poetry install
+
+# Run linting
+poetry run pylint src/ tests/ demos/
+
+# Format code
+poetry run black .
+
+# Run tests
+poetry run pytest
+
+# Run demo
+poetry run python demos/run_demo.py
 ```
 
-## Security Features
+#### Using Make (CI/CD)
+```bash
+make install   # Install dependencies
+make lint      # Run linting
+make format    # Format code
+make test      # Run tests
+make all       # Run all checks
+```
 
-- DID-based identity verification
-- Message signing and validation
-- Protocol version checking
-- Secure API key handling
+### Project Structure
+```
+AgentConnect/
+├── src/                    # Core source code
+│   ├── agents/            # Agent implementations
+│   ├── communication/     # Communication protocols
+│   ├── core/              # Core framework components
+|   ├── prompts/           # Prompt templates
+|   ├── providers/         # AI provider integrations
+|   └── utils/             # Utilities
+├── demos/                 # Demo applications
+│   ├── api/              # FastAPI backend implementation
+│   ├── ui/               # Frontend UI implementation
+│   └── utils/            # Demo utilities
+├── tests/                # Test suite
+├── example_usage.py      # Human-Agent demo
+└── example_multi_agent.py # Agent-Agent demo
+```
+
+> **Note**: Frontend UI is currently under development. The backend API is fully functional and can be tested through the Swagger UI at `/docs`.
+
+## 🔍 Architecture
+
+### Core Components
+
+1. **Communication Hub**
+   - Central message routing
+   - Agent registration and discovery
+   - Protocol enforcement
+   - Message history tracking
+
+2. **Agent System**
+   - Identity management (DID-based)
+   - Capability declaration
+   - Message signing/verification
+   - Autonomous processing
+
+3. **Provider Integration**
+   - OpenAI (GPT, o1)
+   - Anthropic (Claude)
+   - Groq (Mixtral, LLaMA)
+   - Google (Gemini)
+
+## 📚 Documentation
+
+- [Quick Start Guide](demos/QUICKSTART.md)
+- [API Documentation](demos/api/README.md)
+- [Frontend Documentation](demos/ui/frontend/README.md)
 
 ## Roadmap
 
@@ -184,7 +190,7 @@ ai_agent_system/
 - [ ] Additional AI providers and communication protocols
 - [ ] Advanced memory systems (Redis, PostgreSQL)
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -192,6 +198,17 @@ ai_agent_system/
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Thanks to all contributors
+- Built with [FastAPI](https://fastapi.tiangolo.com/), [LangChain](https://www.langchain.com/), and [React](https://reactjs.org/)
+- Inspired by the need for secure autonomous multi-agent communication
+
+## 📞 Support
+
+- Create an [Issue](https://github.com/AKKI0511/AgentConnect/issues)
+- Email: akkijoshi0511@gmail.com

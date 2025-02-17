@@ -1,18 +1,22 @@
-.PHONY: install lint format test all
+.PHONY: install install-core install-demo lint format test all
 
-install:
-	python -m pip install --upgrade pip &&\
-		python -m pip install -r requirements.txt
+install-core:
+	poetry install --no-root
+
+install-demo:
+	poetry install --with demo --no-root
+
+install: install-core
 
 lint:
-	flake8 --extend-ignore E501,W293,E128,W291 src/
+	poetry run flake8 --extend-ignore E501,W293,E128,W291,E402 src/ demos/api/ demos/utils/
 
 format:
-	black src/
+	poetry run black src/ demos/
 
 test:
 	@if ls tests/ 1> /dev/null 2>&1; then \
-		pytest tests/ || true; \
+		poetry run pytest tests/ -v || true; \
 	else \
 		echo "No test files found, skipping tests."; \
 	fi

@@ -13,37 +13,73 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     strategy:
       matrix:
-        python-version: [3.11, 3.12] # Specify Python versions
+        python-version: [3.11, 3.12]
+      fail-fast: false
 
     steps:
-      # Step 1: Checkout the code
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Step 3: Install dependencies
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v3
+        id: cache
+        with:
+          path: ./.venv
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
       - name: Install dependencies
         run: |
-          make install
+          poetry install --with demo,dev --no-root
 
-      # Step 4: Lint code
       - name: Run linter (flake8)
         run: |
-          make lint
+          poetry run flake8 --extend-ignore E501,W293,E128,W291,E402 src/ demos/api/ demos/utils/
 
-      # Step 5: Format code check (black)
       - name: Check code formatting (black)
         run: |
-          make format
+          poetry run black --check src/ demos/
 
-      # Step 6: Run tests
-      - name: Run tests
+      - name: Create test environment file
         run: |
-          make test
+          echo "REDIS_HOST=localhost" > .env
+          echo "REDIS_PORT=6379" >> .env
+          echo "GROQ_API_KEY=dummy-key" >> .env
+
+      - name: Run tests
+        if: hashFiles('tests/**/*.py') != ''
+        run: |
+          poetry run pytest tests/ -v
+
+      - name: Skip tests
+        if: hashFiles('tests/**/*.py') == ''
+        run: |
+          echo "No tests found - skipping test step"

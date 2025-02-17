@@ -171,3 +171,9 @@ cython_debug/
 .pypirc
 
 
+PROJECT.md
+demos/DEMO.md
+demos/test_*
+demos/api/tests
+demos/logs/
+demos/scenarios/

@@ -1,0 +1,25 @@
+# NOTE: This file is kept for reference and compatibility.
+# For development, please use Poetry and pyproject.toml instead.
+# See README.md for installation instructions.
+
+# Install core dependencies
+-r ../requirements.txt
+
+# Demo-specific dependencies
+aioconsole
+fastapi
+uvicorn
+websockets
+pydantic
+pydantic-settings
+httpx
+python-multipart
+requests
+slowapi
+authlib
+fastapi-limiter
+redis
+python-jose[cryptography]
+passlib[bcrypt]
+aioredis
+psutil

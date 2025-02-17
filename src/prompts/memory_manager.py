@@ -25,7 +25,7 @@ class MemoryManager:
         memory_type: MemoryType = MemoryType.BUFFER,
         session_id: str = None,
         redis_url: Optional[str] = None,
-        **kwargs: Dict[str, Any]
+        **kwargs: Dict[str, Any],
     ):
         self.memory_type = memory_type
         self.session_id = session_id

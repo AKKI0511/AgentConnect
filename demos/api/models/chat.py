@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
@@ -8,6 +8,7 @@ from src.core.types import ModelProvider, ModelName, InteractionMode
 
 class MessageType(str, Enum):
     TEXT = "text"
+    PING = "ping"
     ERROR = "error"
     INFO = "info"
     SYSTEM = "system"
@@ -71,8 +72,9 @@ class WebSocketMessage(BaseMessageModel):
     content: Optional[str] = Field(None, description="Message content")
     sender: Optional[str] = Field(None, description="Sender identifier")
     receiver: Optional[str] = Field(None, description="Receiver identifier")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Message timestamp"
+    timestamp: Union[str, datetime] = Field(
+        default_factory=lambda: datetime.now().isoformat(),
+        description="Message timestamp",
     )
     metadata: Optional[Dict[str, Any]] = Field(
         default=None, description="Message metadata"
@@ -90,20 +92,17 @@ class WebSocketMessage(BaseMessageModel):
     @field_validator("timestamp", mode="before")
     @classmethod
     def ensure_datetime(cls, v):
-        if isinstance(v, str):
-            return datetime.fromisoformat(v.replace("Z", "+00:00"))
+        if isinstance(v, datetime):
+            return v.isoformat()
         return v
 
 
-class CreateSessionRequest(BaseModel):
-    """Request model for creating a new chat session"""
+class AgentConfigRequest(BaseModel):
+    """Configuration model for individual agents in a session"""
 
     provider: ModelProvider = Field(..., description="AI provider to use")
     model: Optional[ModelName] = Field(
         None, description="Specific model to use (optional)"
-    )
-    session_type: str = Field(
-        ..., pattern="^(human_agent|agent_agent)$", description="Type of session"
     )
     capabilities: Optional[List[str]] = Field(
         default=["conversation"], description="Agent capabilities"
@@ -111,22 +110,71 @@ class CreateSessionRequest(BaseModel):
     personality: Optional[str] = Field(
         None, description="Agent personality description"
     )
-    metadata: Optional[Dict] = Field(
-        default=None, description="Additional session metadata"
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional agent-specific metadata"
     )
 
     model_config = {"use_enum_values": True}
 
 
+class CreateSessionRequest(BaseModel):
+    """Request model for creating a new chat session with multiple agents"""
+
+    session_type: str = Field(
+        ..., pattern="^(human_agent|agent_agent)$", description="Type of session"
+    )
+    agents: Dict[str, AgentConfigRequest] = Field(
+        ...,
+        description="Configuration for each agent in the session. Key is the agent identifier (e.g., 'agent1', 'agent2')",
+    )
+    interaction_modes: Optional[List[InteractionMode]] = Field(
+        default=None, description="Interaction modes for the session"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional session metadata"
+    )
+
+    @field_validator("agents")
+    @classmethod
+    def validate_agents(cls, v, values):
+        session_type = values.data.get("session_type")
+        if session_type == "human_agent" and len(v) != 1:
+            raise ValueError(
+                "human_agent sessions must have exactly one AI agent configuration"
+            )
+        elif session_type == "agent_agent" and len(v) != 2:
+            raise ValueError(
+                "agent_agent sessions must have exactly two agent configurations"
+            )
+        return v
+
+    model_config = {"use_enum_values": True}
+
+
+class AgentMetadata(BaseModel):
+    """Metadata model for agent information in session response"""
+
+    agent_id: str = Field(..., description="Unique agent identifier")
+    provider: ModelProvider = Field(..., description="AI provider used")
+    model: ModelName = Field(..., description="Model used")
+    capabilities: List[str] = Field(..., description="Agent capabilities")
+    personality: Optional[str] = Field(None, description="Agent personality")
+    status: str = Field(default="active", description="Agent status")
+
+
 class SessionResponse(BaseMessageModel):
-    """Response model for session operations"""
+    """Enhanced response model for session operations with detailed agent information"""
 
     session_id: str = Field(..., description="Unique session identifier")
     type: MessageType = Field(..., description="Session type")
     created_at: datetime = Field(..., description="Session creation timestamp")
     status: str = Field(default="active", description="Session status")
-    provider: ModelProvider = Field(..., description="AI provider type")
-    model: Optional[ModelName] = Field(None, description="Model name")
+    session_type: str = Field(
+        ..., description="Type of session (human_agent or agent_agent)"
+    )
+    agents: Dict[str, AgentMetadata] = Field(
+        ..., description="Information about each agent in the session"
+    )
     metadata: Optional[Dict[str, Any]] = Field(
         default=None, description="Session metadata"
     )

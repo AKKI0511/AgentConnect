@@ -3,7 +3,7 @@
 ## Prerequisites
 - Python 3.11+
 - Poetry (Python package manager)
-- Node.js and npm (for frontend)
+- Node.js 18+ and npm
 - Redis server running locally (required for session management)
 
 ## Installation
@@ -17,7 +17,7 @@ cd AgentConnect
 2. Install Poetry:
 Visit [Poetry's official installation guide](https://python-poetry.org/docs/#installation) and follow the instructions for your operating system.
 
-3. Install dependencies:
+3. Install backend dependencies:
 ```bash
 # For development (includes all dependencies)
 poetry install --with demo,dev --no-root
@@ -29,7 +29,13 @@ poetry install --without dev --no-root
 poetry install --with demo --without dev --no-root
 ```
 
-4. Set up environment:
+4. Install frontend dependencies:
+```bash
+cd demos/ui/frontend
+npm install
+```
+
+5. Set up environment:
 ```bash
 # Copy environment file
 copy example.env .env  # Windows
@@ -80,12 +86,15 @@ Once started, you can access:
 - Interactive API Documentation: `http://localhost:8000/docs`
 - Alternative API Documentation: `http://localhost:8000/redoc`
 
-### Frontend Development
+### Frontend Application
 
-> **Note**: The frontend UI is currently under active development. Once completed, you'll be able to run it using:
+The frontend is a modern React application with TypeScript and Tailwind CSS:
+
 ```bash
-# Install frontend dependencies
+# Navigate to frontend directory
 cd demos/ui/frontend
+
+# Install dependencies (if not done already)
 npm install
 
 # Start development server
@@ -94,28 +103,48 @@ npm run dev
 
 The frontend will be available at `http://localhost:5173` and will automatically connect to the backend API.
 
-## Troubleshooting
+### Production Deployment
 
-1. If you get a "Port in use" error:
-   - Make sure no other application is using port 8000
-   - Try a different port using `--port` argument
+For production deployment:
 
-2. If you get Redis connection errors:
+```bash
+# Build frontend
+cd demos/ui/frontend
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+The production build will be available in the `dist` directory and can be served using the preview server at `http://localhost:4173`.
+
+## Known Issues
+
+1. Frontend Development Server:
+   - There is a known moderate severity vulnerability in esbuild (Vite dependency)
+   - This only affects the development server, not production builds
+   - Reference: GHSA-67mh-4wv8-2f99
+
+2. If you get a "Port in use" error:
+   - Make sure no other application is using ports 8000 (backend) or 5173 (frontend)
+   - Try different ports using `--port` argument for backend
+   - Use `--port` flag with `vite` for frontend
+
+3. If you get Redis connection errors:
    - Make sure Redis server is running locally
    - Default Redis connection: localhost:6379
 
-3. If you get import errors:
+4. If you get import errors:
    - Make sure you're in the project root directory
    - Try reinstalling dependencies: `poetry install --no-root`
 
-4. If you get API key errors:
+5. If you get API key errors:
    - Verify your API keys in `.env`
    - At least one provider's API key is required (default: GROQ)
 
+## Documentation
 
-## API Documentation
-
-For detailed information about the API and its features, refer to:
-- Interactive Swagger UI: `http://localhost:8000/docs`
-- ReDoc Documentation: `http://localhost:8000/redoc`
-- API Documentation: [API README](api/README.md) 
+For detailed information, refer to:
+- [Main Documentation](../README.md)
+- [API Documentation](api/README.md)
+- [Frontend Documentation](ui/frontend/README.md) 

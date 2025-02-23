@@ -17,6 +17,7 @@ AgentConnect is a scalable framework for human-agent and agent-agent interaction
 - **🔒 Security**: DID-based identity and cryptographic message verification
 - **🎯 Capability System**: Dynamic discovery and interaction
 - **🔧 Extensible Design**: Modular architecture with automatic session management
+- **🎨 Modern UI**: React-based frontend with dark mode and real-time updates
 
 ## 🚀 Quick Start
 
@@ -25,7 +26,7 @@ AgentConnect is a scalable framework for human-agent and agent-agent interaction
 - Python 3.11 or higher
 - Poetry (Python package manager)
 - Redis server
-- Node.js and npm (for frontend)
+- Node.js 18+ and npm
 
 ### Installation
 
@@ -38,7 +39,7 @@ cd AgentConnect
 2. Install Poetry:
 Visit [Poetry's official installation guide](https://python-poetry.org/docs/#installation) and follow the instructions for your operating system.
 
-3. Install dependencies:
+3. Install backend dependencies:
 ```bash
 # Install all dependencies (recommended)
 poetry install --with demo,dev --no-root
@@ -47,7 +48,13 @@ poetry install --with demo,dev --no-root
 poetry install --without dev --no-root
 ```
 
-4. Set up environment:
+4. Install frontend dependencies:
+```bash
+cd demos/ui/frontend
+npm install
+```
+
+5. Set up environment:
 ```bash
 # Copy environment file
 copy example.env .env  # Windows
@@ -70,18 +77,25 @@ DEBUG=True
 
 > **Note**: Only the API key matching your `DEFAULT_PROVIDER` is required. Other settings have sensible defaults.
 
-## 🎮 Usage
+## �� Usage
 
-### Quick Demo
+### Running the Application
 
-Run the backend API server:
+1. Start the backend API server:
 ```bash
+# From project root
 poetry run python demos/run_demo.py --backend-only
 ```
 
-The API will be available at:
-- API Endpoints: `http://localhost:8000`
-- Interactive API Documentation: `http://localhost:8000/docs`
+2. Start the frontend development server:
+```bash
+# From demos/ui/frontend
+npm run dev
+```
+
+Access the application:
+- Frontend UI: `http://localhost:5173`
+- API Documentation: `http://localhost:8000/docs`
 - Alternative API Documentation: `http://localhost:8000/redoc`
 
 ### Example Applications
@@ -145,14 +159,13 @@ AgentConnect/
 |   └── utils/             # Utilities
 ├── demos/                 # Demo applications
 │   ├── api/              # FastAPI backend implementation
-│   ├── ui/               # Frontend UI implementation
+│   ├── ui/               # Frontend React implementation
+│   │   └── frontend/     # React TypeScript frontend
 │   └── utils/            # Demo utilities
 ├── tests/                # Test suite
 ├── example_usage.py      # Human-Agent demo
 └── example_multi_agent.py # Agent-Agent demo
 ```
-
-> **Note**: Frontend UI is currently under development. The backend API is fully functional and can be tested through the Swagger UI at `/docs`.
 
 ## 🔍 Architecture
 

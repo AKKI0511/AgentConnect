@@ -145,16 +145,18 @@ Key Features:
 
 ## Base URL
 ```
-http://localhost:8000/api
+http://127.0.0.1:8000/api
 ```
 
 ## Authentication
+
+### Token-Based Authentication
 All endpoints require JWT authentication:
 ```http
 Authorization: Bearer <token>
 ```
 
-### Obtaining Tokens
+### Login
 ```http
 POST /auth/login
 Content-Type: application/x-www-form-urlencoded
@@ -162,12 +164,12 @@ Content-Type: application/x-www-form-urlencoded
 username=<username>&password=<password>
 ```
 
-**Response:**
-```json
-{
-  "access_token": "string",
-  "token_type": "bearer",
-  "expires_in": 1800
+**Response:** `200 OK`
+```typescript
+interface Token {
+    access_token: string;
+    token_type: "bearer";
+    expires_in: number;  // Seconds until expiration
 }
 ```
 
@@ -177,23 +179,20 @@ username=<username>&password=<password>
 - 429: Too many attempts
 
 ### Verify Token
-Verifies if a JWT token is valid and returns the token's claims.
-
 ```http
 POST /auth/verify
 Authorization: Bearer <token>
 ```
 
 **Response:** `200 OK`
-```json
-{
-  "valid": true,
-  "claims": {
-    "sub": "username",
-    "exp": 1234567890,
-    "iat": 1234567890,
-    "type": "access"
-  }
+```typescript
+interface TokenVerification {
+    valid: boolean;
+    user: string;
+    type: "access";
+    exp: number;
+    iat: number;
+    timestamp: string;
 }
 ```
 
@@ -203,48 +202,73 @@ Authorization: Bearer <token>
 - 429: Too many attempts (10 requests/minute)
 
 ## WebSocket Communication
-Connect to: `ws://localhost:8000/api/ws/{session_id}`
 
-### Authentication Options
+### Connection
+Connect to: `ws://127.0.0.1:8000/api/chat/ws/{session_id}`
+
+Authentication options:
 1. Query parameter: `?token=<jwt>`
 2. Header: `Authorization: Bearer <jwt>`
 
-### Message Format
+### Message Types
 ```typescript
-interface Message {
-  type: "text" | "error" | "info" | "system" | "response" | "stop" | "cooldown";
-  content?: string;
-  sender?: string;
-  receiver?: string;
-  timestamp?: string;
-  metadata?: Record<string, any>;
+enum MessageType {
+    TEXT = "text",
+    PING = "ping",
+    ERROR = "error",
+    INFO = "info",
+    SYSTEM = "system",
+    RESPONSE = "response",
+    STOP = "stop",
+    COOLDOWN = "cooldown"
 }
 
-// Example: Sending a message
-{
-  "type": "text",
-  "content": "Hello AI!",
-  "timestamp": "2024-02-17T12:00:00Z"
+enum MessageRole {
+    USER = "user",
+    ASSISTANT = "assistant",
+    SYSTEM = "system"
 }
 
-// Example: Receiving a response
-{
-  "type": "text",
-  "content": "Hello Human!",
-  "sender": "ai_session_123",
-  "receiver": "human_session_123",
-  "timestamp": "2024-02-17T12:00:01Z",
-  "metadata": {
-    "role": "assistant"
-  }
+interface WebSocketMessage {
+    type: MessageType;
+    content?: string;
+    sender?: string;
+    receiver?: string;
+    timestamp: string;  // ISO format
+    metadata?: Record<string, any>;
 }
 ```
 
-## REST Endpoints
+### Example Messages
 
-### Chat Sessions
+**Sending a message:**
+```json
+{
+    "type": "text",
+    "content": "Hello AI!",
+    "timestamp": "2024-02-23T12:00:00Z"
+}
+```
 
-#### Create Session
+**Receiving a response:**
+```json
+{
+    "type": "response",
+    "content": "Hello! How can I help you today?",
+    "sender": "ai_agent_123",
+    "receiver": "user_456",
+    "timestamp": "2024-02-23T12:00:01Z",
+    "metadata": {
+        "role": "assistant",
+        "provider": "groq",
+        "model": "llama-3-70b"
+    }
+}
+```
+
+## Chat Sessions
+
+### Create Session
 Creates a new chat session with specified configuration.
 
 ```http
@@ -256,63 +280,55 @@ Authorization: Bearer <token>
 **Request Body:**
 ```typescript
 interface CreateSessionRequest {
-  // Required fields
-  session_type: "human_agent" | "agent_agent";
-  provider: "groq" | "anthropic" | "openai" | "google";
-  
-  // Optional fields
-  model?: string;  // Default: provider's default model
-  capabilities?: string[];  // Default: ["conversation"]
-  personality?: string;  // Default: "helpful and professional"
-  metadata?: Record<string, any>;
+    session_type: "human_agent" | "agent_agent";
+    agents: {
+        [key: string]: {
+            provider: string;
+            model?: string;
+            capabilities?: string[];
+            personality?: string;
+            metadata?: Record<string, any>;
+        }
+    };
+    interaction_modes?: string[];
+    metadata?: Record<string, any>;
 }
 ```
 
 **Response:** `200 OK`
 ```typescript
 interface SessionResponse {
-  session_id: string;  // Format: session_YYYYMMDDHHMMSS_<uuid>
-  type: "system";
-  created_at: string;  // ISO timestamp
-  status: "active" | "initializing";
-  provider: string;
-  model: string;
-  metadata: {
-    // For human-agent sessions:
-    human_agent_id?: string;  // Format: human_<session_id>
-    ai_agent_id?: string;    // Format: ai1_<session_id>
-    
-    // For agent-agent sessions:
-    agent1_id?: string;      // Format: ai1_<session_id>
-    agent2_id?: string;      // Format: ai2_<session_id>
-  }
+    session_id: string;
+    type: "system";
+    created_at: string;
+    status: "active" | "initializing";
+    session_type: "human_agent" | "agent_agent";
+    agents: {
+        [key: string]: {
+            agent_id: string;
+            provider: string;
+            model: string;
+            capabilities: string[];
+            personality?: string;
+            status: string;
+        }
+    };
+    metadata?: Record<string, any>;
 }
 ```
 
 **Example Request:**
 ```json
 {
-  "session_type": "human_agent",
-  "provider": "groq",
-  "model": "llama-3-70b",
-  "capabilities": ["conversation"],
-  "personality": "helpful and professional"
-}
-```
-
-**Example Response:**
-```json
-{
-  "session_id": "session_20240217120000_abc123",
-  "type": "system",
-  "created_at": "2024-02-17T12:00:00Z",
-  "status": "active",
-  "provider": "groq",
-  "model": "llama-3-70b",
-  "metadata": {
-    "human_agent_id": "human_session_20240217120000_abc123",
-    "ai_agent_id": "ai1_session_20240217120000_abc123"
-  }
+    "session_type": "human_agent",
+    "agents": {
+        "primary": {
+            "provider": "groq",
+            "model": "llama-3-70b",
+            "capabilities": ["conversation"],
+            "personality": "helpful and professional"
+        }
+    }
 }
 ```
 
@@ -323,7 +339,7 @@ interface SessionResponse {
 - 429: Rate limit exceeded (5 requests/minute)
 - 500: Server error
 
-#### Get Session
+### Get Session
 Retrieves information about an existing chat session.
 
 ```http
@@ -331,155 +347,66 @@ GET /chat/sessions/{session_id}
 Authorization: Bearer <token>
 ```
 
-**Response:** `200 OK`
-```typescript
-// Same as SessionResponse above
-```
+**Response:** Same as SessionResponse above
 
-**Errors:**
-- 401: Unauthorized
-- 404: Session not found
-- 429: Rate limit exceeded (10 requests/minute)
-
-#### Delete Session
-Ends and cleans up a chat session.
-
+### Delete Session
 ```http
 DELETE /chat/sessions/{session_id}
 Authorization: Bearer <token>
 ```
 
 **Response:** `204 No Content`
-
-**Errors:**
-- 401: Unauthorized
-- 403: Not session owner
-- 404: Session not found
-- 429: Rate limit exceeded (5 requests/minute)
-
-#### List Providers
-Returns available AI providers and their models.
-
-```http
-GET /chat/providers
-Authorization: Bearer <token>
-```
-
-**Response:** `200 OK`
 ```typescript
-interface ProvidersResponse {
-  providers: {
-    [provider: string]: {
-      models: string[];
-      capabilities: string[];
-      default_model: string;
-    }
-  }
+interface DeleteSessionResponse {
+    status: "success" | "error";
+    message?: string;
 }
 ```
 
-**Example Response:**
-```json
-{
-  "providers": {
-    "groq": {
-      "models": ["llama-3-70b", "mixtral-8x7b"],
-      "capabilities": ["conversation", "analysis"],
-      "default_model": "llama-3-70b",
-      "is_available": true
-    }
-  }
-}
-```
+## Agent Management
 
-**Errors:**
-- 401: Unauthorized
-- 429: Rate limit exceeded (10 requests/minute)
-
-### Agent Management
-
-#### Register Agent
-Registers a new AI agent in the system.
-
-```http
-POST /agents/register
-Content-Type: application/json
-Authorization: Bearer <token>
-```
-
-**Request Body:**
+### Agent Configuration
 ```typescript
 interface AgentConfig {
-  name: string;
-  provider: string;
-  model?: string;
-  capabilities?: string[];  // Default: ["conversation"]
-  interaction_modes?: string[];  // Default: ["human_to_agent"]
-  personality?: string;
-  metadata?: Record<string, any>;
+    name: string;
+    provider: string;
+    model?: string;
+    capabilities?: string[];
+    interaction_modes?: string[];
+    personality?: string;
+    metadata?: Record<string, any>;
 }
 ```
 
-**Response:** `200 OK`
-```typescript
-interface AgentRegistrationResponse {
-  agent_id: string;  // Format: agent_YYYYMMDDHHMMSS_<user_id>
-  status: "registered";
-  name: string;
-  provider: string;
-  model: string;
-  capabilities: string[];
-  interaction_modes: string[];
-  owner_id: string;
-  timestamp: string;
-}
-```
-
-**Example Request:**
-```json
-{
-  "name": "Analysis Assistant",
-  "provider": "groq",
-  "model": "llama-3-70b",
-  "capabilities": ["analysis", "conversation"],
-  "interaction_modes": ["human_to_agent", "agent_to_agent"],
-  "personality": "analytical and precise"
-}
-```
-
-**Errors:**
-- 400: Invalid configuration
-- 401: Unauthorized
-- 422: Validation error
-- 429: Rate limit exceeded (5 requests/minute)
-- 500: Registration failed
-
-#### Unregister Agent
-Removes an agent from the system.
-
+### Get Agent Status
 ```http
-DELETE /agents/{agent_id}
+GET /agents/status/{agent_id}
 Authorization: Bearer <token>
 ```
 
 **Response:** `200 OK`
-```json
-{
-  "agent_id": "string",
-  "status": "unregistered",
-  "timestamp": "2024-02-17T12:00:00Z"
+```typescript
+interface AgentStatus {
+    agent_id: string;
+    agent_type: string;
+    name?: string;
+    status: "active" | "inactive" | "cooldown" | "error";
+    last_active: string;
+    capabilities: string[];
+    interaction_modes: string[];
+    owner_id: string;
+    is_running: boolean;
+    message_count: number;
+    metadata: {
+        provider?: string;
+        model?: string;
+        cooldown_until?: string | null;
+        active_conversations?: number;
+    };
 }
 ```
 
-**Errors:**
-- 401: Unauthorized
-- 403: Not agent owner
-- 404: Agent not found
-- 429: Rate limit exceeded (5 requests/minute)
-
-#### List Agents
-Returns all registered agents accessible to the user.
-
+### List Agents
 ```http
 GET /agents/list
 Authorization: Bearer <token>
@@ -488,32 +415,14 @@ Authorization: Bearer <token>
 **Response:** `200 OK`
 ```typescript
 interface AgentListResponse {
-  agents: Array<{
-    agent_id: string;
-    name: string;
-    provider: string;
-    model: string;
-    capabilities: string[];
-    interaction_modes: string[];
-    status: "active" | "inactive" | "error";
-    owner_id: string;
-    created_at: string;
-    last_active: string;
-    is_owned: boolean;
-  }>;
-  timestamp: string;
-  total_count: number;
-  user_owned_count: number;
+    agents: Array<AgentStatus>;
+    timestamp: string;
+    total_count: number;
+    user_owned_count: number;
 }
 ```
 
-**Errors:**
-- 401: Unauthorized
-- 429: Rate limit exceeded (10 requests/minute)
-
-#### Send Agent Message
-Sends a message from one agent to another.
-
+### Send Agent Message
 ```http
 POST /agents/{agent_id}/message
 Content-Type: application/json
@@ -523,86 +432,76 @@ Authorization: Bearer <token>
 **Request Body:**
 ```typescript
 interface AgentMessageRequest {
-  receiver_id: string;
-  content: string;
-  message_type: string;
-  structured_data?: Record<string, any>;
-  metadata?: Record<string, any>;
+    receiver_id: string;
+    content: string;
+    message_type: MessageType;
+    structured_data?: Record<string, any>;
+    metadata?: Record<string, any>;
 }
 ```
 
 **Response:** `200 OK`
 ```typescript
 interface AgentMessageResponse {
-  status: "sent";
-  message_id: string;
-  sender: string;
-  receiver: string;
-  timestamp: string;
+    status: string;
+    message_id: string;
+    sender: string;
+    receiver: string;
+    timestamp: string;
 }
 ```
 
-**Errors:**
-- 401: Unauthorized
-- 403: Not agent owner
-- 404: Agent not found
-- 422: Invalid message format
-- 429: Rate limit exceeded (20 requests/minute)
+## Error Handling
 
-#### Get Agent Capabilities
-Returns detailed information about an agent's capabilities.
-
-```http
-GET /agents/{agent_id}/capabilities
-Authorization: Bearer <token>
-```
-
-**Response:** `200 OK`
+### Common Error Responses
 ```typescript
-interface AgentCapabilitiesResponse {
-  agent_id: string;
-  agent_type: string;
-  capabilities: string[];
-  interaction_modes: string[];
-  personality?: string;
-  owner_id: string;
-  timestamp: string;
+interface ErrorResponse {
+    detail: string;
+    code?: string;
+    timestamp?: string;
 }
 ```
 
-**Errors:**
-- 401: Unauthorized
-- 403: Not authorized to view
-- 404: Agent not found
-- 429: Rate limit exceeded (10 requests/minute)
+### HTTP Status Codes
+- 400: Bad Request (Invalid input)
+- 401: Unauthorized (Invalid/missing token)
+- 403: Forbidden (Insufficient permissions)
+- 404: Not Found (Resource doesn't exist)
+- 422: Validation Error (Invalid request format)
+- 429: Too Many Requests (Rate limit exceeded)
+- 500: Internal Server Error
 
-#### Get Agent Status
-Returns detailed status information about an agent.
+### WebSocket Error Types
+1. Connection Errors:
+   - 4000: Generic error
+   - 4001: Invalid session
+   - 4002: Session expired
+   - 4003: Authentication failed
+   - 4004: Rate limited
 
-```http
-GET /agents/status/{agent_id}
-Authorization: Bearer <token>
-```
+2. Message Errors:
+   ```json
+   {
+       "type": "error",
+       "content": "Error description",
+       "metadata": {
+           "code": "ERROR_CODE",
+           "details": {}
+       }
+   }
+   ```
 
-**Response:** `200 OK`
-```typescript
-interface AgentStatus {
-  agent_id: string;
-  agent_type: string;
-  name?: string;
-  status: "active" | "inactive" | "cooldown";
-  last_active: string;
-  capabilities: string[];
-  interaction_modes: string[];
-  owner_id: string;
-  is_running: boolean;
-  message_count: number;
-  metadata: {
-    provider?: string;
-    model?: string;
-    cooldown_until?: string | null;
-    active_conversations?: number;
-    total_messages_processed?: number;
-  };
-}
-```
+## Rate Limiting
+- Authentication endpoints: 10-50 requests/minute
+- Session creation: 5 requests/minute
+- Session queries: 10 requests/minute
+- WebSocket messages: 60 messages/minute
+- Agent operations: 20 requests/minute
+
+## Best Practices
+1. Always handle WebSocket reconnection
+2. Implement exponential backoff for retries
+3. Keep track of message order using timestamps
+4. Handle all error types appropriately
+5. Validate session existence before WebSocket connection
+6. Clean up resources by closing unused sessions

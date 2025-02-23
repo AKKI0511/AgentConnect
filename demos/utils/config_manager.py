@@ -78,7 +78,10 @@ class APISettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
-    allowed_origins: List[str] = ["http://localhost:5173"]  # Vite's default port
+    allowed_origins: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ]  # Vite's default port
     ws_rate_limit_times: int = 30
     ws_rate_limit_seconds: int = 60
     api_rate_limit_times: int = 100
@@ -146,11 +149,7 @@ class ConfigManager:
     def _load_config(self) -> Config:
         """Load configuration with validation"""
         try:
-            # Load environment variables from project root
-            env_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"
-            )
-            load_dotenv(env_path)
+            load_dotenv()
 
             # API settings with defaults
             api_settings = {

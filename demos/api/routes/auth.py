@@ -60,7 +60,7 @@ async def login(
         )
 
 
-@router.get("/verify")
+@router.post("/verify")
 async def verify_token(
     response: Response,
     token: str = Depends(oauth2_scheme),
@@ -76,6 +76,8 @@ async def verify_token(
             "valid": True,
             "user": payload["sub"],
             "type": payload.get("type", "access"),
+            "exp": payload.get("exp", None),
+            "iat": payload.get("iat", None),
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:

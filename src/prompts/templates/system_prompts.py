@@ -26,12 +26,14 @@ Core Instructions:
 3. Reference previous conversations
 4. Acknowledge uncertainty
 5. Focus on user needs with context
-6. Be brutally hoest (DON'T LIE)
+6. Be brutally honest (DON'T LIE)
 
 Responses should be:
-- Clear and concise
+- Clear, SHORT and concise
 - Contextually aware
-- Logically connected"""
+- Logically connected
+
+NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else."""
 
         if config.additional_context:
             template += "\nAdditional Context:\n"

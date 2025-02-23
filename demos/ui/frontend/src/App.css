@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  #root {
+    padding: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  #root {
+    padding: 2rem;
+  }
+}
+
+.logo {
+  height: 4em;
+  padding: 1em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+@media (min-width: 640px) {
+  .logo {
+    height: 5em;
+    padding: 1.25em;
+  }
+}
+
+@media (min-width: 1024px) {
+  .logo {
+    height: 6em;
+    padding: 1.5em;
+  }
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em #38bdf8aa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #38bdf8aa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 1em;
+}
+
+@media (min-width: 640px) {
+  .card {
+    padding: 1.5em;
+  }
+}
+
+@media (min-width: 1024px) {
+  .card {
+    padding: 2em;
+  }
+}
+
+.read-the-docs {
+  color: #94a3b8;
+}
+
+/* App-specific animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* App-specific transitions */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.page-transition-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.page-transition-exit-active {
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 300ms, transform 300ms;
+}

@@ -1,3 +1,4 @@
+import os
 import anthropic
 from typing import List, Dict, Any
 from .base_provider import BaseProvider
@@ -38,3 +39,8 @@ class AnthropicProvider(BaseProvider):
 
     def _get_provider_config(self) -> Dict[str, Any]:
         return {"anthropic_api_key": self.api_key, "model_provider": "anthropic"}
+
+
+if __name__ == "__main__":
+    provider = AnthropicProvider(os.getenv("ANTHROPIC_API_KEY"))
+    print(provider.get_available_models())

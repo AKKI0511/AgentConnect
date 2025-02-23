@@ -46,3 +46,8 @@ class BaseProvider(ABC):
     def _get_provider_config(self) -> Dict[str, Any]:
         """Returns provider-specific configuration"""
         pass
+
+
+if __name__ == "__main__":
+    provider = BaseProvider()
+    print(provider.get_available_models())

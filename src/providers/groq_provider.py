@@ -1,3 +1,4 @@
+import os
 from typing import List, Dict, Any
 from .base_provider import BaseProvider
 from ..core.types import ModelName
@@ -33,3 +34,8 @@ class GroqProvider(BaseProvider):
 
     def _get_provider_config(self) -> Dict[str, Any]:
         return {"groq_api_key": self.api_key, "model_provider": "groq"}
+
+
+if __name__ == "__main__":
+    provider = GroqProvider(os.getenv("GROQ_API_KEY"))
+    print(provider.get_available_models())

@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from typing import Dict, Type
 
 from .base_provider import BaseProvider
@@ -31,11 +32,15 @@ class ProviderFactory:
         providers = {}
         for provider_type, provider_class in cls._providers.items():
             try:
+                # Create an instance with an empty API key just to get the models
+                provider_instance = provider_class("")
                 providers[provider_type.value] = {
                     "name": provider_type.value.title(),
-                    "models": provider_class.get_available_models(),
+                    "models": provider_instance.get_available_models(),
                 }
-            except Exception:
+            except Exception as e:
                 # Skip providers that fail to initialize
+                logger.error(f"Failed to initialize provider: {provider_type}")
+                logger.error(f"Error: {e}")
                 continue
         return providers

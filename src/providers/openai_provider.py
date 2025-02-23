@@ -1,3 +1,4 @@
+import os
 from typing import List, Dict, Any
 from .base_provider import BaseProvider
 from ..core.types import ModelName
@@ -25,3 +26,8 @@ class OpenAIProvider(BaseProvider):
 
     def _get_provider_config(self) -> Dict[str, Any]:
         return {"openai_api_key": self.api_key, "model_provider": "openai"}
+
+
+if __name__ == "__main__":
+    provider = OpenAIProvider(os.getenv("OPENAI_API_KEY"))
+    print(provider.get_available_models())

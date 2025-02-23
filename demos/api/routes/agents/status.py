@@ -19,19 +19,14 @@ async def list_agents(current_user: str) -> AgentListResponse:
     """List all registered agents"""
     try:
         logger.info(f"Listing agents for user {current_user}")
-
-        # Get all active agents from hub
         agents: List[BaseAgent] = await shared.hub.get_all_agents()
+
         if not agents:
             logger.warning("No agents found in hub")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve agents",
+            return AgentListResponse(
+                agents=[], timestamp=datetime.now(), total_count=0, user_owned_count=0
             )
 
-        logger.debug(f"Found {len(agents)} total agents")
-
-        # Filter and format agent information
         agent_list = []
         user_owned_count = 0
 
@@ -44,22 +39,33 @@ async def list_agents(current_user: str) -> AgentListResponse:
             try:
                 agent_info = {
                     "agent_id": agent.agent_id,
-                    "name": agent.name,
-                    "provider": agent.provider_type,
-                    "model": agent.model_name,
+                    "agent_type": agent.metadata.agent_type,
+                    "name": getattr(agent, "name", None),
                     "capabilities": agent.metadata.capabilities,
                     "interaction_modes": [
                         mode for mode in agent.metadata.interaction_modes
                     ],
-                    "status": "active",
+                    "status": "active" if agent.is_running else "inactive",
                     "owner_id": agent.metadata.organization_id,
                     "last_active": datetime.now().isoformat(),
+                    "message_count": len(agent.message_history),
+                    "metadata": {},
                 }
 
-                # Check if current user owns this agent
+                # Add AI-specific information
+                if isinstance(agent, AIAgent):
+                    agent_info.update(
+                        {
+                            "provider": agent.provider_type.value,
+                            "model": agent.model_name.value,
+                        }
+                    )
+                    if agent.is_in_cooldown():
+                        agent_info["status"] = "cooldown"
+
+                # Track user ownership
                 if agent.metadata.organization_id == current_user:
                     user_owned_count += 1
-                    logger.debug(f"Found user-owned agent: {agent.agent_id}")
                     agent_info["is_owned"] = True
                 else:
                     agent_info["is_owned"] = False
@@ -70,9 +76,6 @@ async def list_agents(current_user: str) -> AgentListResponse:
                 logger.error(f"Error processing agent {agent.agent_id}: {str(e)}")
                 continue
 
-        logger.info(
-            f"Returning {len(agent_list)} agents ({user_owned_count} owned by user)"
-        )
         return AgentListResponse(
             agents=agent_list,
             timestamp=datetime.now(),
@@ -80,8 +83,6 @@ async def list_agents(current_user: str) -> AgentListResponse:
             user_owned_count=user_owned_count,
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error listing agents: {str(e)}")
         raise HTTPException(
@@ -107,9 +108,8 @@ async def get_agent_capabilities(
     """
     try:
         logger.info(f"Getting capabilities for agent {agent_id}")
-
-        # Get agent from hub
         agent: BaseAgent | None = await shared.hub.get_agent(agent_id)
+
         if not agent:
             logger.warning(f"Agent {agent_id} not found")
             raise HTTPException(
@@ -119,43 +119,28 @@ async def get_agent_capabilities(
 
         # Verify ownership
         if agent.metadata.organization_id != current_user:
-            logger.warning(
-                f"Unauthorized capabilities request for agent {agent_id} by user {current_user}"
-            )
+            logger.warning(f"Unauthorized capabilities request for agent {agent_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view this agent's capabilities",
             )
 
-        logger.debug(f"Retrieving capabilities for agent {agent_id}")
         response_data = {
             "agent_id": agent_id,
             "agent_type": agent.metadata.agent_type,
             "capabilities": agent.metadata.capabilities,
             "interaction_modes": [mode for mode in agent.metadata.interaction_modes],
             "owner_id": agent.metadata.organization_id,
-            "personality": None,  # Default for non-AI agents
+            "personality": getattr(agent, "personality", None),
+            "timestamp": datetime.now(),
         }
 
-        # Add AI-specific data if it's an AI agent
-        if isinstance(agent, AIAgent):
-            response_data["personality"] = agent.personality
-
-            # For AI agents, verify if the requesting user has permission to see full details
-            if agent.metadata.organization_id != current_user:
-                # Remove sensitive information for non-owners
-                response_data["capabilities"] = [
-                    "conversation"
-                ]  # Show only basic capability
-                response_data["personality"] = None
-
-        logger.info(f"Successfully retrieved capabilities for agent {agent_id}")
         return AgentCapabilitiesResponse(**response_data)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting agent capabilities for {agent_id}: {str(e)}")
+        logger.error(f"Error getting agent capabilities: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get agent capabilities: {str(e)}",
@@ -163,21 +148,8 @@ async def get_agent_capabilities(
 
 
 async def get_agent_status(agent_id: str, current_user: str) -> AgentStatus:
-    """Get the current status of an agent
-
-    Args:
-        agent_id (str): The ID of the agent to query
-        current_user (str): The ID of the requesting user
-
-    Returns:
-        AgentStatus: Detailed status information about the agent
-
-    Raises:
-        HTTPException: If agent not found, unauthorized, or other errors occur
-    """
+    """Get the current status of an agent"""
     try:
-        logger.info(f"Getting status for agent {agent_id}")
-
         # Get agent from hub
         agent: BaseAgent | None = await shared.hub.get_agent(agent_id)
         if not agent:
@@ -197,15 +169,13 @@ async def get_agent_status(agent_id: str, current_user: str) -> AgentStatus:
                 detail="You don't have permission to view this agent's status",
             )
 
-        logger.debug(f"Retrieving status information for agent {agent_id}")
-
         # Base status data available for all agent types
         status_data = {
             "agent_id": agent_id,
             "agent_type": agent.metadata.agent_type,
             "name": getattr(agent, "name", None),
             "status": "active" if agent.is_running else "inactive",
-            "last_active": datetime.now(),  # TODO: Track actual last activity time
+            "last_active": datetime.now(),  # Using current time as last activity
             "capabilities": agent.metadata.capabilities,
             "interaction_modes": [mode for mode in agent.metadata.interaction_modes],
             "owner_id": agent.metadata.organization_id,
@@ -233,15 +203,7 @@ async def get_agent_status(agent_id: str, current_user: str) -> AgentStatus:
             if agent.is_in_cooldown():
                 status_data["status"] = "cooldown"
 
-        try:
-            logger.info(f"Successfully retrieved status for agent {agent_id}")
-            return AgentStatus(**status_data)
-        except Exception as e:
-            logger.error(f"Error creating AgentStatus for {agent_id}: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error creating agent status response",
-            )
+        return AgentStatus(**status_data)
 
     except HTTPException:
         raise
@@ -250,4 +212,28 @@ async def get_agent_status(agent_id: str, current_user: str) -> AgentStatus:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get agent status: {str(e)}",
+        )
+
+
+async def update_agent_status(agent_id: str, status_update: dict) -> None:
+    """Update agent status information"""
+    try:
+        # Update status
+        if "status" in status_update:
+            await shared.redis.set(f"agent:{agent_id}:status", status_update["status"])
+
+        # Update last active timestamp
+        await shared.redis.set(
+            f"agent:{agent_id}:last_active", datetime.now().isoformat()
+        )
+
+        # Increment message count if needed
+        if status_update.get("increment_messages", False):
+            await shared.redis.incr(f"agent:{agent_id}:message_count")
+
+    except Exception as e:
+        logger.error(f"Error updating agent status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update agent status: {str(e)}",
         )

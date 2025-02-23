@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import HTTPException, BackgroundTasks, status
 from datetime import datetime
 import asyncio
@@ -6,12 +7,13 @@ from uuid import uuid4
 from demos.api.models.chat import (
     CreateSessionRequest,
     SessionResponse,
+    AgentMetadata,
+    MessageType,
 )
 from src.core.agent import BaseAgent
 from src.core.types import (
     InteractionMode,
     AgentIdentity,
-    MessageType,
     ModelName,
     ModelProvider,
 )
@@ -92,26 +94,59 @@ class SessionManager:
     ) -> dict:
         """Create initial session data"""
         logger.debug(f"Creating session data for session {session_id}")
-        logger.debug(
-            f"Request data - provider: {request.provider}, model: {request.model}"
-        )
         try:
-            # Get default model if none provided
-            model = request.model
-            if not model:
-                model = ModelName.get_default_for_provider(request.provider)
-
+            # Create base session data
             session_data = {
                 "session_id": session_id,
                 "type": MessageType.SYSTEM,
                 "created_at": datetime.now().isoformat(),
                 "last_activity": datetime.now().isoformat(),
                 "created_by": current_user,
-                "provider": request.provider,  # Store enum value
-                "model": model,  # Store enum value
-                "session_type": request.session_type,  # Explicitly store session type
+                "session_type": request.session_type,
                 "status": "initializing",
             }
+
+            # Add agent-specific data based on session type
+            if request.session_type == "human_agent":
+                ai_config = next(iter(request.agents.values()))
+                session_data.update(
+                    {
+                        "ai_provider": ai_config.provider,
+                        "ai_model": ai_config.model
+                        or ModelName.get_default_for_provider(ai_config.provider),
+                        "ai_capabilities": ",".join(ai_config.capabilities),
+                        "ai_personality": ai_config.personality
+                        or "helpful and professional",
+                    }
+                )
+            else:  # agent_agent
+                for idx, (agent_key, agent_config) in enumerate(
+                    request.agents.items(), 1
+                ):
+                    prefix = f"agent{idx}"
+                    session_data.update(
+                        {
+                            f"{prefix}_provider": agent_config.provider,
+                            f"{prefix}_model": agent_config.model
+                            or ModelName.get_default_for_provider(
+                                agent_config.provider
+                            ),
+                            f"{prefix}_capabilities": ",".join(
+                                agent_config.capabilities
+                            ),
+                            f"{prefix}_personality": agent_config.personality
+                            or f"AI Agent {idx} focused on collaborative problem-solving",
+                        }
+                    )
+
+            # Add interaction modes if specified
+            if request.interaction_modes:
+                session_data["interaction_modes"] = ",".join(request.interaction_modes)
+
+            # Add any additional metadata
+            if request.metadata:
+                session_data["metadata"] = str(request.metadata)
+
             logger.debug(f"Created session data: {session_data}")
             return session_data
         except Exception as e:
@@ -164,46 +199,46 @@ class AgentManager:
 
     @staticmethod
     async def create_ai_agent(
-        session_id: str, request: CreateSessionRequest, is_primary: bool = True
+        session_id: str,
+        agent_config: dict,
+        agent_id: str,
+        owner_id: str = "org1",
     ) -> AIAgent:
-        """Create an AI agent"""
-        logger.debug(
-            f"Creating AI agent for session {session_id} (primary: {is_primary})"
-        )
+        """Create an AI agent with specific configuration"""
+        logger.debug(f"Creating AI agent for session {session_id} with ID: {agent_id}")
         try:
             identity = AgentIdentity.create_key_based()
-            logger.debug(f"Getting API key for provider: {request.provider}")
-            api_key = config.get_provider_api_key(request.provider)
+            api_key = config.get_provider_api_key(agent_config["provider"])
             if not api_key:
-                logger.error(f"API key not found for provider: {request.provider}")
-                raise ValueError(f"API key not found for provider: {request.provider}")
-            logger.debug(f"API key found for provider: {api_key}")
+                logger.error(
+                    f"API key not found for provider: {agent_config['provider']}"
+                )
+                raise ValueError(
+                    f"API key not found for provider: {agent_config['provider']}"
+                )
 
             # Get default model if none provided
-            model_name = request.model
+            model_name = agent_config.get("model")
             if not model_name:
-                model_name = ModelName.get_default_for_provider(request.provider)
+                model_name = ModelName.get_default_for_provider(
+                    agent_config["provider"]
+                )
 
-            agent_num = "1" if is_primary else "2"
-            logger.debug(f"Creating AI agent with ID: ai{agent_num}_{session_id}")
             agent = AIAgent(
-                agent_id=f"ai{agent_num}_{session_id}",
-                name=f"AI Assistant {agent_num}",
-                provider_type=ModelProvider(request.provider),
+                agent_id=agent_id,
+                name=f"AI Agent {agent_id}",
+                provider_type=ModelProvider(agent_config["provider"]),
                 model_name=ModelName(model_name),
                 api_key=api_key,
                 identity=identity,
-                capabilities=request.capabilities or ["conversation"],
-                personality=request.personality
-                or (f"helpful and professional AI assistant {agent_num}"),
-                organization_id="org1",
-                interaction_modes=[
-                    (
-                        InteractionMode.HUMAN_TO_AGENT
-                        if request.session_type == "human_agent"
-                        else InteractionMode.AGENT_TO_AGENT
-                    )
-                ],
+                capabilities=agent_config.get("capabilities", ["conversation"]),
+                personality=agent_config.get("personality"),
+                organization_id=owner_id,
+                interaction_modes=agent_config.get(
+                    "interaction_modes",
+                    [InteractionMode.AGENT_TO_AGENT, InteractionMode.HUMAN_TO_AGENT],
+                ),
+                max_tokens_per_minute=3000,
             )
             logger.debug(f"Created AI agent with ID: {agent.agent_id}")
             return agent
@@ -235,19 +270,10 @@ class AgentManager:
             try:
                 # Create a closure to capture session_id
                 async def message_handler(msg):
-                    try:
-                        # Only handle responses from this agent
-                        if msg.sender_id == agent.agent_id:
-                            logger.debug(
-                                f"Agent {agent.agent_id} processing message: {msg.content}"
-                            )
-                            await handle_agent_response(session_id, msg)
-                    except Exception as e:
-                        logger.error(
-                            f"Error in message handler for {agent.agent_id}: {str(e)}"
-                        )
+                    # Handle messages from any agent in the session
+                    await handle_agent_response(session_id, msg)
 
-                # Add message handler
+                # Add message handler to hub
                 shared.hub.add_message_handler(agent.agent_id, message_handler)
 
                 # Start agent processing using asyncio task
@@ -286,7 +312,15 @@ async def setup_human_agent_session(
     logger.info(f"Setting up human-agent session {session_id}")
     try:
         human_agent = await AgentManager.create_human_agent(session_id, current_user)
-        ai_agent = await AgentManager.create_ai_agent(session_id, request)
+
+        # Get the AI agent configuration (there should be exactly one)
+        ai_config = next(iter(request.agents.values()))
+        ai_agent = await AgentManager.create_ai_agent(
+            session_id=session_id,
+            agent_config=ai_config.model_dump(),
+            agent_id=f"ai1_{session_id}",
+            owner_id=current_user,
+        )
 
         await AgentManager.register_agents(human_agent, ai_agent)
         await AgentManager.setup_message_handlers(
@@ -297,31 +331,42 @@ async def setup_human_agent_session(
             human_agent_id=human_agent.agent_id,
             ai_agent_id=ai_agent.agent_id,
         )
-        logger.info(f"Successfully set up human-agent session {session_id}")
+        logger.debug(f"Successfully set up human-agent session {session_id}")
     except Exception as e:
         logger.error(f"Failed to set up human-agent session: {str(e)}")
         raise
 
 
 async def setup_agent_agent_session(
-    session_id: str, request: CreateSessionRequest, background_tasks: BackgroundTasks
+    session_id: str,
+    request: CreateSessionRequest,
+    current_user: str,
+    background_tasks: BackgroundTasks,
 ) -> None:
     """Set up an agent-agent chat session"""
     logger.info(f"Setting up agent-agent session {session_id}")
     try:
-        agent1 = await AgentManager.create_ai_agent(session_id, request)
-        agent2 = await AgentManager.create_ai_agent(
-            session_id, request, is_primary=False
-        )
+        # Create both AI agents with their respective configurations
+        agents: List[AIAgent] = []
+        for idx, (agent_key, agent_config) in enumerate(request.agents.items(), 1):
+            agent = await AgentManager.create_ai_agent(
+                session_id=session_id,
+                agent_config=agent_config.model_dump(),
+                agent_id=f"ai{idx}_{session_id}",
+                owner_id=current_user,
+            )
+            agents.append(agent)
 
-        await AgentManager.register_agents(agent1, agent2)
+        await AgentManager.register_agents(*agents)
         await AgentManager.setup_message_handlers(
-            session_id, agent1, agent2, background_tasks=background_tasks
+            session_id, *agents, background_tasks=background_tasks
         )
         await AgentManager.update_session_with_agents(
-            session_id, agent1_id=agent1.agent_id, agent2_id=agent2.agent_id
+            session_id,
+            agent1_id=agents[0].agent_id,
+            agent2_id=agents[1].agent_id,
         )
-        logger.info(f"Successfully set up agent-agent session {session_id}")
+        logger.debug(f"Successfully set up agent-agent session {session_id}")
     except Exception as e:
         logger.error(f"Failed to set up agent-agent session: {str(e)}")
         raise
@@ -330,86 +375,99 @@ async def setup_agent_agent_session(
 async def create_new_session(
     request: CreateSessionRequest, background_tasks: BackgroundTasks, current_user: str
 ) -> SessionResponse:
-    """Create a new chat session with all necessary setup"""
-    logger.info(f"Creating new session for user {current_user}")
+    """Create a new chat session with specified configuration"""
+    logger.debug(f"Creating new session for user {current_user}")
     try:
-        # Validate and initialize session
+        # Validate session limit
         await SessionManager.validate_user_sessions(current_user)
+
+        # Generate session ID and create initial session data
         session_id = SessionManager.generate_session_id()
-        logger.debug(f"Request data for session creation: {request.model_dump()}")
         session_data = SessionManager.create_session_data(
             session_id, request, current_user
         )
+        await SessionManager.store_session_data(session_id, session_data, current_user)
 
-        try:
-            # Store session data
-            await SessionManager.store_session_data(
-                session_id, session_data, current_user
+        # Set up agents based on session type
+        if request.session_type == "human_agent":
+            await setup_human_agent_session(
+                session_id, request, current_user, background_tasks
+            )
+        elif request.session_type == "agent_agent":
+            await setup_agent_agent_session(
+                session_id, request, current_user, background_tasks
             )
 
-            # Set up agents based on session type
-            if request.session_type == "human_agent":
-                await setup_human_agent_session(
-                    session_id, request, current_user, background_tasks
-                )
-                # Get agent IDs for response
-                session_info = await shared.redis.hgetall(f"session:{session_id}")
-                metadata = {
-                    **(request.metadata or {}),
-                    "human_agent_id": session_info.get("human_agent_id"),
-                    "ai_agent_id": session_info.get("ai_agent_id"),
-                }
-            elif request.session_type == "agent_agent":
-                await setup_agent_agent_session(session_id, request, background_tasks)
-                # Get agent IDs for response
-                session_info = await shared.redis.hgetall(f"session:{session_id}")
-                metadata = {
-                    **(request.metadata or {}),
-                    "agent1_id": session_info.get("agent1_id"),
-                    "agent2_id": session_info.get("agent2_id"),
-                }
+        # Get session info for response
+        session_info = await shared.redis.hgetall(f"session:{session_id}")
 
-            # Schedule cleanup
-            background_tasks.add_task(
-                schedule_session_cleanup, session_id, config.session_settings["timeout"]
-            )
-
-            # Create response with proper enum handling and agent IDs
-            response = SessionResponse(
-                session_id=session_id,
-                type=MessageType.SYSTEM,
-                created_at=datetime.now(),
+        # Create agent metadata for response
+        agents_metadata = {}
+        if request.session_type == "human_agent":
+            ai_agent_id = session_info.get("ai_agent_id")
+            agents_metadata["ai_agent"] = AgentMetadata(
+                agent_id=ai_agent_id,
+                provider=session_info["ai_provider"],
+                model=session_info["ai_model"],
+                capabilities=session_info["ai_capabilities"].split(","),
+                personality=session_info["ai_personality"],
                 status="active",
-                provider=request.provider,
-                model=request.model,
-                metadata=metadata,
             )
-            logger.info(f"Successfully created session {session_id}")
-            return response
+        else:
+            for idx, (agent_key, _) in enumerate(request.agents.items(), 1):
+                prefix = f"agent{idx}"
+                agent_id = session_info.get(f"{prefix}_id")
+                agents_metadata[agent_key] = AgentMetadata(
+                    agent_id=agent_id,
+                    provider=session_info[f"{prefix}_provider"],
+                    model=session_info[f"{prefix}_model"],
+                    capabilities=session_info[f"{prefix}_capabilities"].split(","),
+                    personality=session_info[f"{prefix}_personality"],
+                    status="active",
+                )
 
-        except Exception as e:
-            logger.error(f"Failed to initialize session: {str(e)}")
-            await cleanup_failed_session(session_id, current_user)
-            raise ValueError(f"Failed to initialize session: {str(e)}")
+        # Parse metadata if exists
+        metadata = (
+            eval(session_info.get("metadata", "{}"))
+            if session_info.get("metadata")
+            else None
+        )
 
-    except HTTPException:
-        raise
+        # Create response
+        response = SessionResponse(
+            session_id=session_id,
+            type=MessageType.SYSTEM,
+            created_at=datetime.fromisoformat(session_info["created_at"]),
+            status="active",
+            session_type=request.session_type,
+            agents=agents_metadata,
+            metadata=metadata,
+        )
+
+        # Schedule cleanup
+        background_tasks.add_task(
+            schedule_session_cleanup, session_id, config.session_settings["timeout"]
+        )
+
+        logger.debug(f"Successfully created session {session_id}")
+        return response
+
     except Exception as e:
-        logger.error(f"Error in create session handler: {str(e)}")
+        logger.error(f"Failed to create session: {str(e)}")
+        await cleanup_failed_session(session_id, current_user)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )
 
 
 async def cleanup_failed_session(session_id: str, user_id: str):
-    """Cleanup resources for failed session initialization"""
+    """Clean up resources if session creation fails"""
     try:
-        async with shared.redis.pipeline(transaction=True) as pipe:
-            await pipe.delete(f"session:{session_id}")
-            await pipe.srem(f"user_sessions:{user_id}", session_id)
-            await pipe.execute()
+        await shared.redis.delete(f"session:{session_id}")
+        await shared.redis.srem(f"user_sessions:{user_id}", session_id)
     except Exception as e:
-        logger.error(f"Error cleaning up failed session: {str(e)}")
+        logger.error(f"Failed to cleanup session: {str(e)}")
 
 
 async def schedule_session_cleanup(session_id: str, timeout: int):

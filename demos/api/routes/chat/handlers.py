@@ -61,6 +61,19 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
             logger.error(f"Session {session_id} not found for agent response")
             return
 
+        # Handle cooldown and stop messages differently
+        if message.message_type in [MessageType.COOLDOWN, MessageType.STOP]:
+            ws_message = WebSocketMessage(
+                type=message.message_type,
+                content=message.content,
+                sender=message.sender_id,
+                receiver=message.receiver_id,
+                timestamp=message.timestamp or datetime.now().isoformat(),
+                metadata=message.metadata,
+            )
+            await broadcast_message(session_id, ws_message)
+            return
+
         # Check message count
         message_count = await shared.redis.incr(f"message_count:{session_id}")
         if message_count >= config.session_settings["max_messages_per_session"]:
@@ -70,7 +83,7 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
                 WebSocketMessage(
                     type=MessageType.SYSTEM,
                     content="Conversation limit reached. Starting new topic.",
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now().isoformat(),
                 ),
             )
             # Reset message count for new topic
@@ -79,87 +92,44 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
 
         # Convert core Message to WebSocketMessage
         ws_message = WebSocketMessage(
-            type=message.message_type,
+            type=(
+                MessageType.TEXT
+                if message.message_type == MessageType.RESPONSE
+                else message.message_type
+            ),
             content=message.content,
             sender=message.sender_id,
             receiver=message.receiver_id,
-            timestamp=message.timestamp,
-            metadata=message.metadata,
+            timestamp=message.timestamp or datetime.now().isoformat(),
+            metadata={
+                **(message.metadata or {}),
+                "conversation_type": session_data.get("session_type", "human_agent"),
+                "original_type": message.message_type,  # Store original message type
+            },
         )
 
-        # Store message in session history
-        chat_message = ChatMessage(
-            content=message.content,
-            role=(
-                MessageRole.ASSISTANT
-                if message.sender_id.startswith(("ai_", "agent"))
-                else MessageRole.USER
-            ),
-            timestamp=message.timestamp,
-            metadata=message.metadata,
-        )
-        await shared.redis.rpush(
-            f"messages:{session_id}", chat_message.model_dump_json()
-        )
+        # Only store and broadcast if it's an agent-agent message
+        if ws_message.metadata.get("conversation_type") == "agent_agent":
+            # Store message in session history
+            chat_message = ChatMessage(
+                content=message.content,
+                role=(
+                    MessageRole.ASSISTANT
+                    if message.sender_id.startswith(("ai_", "agent"))
+                    else MessageRole.USER
+                ),
+                timestamp=message.timestamp or datetime.now().isoformat(),
+                metadata=message.metadata,
+            )
+            await shared.redis.rpush(
+                f"messages:{session_id}", chat_message.model_dump_json()
+            )
 
-        # For agent-agent sessions, automatically trigger next message if needed
-        if session_data["type"] == "agent_agent":
-            try:
-                # Check if this is a continuation message
-                if message.metadata and message.metadata.get("continuation"):
-                    continuation_count = int(
-                        message.metadata.get("continuation_count", 1)
-                    )
-                    if continuation_count >= 5:  # Limit consecutive exchanges
-                        logger.info(
-                            f"Reached max consecutive exchanges in session {session_id}"
-                        )
-                        await broadcast_message(
-                            session_id,
-                            WebSocketMessage(
-                                type=MessageType.SYSTEM,
-                                content="Conversation thread completed. Waiting for new input.",
-                                timestamp=datetime.now(),
-                            ),
-                        )
-                        return
-
-                agent1: AIAgent = await shared.hub.get_agent(session_data["agent1_id"])
-                agent2: AIAgent = await shared.hub.get_agent(session_data["agent2_id"])
-
-                if message.sender_id == agent1.agent_id:
-                    next_sender, next_receiver = agent2, agent1
-                else:
-                    next_sender, next_receiver = agent1, agent2
-
-                # Add delay proportional to message length to prevent flooding
-                delay = min(
-                    len(message.content.split()) * 0.1, 2.0
-                )  # 0.1s per word, max 2s
-                await asyncio.sleep(delay)
-
-                # Send next message with updated continuation count
-                await next_sender.send_message(
-                    receiver_id=next_receiver.agent_id,
-                    content=message.content,
-                    message_type=MessageType.TEXT,
-                    metadata={
-                        "continuation": True,
-                        "continuation_count": (
-                            continuation_count + 1
-                            if message.metadata and message.metadata.get("continuation")
-                            else 1
-                        ),
-                    },
-                )
-            except Exception as e:
-                logger.error(f"Error triggering next agent message: {str(e)}")
-
-        # Broadcast message to all clients
-        logger.debug(
-            f"Broadcasting message from {ws_message.sender} to {ws_message.receiver}"
-        )
-        await broadcast_message(session_id, ws_message)
+            # Broadcast message to all clients
+            logger.debug(
+                f"Broadcasting message from {ws_message.sender} to {ws_message.receiver}"
+            )
+            await broadcast_message(session_id, ws_message)
 
     except Exception as e:
         logger.error(f"Error handling agent response: {str(e)}")
@@ -167,7 +137,7 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
         error_message = WebSocketMessage(
             type=MessageType.ERROR,
             content=f"Failed to process agent response: {str(e)}",
-            timestamp=datetime.now(),
+            timestamp=datetime.now().isoformat(),
         )
         await broadcast_message(session_id, error_message)
 
@@ -218,9 +188,13 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                             WebSocketMessage(
                                 type=MessageType.ERROR,
                                 content=f"Invalid message format: {str(e)}",
-                                timestamp=datetime.now(),
+                                timestamp=datetime.now().isoformat(),
                             ).model_dump()
                         )
+                    continue
+
+                # Ping message type
+                if message.type == MessageType.PING:
                     continue
 
                 # Check session limits
@@ -236,7 +210,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                             WebSocketMessage(
                                 type=MessageType.ERROR,
                                 content="Invalid session configuration",
-                                timestamp=datetime.now(),
+                                timestamp=datetime.now().isoformat(),
                             ).model_dump()
                         )
                     return
@@ -255,7 +229,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                                 WebSocketMessage(
                                     type=MessageType.ERROR,
                                     content="Invalid session type",
-                                    timestamp=datetime.now(),
+                                    timestamp=datetime.now().isoformat(),
                                 ).model_dump()
                             )
                         continue
@@ -270,7 +244,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                             WebSocketMessage(
                                 type=MessageType.ERROR,
                                 content=f"Failed to process message: {str(e)}",
-                                timestamp=datetime.now(),
+                                timestamp=datetime.now().isoformat(),
                             ).model_dump()
                         )
 
@@ -285,7 +259,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                             WebSocketMessage(
                                 type=MessageType.ERROR,
                                 content=f"WebSocket error: {str(e)}",
-                                timestamp=datetime.now(),
+                                timestamp=datetime.now().isoformat(),
                             ).model_dump()
                         )
                     except Exception as e:
@@ -314,7 +288,7 @@ async def check_session_limits(session_id: str, session_data: dict) -> bool:
             WebSocketMessage(
                 type=MessageType.SYSTEM,
                 content="Message limit reached. Please create a new session.",
-                timestamp=datetime.now(),
+                timestamp=datetime.now().isoformat(),
             ),
         )
         await end_session(session_id, None)
@@ -332,7 +306,7 @@ async def check_session_limits(session_id: str, session_data: dict) -> bool:
             WebSocketMessage(
                 type=MessageType.SYSTEM,
                 content="Session inactive for too long. Please create a new session.",
-                timestamp=datetime.now(),
+                timestamp=datetime.now().isoformat(),
             ),
         )
         await end_session(session_id, None)
@@ -408,7 +382,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
                                 content=response.content,
                                 sender=ai_agent.agent_id,
                                 receiver=human_agent.agent_id,
-                                timestamp=datetime.now(),
+                                timestamp=datetime.now().isoformat(),
                                 metadata=response.metadata,
                             )
 
@@ -428,7 +402,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
                             error_message = WebSocketMessage(
                                 type=MessageType.ERROR,
                                 content=f"AI agent error: {response.content}",
-                                timestamp=datetime.now(),
+                                timestamp=datetime.now().isoformat(),
                                 metadata=response.metadata,
                             )
                             await broadcast_message(
@@ -450,7 +424,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
             timeout_message = WebSocketMessage(
                 type=MessageType.SYSTEM,
                 content="The AI agent is taking longer than expected to respond. Please try again.",
-                timestamp=datetime.now(),
+                timestamp=datetime.now().isoformat(),
             )
             await broadcast_message(session_data["session_id"], timeout_message)
 
@@ -459,7 +433,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
         error_message = WebSocketMessage(
             type=MessageType.ERROR,
             content=f"Error processing message: {str(e)}",
-            timestamp=datetime.now(),
+            timestamp=datetime.now().isoformat(),
         )
         await broadcast_message(session_data["session_id"], error_message)
         raise
@@ -508,9 +482,8 @@ async def handle_agent_agent_message(session_data: dict, message: WebSocketMessa
     # Send message through hub - BaseAgent.send_message will handle identity and protocol
     metadata = {
         **(message.metadata or {}),
-        "continuation": True,  # Mark as continuation to trigger response
-        "continuation_count": 1,  # Start the conversation
         "session_id": session_data["session_id"],  # Include session context
+        "conversation_type": "agent_agent",  # Add conversation type for proper handling
     }
     logger.debug(f"Prepared message metadata: {metadata}")
 
@@ -531,8 +504,18 @@ async def handle_agent_agent_message(session_data: dict, message: WebSocketMessa
     # Update last sender
     await shared.redis.set(f"last_sender:{session_data['session_id']}", sender_id)
 
-    # Store message in session history
-    await store_message(session_data["session_id"], message, MessageRole.ASSISTANT)
+    # Remove the direct store and broadcast of the message
+    # The response will be handled and broadcasted by handle_agent_response
+    # await store_message(session_data["session_id"], message, MessageRole.ASSISTANT)
+    # ws_message = WebSocketMessage(
+    #     type=message_type,
+    #     content=message.content,
+    #     sender=sender_id,
+    #     receiver=receiver_id,
+    #     timestamp=datetime.now().isoformat(),
+    #     metadata=metadata
+    # )
+    # await broadcast_message(session_data["session_id"], ws_message)
 
 
 async def handle_broadcasts(websocket: WebSocket, pubsub: PubSub):
@@ -542,8 +525,21 @@ async def handle_broadcasts(websocket: WebSocket, pubsub: PubSub):
             message = await pubsub.get_message(ignore_subscribe_messages=True)
             if message and message["type"] == "message":
                 try:
-                    # Send the message directly to the WebSocket
-                    await websocket.send_text(message["data"])
+                    message_data = message["data"]
+                    if isinstance(message_data, bytes):
+                        message_data = message_data.decode("utf-8")
+
+                    # Parse the message to check if it's from agent-agent communication
+                    message_obj = json.loads(message_data)
+                    if isinstance(message_obj, dict):
+                        metadata = message_obj.get("metadata", {})
+                        if metadata.get("conversation_type") == "agent_agent":
+                            logger.debug(
+                                f"Broadcasting agent-agent message: {message_data}"
+                            )
+
+                    # Send the message to the WebSocket client
+                    await websocket.send_text(message_data)
                 except Exception as e:
                     logger.error(f"Error sending message to WebSocket: {str(e)}")
                     raise

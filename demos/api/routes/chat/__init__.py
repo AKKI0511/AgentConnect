@@ -54,7 +54,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 @router.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    """WebSocket endpoint for real-time chat"""
+    """WebSocket endpoint for real-time chat communication between agents"""
     try:
         # Get token from query parameters or headers
         token = None
@@ -66,6 +66,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 token = auth_header.split(" ")[1]
 
         if not token:
+            logger.warning(f"No token provided for session {session_id}")
             await websocket.close(code=4003)
             return
 
@@ -85,23 +86,21 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             await websocket.close(code=4000)
         except Exception as e:
             logger.error(f"Error closing WebSocket: {str(e)}")
-            pass
 
 
 @router.post(
     "/sessions/create",
     response_model=SessionResponse,
-    summary="Create new session",
-    description="Create a new chat session with specified configuration",
+    summary="Create new agent session",
+    description="Create a new chat session for human-agent or agent-agent interaction",
 )
 async def create_session(
-    response: Response,
     request: CreateSessionRequest,
     background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme),
     rate_limiter: bool = Depends(RateLimiter(times=5, seconds=60)),
 ):
-    """Create a new chat session"""
+    """Create a new chat session with specified configuration"""
     payload = verify_token(token)
     return await create_session_handler(request, background_tasks, payload["sub"])
 
@@ -109,19 +108,17 @@ async def create_session(
 @router.get(
     "/sessions/{session_id}",
     response_model=SessionResponse,
-    summary="Get session info",
-    description="Get information about an existing chat session",
+    summary="Get session status",
+    description="Get current status and information about an existing chat session",
 )
 async def get_session(
-    response: Response,
     session_id: str,
     token: str = Depends(oauth2_scheme),
     rate_limiter: bool = Depends(RateLimiter(times=10, seconds=60)),
 ):
-    """Get session information"""
+    """Get session information and status"""
     payload = verify_token(token)
-    current_user = payload["sub"]
-    return await get_session_handler(session_id, current_user)
+    return await get_session_handler(session_id, payload["sub"])
 
 
 @router.delete(
@@ -143,15 +140,13 @@ async def delete_session(
 
 @router.get(
     "/providers",
-    summary="Get providers",
-    description="Get list of available AI providers and models",
+    summary="Get available providers",
+    description="Get list of available AI providers and their models",
 )
 async def get_providers(
-    response: Response,
     token: str = Depends(oauth2_scheme),
     rate_limiter: bool = Depends(RateLimiter(times=10, seconds=60)),
 ):
-    """Get available providers and models"""
+    """Get available AI providers and their models"""
     payload = verify_token(token)
-    current_user = payload["sub"]
-    return await get_available_providers(current_user)
+    return await get_available_providers(payload["sub"])

@@ -10,6 +10,7 @@ import json
 import asyncio
 from typing import Optional
 
+from fastapi.websockets import WebSocketState
 from redis.asyncio.client import PubSub
 
 from demos.api.models.chat import (
@@ -20,7 +21,6 @@ from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.utils.api_validation import validate_ws_connection
 from demos.utils.shared import shared
-from demos.utils.task_manager import add_background_task
 
 from .handlers import handle_client_messages, handle_broadcasts
 from .session import end_session
@@ -73,7 +73,7 @@ async def websocket_endpoint_handler(
             pubsub = shared.redis.pubsub()
             await pubsub.subscribe(f"chat:{session_id}")
 
-            # Start message handling tasks
+            # Create tasks with proper names for tracking
             receive_task = asyncio.create_task(
                 handle_client_messages(websocket, session_id),
                 name=f"ws_receive_{session_id}",
@@ -86,26 +86,39 @@ async def websocket_endpoint_handler(
                 name=f"ws_heartbeat_{session_id}",
             )
 
-            # Add tasks to global tracking
-            add_background_task(receive_task)
-            add_background_task(broadcast_task)
-            add_background_task(heartbeat_task)
-
+            # Add tasks to tracking
             tasks.extend([receive_task, broadcast_task, heartbeat_task])
 
-            # Wait for any task to complete
-            done, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED
-            )
+            # Wait for tasks to complete
+            try:
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
 
-            # Log which task completed
-            for task in done:
-                if task.exception():
-                    logger.error(
-                        f"Task {task.get_name()} failed: {str(task.exception())}"
-                    )
-                else:
-                    logger.info(f"Task {task.get_name()} completed successfully")
+                # Log completed tasks
+                for task in done:
+                    if task.exception():
+                        logger.error(
+                            f"Task {task.get_name()} failed: {str(task.exception())}"
+                        )
+                    else:
+                        logger.info(f"Task {task.get_name()} completed successfully")
+
+                # Cancel remaining tasks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        logger.error(
+                            f"Error cancelling task {task.get_name()}: {str(e)}"
+                        )
+
+            except Exception as e:
+                logger.error(f"Error in task management: {str(e)}")
+                raise
 
         except WebSocketDisconnect:
             logger.info(f"WebSocket client disconnected: {session_id}")
@@ -136,13 +149,21 @@ async def websocket_endpoint_handler(
             except Exception as e:
                 logger.error(f"Error removing connection from Redis: {str(e)}")
 
+            # Close websocket if still connected
+            if websocket.client_state == WebSocketState.CONNECTED:
+                try:
+                    await websocket.close()
+                except Exception as e:
+                    logger.error(f"Error closing WebSocket: {str(e)}")
+
             # Unregister from shared resources
             shared.unregister_websocket(websocket)
 
     except Exception as e:
         logger.error(f"WebSocket connection error: {str(e)}")
         try:
-            await websocket.close(code=4000)
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.close(code=4000)
         except Exception as e:
             logger.error(f"Error closing WebSocket: {str(e)}")
         finally:
@@ -155,6 +176,12 @@ async def handle_heartbeat(websocket: WebSocket, session_id: str):
     try:
         while True:
             try:
+                if websocket.client_state != WebSocketState.CONNECTED:
+                    logger.warning(
+                        f"WebSocket disconnected during heartbeat: {session_id}"
+                    )
+                    break
+
                 # Send ping frame
                 await websocket.send_json(
                     {"type": "ping", "timestamp": datetime.now().isoformat()}
@@ -172,7 +199,9 @@ async def handle_heartbeat(websocket: WebSocket, session_id: str):
                 break
             except Exception as e:
                 logger.error(f"Error in heartbeat handler: {str(e)}")
-                break
+                if "close message has been sent" in str(e):
+                    break
+                raise
 
     except asyncio.CancelledError:
         logger.debug("Heartbeat task cancelled")
@@ -187,9 +216,7 @@ async def create_session_handler(
     """Create a new chat session"""
     logger.info(f"Session creation request from user {current_user}")
     try:
-        logger.debug(
-            f"Creating session with provider: {request.provider}, model: {request.model}"
-        )
+        logger.debug(f"Creating session with agents: {request.agents}")
         return await create_new_session(request, background_tasks, current_user)
     except Exception as e:
         logger.error(f"Error in create session handler: {str(e)}")

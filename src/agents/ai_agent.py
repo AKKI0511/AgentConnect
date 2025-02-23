@@ -101,51 +101,93 @@ class AIAgent(BaseAgent):
                         continue
 
                     async with self.processing_lock:
-                        if message.message_type == MessageType.COOLDOWN:
-                            logger.info(
-                                f"Received cooldown message from {message.sender_id}. Cooldown duration: {message.metadata['cooldown_remaining']} seconds."
+                        # First check if we're in cooldown or at token limit
+                        state = await self.interaction_control.process_interaction(0)
+                        if state == InteractionState.WAIT:
+                            cooldown_duration = (
+                                self.interaction_control.token_config.get_cooldown_duration()
                             )
+                            if cooldown_duration:
+                                logger.info(
+                                    f"Agent {self.agent_id} in cooldown for {cooldown_duration} seconds"
+                                )
+                                cooldown_message = Message.create(
+                                    sender_id=self.agent_id,
+                                    receiver_id=message.sender_id,
+                                    content=f"Agent is in cooldown. Please wait {int(cooldown_duration)} seconds.",
+                                    sender_identity=self.identity,
+                                    message_type=MessageType.COOLDOWN,
+                                    metadata={"cooldown_remaining": cooldown_duration},
+                                )
+                                await self.send_message(
+                                    receiver_id=cooldown_message.receiver_id,
+                                    content=cooldown_message.content,
+                                    message_type=cooldown_message.message_type,
+                                    metadata=cooldown_message.metadata,
+                                )
+                                self.message_queue.task_done()
+                                # Sleep for cooldown duration before processing next message
+                                await asyncio.sleep(cooldown_duration)
+                                continue
+
+                        elif state == InteractionState.STOP:
+                            stop_message = Message.create(
+                                sender_id=self.agent_id,
+                                receiver_id=message.sender_id,
+                                content="Maximum interaction turns reached. Ending conversation.",
+                                sender_identity=self.identity,
+                                message_type=MessageType.STOP,
+                                metadata={"reason": "max_turns_reached"},
+                            )
+                            await self.send_message(
+                                receiver_id=stop_message.receiver_id,
+                                content=stop_message.content,
+                                message_type=stop_message.message_type,
+                                metadata=stop_message.metadata,
+                            )
+                            self.is_running = False
                             self.message_queue.task_done()
                             continue
-                        else:
-                            try:
-                                response = await asyncio.wait_for(
-                                    self.process_message(message), timeout=25.0
+
+                        # Process message only if we're not in cooldown or at limit
+                        try:
+                            response = await asyncio.wait_for(
+                                self.process_message(message), timeout=25.0
+                            )
+                            if response:
+                                await self.send_message(
+                                    receiver_id=response.receiver_id,
+                                    content=response.content,
+                                    message_type=response.message_type,
+                                    metadata=response.metadata,
                                 )
-                                if response:
-                                    await self.send_message(
-                                        receiver_id=response.receiver_id,
-                                        content=response.content,
-                                        message_type=response.message_type,
-                                        metadata=response.metadata,
+
+                                # Update last processed message ID for UI mode
+                                if self.is_ui_mode:
+                                    self.last_processed_message_id = (
+                                        message.metadata.get("message_id")
                                     )
 
-                                    # Update last processed message ID for UI mode
-                                    if self.is_ui_mode:
-                                        self.last_processed_message_id = (
-                                            message.metadata.get("message_id")
-                                        )
-
-                            except asyncio.TimeoutError:
-                                logger.error(
-                                    f"Timeout processing message from {message.sender_id}"
-                                )
-                                await self.send_message(
-                                    receiver_id=message.sender_id,
-                                    content="Processing timeout - the operation took too long",
-                                    message_type=MessageType.ERROR,
-                                    metadata={"error": "timeout"},
-                                )
-                            except Exception as e:
-                                logger.error(f"Error processing message: {str(e)}")
-                                await self.send_message(
-                                    receiver_id=message.sender_id,
-                                    content=f"Error processing message: {str(e)}",
-                                    message_type=MessageType.ERROR,
-                                    metadata={"error": str(e)},
-                                )
-                            finally:
-                                self.message_queue.task_done()
+                        except asyncio.TimeoutError:
+                            logger.error(
+                                f"Timeout processing message from {message.sender_id}"
+                            )
+                            await self.send_message(
+                                receiver_id=message.sender_id,
+                                content="Processing timeout - the operation took too long",
+                                message_type=MessageType.ERROR,
+                                metadata={"error": "timeout"},
+                            )
+                        except Exception as e:
+                            logger.error(f"Error processing message: {str(e)}")
+                            await self.send_message(
+                                receiver_id=message.sender_id,
+                                content=f"Error processing message: {str(e)}",
+                                message_type=MessageType.ERROR,
+                                metadata={"error": str(e)},
+                            )
+                        finally:
+                            self.message_queue.task_done()
 
                 except asyncio.TimeoutError:
                     # This is normal - just continue waiting for new messages
@@ -183,7 +225,8 @@ class AIAgent(BaseAgent):
             # Clean up conversation chain if needed
             if hasattr(self, "conversation_chain"):
                 try:
-                    await self.conversation_chain.aclose()
+                    if hasattr(self.conversation_chain, "aclose"):
+                        await self.conversation_chain.aclose()
                 except Exception as e:
                     logger.exception(f"Error closing conversation chain: {str(e)}")
 
@@ -237,7 +280,7 @@ class AIAgent(BaseAgent):
                 metadata={"reason": "max_turns_reached"},
             )
 
-        if message.message_type == MessageType.STOP:
+        if message.message_type == MessageType.STOP or "__EXIT__" in message.content:
             self.end_conversation(message.sender_id)
             return None
 

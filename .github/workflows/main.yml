@@ -58,15 +58,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with demo,dev --no-root
+          poetry install --with demo,dev
 
-      - name: Run linter (flake8)
+      - name: Run linting and formatting checks
         run: |
-          poetry run flake8 --extend-ignore E501,W293,E128,W291,E402 src/ demos/api/ demos/utils/
-
-      - name: Check code formatting (black)
-        run: |
-          poetry run black --check src/ demos/
+          poetry run make lint
+          poetry run make format
 
       - name: Create test environment file
         run: |

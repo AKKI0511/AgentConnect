@@ -3,19 +3,20 @@ import json
 import logging
 import os
 import time
-from dotenv import load_dotenv
-from colorama import init, Fore, Style
 from typing import List
+
+from colorama import Fore, Style, init
+from dotenv import load_dotenv
 
 from src.agents.ai_agent import AIAgent
 from src.communication.hub import CommunicationHub
 from src.core.registry import AgentRegistry
 from src.core.types import (
-    ModelProvider,
-    ModelName,
-    InteractionMode,
     AgentIdentity,
+    InteractionMode,
     MessageType,
+    ModelName,
+    ModelProvider,
 )
 from src.utils.logging_config import LogLevel, setup_logging
 
@@ -26,7 +27,7 @@ init()
 AGENT_COLORS = {
     "processor1": Fore.CYAN,
     "analyst1": Fore.MAGENTA,
-    "system": Fore.YELLOW
+    "system": Fore.YELLOW,
 }
 
 # Sample e-commerce data for analysis
@@ -61,10 +62,11 @@ ECOMMERCE_DATA = {
     },
 }
 
+
 def print_colored_message(sender_id: str, content: str) -> None:
     """
     Print a message with color based on the sender ID.
-    
+
     Args:
         sender_id (str): ID of the message sender
         content (str): Message content to print
@@ -73,22 +75,24 @@ def print_colored_message(sender_id: str, content: str) -> None:
     print(f"\n{color}{'='*35}[{sender_id}]{'='*35}")
     print(f"{content}{Style.RESET_ALL}\n")
 
+
 def print_system_message(message: str) -> None:
     """
     Print a system message in yellow color.
-    
+
     Args:
         message (str): System message to print
     """
     print(f"\n{Fore.YELLOW}{message}{Style.RESET_ALL}")
 
+
 async def run_ecommerce_analysis_demo(enable_logging: bool = True) -> None:
     """
     Run an e-commerce analysis demo with multiple AI agents collaborating to analyze data.
-    
+
     This demo showcases interaction between a data processor and business analyst agent
     analyzing e-commerce performance data and providing insights.
-    
+
     Args:
         enable_logging (bool): Flag to enable detailed logging. Defaults to False.
     """
@@ -125,12 +129,16 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = True) -> None:
 
     business_analyst = AIAgent(
         agent_id="analyst1",
-        name="BusinessAnalyst", 
+        name="BusinessAnalyst",
         provider_type=ModelProvider.GROQ,
         model_name=ModelName.LLAMA3_70B,
         api_key=os.getenv("GROQ_API_KEY"),
         identity=analyst_identity,
-        capabilities=["business_analysis", "strategy_recommendation", "performance_optimization"],
+        capabilities=[
+            "business_analysis",
+            "strategy_recommendation",
+            "performance_optimization",
+        ],
         interaction_modes=[InteractionMode.AGENT_TO_AGENT],
         personality="strategic business analyst focused on actionable insights and recommendations",
         max_tokens_per_minute=700,
@@ -155,10 +163,10 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = True) -> None:
         # Initialize analysis with structured data
         initial_message = await data_processor.send_message(
             receiver_id=business_analyst.agent_id,
-            content=f"""I have processed our e-commerce platform's recent performance data. 
+            content=f"""I have processed our e-commerce platform's recent performance data.
             Here's the detailed dataset for analysis:
             {json.dumps(ECOMMERCE_DATA, indent=2)}
-            
+
             Could you analyze this data and provide strategic insights on:
             1. Revenue trends and opportunities
             2. Customer segment performance
@@ -206,7 +214,9 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = True) -> None:
             if len(messages) == previous_message_count:
                 elapsed_time = time.time() - start_time
                 if elapsed_time >= 5:
-                    print_system_message("No new messages received. Assuming conversation has ended.")
+                    print_system_message(
+                        "No new messages received. Assuming conversation has ended."
+                    )
                     conversation_ended = True
 
         if not conversation_ended:
@@ -218,7 +228,7 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = True) -> None:
         print_system_message(f"\n❌ Error during analysis: {e}")
     finally:
         print_system_message("\n🛑 Concluding analysis session...")
-        
+
         # Cleanup resources
         for agent in agents:
             agent.is_running = False
@@ -237,6 +247,7 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = True) -> None:
             await hub.unregister_agent(agent.agent_id)
 
         print_system_message("✅ Analysis session completed")
+
 
 if __name__ == "__main__":
     asyncio.run(run_ecommerce_analysis_demo())

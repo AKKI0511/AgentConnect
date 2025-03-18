@@ -1,19 +1,15 @@
 import asyncio
 import logging
 import os
-from colorama import init, Fore, Style
+
+from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
-from src.agents.human_agent import HumanAgent
 from src.agents.ai_agent import AIAgent
+from src.agents.human_agent import HumanAgent
 from src.communication.hub import CommunicationHub
 from src.core.registry import AgentRegistry
-from src.core.types import (
-    ModelProvider,
-    ModelName,
-    InteractionMode,
-    AgentIdentity,
-)
+from src.core.types import AgentIdentity, InteractionMode, ModelName, ModelProvider
 from src.providers.provider_factory import ProviderFactory
 from src.utils.logging_config import LogLevel, setup_logging
 
@@ -29,21 +25,23 @@ COLORS = {
     "INFO": Fore.MAGENTA,
 }
 
+
 def print_colored(message: str, color_type: str = "SYSTEM") -> None:
     """Print a message with specified color"""
     color = COLORS.get(color_type, Fore.WHITE)
     print(f"{color}{message}{Style.RESET_ALL}")
 
+
 async def main(enable_logging: bool = False) -> None:
     """
     Run an interactive demo between a human user and an AI assistant.
-    
+
     This demo showcases:
     1. Dynamic provider and model selection
     2. Secure agent registration and communication
     3. Real-time message exchange with proper error handling
     4. Graceful session management and cleanup
-    
+
     Args:
         enable_logging (bool): Enable detailed logging for debugging. Defaults to False.
     """
@@ -53,11 +51,11 @@ async def main(enable_logging: bool = False) -> None:
         setup_logging(
             level=LogLevel.INFO,
             module_levels={
-                'AgentRegistry': LogLevel.WARNING,
-                'CommunicationHub': LogLevel.INFO,
-                'SimpleAgentProtocol': LogLevel.DEBUG,
-                'src.utils.interaction_control': LogLevel.INFO
-            }
+                "AgentRegistry": LogLevel.WARNING,
+                "CommunicationHub": LogLevel.INFO,
+                "SimpleAgentProtocol": LogLevel.DEBUG,
+                "src.utils.interaction_control": LogLevel.INFO,
+            },
         )
     else:
         logging.disable(logging.CRITICAL)
@@ -95,12 +93,9 @@ async def main(enable_logging: bool = False) -> None:
 
     # Initialize agents
     human = HumanAgent(
-        agent_id="human1",
-        name="User",
-        identity=human_identity,
-        organization_id="org1"
+        agent_id="human1", name="User", identity=human_identity, organization_id="org1"
     )
-    
+
     ai_assistant = AIAgent(
         agent_id="ai1",
         name="Assistant",
@@ -113,7 +108,7 @@ async def main(enable_logging: bool = False) -> None:
         personality="helpful and professional",
         organization_id="org2",
     )
-    
+
     agents = [human, ai_assistant]
 
     try:
@@ -125,13 +120,13 @@ async def main(enable_logging: bool = False) -> None:
 
         # Start AI processing
         ai_task = asyncio.create_task(ai_assistant.run())
-        
+
         print_colored("\n=== Starting Interactive Session ===", "SYSTEM")
         print_colored("Type your messages and press Enter to send", "INFO")
         print_colored("Type 'exit' to end the session", "INFO")
-        
+
         await human.start_interaction(ai_assistant)
-        
+
     except Exception as e:
         print_colored(f"Error in interaction: {str(e)}", "ERROR")
     finally:
@@ -142,11 +137,12 @@ async def main(enable_logging: bool = False) -> None:
             await asyncio.wait_for(ai_task, timeout=5.0)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             ai_task.cancel()
-        
+
         for agent in agents:
             await hub.unregister_agent(agent.agent_id)
-        
+
         print_colored("Session ended successfully", "SYSTEM")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

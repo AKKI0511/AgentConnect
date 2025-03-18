@@ -6,6 +6,7 @@ authors = [
     {name = "Akshat Joshi",email = "akkijoshi0511@gmail.com"}
 ]
 readme = "README.md"
+packages = [{include = "agentconnect", from = "."}]
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "openai (>=1.0.0)",
@@ -27,9 +28,17 @@ dependencies = [
     "cryptography (>=44.0.1,<45.0.0)",
     "pylint (==3.3.3)",
     "pytest (==8.3.4)",
-    "pytest-asyncio (>=0.25.3,<0.26.0)"
+    "pytest-asyncio (>=0.25.3,<0.26.0)",
+    "sentence-transformers (>=3.4.1,<4.0.0)",
+    "langchain-huggingface (>=0.1.2,<0.2.0)",
+    "pandas (>=2.2.3,<3.0.0)",
+    "tavily-python (>=0.5.1,<0.6.0)",
+    "plotly (>=6.0.0,<7.0.0)",
+    "matplotlib (>=3.10.1,<4.0.0)",
 ]
 
+[project.scripts]
+agentconnect = "agentconnect.cli:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -60,4 +69,24 @@ black = "^25.1.0"
 pytest = "^8.3.4"
 flake8 = "^7.1.2"
 pytest-asyncio = "^0.25.3"
+sphinx = "^8.2.3"
+sphinx-rtd-theme = "^3.0.2"
+sphinx-autodoc-typehints = "^3.1.0"
+myst-parser = "^4.0.1"
+toml = "^0.10.2"
+tomli = "^2.2.1"
+tomli-w = "^1.2.0"
+pre-commit = "^4.1.0"
+sphinx-design = "^0.6.1"
+sphinx-copybutton = "^0.5.2"
 
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^8.2.3"
+sphinx-rtd-theme = "^3.0.2"
+sphinx-autodoc-typehints = "^3.1.0"
+myst-parser = "^4.0.1"
+sphinx-design = "^0.6.1"
+sphinx-copybutton = "^0.5.2"

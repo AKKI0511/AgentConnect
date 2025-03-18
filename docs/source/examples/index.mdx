@@ -1,0 +1,208 @@
+# Examples
+
+The `examples/` directory contains example applications that demonstrate the capabilities of AgentConnect.
+
+## Basic Usage
+
+The [example_usage.py](https://github.com/AKKI0511/AgentConnect/blob/main/examples/example_usage.py) file demonstrates basic usage of AgentConnect:
+
+```python
+import asyncio
+from dotenv import load_dotenv
+from colorama import init, Fore, Style
+
+from agentconnect.agents.human_agent import HumanAgent
+from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.communication.hub import CommunicationHub
+from agentconnect.core.registry import AgentRegistry
+from agentconnect.core.types import (
+    ModelProvider,
+    ModelName,
+    InteractionMode,
+    AgentIdentity,
+    Capability,
+)
+
+async def main(enable_logging: bool = False):
+    load_dotenv()
+    
+    # Initialize core components
+    registry = AgentRegistry()
+    hub = CommunicationHub(registry)
+
+    # Create secure agent identities
+    human_identity = AgentIdentity.create_key_based()
+    ai_identity = AgentIdentity.create_key_based()
+
+    # Create agents
+    human = HumanAgent(
+        agent_id="human1",
+        name="User",
+        identity=human_identity,
+        organization_id="org1"
+    )
+    
+    # Create AI agent with capabilities
+    ai_capabilities = [
+        Capability(
+            name="conversation",
+            description="General conversation and assistance",
+            input_schema={"query": "string"},
+            output_schema={"response": "string"},
+        )
+    ]
+
+    ai_assistant = AIAgent(
+        agent_id="ai1",
+        name="Assistant",
+        provider_type=ModelProvider.GROQ,
+        model_name=ModelName.LLAMA3_70B,
+        api_key=os.getenv("GROQ_API_KEY"),
+        identity=ai_identity,
+        capabilities=ai_capabilities,
+        interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
+        personality="helpful and professional",
+        organization_id="org2",
+    )
+
+    # Register agents
+    await hub.register_agent(human)
+    await hub.register_agent(ai_assistant)
+
+    # Start AI processing
+    ai_task = asyncio.create_task(ai_assistant.run())
+    
+    # Start interaction
+    await human.start_interaction(ai_assistant)
+    
+    # Cleanup
+    ai_assistant.is_running = False
+    await ai_task
+    await hub.unregister_agent(human.agent_id)
+    await hub.unregister_agent(ai_assistant.agent_id)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Multi-Agent Systems
+
+The [example_multi_agent.py](https://github.com/AKKI0511/AgentConnect/blob/main/examples/example_multi_agent.py) file demonstrates how to create a multi-agent system:
+
+```python
+import asyncio
+import json
+import os
+from dotenv import load_dotenv
+from colorama import init, Fore, Style
+
+from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.communication.hub import CommunicationHub
+from agentconnect.core.registry import AgentRegistry
+from agentconnect.core.types import (
+    ModelProvider,
+    ModelName,
+    InteractionMode,
+    AgentIdentity,
+    Capability,
+)
+
+async def run_ecommerce_analysis_demo():
+    load_dotenv()
+
+    # Initialize core components
+    registry = AgentRegistry()
+    hub = CommunicationHub(registry)
+    
+    # Create secure agent identities
+    data_processor_identity = AgentIdentity.create_key_based()
+    analyst_identity = AgentIdentity.create_key_based()
+
+    # Initialize specialized AI agents
+    data_processor = AIAgent(
+        agent_id="processor1",
+        name="DataProcessor",
+        provider_type=ModelProvider.GOOGLE,
+        model_name=ModelName.GEMINI2_FLASH_LITE,
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        identity=data_processor_identity,
+        capabilities=[
+            DATA_PROCESSING_CAPABILITY,
+            STATISTICAL_ANALYSIS_CAPABILITY,
+            TREND_DETECTION_CAPABILITY
+        ],
+        interaction_modes=[InteractionMode.AGENT_TO_AGENT],
+        personality="detail-oriented data analyst",
+    )
+
+    business_analyst = AIAgent(
+        agent_id="analyst1",
+        name="BusinessAnalyst", 
+        provider_type=ModelProvider.GOOGLE,
+        model_name=ModelName.GEMINI2_FLASH,
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        identity=analyst_identity,
+        capabilities=[
+            BUSINESS_ANALYSIS_CAPABILITY,
+            STRATEGY_RECOMMENDATION_CAPABILITY,
+            PERFORMANCE_OPTIMIZATION_CAPABILITY
+        ],
+        interaction_modes=[InteractionMode.AGENT_TO_AGENT],
+        personality="strategic business analyst",
+    )
+
+    # Register agents
+    await hub.register_agent(data_processor)
+    await hub.register_agent(business_analyst)
+
+    # Start agent processing loops
+    tasks = [
+        asyncio.create_task(data_processor.run()),
+        asyncio.create_task(business_analyst.run())
+    ]
+
+    # Initiate communication between agents
+    await data_processor.send_message(
+        receiver_id=business_analyst.agent_id,
+        content="I have processed our e-commerce platform's recent performance data...",
+    )
+
+    # Let agents communicate for a while
+    await asyncio.sleep(120)
+    
+    # Cleanup
+    for agent in [data_processor, business_analyst]:
+        agent.is_running = False
+    
+    for task in tasks:
+        await task
+    
+    await hub.unregister_agent(data_processor.agent_id)
+    await hub.unregister_agent(business_analyst.agent_id)
+
+if __name__ == "__main__":
+    asyncio.run(run_ecommerce_analysis_demo())
+```
+
+## Running Examples
+
+To run the examples:
+
+```bash
+# Install with demo dependencies
+poetry install --with demo
+
+# Run an example
+python examples/example_usage.py
+python examples/example_multi_agent.py
+```
+
+## Additional Examples
+
+The examples directory contains additional examples demonstrating various features of AgentConnect:
+
+- **Agent Examples**: Demonstrates how to create and use different types of agents
+- **Communication Examples**: Shows how agents communicate with each other
+- **Multi-Agent Examples**: Examples of multi-agent systems and collaborative workflows
+
+See the [Examples Documentation](https://akki0511.github.io/AgentConnect/examples/) for more details. 

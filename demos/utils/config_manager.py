@@ -7,7 +7,7 @@ import json
 from uuid import uuid4
 from dotenv import load_dotenv
 from demos.utils.demo_logger import get_logger
-from src.core.types import ModelName, ModelProvider
+from agentconnect.core.types import ModelName, ModelProvider
 
 # Initialize logger using our centralized system
 logger = get_logger("config_manager")

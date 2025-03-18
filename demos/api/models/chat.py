@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
-from src.core.types import ModelProvider, ModelName, InteractionMode
+from agentconnect.core.types import ModelProvider, ModelName, InteractionMode
 
 
 class MessageType(str, Enum):

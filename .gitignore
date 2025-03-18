@@ -179,13 +179,15 @@ demos/logs/
 demos/scenarios/
 docs/coverage/
 req/
+src/
+example_usage.py
+example_multi_agent.py
 
 # VS Code
 .vscode/
 .idea/
 
 # Project specific
-src/
 .cursor/
 .cursor-cache/
 .cursor-cache-v2/

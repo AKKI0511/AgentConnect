@@ -10,15 +10,15 @@ from demos.api.models.chat import (
     AgentMetadata,
     MessageType,
 )
-from src.core.agent import BaseAgent
-from src.core.types import (
+from agentconnect.core.agent import BaseAgent
+from agentconnect.core.types import (
     InteractionMode,
     AgentIdentity,
     ModelName,
     ModelProvider,
 )
-from src.agents.ai_agent import AIAgent
-from src.agents.human_agent import HumanAgent
+from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.agents.human_agent import HumanAgent
 from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.utils.shared import shared

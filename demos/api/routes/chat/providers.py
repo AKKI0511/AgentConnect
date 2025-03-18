@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from demos.utils.demo_logger import get_logger
-from src.providers.provider_factory import ProviderFactory
+from agentconnect.providers.provider_factory import ProviderFactory
 
 logger = get_logger("chat_providers")
 

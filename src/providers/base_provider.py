@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
+
 from langchain.chat_models import init_chat_model
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
+
 from src.core.types import ModelName
 
 

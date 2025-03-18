@@ -2,7 +2,8 @@ import logging
 from typing import Dict, Optional
 
 from src.core.message import Message
-from src.core.types import MessageType, AgentIdentity, ProtocolVersion
+from src.core.types import AgentIdentity, MessageType, ProtocolVersion
+
 from .base import BaseProtocol
 
 logger = logging.getLogger("AgentProtocol")

@@ -1,0 +1,232 @@
+# Prompts Module
+
+The prompts module serves as the "brain" of the AgentConnect framework, providing core logic for agent workflows, tools for collaboration, and prompt templates that guide agent behavior.
+
+## Structure
+
+```
+prompts/
+├── __init__.py           # Module initialization and exports
+├── agent_prompts.py      # Core workflow definitions for different agent types
+├── chain_factory.py      # Factory functions for creating LangGraph workflows
+├── tools.py              # Tool implementations for agents
+├── templates/            # Prompt templates directory
+│   └── prompt_templates.py  # Templates for system prompts, collaboration, etc.
+└── README.md             # This documentation file
+```
+
+## Key Components
+
+### Workflows (`agent_prompts.py`)
+
+The workflow system is the core of the prompt architecture. It uses LangGraph to create stateful, multi-step workflows that can persist conversation state between invocations.
+
+### Key Workflows
+
+- **`AIAgentWorkflow`**: Main workflow for AI agents, handling general conversation and collaboration decisions.
+- **`TaskDecompositionWorkflow`**: Workflow for breaking down complex tasks into subtasks.
+- **`CollaborationRequestWorkflow`**: Workflow for handling collaboration requests from other agents.
+
+### Workflow Structure
+
+Each workflow consists of three main nodes:
+
+1. **Preprocess**: Prepares the state before the ReAct agent runs, handling context management and state initialization.
+2. **React**: Runs the ReAct agent, which makes decisions and calls tools as needed.
+3. **Postprocess**: Processes the results of the ReAct agent, extracting tool results and handling topic changes.
+
+### Memory Management
+
+Workflows use LangGraph's built-in persistence features for agent conversations:
+
+- **`MemorySaver`**: LangGraph's built-in checkpointer for persisting conversation state.
+- **`thread_id`**: Unique identifier for each conversation, used to maintain conversation context.
+
+#### Conversation Isolation
+
+Each agent-to-agent conversation has its own isolated memory context through unique thread_ids. This ensures:
+1. No data leakage between conversations
+2. Reduced token usage by only loading relevant conversation history
+3. Better security and privacy for sensitive information
+
+#### Context Management
+
+The workflow system includes sophisticated context management features:
+- **Context Reset**: Automatically resets the context when there's a long gap between interactions (over 30 minutes)
+- **Topic Change Detection**: Uses TF-IDF vectorization and cosine similarity to detect when the conversation topic changes
+- **Selective Memory Retention**: Keeps only relevant messages when context is reset or topic changes
+
+## Tools System
+
+The tools system provides agents with the ability to perform specific actions, particularly related to collaboration and task management.
+
+### Key Tools
+
+- **`search_for_agents`**: Searches for agents with specific capabilities using semantic matching. This tool helps agents find other specialized agents that can assist with tasks outside their capabilities.
+- **`send_collaboration_request`**: Sends a request to a specific agent to perform a task and waits for a response. This tool enables agent-to-agent delegation and collaboration.
+- **`decompose_task`**: Breaks down a complex task into smaller, manageable subtasks. This helps agents organize and tackle complex requests more effectively.
+
+### Tool Architecture
+
+The tools system is built with several key components:
+
+- **`PromptTools`**: Main class for creating and managing tools for agents:
+  - Handles tool creation, registration, and retrieval
+  - Maintains agent context for tools that need it
+  - Provides both synchronous and asynchronous implementations
+
+- **`ToolRegistry`**: Central registry for managing available tools:
+  - Each agent has its own isolated registry
+  - Tools can be categorized (e.g., 'collaboration', 'task_management')
+  - Supports tool lookup by name or category
+
+### Tool Creation
+
+Tools are created using the `PromptTools` class, which provides methods for creating and managing tools:
+
+```python
+# Creating a custom tool
+tool = prompt_tools.create_tool_from_function(
+    func=my_function,               # Synchronous implementation
+    coroutine=my_async_function,    # Asynchronous implementation (optional)
+    name="my_custom_tool",
+    description="Tool description shown to the agent",
+    args_schema=MyArgsSchema,       # Pydantic model for validation
+    category="custom_tools"         # Category for organization
+)
+```
+
+### Tool Usage in Workflows
+
+When an agent needs to use tools, it requests them from the `PromptTools` instance:
+
+```python
+# Get all collaboration tools for an agent
+collaboration_tools = prompt_tools.get_tools_for_workflow(
+    categories=["collaboration"],
+    agent_id="agent_123"  # For logging purposes
+)
+
+# Register a specific agent as the current user of the tools
+prompt_tools.set_current_agent("agent_123")
+```
+
+### Tool Implementation Details
+
+Each tool follows a consistent pattern:
+- Both synchronous and asynchronous implementations
+- Proper error handling and logging
+- Clear input/output schemas using Pydantic models
+- Comprehensive metadata for discoverability
+
+### Security and Safety Features
+
+The tools system includes several security features:
+- **Collaboration Chain Tracking**: Prevents infinite loops in agent collaboration
+- **Timeouts**: All external requests have configurable timeouts
+- **Error Handling**: Graceful degradation when tools encounter errors
+- **Permission Checks**: Tools verify that agents have appropriate permissions
+
+## Prompt Templates
+
+Prompt templates are used to create different types of prompts for agents. The `PromptTemplates` class provides methods for creating various types of prompts:
+
+- **System Prompts**: Define the agent's role, capabilities, and personality.
+- **Collaboration Prompts**: Used for collaboration requests and responses.
+- **ReAct Prompts**: Used for the ReAct agent, which makes decisions and calls tools.
+
+### ReAct Integration
+
+The system uses LangGraph's prebuilt ReAct agent, which follows the Reasoning and Acting pattern:
+- **Reasoning**: The agent reasons about the current state and decides what to do next
+- **Acting**: The agent takes actions by calling tools
+- **Observation**: The agent observes the results of its actions and updates its reasoning
+
+## Integration with AIAgent
+
+The `AIAgent` class in `agentconnect/agents/ai_agent.py` uses the workflow system to process messages:
+
+1. The agent initializes a workflow based on its type (AI, task decomposition, or collaboration request).
+2. When a message is received, the agent creates an initial state with the message and invokes the workflow.
+3. The workflow processes the message, making decisions and calling tools as needed.
+4. The agent extracts the response from the workflow and sends it back to the sender.
+
+### Error Handling and Resilience
+
+The system includes robust error handling:
+- **Timeout Protection**: Workflows have a configurable timeout to prevent hanging
+- **Retry Mechanism**: Failed collaboration attempts can be retried automatically
+- **Graceful Degradation**: If collaboration fails, the agent attempts to answer with available information
+
+### Example Usage
+
+```python
+# Create an AI agent with a workflow
+agent = AIAgent(
+    agent_id="agent1",
+    name="Assistant",
+    provider_type=ModelProvider.OPENAI,
+    model_name=ModelName.GPT4,
+    api_key="your-api-key",
+    identity=AgentIdentity(name="Assistant", role="assistant"),
+    capabilities=[Capability(name="general", description="General assistance")],
+    personality="helpful and professional",
+    agent_type="ai"  # Use the AI agent workflow
+)
+
+# Process a message
+response = await agent.process_message(message)
+```
+
+## Advantages Over Previous Approach
+
+The LangGraph-based workflow system offers several advantages over the previous `chain_factory.py` approach:
+
+1. **Stateful Workflows**: LangGraph allows for stateful workflows that can persist conversation state between invocations.
+2. **Flexible Decision-Making**: Agents can make complex decisions about when to collaborate and how to process responses.
+3. **Tool Integration**: Tools are seamlessly integrated into the workflow, allowing agents to perform specific actions.
+4. **Memory Management**: Built-in memory management ensures that conversation context is maintained between invocations.
+5. **Extensibility**: The system is designed to be extensible, allowing for the addition of new workflows, tools, and prompt templates.
+6. **Better Tracing and Debugging**: LangGraph provides built-in tracing capabilities for better debugging and monitoring.
+7. **Improved Performance**: The new system is more efficient, with better token usage and faster response times.
+
+## Contributing
+
+To contribute to the AgentConnect project:
+
+1. **Fork the Repository**: Create your own fork of the repository on GitHub.
+2. **Create a Branch**: Create a branch for your feature or bugfix.
+3. **Make Changes**: Implement your changes, following the project's coding style.
+4. **Write Tests**: Add tests for your changes to ensure they work as expected.
+5. **Submit a Pull Request**: Submit a pull request to the main repository.
+
+### Development Guidelines
+
+- Follow the existing code style and architecture
+- Document your code with docstrings and comments
+- Update the README.md file if necessary
+- Add tests for new features
+
+## Future Improvements
+
+- **Advanced Memory Management**: Integration with external memory stores like Redis or PostgreSQL for better scalability.
+- **More Sophisticated Topic Detection**: Improved methods for detecting topic changes in conversations.
+- **Enhanced Collaboration Protocols**: More sophisticated protocols for agent-to-agent collaboration.
+- **Custom Workflow Nodes**: Allow for custom workflow nodes to be added to the graph.
+- **Improved Tool Discovery**: Better methods for agents to discover and use available tools.
+- **Multi-Agent Collaboration**: Support for multiple agents collaborating on a single task.
+- **Visualization Tools**: Tools for visualizing agent workflows and collaboration networks.
+
+## Troubleshooting
+
+### Common Issues
+
+- **Missing Agent ID**: If tools aren't working correctly, make sure you've set the current agent ID with `set_current_agent()`.
+- **Tool Timeouts**: If collaboration requests time out, check network connectivity and agent availability.
+- **Memory Leaks**: For long-running applications, consider implementing periodic context resets.
+
+### Debugging Techniques
+
+- Enable DEBUG level logging to see detailed tool operations
+- Use LangGraph's built-in tracing capabilities
+- Check collaboration chains for loops or excessive depth

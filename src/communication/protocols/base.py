@@ -1,9 +1,9 @@
-from abc import ABC, abstractmethod
-from typing import Optional, Dict
 import logging
+from abc import ABC, abstractmethod
+from typing import Dict, Optional
 
 from src.core.message import Message
-from src.core.types import MessageType, AgentIdentity, ProtocolVersion
+from src.core.types import AgentIdentity, MessageType, ProtocolVersion
 
 # Configure logging
 logger = logging.getLogger("Protocol")

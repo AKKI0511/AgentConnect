@@ -1,11 +1,11 @@
 import logging
-from typing import Dict, List, Optional, Callable, Awaitable
+from typing import Awaitable, Callable, Dict, List, Optional
 
+from src.communication.protocols.agent import SimpleAgentProtocol
 from src.core.agent import BaseAgent
-from src.core.types import AgentType, InteractionMode, MessageType, SecurityError
 from src.core.message import Message
 from src.core.registry import AgentRegistration, AgentRegistry
-from src.communication.protocols.agent import SimpleAgentProtocol
+from src.core.types import AgentType, InteractionMode, MessageType, SecurityError
 from src.utils.logging_config import LogLevel, setup_logging
 
 # Configure logging

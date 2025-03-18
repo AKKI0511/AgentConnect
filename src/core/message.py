@@ -1,13 +1,13 @@
+import base64
+import hashlib
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-import uuid
 from typing import Dict, Optional
-import hashlib
-import base64
 
 from src.core.types import (
-    MessageType,
     AgentIdentity,
+    MessageType,
     ProtocolVersion,
     SecurityError,
     VerificationStatus,

@@ -1,11 +1,11 @@
-from enum import Enum
-from dataclasses import dataclass
-from typing import Optional
-import time
 import logging
+import time
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
 
 # Import the logging configuration
-from src.utils.logging_config import setup_logging, LogLevel
+from src.utils.logging_config import LogLevel, setup_logging
 
 # Set up logging
 setup_logging(level=LogLevel.DEBUG)

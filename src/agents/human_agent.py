@@ -1,11 +1,12 @@
-from typing import Optional
 import asyncio
+from typing import Optional
+
 import aioconsole
 from colorama import Fore, Style
 
 from src.core.agent import BaseAgent
-from src.core.types import AgentType, MessageType, InteractionMode, AgentIdentity
 from src.core.message import Message
+from src.core.types import AgentIdentity, AgentType, InteractionMode, MessageType
 
 
 class HumanAgent(BaseAgent):

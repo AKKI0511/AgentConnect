@@ -1,6 +1,6 @@
 import logging
-from typing import Dict, Optional, List, Set
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
 
 from src.core.types import AgentIdentity, AgentType, InteractionMode, VerificationStatus
 from src.utils.logging_config import LogLevel, setup_logging

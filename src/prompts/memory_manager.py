@@ -1,12 +1,13 @@
 # NOTE: This file is not currently useable
 # Future integration: PostgreSQL, Redis
 
-from typing import List, Optional, Dict, Any
-from enum import Enum
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from pydantic import BaseModel
-import redis
 import json
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+import redis
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from pydantic import BaseModel
 
 
 class MemoryType(Enum):

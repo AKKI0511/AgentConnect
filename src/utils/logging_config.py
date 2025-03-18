@@ -1,7 +1,8 @@
 import logging
 import sys
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
 import colorama
 from colorama import Fore, Style
 

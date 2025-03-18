@@ -1,5 +1,5 @@
-from typing import List, Dict
 from enum import Enum
+from typing import Dict, List
 
 
 class ConversationType(Enum):

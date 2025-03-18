@@ -1,16 +1,16 @@
-from abc import ABC, abstractmethod
 import asyncio
-from typing import List, Optional, Dict, TYPE_CHECKING
-import time
 import logging
+import time
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from src.core.message import Message
 from src.core.types import (
-    AgentType,
-    MessageType,
-    InteractionMode,
-    AgentMetadata,
     AgentIdentity,
+    AgentMetadata,
+    AgentType,
+    InteractionMode,
+    MessageType,
     SecurityError,
     VerificationStatus,
 )

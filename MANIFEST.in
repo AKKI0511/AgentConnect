@@ -1,0 +1,59 @@
+# Include license and essential project files
+include LICENSE
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+include pyproject.toml
+include poetry.lock
+include example.env
+include Makefile
+
+# Include documentation
+recursive-include docs *.md
+recursive-include docs *.rst
+recursive-include docs *.txt
+recursive-include docs *.png
+recursive-include docs *.jpg
+recursive-include docs *.svg
+
+# Include all Python source files
+recursive-include agentconnect *.py
+
+# Include all configuration files
+recursive-include agentconnect *.json
+recursive-include agentconnect *.yaml
+recursive-include agentconnect *.yml
+recursive-include agentconnect *.ini
+recursive-include agentconnect *.cfg
+
+# Include all test files
+recursive-include tests *.py
+recursive-include tests/data *
+
+# Include all example files
+recursive-include examples *.py
+recursive-include examples *.ipynb
+recursive-include examples/data *
+
+# Include all demo files
+# recursive-include demos *.py
+# recursive-include demos/templates *
+# recursive-include demos/static *
+
+# Exclude unnecessary files
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+recursive-exclude * .env
+recursive-exclude * *.log
+recursive-exclude .* *
+recursive-exclude .git *
+recursive-exclude .github *
+recursive-exclude .pytest_cache *
+recursive-exclude .coverage *
+recursive-exclude htmlcov *
+recursive-exclude dist *
+recursive-exclude build *
+recursive-exclude *.egg-info *

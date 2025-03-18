@@ -1,0 +1,47 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+    -   id: trailing-whitespace
+        exclude: ^demos/
+    -   id: end-of-file-fixer
+        exclude: ^demos/
+    -   id: check-yaml
+    -   id: check-added-large-files
+    -   id: check-toml
+
+-   repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+    -   id: black
+        exclude: ^demos/
+        args: [agentconnect/, demos/]
+
+-   repo: https://github.com/pycqa/flake8
+    rev: 7.1.2
+    hooks:
+    -   id: flake8
+        args: ["--extend-ignore", "E501,W293,E128,W291,E402,E203", "agentconnect/", "demos/api/", "demos/utils/"]
+
+-   repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+    -   id: isort
+        exclude: ^demos/
+
+-   repo: local
+    hooks:
+    -   id: check-docstrings
+        name: Check docstrings are up to date
+        entry: python docs/check_docstrings.py
+        language: python
+        types: [python]
+        pass_filenames: false
+        exclude: ^demos/
+
+    -   id: check-docs
+        name: Check documentation build
+        entry: make -C docs html
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

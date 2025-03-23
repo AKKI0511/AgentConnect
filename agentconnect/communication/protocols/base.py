@@ -1,8 +1,9 @@
 """
-Base protocol interface for the AgentConnect framework.
+Foundation for all communication protocols in the AgentConnect framework.
 
-This module defines the abstract base class for all communication protocols
-used in the AgentConnect framework.
+This module defines the core protocol interface that standardizes message format
+and validation across different communication patterns, enabling consistent
+peer-to-peer agent interactions and collaboration.
 """
 
 import logging
@@ -22,10 +23,15 @@ logger = logging.getLogger("Protocol")
 
 class BaseProtocol(ABC):
     """
-    Base protocol interface for all communication types.
+    Foundation for all agent communication protocols.
 
-    This abstract class defines the interface that all communication protocols
-    must implement, including message formatting and validation.
+    This abstract class defines the common interface and baseline functionality for all
+    communication protocols, ensuring consistent message handling across different interaction
+    patterns. It provides the foundation for both basic agent-to-agent messaging and
+    more complex collaboration patterns based on capability discovery.
+
+    The protocol system enables standardized communication without requiring central control
+    of agent behavior - it simply ensures messages are properly formatted, signed, and validated.
     """
 
     def __init__(self):

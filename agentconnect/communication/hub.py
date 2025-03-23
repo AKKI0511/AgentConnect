@@ -1,8 +1,9 @@
 """
-Communication hub for the AgentConnect framework.
+Message routing system for the AgentConnect framework.
 
-This module provides the central communication hub that handles message routing,
-agent registration, and protocol management for the entire agent ecosystem.
+This module provides a communication hub that handles message routing and agent registration
+without dictating agent behavior. It enables agent discovery and communication in a
+peer-to-peer network where agents make independent decisions.
 """
 
 # Standard library imports
@@ -28,14 +29,17 @@ logger = logging.getLogger("CommunicationHub")
 
 class CommunicationHub:
     """
-    Handles all agent communication and message routing.
+    Message routing system that facilitates peer-to-peer agent communication.
 
-    The CommunicationHub is responsible for:
-    1. Registering and unregistering agents
-    2. Routing messages between agents
-    3. Managing communication protocols
-    4. Tracking message history
-    5. Handling special message types (cooldown, stop, etc.)
+    The CommunicationHub is NOT a central controller of agent behavior, but rather:
+    1. Routes messages between independent agents
+    2. Facilitates agent discovery through registration
+    3. Ensures secure message delivery without dictating responses
+    4. Manages communication protocols for consistent messaging
+    5. Tracks message history for auditability
+
+    Each agent connected to the hub maintains its autonomy and decision-making capability.
+    The hub simply enables discovery and communication without controlling behavior.
     """
 
     def __init__(self, registry: AgentRegistry):
@@ -293,7 +297,20 @@ class CommunicationHub:
             return False
 
     async def route_message(self, message: Message) -> bool:
-        """Route message between agents with verification"""
+        """
+        Route a message between agents without controlling agent behavior.
+
+        This method verifies message security, locates the receiver, delivers the message,
+        and tracks it in message history. While it ensures delivery and tracks history,
+        it does not dictate how agents respond to messages - each agent maintains its
+        independence in processing and responding to messages.
+
+        Args:
+            message: The message to route
+
+        Returns:
+            True if message was successfully routed, False otherwise
+        """
         try:
             logger.debug(
                 f"Routing message from {message.sender_id} to {message.receiver_id}"
@@ -709,20 +726,26 @@ class CommunicationHub:
         timeout: int = 60,
         **kwargs,
     ) -> str:
-        """Send a collaboration request to another agent and wait for a response.
+        """
+        Facilitate a collaboration request between agents based on capabilities.
 
-        This is a convenience wrapper around send_message_and_wait_response that
-        specifically handles collaboration requests.
+        This method creates and routes a collaboration request without controlling the outcome.
+        The receiving agent independently decides whether and how to fulfill the request
+        based on its own capabilities and decision-making processes.
 
         Args:
-            sender_id: The ID of the sender agent
-            receiver_id: The ID of the receiver agent
+            sender_id: ID of the requesting agent
+            receiver_id: ID of the agent being requested to collaborate
             task_description: Description of the task to be performed
-            timeout: Maximum time to wait for response in seconds (increased default to avoid timeouts)
-            **kwargs: Additional metadata to include with the request
+            timeout: How long to wait for a response in seconds
+            **kwargs: Additional parameters for the collaboration request
 
         Returns:
             The response content as a string, or an error message if the request failed
+
+        Raises:
+            ValueError: If the request could not be sent
+            TimeoutError: If the request times out
         """
         try:
             # Validate sender and receiver

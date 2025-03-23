@@ -1,8 +1,12 @@
 """
-Communication protocols for the AgentConnect framework.
+Communication protocols that enable diverse agent interactions.
 
-This module provides protocol implementations for different types of agent communication,
-including basic agent-to-agent communication and collaborative interactions.
+This module provides protocol implementations that standardize different types of
+agent communication patterns. These protocols support peer-to-peer messaging,
+capability discovery, and collaborative task execution between independent agents.
+
+The protocols ensure message format consistency while allowing agents to maintain
+their individual autonomy and decision-making processes.
 """
 
 from agentconnect.communication.protocols.agent import SimpleAgentProtocol

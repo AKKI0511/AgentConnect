@@ -1,9 +1,9 @@
 """
-Collaboration protocol implementation for the AgentConnect framework.
+Collaboration protocol that enables dynamic capability discovery and task delegation.
 
-This module provides the CollaborationProtocol, which implements the communication
-protocol for collaborative interactions between agents, including capability
-discovery and task delegation.
+This module provides the CollaborationProtocol, which implements communication patterns
+for peer-to-peer collaborative interactions between agents. It enables agents to
+discover each other's capabilities and delegate tasks without requiring central coordination.
 """
 
 # Standard library imports
@@ -23,7 +23,12 @@ logger = logging.getLogger("CollaborationProtocol")
 
 @dataclass
 class RequestCapabilityPayload:
-    """Payload for requesting capabilities from other agents."""
+    """
+    Payload for dynamically discovering capabilities from other agents.
+
+    This structure enables an agent to search for specific capabilities across
+    the network without needing to know in advance which agents provide them.
+    """
 
     capability_name: Optional[str] = None
     capability_description: Optional[str] = None  # For semantic search
@@ -33,7 +38,12 @@ class RequestCapabilityPayload:
 
 @dataclass
 class CapabilityResponsePayload:
-    """Response payload containing capabilities that match a request."""
+    """
+    Response payload containing discovered capabilities that match a request.
+
+    This structure enables peer-to-peer capability discovery by returning
+    matching capabilities from agents across the network.
+    """
 
     request_id: str
     capabilities: List[Dict[str, Any]]  # List of simplified Capability dicts
@@ -42,7 +52,12 @@ class CapabilityResponsePayload:
 
 @dataclass
 class RequestCollaborationPayload:
-    """Payload for requesting collaboration on a specific capability."""
+    """
+    Payload for requesting peer-to-peer collaboration on a specific capability.
+
+    This structure enables an agent to request another agent's services
+    based on its capabilities, forming dynamic collaborative relationships.
+    """
 
     capability_name: str
     input_data: Dict[str, Any]
@@ -50,7 +65,12 @@ class RequestCollaborationPayload:
 
 @dataclass
 class CollaborationResponsePayload:
-    """Response payload for a collaboration request."""
+    """
+    Response payload from an agent providing its capability as a service.
+
+    This structure enables agents to share results after performing
+    a requested capability, completing the peer-to-peer collaboration.
+    """
 
     request_id: str
     success: bool
@@ -60,7 +80,12 @@ class CollaborationResponsePayload:
 
 @dataclass
 class CollaborationErrorPayload:
-    """Error payload for a failed collaboration request."""
+    """
+    Error payload for a collaboration attempt that couldn't be completed.
+
+    This structure provides standardized error reporting in peer-to-peer
+    collaboration scenarios.
+    """
 
     request_id: str
     error_code: str
@@ -69,11 +94,18 @@ class CollaborationErrorPayload:
 
 class CollaborationProtocol(BaseProtocol):
     """
-    Protocol implementation for agent collaboration.
+    Protocol that enables peer-to-peer agent collaboration and capability sharing.
 
-    This protocol handles the message formatting and validation for
-    collaborative interactions between agents, including capability
-    discovery, task delegation, and result sharing.
+    This protocol facilitates dynamic discovery and utilization of capabilities across
+    a network of independent agents. It allows agents to:
+
+    1. Discover what other agents can do through capability queries
+    2. Request help from agents with relevant capabilities
+    3. Share results after task completion
+
+    Agents maintain their independence - each agent decides whether to accept
+    collaboration requests based on its own criteria. The protocol simply
+    standardizes the communication pattern without imposing central control.
     """
 
     def __init__(self):

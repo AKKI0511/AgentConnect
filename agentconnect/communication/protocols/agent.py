@@ -1,8 +1,9 @@
 """
-Agent protocol implementation for the AgentConnect framework.
+Agent protocol implementation that enables secure peer-to-peer communication.
 
 This module provides the SimpleAgentProtocol, which implements the basic
-communication protocol for agent-to-agent interactions.
+communication framework for direct agent-to-agent interactions with cryptographic
+security and message verification.
 """
 
 # Standard library imports
@@ -21,10 +22,12 @@ logger = logging.getLogger("AgentProtocol")
 
 class SimpleAgentProtocol(BaseProtocol):
     """
-    Protocol implementation for agent-to-agent communication.
+    Protocol that ensures secure peer-to-peer agent communication.
 
-    This protocol handles the basic message formatting and validation
-    for communication between agents in the system.
+    This protocol handles message formatting, cryptographic verification, and validation
+    for direct communication between agents. It ensures that messages are properly
+    signed and can be verified by the receiving agent, maintaining security in
+    peer-to-peer interactions.
     """
 
     def __init__(self):

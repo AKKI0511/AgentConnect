@@ -1,6 +1,6 @@
 # Communication Module
 
-The communication module provides the infrastructure for agent communication in the AgentConnect framework. It handles message routing, agent registration, and protocol management.
+The communication module provides the infrastructure for peer-to-peer agent communication in the AgentConnect framework. It handles message routing, agent discovery, and protocol management without dictating agent behavior.
 
 ## Structure
 
@@ -20,61 +20,68 @@ communication/
 
 ### CommunicationHub
 
-The `CommunicationHub` is the central component that:
-- Registers and unregisters agents
-- Routes messages between agents
-- Manages communication protocols
-- Tracks message history
-- Handles special message types (cooldown, stop, etc.)
+The `CommunicationHub` is a message routing system that:
+- Facilitates agent discovery through registration
+- Routes messages between independent agents
+- Ensures secure message delivery 
+- Manages communication protocols for consistent messaging
+- Tracks message history for auditability
+
+**Important**: The hub does NOT control agent behavior. It simply enables discovery and communication between independent agents, each of which makes its own decisions about how to respond to messages.
 
 ```python
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
 
-# Create a hub
+# Create a message routing hub
 registry = AgentRegistry()
 hub = CommunicationHub(registry)
 
-# Register an agent
+# Register an agent (enabling discovery)
 await hub.register_agent(my_agent)
 
-# Route a message
+# Route a message (without dictating the response)
 await hub.route_message(message)
 ```
 
 ### Protocols
 
-The communication module includes several protocol implementations:
+The communication module includes several protocol implementations that standardize different interaction patterns:
 
-1. **BaseProtocol**: Abstract base class for all protocols
-2. **SimpleAgentProtocol**: Basic agent-to-agent communication
-3. **CollaborationProtocol**: Advanced protocol for agent collaboration
+1. **BaseProtocol**: Foundation for all communication protocols, ensuring consistent message handling
+   - Provides baseline message type support
+   - Enforces message validation and security
+
+2. **SimpleAgentProtocol**: Enables secure peer-to-peer agent communication
+   - Handles message formatting and cryptographic verification
+   - Ensures messages can be validated by receiving agents
+   - Maintains security in direct agent interactions
+
+3. **CollaborationProtocol**: Facilitates capability discovery and peer-to-peer task delegation
+   - Enables dynamic discovery of agent capabilities
+   - Supports requesting collaboration based on capabilities
+   - Standardizes result sharing after task completion
+   - Allows agents to independently decide whether to accept collaboration requests
 
 ```python
 from agentconnect.communication import SimpleAgentProtocol
+from agentconnect.core.types import MessageType
 
-# Create a protocol instance
+# Create a protocol instance for secure peer-to-peer messaging
 protocol = SimpleAgentProtocol()
 
-# Format a message
+# Format a message with cryptographic signing
 message = await protocol.format_message(
     sender_id="agent1",
     receiver_id="agent2",
     content="Hello!",
-    sender_identity=identity,
+    sender_identity=identity,  # Contains cryptographic keys
     message_type=MessageType.TEXT
 )
 
-# Validate a message
+# Validate a message's cryptographic signature
 is_valid = await protocol.validate_message(message)
 ```
-
-## Best Practices
-
-1. **Message Routing**: Always use the `CommunicationHub` for routing messages between agents.
-2. **Protocol Selection**: Use the appropriate protocol for your communication needs.
-3. **Error Handling**: Handle communication errors gracefully using the error message types.
-4. **Asynchronous Operations**: All communication operations are asynchronous and should be awaited.
 
 ## Example Usage
 
@@ -82,35 +89,62 @@ is_valid = await protocol.validate_message(message)
 import asyncio
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
-from agentconnect.core.types import MessageType
+from agentconnect.core.types import MessageType, Capability
 from agentconnect.agents import AIAgent, HumanAgent
 
 async def main():
-    # Initialize registry and hub
+    # Initialize registry and message routing hub
     registry = AgentRegistry()
     hub = CommunicationHub(registry)
     
-    # Create and register agents
-    human = HumanAgent(...)
-    ai = AIAgent(...)
-    
-    await hub.register_agent(human)
-    await hub.register_agent(ai)
-    
-    # Send a message
-    await human.send_message(
-        receiver_id=ai.agent_id,
-        content="Hello, AI!",
-        message_type=MessageType.TEXT
+    # Create an AI agent with specific capabilities
+    research_agent = AIAgent(
+        agent_id="research_agent",
+        name="Research Assistant",
+        capabilities=[
+            Capability(
+                name="web_search",
+                description="Can search the web for information",
+                input_schema={"query": "string"},
+                output_schema={"results": "string"}
+            )
+        ],
+        # other parameters...
     )
     
-    # Wait for and process responses
-    # ...
+    # Create a human agent for user interaction
+    human = HumanAgent(
+        agent_id="user123",
+        name="John",
+        # other parameters...
+    )
     
-    # Unregister agents when done
+    # Register both agents to enable discovery
+    await hub.register_agent(human)
+    await hub.register_agent(research_agent)
+    
+    # Human agent sends a collaboration request to the research agent
+    response = await hub.send_collaboration_request(
+        sender_id=human.agent_id,
+        receiver_id=research_agent.agent_id,
+        task_description="Search for the latest news on AI"
+    )
+    
+    # The AI agent independently decides how to respond
+    # The hub only ensures message delivery without controlling the response
+    
+    # When done, unregister agents
     await hub.unregister_agent(human.agent_id)
-    await hub.unregister_agent(ai.agent_id)
+    await hub.unregister_agent(research_agent.agent_id)
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+## Best Practices
+
+1. **Message Routing**: Use the hub for message delivery, not to control agent behavior.
+2. **Protocol Selection**: Choose the appropriate protocol for your interaction pattern.
+3. **Security**: Verify message signatures to ensure secure communication.
+4. **Agent Autonomy**: Design agents to make their own decisions about how to respond to messages.
+5. **Capability Discovery**: Use the collaboration protocol to discover agent capabilities dynamically.

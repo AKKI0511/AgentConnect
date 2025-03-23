@@ -1,8 +1,11 @@
 """
-AI Agent implementation for the AgentConnect framework.
+Independent AI Agent implementation for the AgentConnect decentralized framework.
 
-This module provides an AI agent that can process messages, generate responses,
-and interact with other agents in the system.
+This module provides an autonomous AI agent that can operate independently within a decentralized
+network, process messages, generate responses, discover other agents based on capabilities,
+and interact with those agents without pre-defined connections or central control.
+Each agent can potentially implement its own internal multi-agent structure while maintaining
+secure communication with other agents in the decentralized network.
 """
 
 # Standard library imports
@@ -54,10 +57,19 @@ class MemoryType(str, Enum):
 
 class AIAgent(BaseAgent):
     """
-    AI Agent implementation that can process messages and generate responses.
+    Independent AI Agent implementation that operates autonomously in a decentralized network.
 
-    This agent uses language models to generate responses to messages and can
-    interact with other agents in the system.
+    This agent uses language models to generate responses, can discover and communicate with
+    other agents based on their capabilities (not pre-defined connections), and can implement
+    its own internal multi-agent structure if needed. It operates as a peer in a decentralized
+    system rather than as part of a centrally controlled hierarchy.
+
+    Key features:
+    - Autonomous operation with independent decision-making
+    - Capability-based discovery of other agents
+    - Secure identity verification and communication
+    - Potential for internal multi-agent structures
+    - Dynamic request routing based on capabilities
     """
 
     def __init__(
@@ -262,7 +274,20 @@ class AIAgent(BaseAgent):
         return provider.get_langchain_llm(model_name=self.model_name)
 
     async def process_message(self, message: Message) -> Optional[Message]:
-        """Process an incoming message and generate a response."""
+        """
+        Process an incoming message autonomously and generate a response.
+
+        This method represents the agent's autonomous decision loop, where it:
+        - Verifies message security independently
+        - Makes decisions on how to respond based on capabilities
+        - Can dynamically discover and collaborate with other agents as needed
+        - Maintains its own internal state and conversation tracking
+        - Operates without central coordination or control
+
+        The agent can leverage its internal workflow (which may include its own multi-agent system)
+        to generate appropriate responses and handle complex tasks that may require collaboration
+        with other independent agents in the decentralized network.
+        """
         # Check if this is a collaboration request before calling super().process_message
         is_collaboration_request = (
             message.message_type == MessageType.REQUEST_COLLABORATION

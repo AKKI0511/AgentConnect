@@ -1,16 +1,23 @@
 """
-AgentConnect - A framework for connecting and managing AI agents.
+AgentConnect - A decentralized framework for autonomous agent collaboration.
 
-This package provides tools for creating, managing, and connecting AI agents
-for autonomous communication and collaboration.
+This package provides tools for creating, managing, and connecting independent AI agents
+capable of dynamic discovery and secure, autonomous communication across distributed networks.
 
 Key components:
-- Agents: Base agent classes and implementations (AI, Human)
-- Core: Foundational types, message handling, and registry
-- Communication: Hub for agent-to-agent messaging
-- Providers: LLM provider integrations
+- Agents: Independent agent implementations (AI, Human) with their own internal structures
+- Core: Foundational types, message handling, and registry for capability-based discovery
+- Communication: Decentralized hub for agent-to-agent secure messaging
+- Providers: LLM provider integrations for autonomous agent intelligence
 - Prompts: Tools, workflows, and templates for agent interactions
-- Utils: Utility functions for security, interaction control, etc.
+- Utils: Utility functions for security, interaction control, verification, etc.
+
+Key differentiators:
+- Decentralized Architecture: Agents operate as independent, autonomous peers rather than in a hierarchy
+- Dynamic Discovery: Agents find each other based on capabilities, not pre-defined connections
+- Independent Operation: Each agent can have its own internal multi-agent system
+- Secure Communication: Built-in cryptographic message signing and verification
+- Horizontal Scalability: Designed for thousands of independent, collaborating agents
 
 For detailed usage examples, see the README.md or visit the documentation.
 """

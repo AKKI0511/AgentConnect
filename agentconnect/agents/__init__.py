@@ -1,13 +1,18 @@
 """
-Agent implementations for the AgentConnect framework.
+Independent agent implementations for the AgentConnect decentralized framework.
 
-This module provides various agent implementations, including AI agents and human agents,
-that can communicate with each other and perform tasks based on their capabilities.
+This module provides various autonomous agent implementations that operate as independent entities
+in a decentralized network. Each agent maintains its own identity, capabilities, and can optionally
+implement its own internal multi-agent system while communicating with other agents through
+capability-based discovery.
 
 Key components:
-- AIAgent: AI-powered agent implementation
-- HumanAgent: Human-in-the-loop agent implementation
+- AIAgent: Independent AI-powered agent with potential for internal multi-agent structures
+- HumanAgent: Human-in-the-loop agent that can interact securely with the decentralized network
 - MemoryType: Enum for different types of agent memory
+
+Each agent operates autonomously and can discover and communicate with other agents based on
+capabilities rather than pre-defined connections, enabling a truly decentralized architecture.
 """
 
 from agentconnect.agents.ai_agent import AIAgent, MemoryType

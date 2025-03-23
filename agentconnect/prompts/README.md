@@ -190,23 +190,6 @@ The LangGraph-based workflow system offers several advantages over the previous 
 6. **Better Tracing and Debugging**: LangGraph provides built-in tracing capabilities for better debugging and monitoring.
 7. **Improved Performance**: The new system is more efficient, with better token usage and faster response times.
 
-## Contributing
-
-To contribute to the AgentConnect project:
-
-1. **Fork the Repository**: Create your own fork of the repository on GitHub.
-2. **Create a Branch**: Create a branch for your feature or bugfix.
-3. **Make Changes**: Implement your changes, following the project's coding style.
-4. **Write Tests**: Add tests for your changes to ensure they work as expected.
-5. **Submit a Pull Request**: Submit a pull request to the main repository.
-
-### Development Guidelines
-
-- Follow the existing code style and architecture
-- Document your code with docstrings and comments
-- Update the README.md file if necessary
-- Add tests for new features
-
 ## Future Improvements
 
 - **Advanced Memory Management**: Integration with external memory stores like Redis or PostgreSQL for better scalability.

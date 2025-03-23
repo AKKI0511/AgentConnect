@@ -1,12 +1,13 @@
 """
-Communication infrastructure for the AgentConnect framework.
+Decentralized communication infrastructure for the AgentConnect framework.
 
-This module provides tools for agent communication, message routing, and protocol handling.
-It includes the CommunicationHub for message routing and various protocol implementations.
+This module provides tools for peer-to-peer agent communication, message routing, and protocol handling.
+It includes a message routing system that facilitates agent discovery and interaction without
+centralized control of agent behavior.
 
 Key components:
-- CommunicationHub: Central message routing and delivery system
-- Protocol implementations: Base protocol and specialized variants
+- CommunicationHub: Message routing and delivery system for peer-to-peer agent communication
+- Protocol implementations: Base protocol and specialized variants for different interaction types
 """
 
 from agentconnect.communication.hub import CommunicationHub

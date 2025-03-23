@@ -14,7 +14,7 @@ To run these examples, you'll need to have AgentConnect installed:
 
 ```bash
 # Install AgentConnect with demo dependencies
-poetry install --with demo
+poetry install
 ```
 
 Then you can run any example directly:
@@ -72,8 +72,6 @@ Before running these examples, make sure you have:
 2. Installed all required dependencies:
    ```bash
    poetry install
-   # Or with pip
-   pip install -r requirements.txt
    ```
 
 ## Running the Examples
@@ -217,16 +215,6 @@ asyncio.create_task(agent.run())
 if hasattr(agent, "_processing_task") and agent._processing_task:
     agent._processing_task.cancel()
 ```
-
-## Recent Improvements
-
-The examples now benefit from several improvements to the AgentConnect framework:
-
-1. **Enhanced Communication**: Asynchronous message delivery for better performance
-2. **Improved Request-Response Handling**: More reliable collaboration between agents
-3. **LangGraph Integration**: Structured workflows for complex reasoning
-4. **Rate Limiting**: Better control over API usage and costs
-5. **LangSmith Monitoring**: Visibility into agent behavior and performance
 
 ## Troubleshooting
 

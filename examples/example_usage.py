@@ -171,8 +171,6 @@ async def main(enable_logging: bool = False) -> None:
     )
 
     # --- AI Agent Setup ---
-    prompt_tools = PromptTools(registry, hub)
-    prompt_templates = PromptTemplates()
 
     # Create Capability objects for AI capabilities
     ai_capabilities = [
@@ -195,8 +193,6 @@ async def main(enable_logging: bool = False) -> None:
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         personality="helpful and professional",
         organization_id="org2",
-        prompt_tools=prompt_tools,
-        prompt_templates=prompt_templates,
     )
     # --- End AI Agent Setup ---
 

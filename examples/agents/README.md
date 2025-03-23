@@ -18,7 +18,7 @@ To run these examples:
 
 ```bash
 # Install dependencies
-poetry install --with demo
+poetry install
 
 # Run the basic agent example
 python examples/agents/basic_agent_usage.py

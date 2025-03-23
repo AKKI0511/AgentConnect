@@ -18,7 +18,7 @@ To run these examples:
 
 ```bash
 # Install dependencies
-poetry install --with demo
+poetry install
 
 # Run the basic communication example
 python examples/communication/basic_communication.py

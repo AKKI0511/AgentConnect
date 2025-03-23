@@ -18,7 +18,7 @@ To run these examples (once available):
 
 ```bash
 # Install dependencies
-poetry install --with demo
+poetry install
 
 # Run a multi-agent example
 python examples/multi_agent/collaborative_agents.py

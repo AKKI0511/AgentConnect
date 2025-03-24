@@ -3,9 +3,9 @@ from typing import Dict
 from datetime import datetime
 import asyncio
 
-from src.agents.ai_agent import AIAgent
-from src.core.agent import BaseAgent
-from src.core.types import AgentIdentity, ModelProvider, ModelName
+from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.core.agent import BaseAgent
+from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.api.models.agents import AgentConfig

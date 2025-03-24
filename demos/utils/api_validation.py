@@ -12,7 +12,7 @@ from uuid import uuid4
 from .demo_logger import get_logger
 from .config_manager import get_config
 from .shared import shared
-from src.core.types import ModelProvider
+from agentconnect.core.types import ModelProvider
 from demos.api.models.chat import WebSocketMessage, MessageType
 
 logger = get_logger(__name__)

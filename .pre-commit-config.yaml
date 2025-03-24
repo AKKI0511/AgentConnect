@@ -1,0 +1,31 @@
+repos:
+-   repo: local
+    hooks:
+    -   id: black-format
+        name: Format with black (via Makefile)
+        entry: make format
+        language: system
+        pass_filenames: false
+        types: [python]
+
+    -   id: flake8-lint
+        name: Lint with flake8 (via Makefile)
+        entry: make lint
+        language: system
+        pass_filenames: false
+        types: [python]
+
+    -   id: check-docstrings
+        name: Check docstrings are up to date
+        entry: python docs/check_docstrings.py
+        language: python
+        types: [python]
+        pass_filenames: false
+        exclude: ^demos/
+
+    -   id: check-docs
+        name: Check documentation build
+        entry: make -C docs html
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

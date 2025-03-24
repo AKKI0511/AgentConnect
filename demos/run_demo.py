@@ -69,7 +69,8 @@ def check_port_available(port: int) -> bool:
         sock.bind(("127.0.0.1", port))
         sock.close()
         return True
-    except:
+    except Exception as e:
+        logger.error(f"Error checking port availability: {str(e)}")
         return False
 
 

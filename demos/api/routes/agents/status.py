@@ -2,8 +2,8 @@ from fastapi import HTTPException, status
 from typing import List
 from datetime import datetime
 
-from src.agents.ai_agent import AIAgent
-from src.core.agent import BaseAgent
+from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.core.agent import BaseAgent
 from demos.utils.demo_logger import get_logger
 from demos.api.models.agents import (
     AgentStatus,

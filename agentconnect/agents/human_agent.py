@@ -34,6 +34,7 @@ class HumanAgent(BaseAgent):
     Human agent implementation for interactive communication with AI agents.
 
     This agent handles:
+
     - Real-time text input/output
     - Message verification and security
     - Graceful conversation management

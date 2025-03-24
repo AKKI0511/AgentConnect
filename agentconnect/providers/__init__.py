@@ -7,9 +7,10 @@ implements a factory pattern for creating provider instances based on the
 desired model provider.
 
 Key components:
-- ProviderFactory: Factory class for creating provider instances
-- BaseProvider: Abstract base class for all providers
-- Specific providers: OpenAI, Anthropic, Groq, Google
+
+- **ProviderFactory**: Factory class for creating provider instances
+- **BaseProvider**: Abstract base class for all providers
+- **Specific providers**: OpenAI, Anthropic, Groq, Google
 """
 
 from agentconnect.providers.anthropic_provider import AnthropicProvider

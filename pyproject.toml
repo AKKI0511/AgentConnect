@@ -79,6 +79,9 @@ tomli-w = "^1.2.0"
 pre-commit = "^4.1.0"
 sphinx-design = "^0.6.1"
 sphinx-copybutton = "^0.5.2"
+sphinx-markdown-builder = "^0.6.8"
+pydata-sphinx-theme = "^0.16.1"
+sphinx-togglebutton = "^0.3.2"
 
 [tool.poetry.group.docs]
 optional = true
@@ -90,3 +93,6 @@ sphinx-autodoc-typehints = "^3.1.0"
 myst-parser = "^4.0.1"
 sphinx-design = "^0.6.1"
 sphinx-copybutton = "^0.5.2"
+sphinx-markdown-builder = "^0.6.8"
+pydata-sphinx-theme = "^0.16.1"
+sphinx-togglebutton = "^0.3.2"

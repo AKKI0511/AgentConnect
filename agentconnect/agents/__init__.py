@@ -7,9 +7,10 @@ implement its own internal multi-agent system while communicating with other age
 capability-based discovery.
 
 Key components:
-- AIAgent: Independent AI-powered agent with potential for internal multi-agent structures
-- HumanAgent: Human-in-the-loop agent that can interact securely with the decentralized network
-- MemoryType: Enum for different types of agent memory
+
+- **AIAgent**: Independent AI-powered agent with potential for internal multi-agent structures
+- **HumanAgent**: Human-in-the-loop agent that can interact securely with the decentralized network
+- **MemoryType**: Enum for different types of agent memory
 
 Each agent operates autonomously and can discover and communicate with other agents based on
 capabilities rather than pre-defined connections, enabling a truly decentralized architecture.

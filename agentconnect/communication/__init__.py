@@ -6,18 +6,15 @@ It includes a message routing system that facilitates agent discovery and intera
 centralized control of agent behavior.
 
 Key components:
+
 - CommunicationHub: Message routing and delivery system for peer-to-peer agent communication
 - Protocol implementations: Base protocol and specialized variants for different interaction types
 """
 
 from agentconnect.communication.hub import CommunicationHub
-from agentconnect.communication.protocols.agent import SimpleAgentProtocol
-from agentconnect.communication.protocols.base import BaseProtocol
-from agentconnect.communication.protocols.collaboration import CollaborationProtocol
+from agentconnect.communication import protocols
 
 __all__ = [
     "CommunicationHub",
-    "BaseProtocol",
-    "SimpleAgentProtocol",
-    "CollaborationProtocol",
+    "protocols",
 ]

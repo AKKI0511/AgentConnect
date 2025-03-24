@@ -7,10 +7,11 @@ of the AgentConnect framework, enabling agents to make decisions, collaborate wi
 other agents, and process complex tasks.
 
 Key components:
-- Tools: Utilities for agent search, collaboration, and task decomposition
-- Workflows: LangGraph-based workflows for different agent types
-- Templates: Prompt templates for various agent interactions
-- Chain Factory: Utilities for creating LangChain chains
+
+- **Tools**: Utilities for agent search, collaboration, and task decomposition
+- **Workflows**: LangGraph-based workflows for different agent types
+- **Templates**: Prompt templates for various agent interactions
+- **Chain Factory**: Utilities for creating LangChain chains
 """
 
 # Re-export only the most important workflow classes

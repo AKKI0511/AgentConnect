@@ -178,6 +178,7 @@ demos/api/tests
 demos/logs/
 demos/scenarios/
 docs/coverage/
+docs/markdown_build/
 req/
 src/
 example_usage.py

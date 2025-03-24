@@ -6,10 +6,11 @@ search for specialized agents, and collaborate on tasks. These tools are
 designed to be used with LangGraph workflows and LLM-based agents.
 
 Key components:
-- Agent search tools: Find agents with specific capabilities
-- Collaboration tools: Send requests to other agents and manage responses
-- Task decomposition tools: Break complex tasks into manageable subtasks
-- Tool registry: Central registry for managing available tools
+
+- **Agent search tools**: Find agents with specific capabilities
+- **Collaboration tools**: Send requests to other agents and manage responses
+- **Task decomposition tools**: Break complex tasks into manageable subtasks
+- **Tool registry**: Central registry for managing available tools
 
 The tools in this module are designed to be used within the agent's workflow
 to enable seamless agent-to-agent communication and collaboration.

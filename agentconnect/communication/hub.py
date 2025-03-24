@@ -32,6 +32,7 @@ class CommunicationHub:
     Message routing system that facilitates peer-to-peer agent communication.
 
     The CommunicationHub is NOT a central controller of agent behavior, but rather:
+
     1. Routes messages between independent agents
     2. Facilitates agent discovery through registration
     3. Ensures secure message delivery without dictating responses

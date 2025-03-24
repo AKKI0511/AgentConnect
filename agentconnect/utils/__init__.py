@@ -5,10 +5,11 @@ This module provides various utility functions and classes used throughout the f
 including interaction control for rate limiting, token usage tracking, and logging configuration.
 
 Key components:
-- InteractionControl: Controls agent interactions with rate limiting and turn tracking
-- InteractionState: Enum for interaction states (CONTINUE, STOP, WAIT)
-- TokenConfig: Configuration for token-based rate limiting
-- Logging utilities: Configurable logging setup with colored output
+
+- **InteractionControl**: Controls agent interactions with rate limiting and turn tracking
+- **InteractionState**: Enum for interaction states (CONTINUE, STOP, WAIT)
+- **TokenConfig**: Configuration for token-based rate limiting
+- **Logging utilities**: Configurable logging setup with colored output
 """
 
 # Interaction control components

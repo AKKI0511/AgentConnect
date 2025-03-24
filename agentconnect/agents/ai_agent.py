@@ -65,6 +65,7 @@ class AIAgent(BaseAgent):
     system rather than as part of a centrally controlled hierarchy.
 
     Key features:
+
     - Autonomous operation with independent decision-making
     - Capability-based discovery of other agents
     - Secure identity verification and communication
@@ -278,6 +279,7 @@ class AIAgent(BaseAgent):
         Process an incoming message autonomously and generate a response.
 
         This method represents the agent's autonomous decision loop, where it:
+
         - Verifies message security independently
         - Makes decisions on how to respond based on capabilities
         - Can dynamically discover and collaborate with other agents as needed

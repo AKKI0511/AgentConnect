@@ -1,10 +1,20 @@
 # Quickstart
 
-This guide will help you get started with AgentConnect quickly.
+This guide will help you get started with AgentConnect, a framework that enables independent AI agents to discover, communicate, and collaborate with each other through capability-based discovery.
 
-## Basic Usage
+## What is AgentConnect?
 
-Here's a simple example of how to create and connect AI agents:
+AgentConnect allows you to:
+
+- Create independent AI agents with specific capabilities
+- Enable secure communication between agents with cryptographic verification
+- Discover agents based on their capabilities rather than pre-defined connections
+- Build systems where each agent can operate autonomously while collaborating with others
+- Develop multi-agent workflows for complex tasks
+
+## Basic Usage: Human-AI Interaction
+
+Let's start with a simple example of a human user interacting with an AI assistant:
 
 ```python
 import asyncio
@@ -21,6 +31,7 @@ from agentconnect.core.types import (
     AgentIdentity,
     Capability,
 )
+from agentconnect.core.message import Message
 
 async def main():
     # Load environment variables
@@ -30,7 +41,7 @@ async def main():
     registry = AgentRegistry()
     hub = CommunicationHub(registry)
     
-    # Create secure agent identities
+    # Create secure agent identities with cryptographic keys
     human_identity = AgentIdentity.create_key_based()
     ai_identity = AgentIdentity.create_key_based()
     
@@ -42,7 +53,7 @@ async def main():
         organization_id="org1"
     )
     
-    # Create an AI agent
+    # Define AI agent capabilities (what this agent can do)
     ai_capabilities = [
         Capability(
             name="conversation",
@@ -52,11 +63,12 @@ async def main():
         )
     ]
     
+    # Create an AI assistant with the defined capabilities
     ai_assistant = AIAgent(
         agent_id="ai1",
         name="Assistant",
-        provider_type=ModelProvider.GROQ,  # Or any other provider
-        model_name=ModelName.LLAMA3_70B,   # Or any other model
+        provider_type=ModelProvider.GROQ,  # Choose your provider
+        model_name=ModelName.LLAMA3_70B,   # Choose your model
         api_key=os.getenv("GROQ_API_KEY"),
         identity=ai_identity,
         capabilities=ai_capabilities,
@@ -65,14 +77,14 @@ async def main():
         organization_id="org2",
     )
     
-    # Register agents
+    # Register agents with the hub for discovery
     await hub.register_agent(human)
     await hub.register_agent(ai_assistant)
     
-    # Start AI processing
+    # Start AI processing loop
     ai_task = asyncio.create_task(ai_assistant.run())
     
-    # Start interaction
+    # Start interactive session
     await human.start_interaction(ai_assistant)
     
     # Cleanup
@@ -85,9 +97,9 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## Multi-Agent Systems
+## Agent Collaboration
 
-AgentConnect supports creating multi-agent systems where agents can collaborate autonomously:
+You can create specialized agents that collaborate on tasks without human intervention:
 
 ```python
 import asyncio
@@ -105,12 +117,20 @@ from agentconnect.core.types import (
     Capability,
 )
 
+async def message_handler(message: Message) -> None:
+    """Track all messages passing through the hub"""
+    print(f"Message routed: {message.sender_id} → {message.receiver_id}")
+    print(f"Content: {message.content[:50]}...")
+
 async def run_multi_agent_demo():
     load_dotenv()
     
     # Initialize core components
     registry = AgentRegistry()
     hub = CommunicationHub(registry)
+
+    # Add a global message handler to track all communication
+    hub.add_global_handler(message_handler)
     
     # Create agent identities
     agent1_identity = AgentIdentity.create_key_based()
@@ -189,27 +209,78 @@ if __name__ == "__main__":
     asyncio.run(run_multi_agent_demo())
 ```
 
+## Message Handling and Event Tracking
+
+You can add message handlers to track and respond to agent communications:
+
+```python
+from agentconnect.core.message import Message
+from agentconnect.core.types import MessageType
+
+# Handler for a specific agent
+async def agent_message_handler(message: Message) -> None:
+    print(f"Agent received: {message.content}")
+    # Log, analyze, or take action based on messages
+
+# Add handlers to the hub
+hub.add_message_handler("agent_id", agent_message_handler)
+
+# Add a global handler to monitor all messages
+async def global_message_tracker(message: Message) -> None:
+    if message.message_type == MessageType.REQUEST_COLLABORATION:
+        print(f"Collaboration request: {message.sender_id} → {message.receiver_id}")
+    elif message.message_type == MessageType.COLLABORATION_RESPONSE:
+        print(f"Collaboration response received from {message.sender_id}")
+
+hub.add_global_handler(global_message_tracker)
+```
+
+## Capability-Based Discovery
+
+Agents can discover and collaborate with other agents based on capabilities:
+
+```python
+# Find agents with specific capabilities
+matching_agents = await registry.find_agents_by_capability(
+    capability_name="data_analysis"
+)
+
+if matching_agents:
+    # Request collaboration from the first matching agent
+    analysis_result = await hub.send_collaboration_request(
+        sender_id=requester.agent_id,
+        receiver_id=matching_agents[0].agent_id,
+        task_description="Analyze this dataset: [1, 2, 3, 4, 5]"
+    )
+```
+
 ## Key Components
 
 ### Agents
 
-- `AIAgent`: AI-powered agent that can process messages and generate responses
-- `HumanAgent`: Interface for human users to interact with AI agents
+- `AIAgent`: AI-powered agent with specific capabilities that can operate independently
+- `HumanAgent`: Interface for human users to participate in the agent network
 
 ### Communication
 
-- `CommunicationHub`: Central component for message routing and agent communication
-- `AgentRegistry`: Registry for agent discovery and capability matching
+- `CommunicationHub`: Message routing system that enables agent discovery and interaction
+- `AgentRegistry`: Registry for capability-based agent discovery
+
+### Protocols
+
+- `SimpleAgentProtocol`: Ensures secure agent-to-agent communication
+- `CollaborationProtocol`: Enables capability discovery and task delegation
 
 ### Core Types
 
 - `AgentIdentity`: Secure identity with cryptographic verification
-- `Capability`: Structured representation of agent capabilities
-- `ModelProvider`: Supported AI providers (OpenAI, Anthropic, Groq, Google)
+- `Capability`: Structured representation of what an agent can do
+- `ModelProvider`: Supported AI providers (OpenAI, Anthropic, Groq, Google, etc.)
 - `ModelName`: Available models for each provider
+- `MessageType`: Different types of messages (TEXT, REQUEST_COLLABORATION, etc.)
 
 ## Next Steps
 
-- Check out the [Examples](https://github.com/AKKI0511/AgentConnect/tree/main/examples) directory for more detailed examples
-- Explore the [API Reference](https://akki0511.github.io/AgentConnect/api/) for detailed information about available classes and methods
-- Learn about [Advanced Features](https://akki0511.github.io/AgentConnect/advanced/) for customizing agent behavior 
+- Explore the [Examples](https://github.com/AKKI0511/AgentConnect/tree/main/examples) directory for more detailed implementations
+- Check out the [API Reference](https://AKKI0511.github.io/AgentConnect/api/) for detailed information
+- Learn about [Advanced Features](https://AKKI0511.github.io/AgentConnect/advanced/) for customizing agent behavior 

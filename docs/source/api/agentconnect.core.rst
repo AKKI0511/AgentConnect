@@ -13,6 +13,7 @@ Submodules
    :maxdepth: 4
 
    agentconnect.core.agent
+   agentconnect.core.exceptions
    agentconnect.core.message
    agentconnect.core.registry
    agentconnect.core.types

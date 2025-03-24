@@ -297,25 +297,39 @@ html[data-theme=dark] .MathJax_SVG * {
   color: var(--pst-color-on-surface);
 }
 
+/* Custom additions for PyData Theme compatibility */
+.bd-header {
+  background-color: var(--pst-color-background);
+  box-shadow: 0 2px 8px var(--pst-color-shadow);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
 
+.bd-header .navbar-nav .nav-link {
+  color: var(--pst-color-text-base);
+}
+
+.bd-header .navbar-nav .nav-link:hover {
+  color: var(--pst-color-primary);
+}
 
 /* Adjust the height of the navbar */
-.bd-header .bd-header__inner{
-    height: 52px; /* Adjust this value as needed */
+.bd-header .bd-header__inner {
+  height: 52px; /* Adjust this value as needed */
 }
 
 .navbar-nav > li > a {
-    line-height: 52px; /* Vertically center the navbar links */
+  line-height: 52px; /* Vertically center the navbar links */
 }
 
 /* Make sure the navbar items align properly */
 .navbar-nav {
-    display: flex;
+  display: flex;
 }
 
-
-.bd-header .navbar-header-items__start{
-  margin-left: 0rem
+.bd-header .navbar-header-items__start {
+  margin-left: 0rem;
 }
 
 .bd-header button.primary-toggle {
@@ -324,31 +338,48 @@ html[data-theme=dark] .MathJax_SVG * {
 
 .bd-header ul.navbar-nav .dropdown .dropdown-menu {
   overflow-y: auto; /* Enable vertical scrolling */
-  max-height: 80vh
+  max-height: 80vh;
+  background-color: var(--pst-color-surface);
+  border-color: var(--pst-color-border-muted);
 }
 
 .bd-sidebar-primary {
-    width: max-content;  /* Adjust this value to your preference */
-    line-height: 1.4;
+  width: max-content;  /* Adjust this value to your preference */
+  line-height: 1.4;
+  background-color: var(--pst-color-on-background);
+  border-right: 1px solid var(--pst-color-border-muted);
 }
 
 .bd-sidebar-secondary {
-    line-height: 1.4;
+  line-height: 1.4;
+  background-color: var(--pst-color-on-background);
+  border-left: 1px solid var(--pst-color-border-muted);
 }
 
 .toc-entry a.nav-link, .toc-entry a>code {  
   background-color: transparent;
   border-color: transparent;
+  color: var(--pst-color-text-base);
 }
 
-.bd-sidebar-primary code{
+.toc-entry a.nav-link:hover, .toc-entry a>code:hover {
+  color: var(--pst-color-primary);
+}
+
+.bd-sidebar-primary code {
   background-color: transparent;
   border-color: transparent;
+  color: var(--pst-color-inline-code);
 }
 
-
 .toctree-wrapper li[class^=toctree-l1]>a {
-  font-size: 1.3em
+  font-size: 1.3em;
+  color: var(--pst-color-text-base);
+}
+
+.toctree-wrapper li[class^=toctree-l1]>a:hover {
+  color: var(--pst-color-primary);
+  text-decoration: none;
 }
 
 .toctree-wrapper li[class^=toctree-l1] {
@@ -364,12 +395,13 @@ html[data-theme=dark] .MathJax_SVG * {
   font-style: normal;
 }
 
+/* Admonitions styling */
 div.deprecated {
   margin-top: 0.5em;
   margin-bottom: 2em;
-
   background-color: var(--pst-color-deprecated-bg);
   border-color: var(--pst-color-deprecated);
+  border-radius: 0.25rem;
 }
 
 span.versionmodified.deprecated:before {
@@ -378,19 +410,149 @@ span.versionmodified.deprecated:before {
 
 .admonition-beta.admonition, div.admonition-beta.admonition {
   border-color: var(--pst-color-warning);
-  margin-top:0.5em;
+  margin-top: 0.5em;
   margin-bottom: 2em;
+  border-radius: 0.25rem;
 }
 
 .admonition-beta>.admonition-title, div.admonition-beta>.admonition-title {
   background-color: var(--pst-color-warning-bg);
+  color: var(--pst-color-warning);
 }
 
+/* Definition lists */
 dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.glossary):not(.simple) dd {
   margin-left: 1rem;
 }
 
+/* Content styling */
 p {
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
+}
+
+/* Code blocks */
+pre {
+  background-color: var(--pst-color-surface);
+  border: 1px solid var(--pst-color-border-muted);
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+}
+
+code {
+  color: var(--pst-color-inline-code);
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+}
+
+html[data-theme=dark] code {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Theme switcher button styling */
+.theme-switch-button {
+  background-color: transparent;
+  border: none;
+  color: var(--pst-color-text-base);
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0.5rem;
+  transition: color 0.2s ease-in-out;
+}
+
+.theme-switch-button:hover {
+  color: var(--pst-color-primary);
+}
+
+/* Main content area */
+.bd-main {
+  background-color: var(--pst-color-background);
+}
+
+.bd-content {
+  background-color: var(--pst-color-background);
+  color: var(--pst-color-text-base);
+  padding: 2rem;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--pst-color-text-base);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Links */
+a {
+  color: var(--pst-color-link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--pst-color-link-hover);
+  text-decoration: underline;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+table th {
+  text-align: left;
+  background-color: var(--pst-color-on-background);
+  color: var(--pst-color-text-base);
+  border-bottom: 2px solid var(--pst-color-border);
+  padding: 0.5rem;
+}
+
+table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--pst-color-border-muted);
+}
+
+/* For better mobile responsiveness */
+@media (max-width: 768px) {
+  .bd-sidebar-primary {
+    width: 100%;
+    border-right: none;
+  }
+  
+  .bd-sidebar-secondary {
+    width: 100%;
+    border-left: none;
+  }
+  
+  .bd-content {
+    padding: 1rem;
+  }
+}
+
+/* Copy button styling */
+button.copybtn {
+  background-color: var(--pst-color-on-background);
+  color: var(--pst-color-text-muted);
+  border: 1px solid var(--pst-color-border-muted);
+}
+
+button.copybtn:hover {
+  background-color: var(--pst-color-primary-bg);
+  color: var(--pst-color-primary);
+}
+
+/* Toggle button styling */
+.toggle-button {
+  background-color: var(--pst-color-on-background);
+  color: var(--pst-color-text-muted);
+  border: 1px solid var(--pst-color-border-muted);
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.toggle-button:hover {
+  background-color: var(--pst-color-primary-bg);
+  color: var(--pst-color-primary);
 }

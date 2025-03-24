@@ -6,18 +6,18 @@ Advanced Configuration Guide
 Configuring AgentConnect for Advanced Use Cases
 -------------------------------------------
 
-This guide explains how to configure AgentConnect for advanced use cases, including customizing agent behavior, optimizing performance, and implementing security features.
+This guide explains how to configure AgentConnect for advanced use cases, including customizing agent behavior, optimizing communication flows, and implementing security features.
 
-Configuration Options
+Available Configuration Options
 ------------------
 
-AgentConnect provides several configuration options that can be customized for your specific needs:
+AgentConnect provides several configuration options that can be customized:
 
 1. **Agent Configuration**: Customize agent behavior and capabilities
-2. **Communication Hub Configuration**: Configure message routing and handling
-3. **Provider Configuration**: Set up provider-specific options
-4. **Security Configuration**: Implement security features
-5. **Performance Configuration**: Optimize for high-throughput applications
+2. **Communication Hub Configuration**: Configure message routing and handlers
+3. **Provider Configuration**: Set up provider-specific options 
+4. **Agent Registry Configuration**: Configure agent discovery and capability matching
+5. **Environment Configuration**: Set up environment-specific settings
 
 Agent Configuration
 ----------------
@@ -48,160 +48,139 @@ You can customize agent behavior by configuring various parameters:
             InteractionMode.AGENT_TO_AGENT
         ],
         capabilities=[
-            Capability.TEXT_GENERATION,
-            Capability.CODE_GENERATION,
-            Capability.REASONING
+            Capability(
+                name="text_generation",
+                description="Generate high-quality text content",
+                input_schema={"prompt": "string"},
+                output_schema={"text": "string"}
+            ),
+            Capability(
+                name="code_generation",
+                description="Generate code in various programming languages",
+                input_schema={"language": "string", "task": "string"},
+                output_schema={"code": "string"}
+            )
         ],
+        personality="helpful and informative assistant",
         organization_id="your-org-id",
-        max_tokens=2000,
-        temperature=0.7,
-        top_p=0.95,
-        frequency_penalty=0.0,
-        presence_penalty=0.0,
-        stop_sequences=["###"],
-        timeout=30.0
+        # Model-specific parameters
+        max_tokens_per_minute = 5500,
+        max_tokens_per_hour = 100000,
     )
 
 Communication Hub Configuration
 ----------------------------
 
-Configure the communication hub for advanced message routing and handling:
+Configure the communication hub for message routing and handling:
 
 .. code-block:: python
 
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     
-    # Create a registry with custom settings
-    registry = AgentRegistry(
-        persistence_enabled=True,
-        persistence_path="./agent_registry.db"
-    )
+    # Create a registry
+    registry = AgentRegistry()
     
-    # Create a communication hub with advanced configuration
-    hub = CommunicationHub(
-        registry=registry,
-        message_history_limit=1000,
-        message_timeout=60.0,
-        enable_encryption=True,
-        enable_verification=True,
-        max_concurrent_messages=100
-    )
+    # Create a communication hub
+    hub = CommunicationHub(registry)
     
-    # Configure global message handlers
+    # Configure message handlers
     async def global_message_handler(message):
         print(f"Global handler received message: {message.id}")
         # Process all messages
     
-    hub.register_global_handler(global_message_handler)
+    hub.add_global_handler(global_message_handler)
     
-    # Configure message filtering
-    async def filter_sensitive_content(message):
-        # Check for sensitive content
-        if "sensitive" in message.content.lower():
-            return False  # Block the message
-        return True  # Allow the message
+    # Configure agent-specific message handlers
+    async def agent_message_handler(message):
+        print(f"Agent handler received: {message.content[:50]}...")
+        # Process messages for a specific agent
     
-    hub.register_message_filter(filter_sensitive_content)
+    hub.add_message_handler("agent-id", agent_message_handler)
+    
+    # Sending a message and waiting for response with timeout
+    response = await hub.send_message_and_wait_response(
+        sender_id="sender-agent-id",
+        receiver_id="receiver-agent-id",
+        content="Hello, can you help me with this task?",
+        timeout=60  # Wait up to 60 seconds for response
+    )
+
+Agent Registry Configuration
+---------------------
+
+Configure the agent registry for agent discovery and capability matching:
+
+.. code-block:: python
+
+    from agentconnect.core.registry import AgentRegistry, AgentRegistration
+    from agentconnect.core.types import AgentType, AgentIdentity, InteractionMode, Capability
+    
+    # Create an agent registry
+    registry = AgentRegistry()
+    
+    # Register an agent with the registry
+    registration = AgentRegistration(
+        agent_id="agent-1",
+        organization_id="org-1",
+        agent_type=AgentType.AI,
+        interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
+        capabilities=[
+            Capability(
+                name="data_analysis",
+                description="Analyze and interpret complex datasets",
+                input_schema={"data": "array", "analysis_type": "string"},
+                output_schema={"results": "object", "insights": "array"}
+            )
+        ],
+        identity=AgentIdentity.create_key_based(),
+        owner_id="user-1",
+        metadata={"specialization": "financial data"}
+    )
+    
+    # Register the agent
+    await registry.register(registration)
+    
+    # Find agents by capability
+    agents_with_capability = await registry.get_by_capability("data_analysis")
+    
+    # Find agents by semantic capability search
+    agents_by_description = await registry.get_by_capability_semantic(
+        "Analyze financial market data and provide insights"
+    )
+    
+    # Get all agents
+    all_agents = await registry.get_all_agents()
 
 Provider Configuration
 -------------------
 
-Configure providers with advanced options:
+Configure providers for different AI services:
 
 .. code-block:: python
 
     from agentconnect.providers.provider_factory import ProviderFactory
-    from agentconnect.core.types import ModelProvider
+    from agentconnect.core.types import ModelProvider, ModelName
     
-    # Configure provider with advanced options
+    # Get a provider instance
     provider = ProviderFactory.create_provider(
         provider_type=ModelProvider.OPENAI,
-        api_key="your-api-key",
-        organization_id="your-org-id",
-        base_url="https://custom-endpoint.openai.com",
-        timeout=30.0,
-        max_retries=3,
-        retry_delay=1.0,
-        proxy="http://your-proxy.com:8080",
-        cache_enabled=True,
-        cache_size=1000
-    )
-
-Security Configuration
--------------------
-
-Implement security features for your agents:
-
-.. code-block:: python
-
-    from agentconnect.core.types import AgentIdentity, SecurityLevel
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    
-    # Generate a strong RSA key pair
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=4096
+        api_key="your-api-key"
     )
     
-    # Create a secure identity
-    secure_identity = AgentIdentity.create_key_based(
-        private_key=private_key,
-        security_level=SecurityLevel.HIGH
-    )
-    
-    # Create an agent with enhanced security
-    secure_agent = AIAgent(
-        agent_id="secure-agent-1",
-        name="SecureAssistant",
-        provider_type=ModelProvider.OPENAI,
-        model_name=ModelName.GPT4O,
-        api_key="your-api-key",
-        identity=secure_identity,
-        require_signed_messages=True,
-        verify_sender_identity=True,
-        encrypt_messages=True
+    # Configure provider parameters
+    response = await provider.generate_response(
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Tell me about AI agents."}
+        ],
+        model=ModelName.GPT4O,
+        temperature=0.7,
+        max_tokens=1000
     )
 
-Performance Optimization
+Environment Configuration
 ---------------------
-
-Optimize AgentConnect for high-throughput applications:
-
-.. code-block:: python
-
-    import asyncio
-    import logging
-    
-    # Configure logging for performance monitoring
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Configure event loop policy for better performance
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    # Create a high-performance communication hub
-    high_perf_hub = CommunicationHub(
-        registry=registry,
-        message_queue_size=10000,
-        worker_threads=8,
-        batch_processing=True,
-        batch_size=100,
-        message_timeout=5.0
-    )
-    
-    # Configure connection pooling for providers
-    provider_config = {
-        "connection_pool_size": 20,
-        "max_connections": 100,
-        "keep_alive": True,
-        "keep_alive_timeout": 60.0
-    }
-
-Environment-Specific Configuration
--------------------------------
 
 Configure AgentConnect for different environments:
 
@@ -216,10 +195,6 @@ Configure AgentConnect for different environments:
     # Get configuration from environment variables
     api_key = os.getenv("OPENAI_API_KEY")
     model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
-    log_level = os.getenv("LOG_LEVEL", "INFO")
-    
-    # Configure logging based on environment
-    logging.basicConfig(level=getattr(logging, log_level))
     
     # Create environment-specific agent
     env_agent = AIAgent(
@@ -231,18 +206,125 @@ Configure AgentConnect for different environments:
         identity=AgentIdentity.create_key_based()
     )
 
+.. note::
+   Some advanced configuration features mentioned in this guide (such as enhanced security features and performance optimization) are planned for future releases but not fully implemented in the current version.
+
 Configuration Best Practices
 -------------------------
 
 Follow these best practices when configuring AgentConnect:
 
-1. **Security First**: Always prioritize security in your configuration
-2. **Environment Variables**: Use environment variables for sensitive information
-3. **Configuration Files**: Use configuration files for complex setups
-4. **Validation**: Validate configuration values before using them
-5. **Defaults**: Provide sensible defaults for all configuration options
-6. **Documentation**: Document your configuration for future reference
-7. **Testing**: Test your configuration in different environments
-8. **Monitoring**: Monitor your application to identify configuration issues
-9. **Versioning**: Version your configuration files
-10. **Separation of Concerns**: Separate configuration from code 
+1. **Security First**: Store API keys in environment variables, not in code
+2. **Error Handling**: Implement proper error handling for failed operations
+3. **Message Handlers**: Use message handlers to monitor and process communication
+4. **Scalability**: For high-volume applications, consider using asynchronous patterns
+5. **Testing**: Test your configuration in a development environment before production
+6. **Documentation**: Document your configuration for team members
+7. **Logging**: Enable appropriate logging levels for debugging and monitoring
+
+Example: Complete Configuration
+----------------------------
+
+Here's a complete example that demonstrates various configuration options:
+
+.. code-block:: python
+
+    import asyncio
+    import logging
+    import os
+    from dotenv import load_dotenv
+    
+    from agentconnect.agents import AIAgent, HumanAgent
+    from agentconnect.core.types import (
+        ModelProvider, 
+        ModelName, 
+        AgentIdentity, 
+        InteractionMode,
+        Capability,
+        AgentType
+    )
+    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.communication import CommunicationHub
+    
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("AgentConnect")
+    
+    # Load environment variables
+    load_dotenv()
+    
+    async def main():
+        # Create registry and hub
+        registry = AgentRegistry()
+        hub = CommunicationHub(registry)
+        
+        # Create AI agent
+        ai_agent = AIAgent(
+            agent_id="ai-assistant",
+            name="AI Assistant",
+            provider_type=ModelProvider.OPENAI,
+            model_name=ModelName.GPT4O,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            identity=AgentIdentity.create_key_based(),
+            interaction_modes=[
+                InteractionMode.HUMAN_TO_AGENT,
+                InteractionMode.AGENT_TO_AGENT
+            ],
+            capabilities=[
+                Capability(
+                    name="general_assistant",
+                    description="Provide helpful information and assistance on a wide range of topics",
+                    input_schema={"query": "string"},
+                    output_schema={"response": "string"}
+                )
+            ],
+            personality="helpful and informative",
+            organization_id="example-org"
+        )
+        
+        # Create human agent
+        human_agent = HumanAgent(
+            agent_id="human-user",
+            name="Human User",
+            identity=AgentIdentity.create_key_based(),
+            organization_id="example-org"
+        )
+        
+        # Register agents
+        await hub.register_agent(ai_agent)
+        await hub.register_agent(human_agent)
+        
+        # Set up message handler for the AI agent
+        async def ai_message_handler(message):
+            logger.info(f"AI agent received message: {message.content[:50]}...")
+            # Process incoming messages to the AI agent
+        
+        # Add the message handler
+        hub.add_message_handler(ai_agent.agent_id, ai_message_handler)
+        
+        # Add a global message handler to track all messages
+        async def global_message_tracker(message):
+            logger.info(f"Message from {message.sender_id} to {message.receiver_id}: {message.content[:30]}...")
+        
+        hub.add_global_handler(global_message_tracker)
+        
+        # Start the AI agent
+        ai_task = asyncio.create_task(ai_agent.run())
+        
+        # Send a message from human to AI
+        await human_agent.send_message(
+            receiver_id=ai_agent.agent_id,
+            content="Can you help me with a research question about AI agents?"
+        )
+        
+        # Wait for processing
+        await asyncio.sleep(5)
+        
+        # Clean up
+        ai_agent.is_running = False
+        await ai_task
+        await hub.unregister_agent(ai_agent.agent_id)
+        await hub.unregister_agent(human_agent.agent_id)
+    
+    if __name__ == "__main__":
+        asyncio.run(main()) 

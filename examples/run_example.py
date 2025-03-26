@@ -14,10 +14,7 @@ Available examples:
     multi - Multi-agent e-commerce analysis
     research - Research assistant with multiple agents
     data - Data analysis and visualization assistant
-
-Examples:
-    python run_example.py chat
-    python run_example.py multi --enable-logging
+    telegram - Telegram bot with specialized agents
 """
 
 import argparse
@@ -46,12 +43,15 @@ def print_colored(message: str, color: str = Fore.WHITE) -> None:
     print(f"{color}{message}{Style.RESET_ALL}")
 
 
-def check_environment() -> bool:
+def check_environment(example_name: str = None) -> bool:
     """
     Check if necessary environment variables are set.
 
+    Args:
+        example_name: Optional name of the example to check specific requirements
+
     Returns:
-        bool: True if at least one LLM API key is available
+        bool: True if required API keys are available
     """
     load_dotenv()
 
@@ -83,6 +83,22 @@ def check_environment() -> bool:
         return False
 
     print_colored(f"✅ Found API key(s) for: {', '.join(available_keys)}", Fore.GREEN)
+    
+    # Check for example-specific requirements
+    if example_name == "telegram":
+        if not os.getenv("TELEGRAM_BOT_TOKEN"):
+            print_colored(
+                "⚠️ TELEGRAM_BOT_TOKEN not found. The Telegram example requires this environment variable.",
+                Fore.YELLOW,
+            )
+            print_colored(
+                "Please set TELEGRAM_BOT_TOKEN in your environment or .env file.",
+                Fore.YELLOW,
+            )
+            return False
+        else:
+            print_colored("✅ Found TELEGRAM_BOT_TOKEN", Fore.GREEN)
+    
     return True
 
 
@@ -120,6 +136,11 @@ async def run_example(example_name: str, enable_logging: bool = False) -> None:
                 run_data_analysis_assistant_demo
 
             await run_data_analysis_assistant_demo(enable_logging=enable_logging)
+                
+        elif example_name == "telegram":
+            from examples.telegram_assistant import run_telegram_assistant
+
+            await run_telegram_assistant(enable_logging=enable_logging)
 
         else:
             raise ValueError(f"Unknown example: {example_name}")
@@ -149,16 +170,18 @@ Available examples:
   multi     - Multi-agent e-commerce analysis
   research  - Research assistant with multiple agents
   data      - Data analysis and visualization assistant
+  telegram  - Telegram bot with specialized agents
 
 Examples:
   python run_example.py chat
   python run_example.py multi --enable-logging
+  python run_example.py telegram --enable-logging
         """,
     )
 
     parser.add_argument(
         "example",
-        choices=["chat", "multi", "research", "data"],
+        choices=["chat", "multi", "research", "data", "telegram"],
         help="The example to run",
     )
 
@@ -174,6 +197,7 @@ Examples:
         "multi": "Multi-Agent E-commerce Analysis",
         "research": "Research Assistant with Multiple Agents",
         "data": "Data Analysis and Visualization Assistant",
+        "telegram": "Telegram Bot with Specialized Agents",
     }
 
     print_colored("\n" + "=" * 60, Fore.CYAN)
@@ -182,8 +206,8 @@ Examples:
     )
     print_colored("=" * 60 + "\n", Fore.CYAN)
 
-    # Check environment variables
-    if not check_environment():
+    # Check environment variables with example-specific requirements
+    if not check_environment(args.example):
         sys.exit(1)
 
     try:

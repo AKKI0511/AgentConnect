@@ -28,11 +28,11 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 # Import directly from the agentconnect package (using the public API)
-from agentconnect import (
-    CommunicationHub,
+from agentconnect.agents import (
     AIAgent,
     HumanAgent,
 )
+from agentconnect.communication import CommunicationHub
 from agentconnect.core.types import (
     AgentIdentity,
     Capability,

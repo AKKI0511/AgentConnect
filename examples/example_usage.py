@@ -24,12 +24,16 @@ from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Import directly from the agentconnect package (using the public API)
-from agentconnect import AIAgent, CommunicationHub, HumanAgent
+from agentconnect.agents import AIAgent, HumanAgent
+from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
-from agentconnect.core.types import (AgentIdentity, Capability,
-                                     InteractionMode, ModelName, ModelProvider)
-from agentconnect.prompts.templates.prompt_templates import PromptTemplates
-from agentconnect.prompts.tools import PromptTools
+from agentconnect.core.types import (
+    AgentIdentity,
+    Capability,
+    InteractionMode,
+    ModelName,
+    ModelProvider,
+)
 from agentconnect.providers import ProviderFactory
 from agentconnect.utils.logging_config import LogLevel, setup_logging
 

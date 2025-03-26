@@ -27,6 +27,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+
 # Add new imports for real-world tools
 import plotly.express as px
 from colorama import Fore, Style, init
@@ -40,8 +41,11 @@ from agentconnect.core.agent import AgentIdentity
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import Capability, ModelName, ModelProvider
 from agentconnect.prompts.tools import PromptTools
-from agentconnect.utils.logging_config import (LogLevel, disable_all_logging,
-                                               setup_logging)
+from agentconnect.utils.logging_config import (
+    LogLevel,
+    disable_all_logging,
+    setup_logging,
+)
 
 # Initialize colorama for cross-platform colored output
 init()

@@ -184,6 +184,12 @@ src/
 example_usage.py
 example_multi_agent.py
 
+# Examples
+examples/visualizations/
+
+# telegram
+groups.txt
+
 # VS Code
 .vscode/
 .idea/

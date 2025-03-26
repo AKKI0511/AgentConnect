@@ -23,6 +23,7 @@ Available examples:
     multi    - Multi-agent e-commerce analysis
     research - Research assistant with multiple agents
     data     - Data analysis and visualization assistant
+    telegram - Telegram AI Agent with multi-agent capabilities
 
 Note: The demo UI is currently under development and only supported on Windows.
       For the best experience, please use the examples instead.
@@ -87,6 +88,7 @@ Available examples:
   multi    - Multi-agent e-commerce analysis
   research - Research assistant with multiple agents
   data     - Data analysis and visualization assistant
+  telegram - Telegram AI Agent with multi-agent capabilities
 
 Examples:
   agentconnect --example chat
@@ -102,8 +104,8 @@ Examples:
     parser.add_argument(
         "--example",
         "-e",
-        choices=["chat", "multi", "research", "data"],
-        help="Run a specific example: chat (simple AI assistant), multi (multi-agent ecommerce analysis), research (research assistant), or data (data analysis assistant)",
+        choices=["chat", "multi", "research", "data", "telegram"],
+        help="Run a specific example: chat (simple AI assistant), multi (multi-agent ecommerce analysis), research (research assistant), data (data analysis assistant), or telegram (telegram AI agent)",
     )
 
     parser.add_argument(
@@ -151,6 +153,10 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
             from examples import run_data_analysis_assistant_demo
 
             await run_data_analysis_assistant_demo(enable_logging=verbose)
+        elif example_name == "telegram":
+            from examples import run_telegram_assistant
+
+            await run_telegram_assistant(enable_logging=verbose)
         else:
             logger.error(f"Unknown example: {example_name}")
     except ImportError as e:
@@ -235,7 +241,7 @@ def check_environment() -> None:
             logger.info("All required environment variables are set")
 
     # Check for optional environment variables
-    optional_vars = ["LANGSMITH_API_KEY", "TAVILY_API_KEY"]
+    optional_vars = ["LANGSMITH_API_KEY", "TAVILY_API_KEY", "TELEGRAM_BOT_TOKEN"]
     missing_optional = [var for var in optional_vars if not os.environ.get(var)]
 
     if missing_optional:

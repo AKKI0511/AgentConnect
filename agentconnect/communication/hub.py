@@ -799,7 +799,7 @@ class CommunicationHub:
                 content=task_description,
                 message_type=MessageType.REQUEST_COLLABORATION,
                 metadata=metadata,
-                timeout=timeout,
+                timeout=max(timeout, 60),
             )
 
             # Log the response status for debugging

@@ -69,6 +69,7 @@ class GoogleProvider(BaseProvider):
             List of available Gemini model names
         """
         return [
+            ModelName.GEMINI2_5_PRO_EXP,
             ModelName.GEMINI2_FLASH,
             ModelName.GEMINI2_FLASH_LITE,
             ModelName.GEMINI1_5_FLASH,

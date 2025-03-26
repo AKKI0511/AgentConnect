@@ -9,6 +9,7 @@ agents/
 ├── __init__.py         # Package initialization and API exports
 ├── ai_agent.py         # AI agent implementation
 ├── human_agent.py      # Human agent implementation
+├── telegram/           # Telegram agent implementation (see telegram/README.md)
 └── README.md           # This file
 ```
 
@@ -38,6 +39,19 @@ The `HumanAgent` class provides an interface for human users to interact with AI
 - Message verification and security
 - Conversation management
 - Command processing (help, exit, etc.)
+
+### TelegramAIAgent
+
+The `TelegramAIAgent` class extends `AIAgent` to provide a Telegram bot interface, enabling:
+
+- Natural language conversations with users via Telegram private chats
+- Group chat interactions through bot mentions
+- Media message handling (photos, documents, voice, etc.)
+- Announcements to registered groups
+- Integration with other AgentConnect agents via collaboration requests
+- Concurrent processing of both Telegram messages and inter-agent communications
+
+For more details, see the [Telegram Agent documentation](telegram/README.md).
 
 ## Key Features
 
@@ -228,4 +242,4 @@ if not message.verify(agent.identity):
 4. **Autonomous Error Handling**: Implement proper error handling for agent interactions without central coordination.
 5. **Resource Management**: Be mindful of resource usage when creating multiple independent AI agents.
 6. **Secure Communication**: Always verify message signatures to maintain security in the decentralized network.
-7. **Autonomous Operation**: Design agents that can make independent decisions without central control. 
+7. **Autonomous Operation**: Design agents that can make independent decisions without central control.

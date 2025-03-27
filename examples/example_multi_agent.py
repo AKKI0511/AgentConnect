@@ -27,14 +27,23 @@ from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Import directly from the agentconnect package (using the public API)
-from agentconnect import AIAgent, CommunicationHub
+from agentconnect.agents import AIAgent
+from agentconnect.communication import CommunicationHub
 from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistry
-from agentconnect.core.types import (AgentIdentity, Capability,
-                                     InteractionMode, MessageType, ModelName,
-                                     ModelProvider)
-from agentconnect.utils.logging_config import (LogLevel, disable_all_logging,
-                                               setup_logging)
+from agentconnect.core.types import (
+    AgentIdentity,
+    Capability,
+    InteractionMode,
+    MessageType,
+    ModelName,
+    ModelProvider,
+)
+from agentconnect.utils.logging_config import (
+    LogLevel,
+    disable_all_logging,
+    setup_logging,
+)
 
 # Initialize colorama for cross-platform colored output
 init()

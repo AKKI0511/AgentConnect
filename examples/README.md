@@ -168,6 +168,68 @@ Demonstrates a data analysis workflow with specialized agents:
 - Insight extraction
 - Human-in-the-loop guidance
 
+### 5. Telegram Assistant (`telegram_assistant.py`)
+
+Demonstrates a Telegram bot with specialized AI agents:
+- Users interact with the bot through Telegram
+- The bot delegates tasks to specialized agents:
+  - Research Agent: Performs web searches and research
+  - Markdown Formatting Agent: Formats content into structured text
+  - Data Analysis Agent: Analyzes data and creates visualizations
+
+**Key Features:**
+- Telegram integration
+- Multi-agent collaboration
+- Web search capabilities
+- Data analysis and visualization
+- Public and private chat handling
+- Group chat support with mention detection
+
+**Prerequisites for Telegram Assistant:**
+- Python 3.11 or higher
+- A Telegram bot token (create one through [@BotFather](https://t.me/botfather))
+- API keys for one of the supported LLM providers (Google, OpenAI, Anthropic, or Groq)
+- Optional: Tavily API key for improved web search capabilities
+
+**Setting Up Telegram Bot:**
+1. Create a `.env` file with:
+   ```
+   # Required
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+
+   # At least one of these LLM API keys
+   GOOGLE_API_KEY=your_google_api_key
+   # OR
+   OPENAI_API_KEY=your_openai_api_key
+   # OR
+   ANTHROPIC_API_KEY=your_anthropic_api_key
+   # OR
+   GROQ_API_KEY=your_groq_api_key
+
+   # Optional for improved research capabilities
+   TAVILY_API_KEY=your_tavily_api_key
+   ```
+
+2. Run the example:
+   ```bash
+   python examples/telegram_assistant.py
+   ```
+   
+   For detailed logging, add the `--logging` flag:
+   ```bash
+   python examples/telegram_assistant.py --logging
+   ```
+
+3. Interact with the bot on Telegram in both private and group chats:
+   - Use `/start` to initialize the bot
+   - Use `/help` to get help information
+   - Ask questions like "What are the latest developments in AI?"
+   - Request research: "Research quantum computing breakthroughs in 2025"
+   - Format content: "Format this as a report: [your content]"
+   - Analyze data: "Analyze this data: [CSV or JSON data]"
+   - Publish
+
+For more details on the implementation, see the source code and comments in `telegram_assistant.py`.
 
 ## Monitoring with LangSmith
 

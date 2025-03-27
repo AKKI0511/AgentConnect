@@ -25,10 +25,12 @@ from examples.example_multi_agent import run_ecommerce_analysis_demo
 # Export main functions for easy importing
 from examples.example_usage import main as run_chat_example
 from examples.research_assistant import run_research_assistant_demo
+from examples.telegram_assistant import run_telegram_assistant
 
 __all__ = [
     "run_chat_example",
     "run_ecommerce_analysis_demo",
     "run_research_assistant_demo",
     "run_data_analysis_assistant_demo",
+    "run_telegram_assistant",
 ]

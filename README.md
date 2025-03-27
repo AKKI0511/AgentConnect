@@ -131,6 +131,7 @@ AgentConnect includes several example applications to demonstrate different feat
 - **Multi-Agent System**: Collaborative agent workflows
 - **Research Assistant**: Task delegation and information retrieval
 - **Data Analysis**: Specialized data processing
+- **Telegram Assistant**: Telegram AI agent with multi-agent collaboration
 
 For code examples and detailed descriptions, see the [Examples Directory](examples/README.md).
 

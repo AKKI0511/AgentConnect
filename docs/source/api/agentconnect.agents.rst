@@ -6,6 +6,14 @@ agentconnect.agents package
    :show-inheritance:
    :undoc-members:
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   agentconnect.agents.telegram
+
 Submodules
 ----------
 

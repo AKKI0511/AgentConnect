@@ -15,6 +15,7 @@ The examples cover a range of use cases from basic to advanced scenarios:
 - **Custom Provider Example**: Connect custom AI providers to the framework
 - **Multi-Agent Example**: Set up decentralized communication between multiple agents
 - **Advanced Agent Example**: Build sophisticated agents with custom tools, workflows, and LangChain/LangGraph integration
+- **Telegram Agent Example**: Create a Telegram AI Agent with multi-agent capabilities for natural language interactions
 
 .. toctree::
    :maxdepth: 2
@@ -25,3 +26,4 @@ The examples cover a range of use cases from basic to advanced scenarios:
    custom_provider_example
    multi_agent_example
    advanced_agent_example
+   telegram_example

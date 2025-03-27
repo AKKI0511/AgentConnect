@@ -66,6 +66,7 @@ class ModelName(str, Enum):
     GEMMA2_90B = "gemma2-9b-it"
 
     # Google Models
+    GEMINI2_5_PRO_EXP = "gemini-2.5-pro-exp-03-25 "
     GEMINI2_FLASH = "gemini-2.0-flash"
     GEMINI2_FLASH_LITE = "gemini-2.0-flash-lite"
     GEMINI2_PRO_EXP = "gemini-2.0-pro-exp-02-05"

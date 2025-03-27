@@ -9,3 +9,4 @@ This section provides guides for common tasks with AgentConnect.
    multi_agent_setup
    custom_providers
    advanced_configuration
+   telegram_integration

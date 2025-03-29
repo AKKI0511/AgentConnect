@@ -9,7 +9,11 @@ prompts/
 ├── __init__.py           # Module initialization and exports
 ├── agent_prompts.py      # Core workflow definitions for different agent types
 ├── chain_factory.py      # Factory functions for creating LangGraph workflows
-├── tools.py              # Tool implementations for agents
+├── tools.py              # Tool delegation and framework (delegates to custom_tools)
+├── custom_tools/         # Modular tool implementations
+│   ├── registry.py       # Tool registry for managing available tools
+│   ├── collaboration_tools.py # Agent search and collaboration request tools
+│   └── task_tools.py     # Task decomposition and management tools
 ├── templates/            # Prompt templates directory
 │   └── prompt_templates.py  # Templates for system prompts, collaboration, etc.
 └── README.md             # This documentation file
@@ -68,17 +72,73 @@ The tools system provides agents with the ability to perform specific actions, p
 
 ### Tool Architecture
 
-The tools system is built with several key components:
+The tools system uses a modular architecture with a clean separation of concerns:
+
+- **`tools.py`**: Main entry point that:
+  - Defines the `PromptTools` class which manages tool creation and registration
+  - Delegates implementation details to specialized modules in the `custom_tools` directory
+  - Maintains backward compatibility with existing code
+
+- **`custom_tools/`**: Directory containing modular tool implementations:
+  - **`registry.py`**: Contains the `ToolRegistry` class for managing available tools
+  - **`collaboration_tools.py`**: Implementations for agent search and collaboration request tools
+  - **`task_tools.py`**: Implementations for task decomposition and management tools
 
 - **`PromptTools`**: Main class for creating and managing tools for agents:
   - Handles tool creation, registration, and retrieval
   - Maintains agent context for tools that need it
-  - Provides both synchronous and asynchronous implementations
+  - Delegates actual implementation to specialized modules while maintaining consistent APIs
 
 - **`ToolRegistry`**: Central registry for managing available tools:
   - Each agent has its own isolated registry
   - Tools can be categorized (e.g., 'collaboration', 'task_management')
   - Supports tool lookup by name or category
+
+### Extending the Tool System
+
+The modular architecture makes it easy to add new tools:
+
+1. Create a new file in the `custom_tools` directory (e.g., `search_tools.py`)
+2. Define your tool's input/output schemas and implementation functions
+3. Import and expose these functions in `tools.py`
+
+This approach ensures:
+- Better code organization and maintenance
+- Easier testing of individual tool components
+- Cleaner separation of concerns
+- Simplified development of new tools
+
+```python
+# Example: Adding a new tool in custom_tools/search_tools.py
+from pydantic import BaseModel, Field
+from langchain.tools import StructuredTool
+import asyncio
+
+# Define input schema
+class WebSearchInput(BaseModel):
+    query: str = Field(description="Search query")
+    
+# Create the tool function
+def create_web_search_tool():
+    def search(query: str):
+        # Synchronous implementation
+        # ...
+    
+    async def search_async(query: str):
+        # Asynchronous implementation
+        # ...
+    
+    return StructuredTool.from_function(
+        func=search,
+        name="web_search",
+        description="Search the web for information",
+        args_schema=WebSearchInput,
+        coroutine=search_async
+    )
+
+# Then in tools.py, import and expose:
+from agentconnect.prompts.custom_tools.search_tools import create_web_search_tool
+```
 
 ### Tool Creation
 
@@ -190,6 +250,16 @@ The LangGraph-based workflow system offers several advantages over the previous 
 6. **Better Tracing and Debugging**: LangGraph provides built-in tracing capabilities for better debugging and monitoring.
 7. **Improved Performance**: The new system is more efficient, with better token usage and faster response times.
 
+### Advantages of the Modular Tool Architecture
+
+The refactored tool architecture offers significant advantages:
+
+1. **Modularity**: Each type of tool lives in its own file, making the codebase easier to navigate and understand
+2. **Separation of Concerns**: The `tools.py` file handles framework concerns while implementation details live in `custom_tools/`
+3. **Scalability**: Easier to add new tools without cluttering the main `tools.py` file
+4. **Maintainability**: Smaller, focused files are easier to test and maintain
+5. **Reusability**: Tool implementations can be reused across different projects or modules
+
 ## Future Improvements
 
 - **Advanced Memory Management**: Integration with external memory stores like Redis or PostgreSQL for better scalability.
@@ -199,6 +269,7 @@ The LangGraph-based workflow system offers several advantages over the previous 
 - **Improved Tool Discovery**: Better methods for agents to discover and use available tools.
 - **Multi-Agent Collaboration**: Support for multiple agents collaborating on a single task.
 - **Visualization Tools**: Tools for visualizing agent workflows and collaboration networks.
+- **Additional Tool Categories**: Expand the custom_tools directory with new specialized tools (e.g., data analysis, content generation)
 
 ## Troubleshooting
 
@@ -207,9 +278,11 @@ The LangGraph-based workflow system offers several advantages over the previous 
 - **Missing Agent ID**: If tools aren't working correctly, make sure you've set the current agent ID with `set_current_agent()`.
 - **Tool Timeouts**: If collaboration requests time out, check network connectivity and agent availability.
 - **Memory Leaks**: For long-running applications, consider implementing periodic context resets.
+- **Import Errors**: If you get import errors after adding new tools, make sure they're properly exported from their modules.
 
 ### Debugging Techniques
 
 - Enable DEBUG level logging to see detailed tool operations
 - Use LangGraph's built-in tracing capabilities
 - Check collaboration chains for loops or excessive depth
+- Inspect individual tool implementations in the custom_tools directory for issues

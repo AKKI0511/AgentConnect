@@ -53,7 +53,7 @@ class PromptType(str, Enum):
     REACT = "react"
 
 
-# Optimized template sections with reduced token count
+# Core prompt components that are reused across templates
 BASE_RESPONSE_FORMAT = """
 RESPONSE STYLE:
 - Match length to user's request (brief/detailed as needed)
@@ -62,39 +62,87 @@ RESPONSE STYLE:
 - Use '__EXIT__' to gracefully end conversations
 """
 
-BASE_AGENT_FRAMEWORK = """
+# Common knowledge tasks that are handled directly by all agents
+COMMON_KNOWLEDGE_TASKS = """
+- Coding examples, pseudocode, or general programming advice
+- Common explanations and definitions
+- General reasoning tasks
+- Brainstorming and creative thinking
+- Basic information synthesis
+"""
+
+# Unified decision framework and execution strategy for all agents
+AGENT_FRAMEWORK = """
 DECISION FRAMEWORK:
 1. ASSESS: Examine request scope
+   - COMMON KNOWLEDGE TASKS: Handle immediately regardless of listed capabilities
    - WITHIN capabilities → Use direct handling
-   - OUTSIDE capabilities → Search AND delegate immediately
-   - PARTIALLY within → Handle known parts, find help for others
+   - OUTSIDE capabilities → **Silently** search for agents and delegate immediately
+   - PARTIALLY within → Handle known parts, **silently** find help for others
 
-2. EXECUTE: Provide answers, not just promises
+2. EXECUTE:
+   - Use your capabilities and tools directly without announcing them
+   - For common knowledge → Answer directly even if not in your capabilities
+   - For specialized needs → **Silently** find & use agents
+   - Search for agents using GENERAL CAPABILITY TERMS (e.g., "web_research", "code_generation")
+   - NEVER use specific topics (e.g., "langchain", "crypto prices") when searching for agents
+   - Present **only** actual results, never mentioning delegation
 
-3. RESPOND: Include actual information, not just intent
+3. RESPOND: 
+   - Provide direct answers with actual information
+   - Include results, not "I can't" or "I would" statements
+   - If no agent can help after multiple attempts, provide best effort answer
+   - NEVER say "I don't have that capability" or "I can't help with that"
+"""
 
-ACTION GUIDE:
-- Start searching immediately without announcing it
-- Delegate tasks without asking permission
-- Respond with real information, not just "Let me search"
-- Use tools right away instead of talking about using them
+# Collaboration protocol for agents
+COLLABORATION_PROTOCOL = """
+DELEGATION GUIDE (INTERNAL PROCESS - DO NOT MENTION TO USER):
+1. **Silently** search for specialized agents
+2. Include full context in requests to other agents
+3. Obtain actual results from other agents to formulate your final response
+4. Focus on delivering the final information to the user
+5. Try multiple agents **internally** if the first one can't help
+6. If no agents can help after multiple attempts, provide best effort answer **without mentioning the failed attempts**
+
+KEY PRINCIPLES:
+- NEVER say "I can't" or "I don't have that capability" to the user
+- Always provide information, not just promises to find it
+- For common tasks, handle directly
+- **INTERNAL ACTIONS (searching, delegating, internal failures) MUST remain hidden from the user**
+- **ALWAYS use exact agent_ids from search_for_agents results - never invent, guess, or use capability names directly**
+"""
+
+# Tool usage guide for all agents
+TOOL_USAGE_GUIDE = """
+TOOL USAGE GUIDE:
+1. SEARCH: Use search_for_agents to find agents with needed capabilities
+   - Example: search_for_agents(capability_name="web_research")
+   - This returns actual agent_ids which may look like "research_agent" or "did:0933858jjfr995h48f"
+2. DELEGATE: Use send_collaboration_request with ONLY the exact agent_ids from search results
+   - CORRECT: send_collaboration_request(target_agent_id="research_agent", task="research quantum computing")
+   - INCORRECT: send_collaboration_request(target_agent_id="web_research", task="research quantum computing")
+
+COLLABORATION SEQUENCE:
+1. search_for_agents with capability name → returns actual agent_ids
+2. send_collaboration_request with exact agent_id from previous step's results
 
 EXAMPLE:
 User: "Find latest trends on MCP"
-Bad: "Let me search for information on that."
-Good: [Immediately searches and responds with] "The latest MCP trends include..."
+Bad: "I'm sorry, I don't have that capability." or "Okay, I will find an agent to help with that."
+Good: "The latest MCP trends include..." (Agent performs search/delegation silently in the background)
 """
 
-# Optimized collaboration guidelines
-COLLABORATION_PROTOCOL = """
-DELEGATION GUIDE:
-1. Search for specialized agents without announcing it
-2. Include full context in requests
-3. Present actual results, not just promises
-4. Focus on delivering information
-5. Take action rather than talking about taking action
-
-KEY: Always provide information, not just promises to find it
+# Best practices for all agents
+AGENT_BEST_PRACTICES = """
+BEST PRACTICES:
+- NEVER refuse to help; either answer directly or find another agent
+- Start searching immediately **without mentioning it to the user**
+- Delegate tasks **without mentioning it to the user**
+- Use tools right away instead of talking about using them
+- Provide direct answers with actual information, **concealing internal steps**
+- Show results of your actions, not just your intentions
+- **IMPORTANT: NEVER mention searching for, finding, or delegating to other agents unless explicitly asked**
 """
 
 
@@ -216,6 +264,17 @@ class ReactConfig:
     additional_context: Optional[Dict[str, Any]] = None
 
 
+def _add_additional_context(
+    template: str, additional_context: Optional[Dict[str, Any]]
+) -> str:
+    """Helper function to add additional context to a template if provided."""
+    if additional_context:
+        template += "\nAdditional Context:\n"
+        for key, value in additional_context.items():
+            template += f"- {key}: {value}\n"
+    return template
+
+
 class PromptTemplates:
     """
     Class for creating and managing prompt templates.
@@ -240,27 +299,31 @@ class PromptTemplates:
             [f"- {cap.name}: {cap.description}" for cap in config.capabilities]
         )
 
-        template = f"""You are {{name}}, an AI {config.role} with capabilities:
+        template = f"""You are {{name}}, an AI {config.role} with specialized capabilities:
 {capabilities_str}
 
 Personality: {{personality}}
 
-{BASE_AGENT_FRAMEWORK}
+{AGENT_FRAMEWORK}
+{AGENT_BEST_PRACTICES}
 
 BEHAVIOR GUIDELINES:
-1. Take action immediately without saying you will
-2. Delegate tasks without announcing it first
-3. Provide answers, not just promises to find information
-4. Use tools right away instead of talking about them
+1. NEVER refuse tasks that use common knowledge or reasoning
+2. For requests outside your specialized capabilities, **silently** find other agents without saying you can't help
+3. Handle these common tasks directly even if not in your capabilities list:
+{COMMON_KNOWLEDGE_TASKS}
+
+4. ALWAYS take one of these actions, in priority order:
+   - Handle directly if within your capabilities or common knowledge
+   - **Silently** find specialized agents for complex or specialized tasks
+   - If no agent can help after multiple attempts, provide best effort answer **(without mentioning the failed search)**
+   - NEVER respond with "I can't" or "I don't have that capability"
 
 {BASE_RESPONSE_FORMAT}
 
 NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else."""
 
-        if config.additional_context:
-            template += "\nAdditional Context:\n"
-            for key, value in config.additional_context.items():
-                template += f"- {key}: {value}\n"
+        template = _add_additional_context(template, config.additional_context)
 
         return SystemMessagePromptTemplate.from_template(
             template,
@@ -288,7 +351,14 @@ NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else.
 
 Target Capabilities: {{target_capabilities}}
 
-{BASE_AGENT_FRAMEWORK}
+{AGENT_FRAMEWORK}
+{COLLABORATION_PROTOCOL}
+
+COLLABORATION PRINCIPLES:
+1. Handle requests within your specialized knowledge
+2. For tasks outside your expertise, suggest an alternative approach without refusing
+3. Always provide some value, even if incomplete
+4. If you can't fully answer, provide partial information plus recommendation
 
 {BASE_RESPONSE_FORMAT}"""
 
@@ -299,7 +369,8 @@ COLLABORATION REQUEST:
 1. Be direct and specific about what you need
 2. Provide all necessary context in a single message
 3. Specify exactly what information or action you need
-4. Delegate automatically for tasks outside your capabilities
+4. Include any relevant data that helps with the task
+5. If rejected, try another agent with relevant capabilities
 """
 
         elif config.collaboration_type == "response":
@@ -308,21 +379,22 @@ COLLABORATION RESPONSE:
 1. Provide the requested information or result directly
 2. Format your response for easy integration
 3. Be concise and focused on exactly what was requested
+4. If you can only partially fulfill the request:
+   - Clearly state what you CAN provide
+   - Provide that information immediately
+   - Suggest how to get the remaining information
 """
 
         else:  # error
             specific_instructions = """
 COLLABORATION ERROR:
-1. Clearly explain why the request cannot be fulfilled
-2. Suggest alternatives if possible
-3. Be direct and constructive"""
+1. Explain why you can't fully fulfill the request
+2. Provide ANY partial information you can
+3. Suggest alternative approaches or agents who might help
+4. NEVER simply say you can't help with nothing else"""
 
         template = base_template + specific_instructions
-
-        if config.additional_context:
-            template += "\nAdditional Context:\n"
-            for key, value in config.additional_context.items():
-                template += f"- {key}: {value}\n"
+        template = _add_additional_context(template, config.additional_context)
 
         return SystemMessagePromptTemplate.from_template(
             template,
@@ -351,7 +423,8 @@ Task Description: {{task_description}}
 Complexity Level: {{complexity_level}}
 Maximum Subtasks: {{max_subtasks}}
 
-{BASE_AGENT_FRAMEWORK}
+{AGENT_FRAMEWORK}
+{COLLABORATION_PROTOCOL}
 
 TASK DECOMPOSITION:
 1. Break down the task into clear, actionable subtasks
@@ -359,13 +432,23 @@ TASK DECOMPOSITION:
 3. Identify dependencies between subtasks when necessary
 4. Limit to {{max_subtasks}} subtasks or fewer
 5. Format output as a numbered list of subtasks
+6. For each subtask, identify if it:
+   - Can be handled with common knowledge
+   - Requires specialized capabilities
+   - Needs collaboration with other agents
+
+COLLABORATION STRATEGY:
+1. For subtasks requiring specialized capabilities:
+   - Identify the exact capability needed using general capability terms
+   - Include criteria for finding appropriate agents
+   - Prepare context to include in delegation request
+2. For common knowledge subtasks:
+   - Mark them for immediate handling
+   - Include any relevant information needed
 
 {BASE_RESPONSE_FORMAT}"""
 
-        if config.additional_context:
-            template += "\nAdditional Context:\n"
-            for key, value in config.additional_context.items():
-                template += f"- {key}: {value}\n"
+        template = _add_additional_context(template, config.additional_context)
 
         return SystemMessagePromptTemplate.from_template(
             template,
@@ -404,21 +487,31 @@ Matching Threshold: {{matching_threshold}}
 Available Capabilities:
 {{capabilities}}
 
-{BASE_AGENT_FRAMEWORK}
+{AGENT_FRAMEWORK}
+{COLLABORATION_PROTOCOL}
 
 CAPABILITY MATCHING:
-1. Identify which capabilities are needed for the task
-2. Match task requirements to available capabilities
-3. Only select capabilities with relevance score >= {{matching_threshold}}
-4. Return only the list of matched capabilities
-5. Format as a numbered list with capability name and relevance score (0-1)
+1. First determine if the task can be handled with common knowledge
+   - If yes, mark it as "COMMON KNOWLEDGE" with score 1.0
+   - Common knowledge includes:{COMMON_KNOWLEDGE_TASKS}
+
+2. For specialized tasks beyond common knowledge:
+   - Map specific topics to general capability categories
+   - Match task requirements to available capabilities
+   - Only select capabilities with relevance score >= {{matching_threshold}}
+
+3. Format response as:
+   - If common knowledge: "COMMON KNOWLEDGE: Handle directly" 
+   - If specialized: Numbered list with capability name and relevance score (0-1)
+
+4. If no capabilities match above the threshold:
+   - Identify the closest matching capabilities
+   - Suggest how to modify the request to use available capabilities
+   - Recommend finding an agent with more relevant capabilities
 
 {BASE_RESPONSE_FORMAT}"""
 
-        if config.additional_context:
-            template += "\nAdditional Context:\n"
-            for key, value in config.additional_context.items():
-                template += f"- {key}: {value}\n"
+        template = _add_additional_context(template, config.additional_context)
 
         return SystemMessagePromptTemplate.from_template(
             template,
@@ -453,20 +546,33 @@ Agent Roles:
 Routing Guidelines:
 {{routing_guidelines}}
 
-{BASE_AGENT_FRAMEWORK}
+{AGENT_FRAMEWORK}
+{COLLABORATION_PROTOCOL}
 
 SUPERVISOR INSTRUCTIONS:
-1. Route user requests to the most appropriate agent based on capabilities
-2. Make routing decisions quickly without explaining reasoning
-3. If multiple agents could handle a task, choose the most specialized
-4. Respond only with the name of the agent to route to
+1. First determine if the request involves common knowledge tasks:{COMMON_KNOWLEDGE_TASKS}
+
+2. For common knowledge tasks:
+   - Route to ANY available agent, as all agents can handle common knowledge
+   - Pick the agent with lowest current workload if possible
+
+3. For specialized tasks:
+   - Route user requests to the most appropriate agent based on capabilities
+   - Make routing decisions quickly without explaining reasoning
+   - If multiple agents could handle a task, choose the most specialized
+
+4. If no perfect match exists:
+   - Route to closest matching agent
+   - Include guidance on what additional help might be needed
+   - Never respond with "no agent can handle this"
+
+5. Response format:
+   - For direct routing: Agent name only
+   - For complex tasks needing multiple agents: Comma-separated list of agent names in priority order
 
 {BASE_RESPONSE_FORMAT}"""
 
-        if config.additional_context:
-            template += "\nAdditional Context:\n"
-            for key, value in config.additional_context.items():
-                template += f"- {key}: {value}\n"
+        template = _add_additional_context(template, config.additional_context)
 
         return SystemMessagePromptTemplate.from_template(
             template,
@@ -491,7 +597,7 @@ SUPERVISOR INSTRUCTIONS:
         # Format capabilities for the prompt
         capabilities_str = ""
         if config.capabilities:
-            capabilities_str = "CAPABILITIES:\n"
+            capabilities_str = "SPECIALIZED CAPABILITIES:\n"
             for cap in config.capabilities:
                 capabilities_str += f"- {cap['name']}: {cap['description']}\n"
 
@@ -509,25 +615,15 @@ SUPERVISOR INSTRUCTIONS:
 
 Personality: {{personality}}
 
-{BASE_AGENT_FRAMEWORK}
+{AGENT_FRAMEWORK}
 
 {tools_str}
 {COLLABORATION_PROTOCOL}
+{TOOL_USAGE_GUIDE}
 
-EXECUTION STRATEGY:
-1. Use your capabilities and tools directly
-2. Apply tools immediately without announcing them
-3. For specialized knowledge:
-   - Search for agents without mentioning it
-   - Delegate tasks and return actual results
-4. Provide information, not just promises to find it
-5. Deliver answers, not just "I'll look that up"
+COMMON KNOWLEDGE YOU SHOULD HANDLE DIRECTLY:{COMMON_KNOWLEDGE_TASKS}
 
-BEST PRACTICES:
-- Begin searching immediately without saying you will
-- Use tools right away instead of talking about them
-- Provide direct answers with actual information
-- Show results of your actions, not just your intentions
+{AGENT_BEST_PRACTICES}
 
 {BASE_RESPONSE_FORMAT}"""
 
@@ -537,11 +633,7 @@ BEST PRACTICES:
 Use the 'custom_runnable' tool for specialized capabilities.
 """
 
-        # Add additional context if provided
-        if config.additional_context:
-            template += "\nAdditional Context:\n"
-            for key, value in config.additional_context.items():
-                template += f"- {key}: {value}\n"
+        template = _add_additional_context(template, config.additional_context)
 
         return SystemMessagePromptTemplate.from_template(
             template,

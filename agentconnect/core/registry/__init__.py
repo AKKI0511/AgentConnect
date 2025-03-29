@@ -8,6 +8,7 @@ agent registration information.
 
 from agentconnect.core.registry.registration import AgentRegistration
 from agentconnect.core.registry.registry_base import AgentRegistry
+from agentconnect.core.registry.capability_discovery import CapabilityDiscoveryService
 
 # Define public API
-__all__ = ["AgentRegistry", "AgentRegistration"]
+__all__ = ["AgentRegistry", "AgentRegistration", "CapabilityDiscoveryService"]

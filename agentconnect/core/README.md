@@ -8,9 +8,15 @@ The core module provides the foundational components of the AgentConnect framewo
 core/
 ├── __init__.py         # Package initialization and API exports
 ├── agent.py            # BaseAgent abstract class
+├── exceptions.py       # Core exception definitions
 ├── message.py          # Message class for agent communication
-├── registry.py         # AgentRegistry for agent discovery
 ├── types.py            # Core type definitions and enumerations
+├── registry/           # Agent registry and discovery subsystem
+│   ├── __init__.py     # Registry package exports
+│   ├── registry_base.py        # AgentRegistry implementation
+│   ├── capability_discovery.py # Semantic search for capabilities
+│   ├── identity_verification.py # Agent identity verification
+│   └── registration.py         # Agent registration data structures
 └── README.md           # This file
 ```
 
@@ -32,15 +38,19 @@ Key methods:
 - `process_message()`: Abstract method that must be implemented by subclasses
 - `verify_identity()`: Verify the agent's identity using its DID
 
-### AgentRegistry (`registry.py`)
+### Agent Registry System (`registry/`)
 
-The `AgentRegistry` class provides a centralized registry for agent discovery and capability matching. It supports:
+The registry subsystem provides a comprehensive solution for agent discovery, capability matching, and identity verification. It's been refactored into multiple specialized components for better maintainability and extensibility:
+
+#### AgentRegistry (`registry/registry_base.py`)
+
+The central registry for agent discovery and management:
 
 - **Agent Registration**: Register agents with their capabilities
-- **Capability Discovery**: Find agents with specific capabilities
-- **Semantic Search**: Find agents with capabilities that match a description
-- **Identity Verification**: Verify agent identities during registration
+- **Capability Indexing**: Index agent capabilities for fast lookup
+- **Agent Lifecycle Management**: Track agent status and handle registration/unregistration
 - **Organization Management**: Group agents by organization
+- **Vector Search Integration**: Coordinate with the capability discovery service
 
 Key methods:
 - `register()`: Register an agent with the registry
@@ -49,6 +59,43 @@ Key methods:
 - `get_by_capability_semantic()`: Find agents with capabilities that semantically match a description
 - `get_all_capabilities()`: Get a list of all available capabilities
 - `get_all_agents()`: Get a list of all registered agents
+- `is_agent_active()`: Check if an agent is active and available
+- `get_agent_type()`: Get the type of a registered agent
+
+#### CapabilityDiscoveryService (`registry/capability_discovery.py`)
+
+Specialized component for semantic search and capability matching:
+
+- **Vector-Based Semantic Search**: Find semantically similar capabilities using embeddings
+- **Multiple Vector Store Backends**: Support for FAISS and USearch vector stores
+- **Similarity Scoring**: Calculate and normalize similarity scores between capabilities
+- **Fallback Mechanisms**: Graceful degradation to simpler matching when vector search unavailable
+- **Embedding Model Management**: Efficient handling of embedding models for semantic search
+
+Key methods:
+- `initialize_embeddings_model()`: Initialize the embeddings model for semantic search
+- `find_by_capability_semantic()`: Find agents with capabilities that semantically match a description
+- `find_by_capability_name()`: Find agents by exact capability name matching
+- `precompute_all_capability_embeddings()`: Precompute embeddings for efficient searching
+- `save_vector_store()` / `load_vector_store()`: Persistence for vector stores
+
+#### Identity Verification (`registry/identity_verification.py`)
+
+Handles verification of agent identities:
+
+- **DID Verification**: Verify Decentralized Identifiers
+- **Public Key Verification**: Verify agent public keys
+- **Signature Verification**: Verify digital signatures
+- **Trust Chains**: Verify trust chains for agent identities
+
+#### AgentRegistration (`registry/registration.py`)
+
+Data structure for agent registration information:
+
+- **Agent Metadata**: Basic information about the agent
+- **Capabilities**: List of agent capabilities
+- **Identity Information**: Agent identity credentials
+- **Organization Details**: Information about the agent's organization
 
 ### Message (`message.py`)
 
@@ -76,6 +123,15 @@ The `types.py` file defines core types used throughout the framework:
 - **AgentIdentity**: Decentralized identity for agents
 - **MessageType**: Types of messages that can be exchanged
 - **ProtocolVersion**: Supported protocol versions
+
+### Exceptions (`exceptions.py`)
+
+The `exceptions.py` file defines custom exceptions used throughout the framework:
+
+- **RegistrationError**: Errors during agent registration
+- **IdentityVerificationError**: Errors during identity verification
+- **MessageError**: Errors related to message handling
+- **AgentError**: Base class for agent-related errors
 
 ## Usage Examples
 
@@ -142,10 +198,10 @@ await agent1.send_message(
 response = await agent2.process_message(message)
 ```
 
-### Registering Agents
+### Registering Agents and Finding by Capability
 
 ```python
-from agentconnect.core import AgentRegistry, AgentRegistration
+from agentconnect.core.registry import AgentRegistry, AgentRegistration
 
 # Create a registry
 registry = AgentRegistry()
@@ -162,11 +218,65 @@ registration = AgentRegistration(
 
 success = await registry.register(registration)
 
-# Find agents by capability
+# Find agents by capability (exact match)
 agents = await registry.get_by_capability("text_processing")
 
-# Find agents by semantic search
-agents = await registry.get_by_capability_semantic("process text and generate responses")
+# Find agents by semantic search with custom threshold
+# Returns a list of (agent, similarity_score) tuples
+agents_with_scores = await registry.get_by_capability_semantic(
+    "analyze text and generate summaries", 
+    limit=5,
+    similarity_threshold=0.3
+)
+
+# Get agent details
+for agent, score in agents_with_scores:
+    print(f"Agent: {agent.agent_id}, Score: {score:.2f}")
+    
+    # Check if agent is active
+    is_active = await registry.is_agent_active(agent.agent_id)
+    
+    # Get agent type
+    agent_type = await registry.get_agent_type(agent.agent_id)
+```
+
+## Semantic Search Features
+
+The registry's semantic search capabilities provide powerful ways to find agents:
+
+### Basic Usage
+
+```python
+# Find agents that can summarize text
+agents = await registry.get_by_capability_semantic("summarize text")
+
+# Find agents with data analysis capabilities
+agents = await registry.get_by_capability_semantic(
+    "analyze data and create visualizations",
+    limit=3,  # Return at most 3 agents
+    similarity_threshold=0.5  # Only return agents with similarity scores >= 0.5
+)
+```
+
+### Advanced Configuration
+
+```python
+# Configure the agent registry with custom vector store settings
+vector_store_config = {
+    "prefer_backend": "faiss",  # Use FAISS for vector storage
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",  # Use a smaller, faster model
+    "cache_folder": "./embeddings_cache"  # Specify cache location
+}
+
+registry = AgentRegistry(vector_store_config=vector_store_config)
+
+# Register agents...
+
+# Save vector store for faster startup next time
+await registry.save_vector_store("./vector_store")
+
+# Later, load the saved vector store
+await registry.load_vector_store("./vector_store")
 ```
 
 ## Integration with LangGraph
@@ -184,7 +294,7 @@ Security is a core feature of the framework:
 1. **DID-based Identity**: Agents have decentralized identifiers for secure identity management
 2. **Message Signing**: Messages are signed with the sender's private key
 3. **Signature Verification**: Message signatures are verified using the sender's public key
-4. **Identity Verification**: Agent identities are verified during registration
+4. **Identity Verification**: Agent identities are verified during registration through the dedicated identity verification module
 
 ## Best Practices
 
@@ -193,10 +303,12 @@ When working with the core framework:
 1. **Extend BaseAgent**: Create custom agent types by extending the `BaseAgent` class
 2. **Implement Required Methods**: Provide concrete implementations of the abstract methods
 3. **Register Capabilities**: Clearly define agent capabilities during registration
-4. **Handle Message Types**: Properly handle different message types in your agent implementation
-5. **Verify Messages**: Always verify message signatures before processing
-6. **Use Semantic Search**: Leverage semantic search for more flexible capability matching
-7. **Manage Conversations**: Properly track and manage conversations between agents
-8. **Use Absolute Imports**: Always use absolute imports for clarity and consistency
-9. **Add Type Hints**: Use type hints for better IDE support and static analysis
-10. **Document Your Code**: Add comprehensive docstrings to all classes and methods
+4. **Include Detailed Descriptions**: Add comprehensive descriptions to capabilities for better semantic matching
+5. **Handle Message Types**: Properly handle different message types in your agent implementation
+6. **Verify Messages**: Always verify message signatures before processing
+7. **Use Semantic Search**: Leverage semantic search for more flexible capability matching
+8. **Adjust Similarity Thresholds**: Fine-tune thresholds based on your specific use case
+9. **Manage Conversations**: Properly track and manage conversations between agents
+10. **Use Absolute Imports**: Always use absolute imports for clarity and consistency
+11. **Add Type Hints**: Use type hints for better IDE support and static analysis
+12. **Document Your Code**: Add comprehensive docstrings to all classes and methods

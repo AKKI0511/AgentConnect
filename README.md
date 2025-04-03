@@ -138,6 +138,8 @@ For code examples and detailed descriptions, see the [Examples Directory](exampl
 ## 🚀 Demo Application
 A full-featured demo application is included to showcase the framework's capabilities:
 
+> **Note:** The UI demo is currently being refactored for a new version with improved features and better integration with the modular multi-agent system. In the meantime, we recommend using the CLI examples.
+
 ```bash
 # Start the backend server
 agentconnect --demo --backend-only
@@ -218,15 +220,19 @@ AgentConnect/
 
 ## 🗺️ Roadmap
 
-- [x] MVP with basic agent-to-agent interactions
-- [x] Autonomous communication between agents
-- [ ] Secure data exchange between agents
-- [ ] Decentralized payment integration
-- [ ] Additional AI providers and protocols
-- [ ] Advanced memory systems (Redis, PostgreSQL)
-- [ ] **Federated Learning:** Agents collaboratively train models without sharing raw data.
-- [ ] **Cross-Chain Communication:** Agents on different blockchains could interact.
-- [ ] **Marketplace for Agent Capabilities:** A way for developers to monetize their agents' services.
+- ✅ **MVP with basic agent-to-agent interactions**
+- ✅ **Autonomous communication between agents**  
+- ✅ **Capability-based agent discovery**
+- ⬜ **Coinbase AgentKit Payment Integration**
+- ⬜ **Agent Identity & Reputation System**
+- ⬜ **Marketplace-Style Agent Discovery**
+- ⬜ **MCP Integration**
+- ⬜ **Structured Parameters SDK**
+- ⬜ **Secure data exchange protocols**
+- ⬜ **Additional AI provider integrations**
+- ⬜ **Advanced memory systems (Redis, PostgreSQL)**
+- ⬜ **Federated learning capabilities**
+- ⬜ **Cross-chain communication support**
 
 ## 🤝 Contributing
 

@@ -293,16 +293,19 @@ AgentConnect integrates with LangSmith for comprehensive monitoring:
 Roadmap
 =======
 
-- ✅ MVP with basic agent-to-agent interactions
-- ✅ Autonomous communication between agents  
-- ✅ Capability-based agent discovery
-- ⬜ Secure data exchange between agents
-- ⬜ Decentralized payment integration
-- ⬜ Additional AI providers and protocols
-- ⬜ Advanced memory systems (Redis, PostgreSQL)
-- ⬜ Federated learning capabilities
-- ⬜ Cross-chain communication
-- ⬜ Marketplace for agent capabilities
+- ✅ **MVP with basic agent-to-agent interactions**
+- ✅ **Autonomous communication between agents**  
+- ✅ **Capability-based agent discovery**
+- ⬜ **Coinbase AgentKit Payment Integration**
+- ⬜ **Agent Identity & Reputation System**
+- ⬜ **Marketplace-Style Agent Discovery**
+- ⬜ **MCP Integration**
+- ⬜ **Structured Parameters SDK**
+- ⬜ **Secure data exchange protocols**
+- ⬜ **Additional AI provider integrations**
+- ⬜ **Advanced memory systems (Redis, PostgreSQL)**
+- ⬜ **Federated learning capabilities**
+- ⬜ **Cross-chain communication support**
 
 
 .. raw:: html

@@ -67,6 +67,12 @@ passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 aioredis = "^2.0.1"
 psutil = "^7.0.0"
 
+[tool.poetry.group.research]
+optional = true
+
+[tool.poetry.group.research.dependencies]
+arxiv = "^1.4.8"
+wikipedia = "^1.4.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"

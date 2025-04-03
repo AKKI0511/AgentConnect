@@ -5,7 +5,7 @@ Advanced Multi-Agent Research Assistant Example
 This example demonstrates a sophisticated multi-agent system using AgentConnect:
 1. Core Interaction Agent: Primary interface between user and specialized agents
 2. Research Agent: Performs web searches and creates comprehensive research reports
-3. Markdown Formatting Agent: Transforms content into well-formatted markdown
+3. Markdown Formatting Agent: Transforms HTML content into clean markdown
 
 This showcases:
 - Multi-agent collaboration
@@ -39,6 +39,7 @@ from agentconnect.core.types import (
     ModelName,
     ModelProvider,
 )
+from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.utils.logging_config import (
     setup_logging,
@@ -49,12 +50,10 @@ from agentconnect.prompts.tools import PromptTools
 
 # Add imports for real-world tools
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_community.document_loaders import UnstructuredMarkdownLoader
-from langchain_community.document_loaders.tomarkdown import ToMarkdownLoader
-from langchain.text_splitter import HTMLHeaderTextSplitter
 from langchain.schema import Document
 from langchain_community.document_transformers.markdownify import MarkdownifyTransformer
-
+from langchain_community.tools.requests.tool import RequestsGetTool
+from langchain_community.utilities import TextRequestsWrapper
 # Initialize colorama for cross-platform colored output
 init()
 
@@ -102,26 +101,24 @@ class WebSearchOutput(BaseModel):
 
 
 class MarkdownFormatInput(BaseModel):
-    """Input schema for markdown formatting tool."""
+    """Input schema for HTML to markdown conversion tool."""
 
-    content: str = Field(description="The content to format as markdown.")
-    format_type: str = Field(
-        default="report",
-        description="The type of markdown format to apply (report, documentation, etc.).",
-    )
+    html_content: str = Field(description="The HTML content to convert to markdown.")
 
 
 class MarkdownFormatOutput(BaseModel):
-    """Output schema for markdown formatting tool."""
+    """Output schema for HTML to markdown conversion tool."""
 
-    formatted_content: str = Field(description="The content formatted in markdown.")
-    format_applied: str = Field(description="The type of format that was applied.")
+    markdown_content: str = Field(description="The HTML content converted to markdown.")
 
 
 async def setup_agents() -> Dict[str, Any]:
     """
     Set up the registry, hub, and agents.
-
+    
+    Args:
+        enable_logging (bool): Whether to enable detailed message flow logging
+    
     Returns:
         Dict[str, Any]: Dictionary containing registry, hub, and agents
 
@@ -130,7 +127,7 @@ async def setup_agents() -> Dict[str, Any]:
     """
     # Load environment variables
     load_dotenv()
-
+    
     # Check for required API keys
     api_key = os.getenv("GOOGLE_API_KEY")
     tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -176,6 +173,10 @@ async def setup_agents() -> Dict[str, Any]:
     # Create registry and hub
     registry = AgentRegistry()
     hub = CommunicationHub(registry)
+    
+    # Register message logger
+    hub.add_global_handler(demo_message_logger)
+    print_colored("Registered message flow logger to visualize agent collaboration", "INFO")
 
     # Create human agent
     human_identity = AgentIdentity.create_key_based()
@@ -255,6 +256,8 @@ async def setup_agents() -> Dict[str, Any]:
             custom_tools.append(tavily_search)
         except Exception as e:
             print_colored(f"Error initializing Tavily search: {e}", "ERROR")
+    requests_wrapper = TextRequestsWrapper()
+    custom_tools.append(RequestsGetTool(requests_wrapper=requests_wrapper, allow_dangerous_requests=True))
 
     research_agent = AIAgent(
         agent_id="research_agent",
@@ -272,10 +275,10 @@ async def setup_agents() -> Dict[str, Any]:
     markdown_identity = AgentIdentity.create_key_based()
     markdown_capabilities = [
         Capability(
-            name="markdown_formatting",
-            description="Transforms content into well-formatted markdown",
-            input_schema={"content": "string", "format_type": "string"},
-            output_schema={"formatted_content": "string"},
+            name="html_to_markdown_conversion",
+            description="Converts HTML content to clean markdown format",
+            input_schema={"html_content": "string"},
+            output_schema={"markdown_content": "string"},
         ),
         Capability(
             name="content_organization",
@@ -285,131 +288,57 @@ async def setup_agents() -> Dict[str, Any]:
         ),
     ]
 
-    # Create markdown formatting tools
-    def format_markdown(content: str, format_type: str = "report") -> Dict[str, str]:
+    # Create HTML to Markdown conversion function
+    def convert_html_to_markdown(html_content: str) -> Dict[str, str]:
         """
-        Format content as markdown using LangChain's document transformers and structured text splitting.
-        Supports HTML-to-Markdown conversion and maintains document structure.
+        Convert HTML content to clean markdown format using LangChain's MarkdownifyTransformer.
 
         Args:
-            content (str): The content to format
-            format_type (str): The type of format to apply (report, documentation, etc.)
+            html_content (str): The HTML content to convert
 
         Returns:
-            Dict[str, str]: Contains formatted content and format type
+            Dict[str, str]: Contains the converted markdown content
         """
-        print_colored(f"Formatting content as {format_type} markdown", "MARKDOWN")
+        print_colored("Converting HTML content to markdown format", "MARKDOWN")
 
         try:
-            # Convert HTML to markdown if content contains HTML
-            if "<" in content and ">" in content:
-                markdown_transformer = MarkdownifyTransformer(
-                    strip=["script", "style"],  # Remove unwanted elements
-                    heading_style="ATX",  # Use # style headings
-                    bullets="-",  # Use - for bullet points
-                )
-                docs = [Document(page_content=content)]
-                converted_docs = markdown_transformer.transform_documents(docs)
-                content = converted_docs[0].page_content
-
-            # Use structured text splitting based on format type
-            if format_type == "report":
-                # Define headers to split on for reports
-                headers_to_split_on = [
-                    ("h1", "title"),
-                    ("h2", "section"),
-                    ("h3", "subsection"),
-                ]
-
-                try:
-                    splitter = HTMLHeaderTextSplitter(
-                        headers_to_split_on=headers_to_split_on
-                    )
-
-                    # Split and recombine with proper structure
-                    splits = splitter.split_text(content)
-                    formatted_content = "# Research Report\n\n"
-
-                    # Add executive summary
-                    formatted_content += "## Executive Summary\n"
-                    formatted_content += "\n".join(
-                        split.page_content[:200] for split in splits[:1]
-                    )
-                    formatted_content += "\n\n"
-
-                    # Add main content with sections
-                    formatted_content += "## Detailed Analysis\n\n"
-                    for split in splits:
-                        if "title" in split.metadata:
-                            formatted_content += f"### {split.metadata['title']}\n\n"
-                        formatted_content += split.page_content + "\n\n"
-
-                    # Add references section
-                    formatted_content += "## References\n"
-                    formatted_content += (
-                        "_Generated from the research content above._\n\n"
-                    )
-                except Exception:
-                    # Fallback if HTML splitting fails
-                    formatted_content = "# Research Report\n\n"
-                    formatted_content += "## Executive Summary\n\n"
-                    formatted_content += content[:300] + "...\n\n"
-                    formatted_content += "## Detailed Analysis\n\n"
-                    formatted_content += content + "\n\n"
-                    formatted_content += "## References\n\n"
-                    formatted_content += (
-                        "_Generated from the research content above._\n\n"
-                    )
-
-            elif format_type == "documentation":
-                # Use UnstructuredMarkdownLoader for documentation
-                try:
-                    loader = UnstructuredMarkdownLoader.from_str(content)
-                    docs = loader.load()
-
-                    formatted_content = "# Technical Documentation\n\n"
-                    formatted_content += "## Overview\n\n"
-                    formatted_content += docs[0].page_content[:200] + "...\n\n"
-                    formatted_content += "## Detailed Documentation\n\n"
-                    formatted_content += docs[0].page_content + "\n\n"
-                    formatted_content += "## API Reference\n\n"
-                    formatted_content += (
-                        "_Generated from the documentation content above._\n"
-                    )
-                except Exception:
-                    # Fallback
-                    formatted_content = "# Technical Documentation\n\n"
-                    formatted_content += content
-            else:
-                # For general formatting, use ToMarkdownLoader with error handling
-                try:
-                    loader = ToMarkdownLoader.from_str(content)
-                    docs = loader.load()
-                    formatted_content = f"# {format_type.title()}\n\n"
-                    formatted_content += docs[0].page_content
-                except Exception:
-                    # Fallback
-                    formatted_content = f"# {format_type.title()}\n\n"
-                    formatted_content += content
-
+            # Initialize the transformer with appropriate options
+            markdown_transformer = MarkdownifyTransformer(
+                strip=["script", "style"],  # Remove unwanted elements
+                heading_style="ATX",  # Use # style headings
+                bullets="-",  # Use - for bullet points
+            )
+            
+            # Create a document from the HTML content
+            docs = [Document(page_content=html_content)]
+            
+            # Convert HTML to markdown
+            converted_docs = markdown_transformer.transform_documents(docs)
+            
+            # Ensure the response is a single string, not a list of fragments
+            markdown_content = converted_docs[0].page_content
+            
+            # Additional processing to ensure it's a single coherent document
+            if isinstance(markdown_content, list):
+                markdown_content = "\n\n".join(markdown_content)
+            
+            # Return the consolidated markdown content
             return {
-                "formatted_content": formatted_content,
-                "format_applied": format_type,
+                "markdown_content": markdown_content,
             }
         except Exception as e:
-            print_colored(f"Error in markdown formatting: {e}", "ERROR")
-            # Provide a basic fallback format
+            print_colored(f"Error in HTML to markdown conversion: {e}", "ERROR")
+            # Provide a basic fallback
             return {
-                "formatted_content": f"# {format_type.title()}\n\n{content}",
-                "format_applied": "basic",
+                "markdown_content": f"Error converting HTML to markdown: {str(e)}\n\nOriginal content:\n{html_content}",
             }
 
     # Create the markdown agent with custom tools
     markdown_agent_tools = PromptTools(registry, hub)
-    markdown_format_tool = markdown_agent_tools.create_tool_from_function(
-        func=format_markdown,
-        name="markdown_format",
-        description="Format content as markdown using LangChain's document transformers and structured text splitting",
+    html_to_markdown_tool = markdown_agent_tools.create_tool_from_function(
+        func=convert_html_to_markdown,
+        name="convert_html_to_markdown",
+        description="Convert HTML content to clean markdown format using LangChain's document transformers",
         args_schema=MarkdownFormatInput,
         category="formatting",
     )
@@ -422,8 +351,8 @@ async def setup_agents() -> Dict[str, Any]:
         api_key=api_key,
         identity=markdown_identity,
         capabilities=markdown_capabilities,
-        personality="I am a markdown formatting specialist who excels at transforming unstructured or semi-structured content into well-formatted markdown. I apply consistent styling and organization to optimize content for readability.",
-        custom_tools=[markdown_format_tool],
+        personality="I am a markdown formatting specialist who excels at transforming unstructured or semi-structured content into well-formatted markdown.",
+        custom_tools=[html_to_markdown_tool],
     )
 
     # Register all agents with the hub
@@ -472,14 +401,16 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
     # Configure logging
     if enable_logging:
         setup_logging(
-            level=LogLevel.WARNING,
+            level=LogLevel.INFO,
             module_levels={
                 "AgentRegistry": LogLevel.WARNING,
-                "CommunicationHub": LogLevel.DEBUG,
-                "agentconnect.agents.ai_agent": LogLevel.INFO,
+                "CommunicationHub": LogLevel.WARNING,
+                "agentconnect.agents.ai_agent": LogLevel.WARNING,
                 "agentconnect.agents.human_agent": LogLevel.WARNING,
-                "agentconnect.core.agent": LogLevel.INFO,
-                "agentconnect.prompts.tools": LogLevel.INFO,
+                "agentconnect.core.agent": LogLevel.WARNING,
+                "agentconnect.prompts.tools": LogLevel.WARNING,
+                "CapabilityDiscovery": LogLevel.WARNING,
+                "agentconnect.prompts.custom_tools.collaboration_tools": LogLevel.WARNING,
             },
         )
     else:
@@ -505,24 +436,25 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
         "RESEARCH",
     )
     print_colored(
-        "3. Markdown Formatting Agent - Transforms content into well-formatted markdown",
+        "3. Markdown Formatting Agent - Converts HTML content to clean markdown",
         "MARKDOWN",
     )
     print_colored("\nSetting up agents...", "SYSTEM")
 
     agents = None
+    message_logger_registered = enable_logging
 
     try:
-        # Set up agents
+        # Set up agents with logging flag
         agents = await setup_agents()
 
         print_colored("Agents are ready! Starting interaction...\n", "SYSTEM")
         print_colored(
-            "You can ask the core agent to research any topic or format content as markdown.",
+            "You can ask the core agent to research any topic or convert HTML to markdown.",
             "SYSTEM",
         )
         print_colored(
-            "Example: 'Research the latest developments in LangChain and LangGraph and format the results as a markdown report.'",
+            "Example: 'Research the latest developments in LangChain and LangGraph and convert the results to markdown.'",
             "SYSTEM",
         )
         print_colored("Type 'exit' to end the conversation.\n", "SYSTEM")
@@ -545,6 +477,14 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
         if agents:
             print_colored("\nCleaning up resources...", "SYSTEM")
 
+            # Remove message logger if it was registered
+            if message_logger_registered and "hub" in agents:
+                try:
+                    agents["hub"].remove_global_handler(demo_message_logger)
+                    print_colored("Removed message flow logger", "INFO")
+                except Exception as e:
+                    print_colored(f"Error removing message logger: {e}", "ERROR")
+
             # Stop all agent tasks
             if "agent_tasks" in agents:
                 for task in agents["agent_tasks"]:
@@ -566,6 +506,30 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
 
         print_colored("Demo completed successfully!", "SYSTEM")
 
+
+# Define the global message logger function
+async def demo_message_logger(message: Message) -> None:
+    """
+    Global message handler for logging agent collaboration flow.
+    
+    This handler inspects messages routed through the hub and logs specific events
+    in the research assistant demo to visualize agent collaboration.
+    
+    Args:
+        message (Message): The message being routed through the hub
+    """
+    if message.receiver_id == "human_user" or message.sender_id == "human_user":
+        return
+    color_type = "SYSTEM"
+    if message.sender_id == "core_agent":
+        color_type = "CORE"
+    elif message.sender_id == "research_agent":
+        color_type = "RESEARCH"
+    elif message.sender_id == "markdown_agent":
+        color_type = "MARKDOWN"
+
+    print_colored(f"{message.sender_id} -> {message.receiver_id}: {message.content[:50]}...", color_type)
+        
 
 if __name__ == "__main__":
     try:

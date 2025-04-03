@@ -88,8 +88,9 @@ class AIAgent(BaseAgent):
             InteractionMode.HUMAN_TO_AGENT,
             InteractionMode.AGENT_TO_AGENT,
         ],
-        max_tokens_per_minute: int = 5500,
-        max_tokens_per_hour: int = 100000,
+        max_tokens_per_minute: int = 70000,
+        max_tokens_per_hour: int = 700000,
+        max_turns: int = 20,
         is_ui_mode: bool = False,
         memory_type: MemoryType = MemoryType.BUFFER,
         prompt_tools: Optional[PromptTools] = None,
@@ -156,7 +157,9 @@ class AIAgent(BaseAgent):
             max_tokens_per_hour=max_tokens_per_hour,
         )
 
-        self.interaction_control = InteractionControl(token_config=token_config)
+        self.interaction_control = InteractionControl(
+            token_config=token_config, max_turns=max_turns
+        )
 
         # Set cooldown callback to update agent's cooldown state
         self.interaction_control.set_cooldown_callback(self.set_cooldown)

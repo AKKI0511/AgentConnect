@@ -25,7 +25,8 @@ from examples.example_multi_agent import run_ecommerce_analysis_demo
 # Export main functions for easy importing
 from examples.example_usage import main as run_chat_example
 from examples.research_assistant import run_research_assistant_demo
-from examples.telegram_assistant import run_telegram_assistant
+# Use the new modular multi-agent system for telegram example
+from examples.multi_agent.multi_agent_system import run_multi_agent_system as run_telegram_assistant
 
 __all__ = [
     "run_chat_example",

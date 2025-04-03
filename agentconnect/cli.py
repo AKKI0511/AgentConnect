@@ -14,6 +14,7 @@ Usage:
     agentconnect --example multi
     agentconnect --example research
     agentconnect --example data
+    agentconnect --example telegram
     agentconnect --demo        # UI compatibility under development (Windows only)
     agentconnect --check-env
     agentconnect --help
@@ -23,7 +24,7 @@ Available examples:
     multi    - Multi-agent e-commerce analysis
     research - Research assistant with multiple agents
     data     - Data analysis and visualization assistant
-    telegram - Telegram AI Agent with multi-agent capabilities
+    telegram - Modular multi-agent system with Telegram integration
 
 Note: The demo UI is currently under development and only supported on Windows.
       For the best experience, please use the examples instead.
@@ -88,7 +89,7 @@ Available examples:
   multi    - Multi-agent e-commerce analysis
   research - Research assistant with multiple agents
   data     - Data analysis and visualization assistant
-  telegram - Telegram AI Agent with multi-agent capabilities
+  telegram - Modular multi-agent system with Telegram integration
 
 Examples:
   agentconnect --example chat
@@ -105,7 +106,7 @@ Examples:
         "--example",
         "-e",
         choices=["chat", "multi", "research", "data", "telegram"],
-        help="Run a specific example: chat (simple AI assistant), multi (multi-agent ecommerce analysis), research (research assistant), data (data analysis assistant), or telegram (telegram AI agent)",
+        help="Run a specific example: chat (simple AI assistant), multi (multi-agent ecommerce analysis), research (research assistant), data (data analysis assistant), or telegram (modular multi-agent system with Telegram integration)",
     )
 
     parser.add_argument(
@@ -135,6 +136,22 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
         verbose: Whether to enable verbose logging
     """
     logger.info(f"Running example: {example_name}")
+
+    # Check for research dependencies when running telegram example
+    if example_name == "telegram":
+        try:
+            import arxiv  # noqa: F401
+            import wikipedia  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "Research dependencies are missing for the multi-agent system"
+            )
+            logger.info("To install the required dependencies:")
+            logger.info("  poetry install --with research")
+            logger.info("  or: pip install arxiv wikipedia")
+            logger.info(
+                "The example will run, but research capabilities will be limited"
+            )
 
     try:
         if example_name == "chat":
@@ -248,6 +265,22 @@ def check_environment() -> None:
         logger.info(
             f"Optional environment variables not set: {', '.join(missing_optional)}"
         )
+
+    # Check for research dependencies
+    try:
+        # Try to import research dependencies
+        logger.debug("Checking for research dependencies...")
+        try:
+            import arxiv  # noqa: F401
+            import wikipedia  # noqa: F401
+
+            logger.info("Research dependencies (arxiv, wikipedia) are available")
+        except ImportError:
+            logger.warning("Research dependencies are missing. To install:")
+            logger.info("poetry install --with research")
+            logger.info("or: pip install arxiv wikipedia")
+    except Exception as e:
+        logger.debug(f"Error checking research dependencies: {e}")
 
     # Check Python version
     python_version = sys.version_info

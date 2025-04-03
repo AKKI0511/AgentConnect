@@ -285,9 +285,7 @@ class TelegramTools:
         self.groups_file = groups_file
         self.announcements: Dict[str, Dict[str, Any]] = {}
         self.announcement_counter = 0
-        self.download_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "downloads"
-        )
+        self.download_dir = "downloads"
 
         # Create download directory if it doesn't exist
         if not os.path.exists(self.download_dir):

@@ -8,7 +8,8 @@ and capability matching.
 # Standard library imports
 import asyncio
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+import os
+from typing import Dict, List, Optional, Set, Tuple, Any
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import (
@@ -35,12 +36,15 @@ class AgentRegistry:
     by capability, and verifying agent identities.
     """
 
-    def __init__(self):
+    def __init__(self, vector_search_config: Dict[str, Any] = None):
         """
         Initialize the agent registry.
 
         This method initializes the registry with empty indexes for agents,
         capabilities, interaction modes, organizations, and owners.
+
+        Args:
+            vector_search_config: Optional configuration for vector search capability
         """
         logger.info("Initializing AgentRegistry")
         self._agents: Dict[str, AgentRegistration] = {}
@@ -52,26 +56,86 @@ class AgentRegistry:
         self._owner_index: Dict[str, Set[str]] = {}
         self._verified_agents: Set[str] = set()
 
-        # Initialize capability discovery service
-        self._capability_discovery = CapabilityDiscoveryService()
+        # Set default vector search configuration if not provided
+        if vector_search_config is None:
+            vector_search_config = {
+                "model_name": "sentence-transformers/all-mpnet-base-v2",
+                "cache_folder": "./.cache/huggingface/embeddings",
+                "prefer_backend": "faiss",  # Use FAISS by default (falls back to USearch if available)
+                "vector_store_path": "./.cache/vector_stores",
+            }
 
-        # Initialize embeddings model in the background
-        asyncio.create_task(self._initialize_embeddings_model())
+        # Initialize capability discovery service with configuration
+        self._capability_discovery = CapabilityDiscoveryService(vector_search_config)
+        self._vector_search_config = vector_search_config
 
-    async def _initialize_embeddings_model(self) -> None:
+        # Create vector store directory if it doesn't exist
+        os.makedirs(
+            vector_search_config.get("vector_store_path", "./.cache/vector_stores"),
+            exist_ok=True,
+        )
+
+        # Initialize embeddings model and try to load existing vector store
+        asyncio.create_task(self._initialize_vector_search())
+
+    async def _initialize_vector_search(self) -> None:
         """
-        Initialize the embeddings model in the background.
+        Initialize vector search capabilities.
 
-        This method initializes the embeddings model used for semantic search
-        of agent capabilities.
+        This method:
+
+        1. Initializes the embeddings model
+        2. Attempts to load existing vector store from disk
+        3. If loading fails, precomputes embeddings for all existing capabilities
         """
-        await self._capability_discovery.initialize_embeddings_model()
+        try:
+            # Initialize the embeddings model first
+            await self._capability_discovery.initialize_embeddings_model()
 
-        # Precompute embeddings for all existing capabilities
-        if self._agents:
-            await self._capability_discovery.precompute_all_capability_embeddings(
-                self._agents
-            )
+            # Try to load existing vector store if available
+            vector_store_path = self._vector_search_config.get("vector_store_path")
+
+            if vector_store_path:
+                try:
+                    success = await self._capability_discovery.load_vector_store(
+                        vector_store_path
+                    )
+                    if success:
+                        logger.info(
+                            f"Successfully loaded vector store from {vector_store_path}"
+                        )
+                        # Still need to populate the capability map
+                        if self._agents:
+                            for agent_id, registration in self._agents.items():
+                                for capability in registration.capabilities:
+                                    doc_id = f"{agent_id}:{capability.name}"
+                                    self._capability_discovery._capability_to_agent_map[
+                                        doc_id
+                                    ] = registration
+                        return
+                    else:
+                        logger.info(
+                            "Could not load vector store, will precompute embeddings"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to load vector store: {str(e)}")
+
+            # Precompute embeddings for all existing capabilities
+            if self._agents:
+                await self._capability_discovery.precompute_all_capability_embeddings(
+                    self._agents
+                )
+
+                # Try to save the computed vector store for future use
+                if vector_store_path:
+                    try:
+                        await self._capability_discovery.save_vector_store(
+                            vector_store_path
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to save vector store: {str(e)}")
+        except Exception as e:
+            logger.exception(f"Error initializing vector search: {str(e)}")
 
     async def register(self, registration: AgentRegistration) -> bool:
         """
@@ -102,6 +166,14 @@ class AgentRegistry:
             await self._update_indexes(registration)
 
             logger.info(f"Successfully registered agent: {registration.agent_id}")
+
+            # Try to save the updated vector store
+            vector_store_path = self._vector_search_config.get("vector_store_path")
+            if vector_store_path:
+                asyncio.create_task(
+                    self._capability_discovery.save_vector_store(vector_store_path)
+                )
+
             return True
 
         except Exception as e:
@@ -191,40 +263,60 @@ class AgentRegistry:
             # Clear embeddings cache for this agent
             self._capability_discovery.clear_agent_embeddings_cache(agent_id)
 
+            # Try to save the updated vector store
+            vector_store_path = self._vector_search_config.get("vector_store_path")
+            if vector_store_path:
+                asyncio.create_task(
+                    self._capability_discovery.save_vector_store(vector_store_path)
+                )
+
             logger.info(f"Successfully unregistered agent: {agent_id}")
             return True
         except Exception as e:
             logger.exception(f"Error unregistering agent: {str(e)}")
             return False
 
-    async def get_by_capability(self, capability_name: str) -> List[AgentRegistration]:
+    async def get_by_capability(
+        self, capability_name: str, limit: int = 10, similarity_threshold: float = 0.1
+    ) -> List[AgentRegistration]:
         """
-        Find agents by capability name (simple string matching).
+        Find agents by capability name.
 
         Args:
             capability_name: Name of the capability to search for
+            limit: Maximum number of results to return (default: 10)
+            similarity_threshold: Minimum similarity score for semantic fallback search (default: 0.1)
 
         Returns:
             List of agent registrations with the specified capability
         """
         return await self._capability_discovery.find_by_capability_name(
-            capability_name, self._agents, self._capabilities_index
+            capability_name,
+            self._agents,
+            self._capabilities_index,
+            limit,
+            similarity_threshold,
         )
 
     async def get_by_capability_semantic(
-        self, capability_description: str
+        self,
+        capability_description: str,
+        limit: int = 10,
+        similarity_threshold: float = 0.1,
     ) -> List[Tuple[AgentRegistration, float]]:
         """
         Find agents by capability description using semantic search.
 
         Args:
             capability_description: Description of the capability to search for
+            limit: Maximum number of results to return (default: 10)
+            similarity_threshold: Minimum similarity score to include in results (default: 0.1)
 
         Returns:
             List of tuples containing agent registrations and similarity scores
         """
         return await self._capability_discovery.find_by_capability_semantic(
-            capability_description, self._agents
+            capability_description, self._agents, limit, similarity_threshold
         )
 
     async def get_all_capabilities(self) -> List[str]:
@@ -394,6 +486,13 @@ class AgentRegistry:
                     registration
                 )
             )
+
+            # Try to save the updated vector store
+            vector_store_path = self._vector_search_config.get("vector_store_path")
+            if vector_store_path:
+                asyncio.create_task(
+                    self._capability_discovery.save_vector_store(vector_store_path)
+                )
 
         if "interaction_modes" in updates:
             # Remove from old mode indexes

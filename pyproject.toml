@@ -37,6 +37,8 @@ dependencies = [
     "matplotlib (>=3.10.1,<4.0.0)",
     "colorama (>=0.4.6,<0.5.0)",
     "aiogram (>=3.19.0,<4.0.0)",
+    "faiss-cpu (>=1.10.0,<2.0.0)",
+    "simsimd (>=6.2.1,<7.0.0)",
 ]
 
 [project.scripts]
@@ -65,6 +67,12 @@ passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 aioredis = "^2.0.1"
 psutil = "^7.0.0"
 
+[tool.poetry.group.research]
+optional = true
+
+[tool.poetry.group.research.dependencies]
+arxiv = "^1.4.8"
+wikipedia = "^1.4.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"

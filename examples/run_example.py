@@ -1,6 +1,25 @@
 #!/usr/bin/env python
 """
-AgentConnect Examples Runner
+[DEPRECATED] AgentConnect Examples Runner
+
+⚠️ DEPRECATION NOTICE ⚠️
+This script is deprecated and will be removed in a future release.
+Please use the official AgentConnect CLI tool instead:
+
+    # Run an example
+    agentconnect --example chat
+    agentconnect --example multi
+    agentconnect --example research
+    agentconnect --example data
+    agentconnect --example telegram
+
+    # Enable verbose logging
+    agentconnect --example telegram --verbose
+
+The CLI tool provides the same functionality with better integration
+and is the recommended way to run examples.
+
+-------------------
 
 This script provides a simple command-line interface to run various examples
 from the AgentConnect framework. It uses argparse to parse command-line arguments
@@ -113,6 +132,17 @@ async def run_example(example_name: str, enable_logging: bool = False) -> None:
     Raises:
         ValueError: If the example name is not recognized
     """
+    # Show deprecation notice
+    print_colored("\n⚠️ DEPRECATION NOTICE ⚠️", Fore.YELLOW)
+    print_colored(
+        "This script is deprecated. Please use the CLI tool instead:",
+        Fore.YELLOW,
+    )
+    print_colored(f"  agentconnect --example {example_name}", Fore.CYAN)
+    if enable_logging:
+        print_colored("  --verbose", Fore.CYAN)
+    print_colored("", Fore.WHITE)
+    
     # Import examples only when needed (lazy loading)
     try:
         if example_name == "chat":
@@ -138,7 +168,7 @@ async def run_example(example_name: str, enable_logging: bool = False) -> None:
             await run_data_analysis_assistant_demo(enable_logging=enable_logging)
                 
         elif example_name == "telegram":
-            from examples.telegram_assistant import run_telegram_assistant
+            from examples.multi_agent.multi_agent_system import run_multi_agent_system as run_telegram_assistant
 
             await run_telegram_assistant(enable_logging=enable_logging)
 
@@ -161,6 +191,19 @@ def main() -> None:
     """
     Main function to parse arguments and run the selected example.
     """
+    # Show deprecation warning
+    print_colored("\n⚠️ DEPRECATION NOTICE ⚠️", Fore.YELLOW)
+    print_colored(
+        "This script is deprecated and will be removed in a future release.",
+        Fore.YELLOW,
+    )
+    print_colored(
+        "Please use the official AgentConnect CLI tool instead:",
+        Fore.YELLOW,
+    )
+    print_colored("  agentconnect --example <name> [--verbose]", Fore.CYAN)
+    print_colored("", Fore.WHITE)
+    
     parser = argparse.ArgumentParser(
         description="Run AgentConnect examples",
         formatter_class=argparse.RawDescriptionHelpFormatter,

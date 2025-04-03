@@ -580,7 +580,7 @@ class CapabilityDiscoveryService:
         ):
             try:
                 # Suppress the specific UserWarning from LangChain during the search call
-                with warnings.catch_warnings():
+                with warnings.catch_warnings(record=False):
                     warnings.filterwarnings(
                         "ignore",
                         # Use regex to match the start of the message reliably

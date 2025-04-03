@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.2.0] - 2025-04-01
+
+### Added
 - Research dependency group (`poetry install --with research`) for enhanced research capabilities
 - Modular multi-agent system with separate specialized agent implementations
 - Enhanced research assistant example with improved web search capabilities
@@ -66,23 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - API key handling
   - Rate limiting support
 
-### Changed
-- N/A (Initial release)
-
-### Deprecated
-- N/A (Initial release)
-
-### Removed
-- N/A (Initial release)
-
-### Fixed
-- N/A (Initial release)
-
 ### Security
 - Implemented secure API key management
 - Added rate limiting for API calls
 - Set up environment variable handling
 - Added input validation for all API endpoints
 
-[Unreleased]: https://github.com/AKKI0511/AgentConnect/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/AKKI0511/AgentConnect/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/AKKI0511/AgentConnect/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AKKI0511/AgentConnect/releases/tag/v0.1.0

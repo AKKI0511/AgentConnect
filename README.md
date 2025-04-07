@@ -1,6 +1,8 @@
 <div align="center">
 
-# AgentConnect: A Decentralized Framework for Autonomous Agent Collaboration
+<picture>
+  <img src="docs/source/_static/long_logo.png" alt="AgentConnect Logo" width="80%"/>
+</picture>
 
 *Build and connect independent AI agents that discover, interact, and collaborate securely.*
 
@@ -10,8 +12,6 @@
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
-<img src="https://raw.githubusercontent.com/AKKI0511/AgentConnect/main/docs/source/_static/logo.png" alt="AgentConnect Logo" width="200"/>
 
 [Installation](#-installation) •
 [Documentation](https://AKKI0511.github.io/AgentConnect/) •
@@ -160,6 +160,8 @@ AgentConnect is built on three core pillars that enable decentralized agent coll
 3.  **Independent Agent Systems:**  Each agent is a self-contained unit, built using the tools and frameworks of the developer's choice (LangGraph, custom logic, etc.).  Agents interact with the network through standardized protocols, but their internal workings are independent.
 
 This architecture allows for a truly decentralized and scalable network of autonomous agents.
+
+![AgentConnect Architecture Flow](docs/source/_static/architecture_flow.png)
 
 ## 📊 Monitoring with LangSmith
 

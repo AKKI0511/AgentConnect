@@ -28,8 +28,8 @@ project = 'AgentConnect'
 copyright = '2025, Akshat Joshi'
 author = 'Akshat Joshi'
 
-version = '0.1.0'
-release = '0.1.0'
+version = '0.2.0'
+release = '0.2.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -148,7 +148,9 @@ html_theme = 'pydata_sphinx_theme'
 # Theme options
 html_theme_options = {
     "logo": {
-        "text": "AgentConnect",
+        "image_light": "_static/long_logo.png",
+        "image_dark": "_static/long_logo.png",  # Consider a dark-theme optimized version if needed
+        # "text": "AgentConnect",  # Remove text as it's in the image
     },
     "external_links": [
         {"name": "GitHub", "url": "https://github.com/AKKI0511/AgentConnect"},
@@ -190,7 +192,7 @@ html_css_files = [
 # ]
 
 # Favicon and branding
-# html_favicon = '_static/logo.png'
+html_favicon = '_static/final_logo.png'
 
 # Enable the generation of the index
 html_use_index = True

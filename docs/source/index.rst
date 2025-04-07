@@ -123,6 +123,13 @@ AgentConnect is built on three core pillars that enable decentralized agent coll
      </div>
    </div>
 
+.. figure:: _static/architecture_flow.png
+   :alt: AgentConnect Architecture Flow
+   :align: center
+   :width: 100%
+   
+   Detailed workflow showing how agents discover, communicate, and collaborate
+
 .. _installation:
 
 Installation

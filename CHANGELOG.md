@@ -8,16 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Agent payment capabilities using Coinbase Developer Platform (CDP) SDK and AgentKit.
+- Wallet persistence for agents (`agentconnect.utils.wallet_manager`).
+- CDP environment validation and payment readiness checks (`agentconnect.utils.payment_helper`).
+- Payment-related dependencies (`cdp-sdk`, `coinbase-agentkit`, `coinbase-agentkit-langchain`) to `pyproject.toml`.
+- Payment address (`payment_address`) field to `AgentMetadata` and `AgentRegistration`.
+- Payment capability template (`PAYMENT_CAPABILITY_TEMPLATE`) for agent prompts.
+- Autonomous workflow demo (`examples/autonomous_workflow`) showcasing inter-agent payments.
 
 ### Changed
+- `BaseAgent` and `AIAgent` to initialize wallet provider and AgentKit conditionally based on `enable_payments` flag.
+- `AIAgent` workflow initialization to include AgentKit tools when payments are enabled.
+- Agent prompts (`CORE_DECISION_LOGIC`, ReAct prompts) updated to include payment instructions and context.
+- `CommunicationHub` registration updated to include `payment_address`.
+- `ToolTracerCallbackHandler` enhanced to provide specific tracing for payment tool actions.
 
 ### Deprecated
-
-### Removed
+- `examples/run_example.py` in favor of using the official CLI tool (`agentconnect` command)
 
 ### Fixed
+- Suppressed unnecessary warnings in capability discovery module
+- Improved error handling in agent communication
 
 ### Security
+- Enhanced validation for inter-agent messages
+- Implemented secure API key management
+- Added rate limiting for API calls
+- Set up environment variable handling
+- Added input validation for all API endpoints
 
 ## [0.2.0] - 2025-04-01
 

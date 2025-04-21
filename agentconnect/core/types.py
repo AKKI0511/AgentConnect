@@ -66,7 +66,8 @@ class ModelName(str, Enum):
     GEMMA2_90B = "gemma2-9b-it"
 
     # Google Models
-    GEMINI2_5_PRO_EXP = "gemini-2.5-pro-exp-03-25 "
+    GEMINI2_5_PRO_EXP = "gemini-2.5-pro-exp-03-25"
+    GEMINI2_5_FLASH_PREVIEW = "gemini-2.5-flash-preview-04-17"
     GEMINI2_FLASH = "gemini-2.0-flash"
     GEMINI2_FLASH_LITE = "gemini-2.0-flash-lite"
     GEMINI2_PRO_EXP = "gemini-2.0-pro-exp-02-05"
@@ -92,7 +93,7 @@ class ModelName(str, Enum):
             ModelProvider.OPENAI: cls.GPT4O,
             ModelProvider.ANTHROPIC: cls.CLAUDE_3_SONNET,
             ModelProvider.GROQ: cls.LLAMA33_70B_VTL,
-            ModelProvider.GOOGLE: cls.GEMINI2_FLASH_LITE,
+            ModelProvider.GOOGLE: cls.GEMINI2_FLASH,
         }
 
         if provider not in defaults:
@@ -165,8 +166,8 @@ class Capability:
 
     name: str
     description: str
-    input_schema: Dict[str, str]
-    output_schema: Dict[str, str]
+    input_schema: Optional[Dict[str, str]] = None
+    output_schema: Optional[Dict[str, str]] = None
     version: str = "1.0"
 
 
@@ -352,7 +353,7 @@ class AgentMetadata:
         organization_id: ID of the organization the agent belongs to
         capabilities: List of capability names the agent provides
         interaction_modes: Supported interaction modes
-        verification_status: Whether the agent's identity is verified
+        payment_address: Agent's primary wallet address for receiving payments
         metadata: Additional information about the agent
     """
 
@@ -362,7 +363,7 @@ class AgentMetadata:
     organization_id: Optional[str] = None
     capabilities: List[str] = field(default_factory=list)
     interaction_modes: List[InteractionMode] = field(default_factory=list)
-    verification_status: bool = False
+    payment_address: Optional[str] = None
     metadata: Dict = field(default_factory=dict)
 
 

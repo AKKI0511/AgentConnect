@@ -34,6 +34,7 @@ class AgentRegistration:
         capabilities: List of agent capabilities
         identity: Agent's decentralized identity
         owner_id: ID of the agent's owner
+        payment_address: Agent's primary wallet address for receiving payments
         metadata: Additional information about the agent
     """
 
@@ -44,4 +45,5 @@ class AgentRegistration:
     capabilities: list[Capability]
     identity: AgentIdentity
     owner_id: Optional[str] = None
+    payment_address: Optional[str] = None
     metadata: Dict = field(default_factory=dict)

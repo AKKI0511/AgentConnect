@@ -506,6 +506,10 @@ class AgentRegistry:
             for mode in registration.interaction_modes:
                 self._interaction_index[mode].add(agent_id)
 
+        # Update payment address if provided
+        if "payment_address" in updates:
+            registration.payment_address = updates["payment_address"]
+
         if "metadata" in updates:
             registration.metadata.update(updates["metadata"])
 

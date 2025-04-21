@@ -169,6 +169,7 @@ class HumanAgent(BaseAgent):
                             print(
                                 f"{Fore.RED}❌ Error: {response.content}{Style.RESET_ALL}"
                             )
+                            print("-" * 40)
                             logger.error(
                                 f"Human Agent {self.agent_id} received error message: {response.content[:50]}..."
                             )
@@ -191,8 +192,10 @@ class HumanAgent(BaseAgent):
                                 f"Human Agent {self.agent_id} received processing status message: {response.content[:50]}..."
                             )
                         else:
-                            print(f"\n{Fore.CYAN}{target_agent.name}:{Style.RESET_ALL}")
+                            print("-" * 40)
+                            print(f"{Fore.CYAN}{target_agent.name}:{Style.RESET_ALL}")
                             print(f"{response.content}")
+                            print("-" * 40)
                             logger.info(
                                 f"Human Agent {self.agent_id} received and displayed response: {response.content[:50]}..."
                             )

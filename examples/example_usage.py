@@ -11,9 +11,11 @@ Key features demonstrated:
 - Secure agent registration and communication with cryptographic verification
 - Real-time message exchange with proper error handling
 - Graceful session management and cleanup
+- Optional payment capabilities using blockchain technology
 
 Required environment variables:
 - At least one provider API key (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+- For payment capabilities: CDP_API_KEY_NAME, CDP_API_KEY_PRIVATE (Coinbase Developer Platform)
 """
 
 import asyncio
@@ -56,7 +58,7 @@ def print_colored(message: str, color_type: str = "SYSTEM") -> None:
     print(f"{color}{message}{Style.RESET_ALL}")
 
 
-async def main(enable_logging: bool = False) -> None:
+async def main(enable_logging: bool = False, enable_payments: bool = False) -> None:
     """
     Run an interactive demo between a human user and an AI assistant.
 
@@ -65,9 +67,11 @@ async def main(enable_logging: bool = False) -> None:
     2. Secure agent registration and communication
     3. Real-time message exchange with proper error handling
     4. Graceful session management and cleanup
+    5. Optional blockchain payment capabilities
 
     Args:
         enable_logging (bool): Enable detailed logging for debugging. Defaults to False.
+        enable_payments (bool): Enable blockchain payment capabilities. Defaults to False.
     """
     # Load environment variables from .env file
     load_dotenv()
@@ -186,6 +190,17 @@ async def main(enable_logging: bool = False) -> None:
         )
     ]
 
+    # Initialize wallet configuration if payments are enabled
+    if enable_payments:
+        print_colored(
+            "Payment capabilities enabled. Environment will be validated during agent initialization.",
+            "INFO"
+        )
+        print_colored(
+            "Required environment variables: CDP_API_KEY_NAME, CDP_API_KEY_PRIVATE_KEY, (optional) CDP_NETWORK_ID",
+            "INFO"
+        )
+
     ai_assistant = AIAgent(
         agent_id="ai1",
         name="Assistant",
@@ -197,6 +212,7 @@ async def main(enable_logging: bool = False) -> None:
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         personality="helpful and professional",
         organization_id="org2",
+        enable_payments=enable_payments,  # Enable payment capabilities if requested
     )
     # --- End AI Agent Setup ---
 
@@ -212,6 +228,10 @@ async def main(enable_logging: bool = False) -> None:
 
         # Start AI processing
         ai_task = asyncio.create_task(ai_assistant.run())
+
+        # Display payment address if payment capabilities are enabled
+        if enable_payments and ai_assistant.payments_enabled:
+            print_colored(f"\nAI Assistant Payment Address: {ai_assistant.metadata.payment_address}", "INFO")
 
         print_colored("\n=== Starting Interactive Session ===", "SYSTEM")
         print_colored("Type your messages and press Enter to send", "INFO")
@@ -248,4 +268,6 @@ async def main(enable_logging: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # By default, run without payments enabled for simpler setup
+    # To enable payments, you would call main(enable_payments=True)
+    asyncio.run(main(enable_payments=False))

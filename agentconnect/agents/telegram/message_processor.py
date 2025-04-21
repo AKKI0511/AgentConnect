@@ -365,7 +365,7 @@ class TelegramMessageProcessor:
                 "configurable": {
                     "thread_id": conversation_id,
                 },
-                "callbacks": interaction_control.get_callback_manager(),
+                "callbacks": interaction_control.get_callback_handlers(),
             }
 
             logger.debug(

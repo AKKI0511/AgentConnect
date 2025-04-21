@@ -13,16 +13,19 @@ import asyncio
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Union
+from pathlib import Path
 
 # Third-party imports
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import Runnable
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.tools import BaseTool
 
 # Absolute imports from agentconnect package
 from agentconnect.core.agent import BaseAgent
 from agentconnect.core.message import Message
+from agentconnect.core.payment_constants import POC_PAYMENT_TOKEN_SYMBOL
 from agentconnect.core.types import (
     AgentIdentity,
     AgentType,
@@ -43,6 +46,7 @@ from agentconnect.utils.interaction_control import (
     InteractionState,
     TokenConfig,
 )
+from agentconnect.utils.payment_helper import validate_cdp_environment
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -98,6 +102,12 @@ class AIAgent(BaseAgent):
         # Custom tools parameter
         custom_tools: Optional[List[BaseTool]] = None,
         agent_type: str = "ai",
+        # Payment capabilities parameters
+        enable_payments: bool = False,
+        verbose: bool = False,
+        wallet_data_dir: Optional[Union[str, Path]] = None,
+        # External callbacks parameter
+        external_callbacks: Optional[List[BaseCallbackHandler]] = None,
     ):
         """Initialize the AI agent.
 
@@ -120,7 +130,29 @@ class AIAgent(BaseAgent):
             prompt_templates: Optional prompt templates for the agent
             custom_tools: Optional list of custom LangChain tools for the agent
             agent_type: Type of agent workflow to create
+            enable_payments: Whether to enable payment capabilities
+            verbose:
+            wallet_data_dir: Optional custom directory for wallet data storage
+            external_callbacks: Optional list of external callback handlers to include
         """
+        # Validate CDP environment if payments are requested
+        actual_enable_payments = enable_payments
+        if enable_payments:
+            # The validation function will load dotenv for us
+            is_valid, message = validate_cdp_environment()
+            if not is_valid:
+                logger.warning(
+                    f"Payment capabilities requested for agent {agent_id} but environment validation failed: {message}"
+                )
+                logger.warning(
+                    f"Payment capabilities will be disabled for agent {agent_id}"
+                )
+                actual_enable_payments = False  # Disable payments since the environment is not properly configured
+            else:
+                logger.info(
+                    f"CDP environment validation passed for agent {agent_id}: {message}"
+                )
+
         # Initialize base agent
         super().__init__(
             agent_id=agent_id,
@@ -129,6 +161,8 @@ class AIAgent(BaseAgent):
             capabilities=capabilities or [],
             organization_id=organization_id,
             interaction_modes=interaction_modes,
+            enable_payments=actual_enable_payments,
+            wallet_data_dir=wallet_data_dir,
         )
 
         # Store agent-specific attributes
@@ -141,12 +175,16 @@ class AIAgent(BaseAgent):
         self.is_ui_mode = is_ui_mode
         self.memory_type = memory_type
         self.workflow_agent_type = agent_type
+        self.verbose = verbose
 
         # Store the custom tools list if provided
         self.custom_tools = custom_tools or []
 
         # Store the prompt_tools instance if provided
         self._prompt_tools = prompt_tools
+
+        # Store external callbacks if provided
+        self.external_callbacks = external_callbacks or []
 
         # Create a new PromptTemplates instance for this agent
         self.prompt_templates = prompt_templates or PromptTemplates()
@@ -158,13 +196,13 @@ class AIAgent(BaseAgent):
         )
 
         self.interaction_control = InteractionControl(
-            token_config=token_config, max_turns=max_turns
+            agent_id=self.agent_id, token_config=token_config, max_turns=max_turns
         )
 
         # Set cooldown callback to update agent's cooldown state
         self.interaction_control.set_cooldown_callback(self.set_cooldown)
 
-        # Initialize the LLM
+        # Initialize the LLM (This will now use the tool_tracer_handler)
         self.llm = self._initialize_llm()
         logger.debug(f"Initialized LLM for AI Agent {self.agent_id}: {self.llm}")
 
@@ -251,6 +289,56 @@ class AIAgent(BaseAgent):
             f"AI Agent {self.agent_id}: System config created with capabilities: {self.capabilities}"
         )
 
+        # Initialize custom tools from AgentKit if payments are enabled
+        custom_tools_list = list(self.custom_tools) if self.custom_tools else []
+
+        # Check if payments are enabled and AgentKit is available
+        if self.agent_kit is not None:
+            try:
+                # Import AgentKit LangChain integration
+                from coinbase_agentkit_langchain import get_langchain_tools
+
+                # Get the AgentKit tools
+                agentkit_tools = get_langchain_tools(self.agent_kit)
+
+                # Add the tools to the custom tools list
+                custom_tools_list.extend(agentkit_tools)
+
+                # Log the available payment tools
+                tool_names = [tool.name for tool in agentkit_tools]
+                logger.info(
+                    f"AI Agent {self.agent_id}: Added {len(agentkit_tools)} AgentKit payment tools: {tool_names}"
+                )
+
+                # Determine which payment tool to use based on token symbol
+                payment_tool = (
+                    "native_transfer"
+                    if POC_PAYMENT_TOKEN_SYMBOL == "ETH"
+                    else "erc20_transfer"
+                )
+                logger.info(
+                    f"AI Agent {self.agent_id}: Will use {payment_tool} for payments with {POC_PAYMENT_TOKEN_SYMBOL} token"
+                )
+
+                # Enable payment capabilities in the system prompt config
+                self.system_config.enable_payments = True
+                self.system_config.payment_token_symbol = POC_PAYMENT_TOKEN_SYMBOL
+                logger.info(
+                    f"AI Agent {self.agent_id}: Enabled payment capabilities in system prompt"
+                )
+
+            except ImportError as e:
+                logger.warning(
+                    f"AI Agent {self.agent_id}: Could not import AgentKit LangChain tools: {e}"
+                )
+                logger.warning(
+                    "To use payment capabilities, install with: pip install coinbase-agentkit-langchain"
+                )
+            except Exception as e:
+                logger.error(
+                    f"AI Agent {self.agent_id}: Error initializing AgentKit tools: {e}"
+                )
+
         # Create and compile the workflow with business logic info
         workflow = create_workflow_for_agent(
             agent_type=self.workflow_agent_type,
@@ -259,10 +347,11 @@ class AIAgent(BaseAgent):
             tools=tools,
             prompt_templates=prompt_templates,
             agent_id=self.agent_id,
-            custom_tools=self.custom_tools,  # Pass the custom tools list
+            custom_tools=custom_tools_list,
+            verbose=self.verbose,
         )
         logger.debug(
-            f"AI Agent {self.agent_id}: Workflow created with {len(self.custom_tools)} custom tools."
+            f"AI Agent {self.agent_id}: Workflow created with {len(custom_tools_list)} custom tools."
         )
 
         compiled_workflow = workflow.compile()
@@ -424,16 +513,17 @@ class AIAgent(BaseAgent):
             # Get the conversation ID for this sender
             conversation_id = self._get_conversation_id(message.sender_id)
 
-            # Get the callback manager from interaction_control
-            # Only include our rate limiting callback, not a tracer
-            callbacks = self.interaction_control.get_callback_manager()
+            # Get the base callback manager from interaction_control (rate limiting + tool tracing)
+            callbacks = self.interaction_control.get_callback_handlers()
 
-            # Set up the configuration with the thread ID for memory persistence and callbacks
-            # Use the thread_id for LangGraph memory persistence
+            # Add any external callbacks
+            if self.external_callbacks:
+                callbacks.extend(self.external_callbacks)
+
+            # Set up the configuration with the thread ID for memory persistence and ALL handlers
             config = {
                 "configurable": {
                     "thread_id": conversation_id,
-                    # Add a run name for better LangSmith organization
                     "run_name": f"Agent {self.agent_id} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 },
                 "callbacks": callbacks,
@@ -450,8 +540,33 @@ class AIAgent(BaseAgent):
                 )
 
             # Create the initial state for the workflow
+            # --- Add context prefix based on sender/message type ---
+            sender_type = (
+                "Human" if message.sender_id.startswith("human_") else "AI Agent"
+            )
+            is_collab_request = (
+                message.message_type == MessageType.REQUEST_COLLABORATION
+            )
+            # Check metadata for response correlation, assuming 'response_to' indicates a collab response
+            is_collab_response = "response_to" in (message.metadata or {})
+
+            context_prefix = ""
+            if sender_type == "AI Agent":
+                if is_collab_request:
+                    context_prefix = f"[Incoming Collaboration Request from AI Agent {message.sender_id}]:\n"
+                elif is_collab_response:
+                    context_prefix = f"[Incoming Response from Collaborating AI Agent {message.sender_id}]:\n"
+                else:  # General message from AI
+                    context_prefix = (
+                        f"[Incoming Message from AI Agent {message.sender_id}]:\n"
+                    )
+            # No prefix for direct Human messages
+
+            workflow_input_content = f"{context_prefix}{message.content}"
+            # --- End context prefix logic ---
+
             initial_state = {
-                "messages": [HumanMessage(content=message.content)],
+                "messages": [HumanMessage(content=workflow_input_content)],
                 "sender": message.sender_id,
                 "receiver": self.agent_id,
                 "message_type": message.message_type,
@@ -465,8 +580,8 @@ class AIAgent(BaseAgent):
 
             # Use the provided runnable with a timeout
             try:
-                # Invoke the workflow with a timeout and callbacks
-                response = await asyncio.wait_for(
+                # Invoke the workflow with a timeout and the combined callbacks
+                response_state = await asyncio.wait_for(
                     self.workflow.ainvoke(initial_state, config),
                     timeout=180.0,  # 3 minute timeout for workflow execution
                 )
@@ -500,8 +615,26 @@ class AIAgent(BaseAgent):
                     },
                 )
 
-            # Extract the last message from the workflow response
-            last_message = response["messages"][-1]
+            # Extract the last message from the workflow response state
+            if "messages" not in response_state or not response_state["messages"]:
+                logger.error(
+                    f"AI Agent {self.agent_id}: Workflow returned empty or invalid messages state."
+                )
+                # Handle error appropriately, maybe return an error message
+                return Message.create(
+                    sender_id=self.agent_id,
+                    receiver_id=message.sender_id,
+                    content="Internal error: Could not retrieve response.",
+                    sender_identity=self.identity,
+                    message_type=(
+                        MessageType.ERROR
+                        if not is_collaboration_request
+                        else MessageType.COLLABORATION_RESPONSE
+                    ),
+                    metadata={"error_type": "empty_workflow_response"},
+                )
+
+            last_message = response_state["messages"][-1]
             logger.debug(
                 f"AI Agent {self.agent_id} extracted last message from workflow response."
             )

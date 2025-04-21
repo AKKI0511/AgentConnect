@@ -237,6 +237,7 @@ class CommunicationHub:
                 capabilities=agent.capabilities,  # Use the Capability objects directly
                 identity=agent.identity,
                 owner_id=agent.metadata.organization_id,
+                payment_address=agent.metadata.payment_address,
                 metadata=agent.metadata.metadata,
             )
 

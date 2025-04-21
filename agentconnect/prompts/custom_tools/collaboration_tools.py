@@ -26,11 +26,15 @@ R = TypeVar("R", bound=BaseModel)
 class AgentSearchInput(BaseModel):
     """Input schema for agent search."""
 
-    capability_name: str = Field(description="Specific capability name to search for.")
-    limit: int = Field(10, description="Maximum number of agents to return.")
+    capability_name: str = Field(
+        description="The specific skill or capability required for the task (e.g., 'general_research', 'telegram_broadcast', 'image_generation'). Be descriptive but concise."
+    )
+    limit: int = Field(
+        10, description="Maximum number of matching agents to return (default 10)."
+    )
     similarity_threshold: float = Field(
         0.2,
-        description="Minimum similarity score (0-1) required for results. Higher values return only more relevant agents.",
+        description="How closely the agent's capability must match your query (0.0=broad match, 1.0=exact match, default 0.2). Use higher values for very specific needs.",
     )
 
 
@@ -38,10 +42,10 @@ class AgentSearchOutput(BaseModel):
     """Output schema for agent search."""
 
     agent_ids: List[str] = Field(
-        description="List of agent IDs with matching capabilities."
+        description="A list of unique IDs for agents possessing the required capability."
     )
     capabilities: List[Dict[str, Any]] = Field(
-        description="List of capabilities for each agent."
+        description="A list of dictionaries, each containing details for a found agent: their `agent_id`, their full list of capabilities, and their `payment_address` (if applicable)."
     )
 
 
@@ -49,13 +53,14 @@ class SendCollaborationRequestInput(BaseModel):
     """Input schema for sending a collaboration request."""
 
     target_agent_id: str = Field(
-        description="ID of the agent to collaborate with. (agent_id)"
+        description="The exact `agent_id` (obtained from `search_for_agents` output) of the agent you want to delegate the task to."
     )
-    task_description: str = Field(
-        description="Description of the task to be performed."
+    task: str = Field(
+        description="A clear and detailed description of the task, providing ALL necessary context for the collaborating agent to understand and execute the request."
     )
     timeout: int = Field(
-        default=30, description="Maximum time to wait for a response in seconds."
+        default=30,
+        description="Maximum seconds to wait for the collaborating agent's response (default 30).",
     )
 
     class Config:
@@ -67,8 +72,13 @@ class SendCollaborationRequestInput(BaseModel):
 class SendCollaborationRequestOutput(BaseModel):
     """Output schema for sending a collaboration request."""
 
-    success: bool = Field(description="Whether the request was sent successfully.")
-    response: Optional[str] = Field(None, description="Response from the target agent.")
+    success: bool = Field(
+        description="Indicates if the request was successfully SENT (True/False). Does NOT guarantee the collaborator completed the task."
+    )
+    response: Optional[str] = Field(
+        None,
+        description="The direct message content received back from the collaborating agent. Analyze this response carefully to determine the next step (e.g., pay, provide more info, present to user).",
+    )
 
 
 def create_agent_search_tool(
@@ -292,6 +302,11 @@ def create_agent_search_tool(
                         {
                             "agent_id": agent.agent_id,
                             "capabilities": agent_capabilities,
+                            **(
+                                {"payment_address": agent.payment_address}
+                                if agent.payment_address
+                                else {}
+                            ),
                         }
                     )
 
@@ -353,6 +368,11 @@ def create_agent_search_tool(
                         {
                             "agent_id": agent.agent_id,
                             "capabilities": agent_capabilities,
+                            **(
+                                {"payment_address": agent.payment_address}
+                                if agent.payment_address
+                                else {}
+                            ),
                         }
                     )
 
@@ -418,6 +438,11 @@ def create_agent_search_tool(
                             {
                                 "agent_id": agent.agent_id,
                                 "capabilities": agent_capabilities,
+                                **(
+                                    {"payment_address": agent.payment_address}
+                                    if agent.payment_address
+                                    else {}
+                                ),
                             }
                         )
 
@@ -446,7 +471,9 @@ def create_agent_search_tool(
             return {"error": str(e), "agent_ids": [], "capabilities": []}
 
     # Create a description that includes available capabilities if possible
-    description = "Search for agents with specific capabilities. Uses semantic matching to find agents with relevant capabilities."
+    description = """
+    Finds other agents within the network that possess specific capabilities you lack, enabling task delegation. Use this tool FIRST when you cannot handle a request directly. Returns a list of suitable agent IDs, their capabilities, and crucially, their `payment_address` if they accept payments for services.
+    """
 
     # Create and return the tool
     tool = StructuredTool.from_function(
@@ -490,7 +517,7 @@ def create_send_collaboration_request_tool(
 
         # Synchronous implementation that returns an error
         def error_request(
-            target_agent_id: str, task_description: str, timeout: int = 30, **kwargs
+            target_agent_id: str, task: str, timeout: int = 30, **kwargs
         ) -> Dict[str, Any]:
             """Send a collaboration request to another agent."""
             return {
@@ -502,7 +529,7 @@ def create_send_collaboration_request_tool(
         return StructuredTool.from_function(
             func=error_request,
             name="send_collaboration_request",
-            description="Sends a collaboration request to a specific agent and waits for a response. Use this after finding an agent with search_for_agents to delegate tasks.",
+            description="Delegates a specific task to another agent identified by `search_for_agents`. Sends your request and waits for the collaborator's response. Use this tool AFTER finding a suitable agent ID. The response received might be the final result, a request for payment, or a request for clarification, requiring further action from you.",
             args_schema=SendCollaborationRequestInput,
             return_direct=False,
             handle_tool_error=True,
@@ -512,22 +539,20 @@ def create_send_collaboration_request_tool(
     # Normal implementation when agent ID is set
     # Synchronous implementation
     def send_request(
-        target_agent_id: str, task_description: str, timeout: int = 30, **kwargs
+        target_agent_id: str, task: str, timeout: int = 30, **kwargs
     ) -> Dict[str, Any]:
         """Send a collaboration request to another agent."""
         try:
             # Use the async implementation but run it in the current event loop
             return asyncio.run(
-                send_request_async(target_agent_id, task_description, timeout, **kwargs)
+                send_request_async(target_agent_id, task, timeout, **kwargs)
             )
         except RuntimeError:
             # If we're already in an event loop, create a new one
             loop = asyncio.new_event_loop()
             try:
                 return loop.run_until_complete(
-                    send_request_async(
-                        target_agent_id, task_description, timeout, **kwargs
-                    )
+                    send_request_async(target_agent_id, task, timeout, **kwargs)
                 )
             finally:
                 loop.close()
@@ -541,7 +566,7 @@ def create_send_collaboration_request_tool(
     # Asynchronous implementation
     async def send_request_async(
         target_agent_id: str,
-        task_description: str,
+        task: str,
         timeout: int = 30,
         **kwargs,  # Additional data
     ) -> Dict[str, Any]:
@@ -652,7 +677,7 @@ def create_send_collaboration_request_tool(
             response = await communication_hub.send_collaboration_request(
                 sender_id=sender_id,  # Use the current agent's ID
                 receiver_id=target_agent_id,
-                task_description=task_description,
+                task_description=task,
                 timeout=adjusted_timeout,
                 **metadata,
             )
@@ -687,7 +712,7 @@ def create_send_collaboration_request_tool(
     return StructuredTool.from_function(
         func=send_request,
         name="send_collaboration_request",
-        description="Sends a collaboration request to a specific agent and waits for a response. Use after finding an agent with search_for_agents.",
+        description="Delegates a specific task to another agent identified by `search_for_agents`. Sends your request and waits for the collaborator's response. Use this tool AFTER finding a suitable agent ID. The response received might be the final result, a request for payment, or a request for clarification, requiring further action from you.",
         args_schema=SendCollaborationRequestInput,
         return_direct=False,
         handle_tool_error=True,

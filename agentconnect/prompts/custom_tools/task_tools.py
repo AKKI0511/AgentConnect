@@ -188,32 +188,24 @@ def create_task_decomposition_tool(llm: Optional[BaseLLM] = None) -> StructuredT
         parser = JsonOutputParser(pydantic_object=TaskDecompositionResult)
 
         # Create the system prompt with optimized structure
-        system_prompt = f"""You are a task decomposition specialist.
+        system_prompt = f"""TASK: {task_description}
+MAX SUBTASKS: {max_subtasks}
 
-Task Description: {task_description}
-Maximum Subtasks: {max_subtasks}
-
-DECISION FRAMEWORK:
-1. ASSESS: Analyze the complexity of the task
-2. EXECUTE: Break down into clear, actionable subtasks
-3. RESPOND: Format as a structured list
-
-TASK DECOMPOSITION:
-1. Break down the task into clear, actionable subtasks
-2. Each subtask should be 1-2 sentences maximum
-3. Identify dependencies between subtasks when necessary
-4. Limit to {max_subtasks} subtasks or fewer
+INSTRUCTIONS:
+1. Analyze complexity
+2. Break into clear subtasks
+3. Each subtask: 1-2 sentences only
+4. Include dependencies if needed
+5. Format as structured list
 
 {parser.get_format_instructions()}
 
-Make sure each subtask has a unique ID, a clear title, and a concise description.
+Each subtask needs: ID, title, description.
 """
 
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(
-                content=f"Break down this task into at most {max_subtasks} subtasks: {task_description}"
-            ),
+            HumanMessage(content=f"Decompose: {task_description}"),
         ]
 
         try:

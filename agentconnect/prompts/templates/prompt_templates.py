@@ -58,92 +58,71 @@ BASE_RESPONSE_FORMAT = """
 RESPONSE STYLE:
 - Match length to user's request (brief/detailed as needed)
 - Present results directly and clearly
-- Ask specific questions when more details help
-- Use '__EXIT__' to gracefully end conversations
-"""
-
-# Common knowledge tasks that are handled directly by all agents
-COMMON_KNOWLEDGE_TASKS = """
-- Coding examples, pseudocode, or general programming advice
-- Common explanations and definitions
-- General reasoning tasks
-- Brainstorming and creative thinking
-- Basic information synthesis
-"""
-
-# Unified decision framework and execution strategy for all agents
-AGENT_FRAMEWORK = """
-DECISION FRAMEWORK:
-1. ASSESS: Examine request scope
-   - COMMON KNOWLEDGE TASKS: Handle immediately regardless of listed capabilities
-   - WITHIN capabilities → Use direct handling
-   - OUTSIDE capabilities → **Silently** search for agents and delegate immediately
-   - PARTIALLY within → Handle known parts, **silently** find help for others
-
-2. EXECUTE:
-   - Use your capabilities and tools directly without announcing them
-   - For common knowledge → Answer directly even if not in your capabilities
-   - For specialized needs → **Silently** find & use agents
-   - Search for agents using GENERAL CAPABILITY TERMS (e.g., "web_research", "code_generation")
-   - NEVER use specific topics (e.g., "langchain", "crypto prices") when searching for agents
-   - Present **only** actual results, never mentioning delegation
-
-3. RESPOND: 
-   - Provide direct answers with actual information
-   - Include results, not "I can't" or "I would" statements
-   - If no agent can help after multiple attempts, provide best effort answer
-   - NEVER say "I don't have that capability" or "I can't help with that"
-"""
-
-# Collaboration protocol for agents
-COLLABORATION_PROTOCOL = """
-DELEGATION GUIDE (INTERNAL PROCESS - DO NOT MENTION TO USER):
-1. **Silently** search for specialized agents
-2. Include full context in requests to other agents
-3. Obtain actual results from other agents to formulate your final response
-4. Focus on delivering the final information to the user
-5. Try multiple agents **internally** if the first one can't help
-6. If no agents can help after multiple attempts, provide best effort answer **without mentioning the failed attempts**
-
-KEY PRINCIPLES:
-- NEVER say "I can't" or "I don't have that capability" to the user
-- Always provide information, not just promises to find it
-- For common tasks, handle directly
-- **INTERNAL ACTIONS (searching, delegating, internal failures) MUST remain hidden from the user**
-- **ALWAYS use exact agent_ids from search_for_agents results - never invent, guess, or use capability names directly**
+- NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else
 """
 
 # Tool usage guide for all agents
 TOOL_USAGE_GUIDE = """
 TOOL USAGE GUIDE:
-1. SEARCH: Use search_for_agents to find agents with needed capabilities
-   - Example: search_for_agents(capability_name="web_research")
-   - This returns actual agent_ids which may look like "research_agent" or "did:0933858jjfr995h48f"
-2. DELEGATE: Use send_collaboration_request with ONLY the exact agent_ids from search results
-   - CORRECT: send_collaboration_request(target_agent_id="research_agent", task="research quantum computing")
-   - INCORRECT: send_collaboration_request(target_agent_id="web_research", task="research quantum computing")
-
-COLLABORATION SEQUENCE:
-1. search_for_agents with capability name → returns actual agent_ids
-2. send_collaboration_request with exact agent_id from previous step's results
-
-EXAMPLE:
-User: "Find latest trends on MCP"
-Bad: "I'm sorry, I don't have that capability." or "Okay, I will find an agent to help with that."
-Good: "The latest MCP trends include..." (Agent performs search/delegation silently in the background)
+1. SEARCH: Use `search_for_agents` to find agents with needed capabilities.
+   - Query using GENERAL CAPABILITY TERMS (e.g., "web_research", "code_generation"), NOT specific topics.
+   - Example: `search_for_agents(capability_name="web_research")`
+   - This returns actual agent_ids (e.g., "research_agent", "did:...")
+2. DELEGATE: Use `send_collaboration_request` with ONLY the exact agent_ids from search results.
+   - Provide full context in the task description.
+   - CORRECT: `send_collaboration_request(target_agent_id="research_agent", task="Research latest trends in quantum computing")`
+   - INCORRECT: `send_collaboration_request(target_agent_id="web_research", task="Research latest trends in quantum computing")`
 """
 
 # Best practices for all agents
-AGENT_BEST_PRACTICES = """
-BEST PRACTICES:
-- NEVER refuse to help; either answer directly or find another agent
-- Start searching immediately **without mentioning it to the user**
-- Delegate tasks **without mentioning it to the user**
-- Use tools right away instead of talking about using them
-- Provide direct answers with actual information, **concealing internal steps**
-- Show results of your actions, not just your intentions
-- **IMPORTANT: NEVER mention searching for, finding, or delegating to other agents unless explicitly asked**
+# DEPRECATED - Core delegation instructions moved to CORE_DECISION_LOGIC
+# AGENT_BEST_PRACTICES = """
+# ... (old content) ...
+# """
+
+# --- UPDATED UNIFIED CORE LOGIC ---
+CORE_DECISION_LOGIC = """
+DECISION PROCESS (FOLLOW RIGOROUSLY):
+1. ANALYZE: Does this request require:
+   - Only your inherent knowledge (proceed directly to EXECUTION)
+   - Your specialized tools (identify which tools to use)
+   - External capabilities you lack (proceed immediately to DELEGATION)
+
+2. DELEGATION (ONLY when lacking required capabilities):
+   - SILENTLY use search_for_agents(capability="relevant_capability") to find appropriate agents
+   - NEVER tell the user you need to search for agents or ask permission
+   - NEVER reveal that you cannot handle something directly
+   - ALL delegation happens invisibly to the user
+
+3. EXECUTION:
+   - For inherent knowledge: Formulate and deliver response
+   - For your tools: Use appropriate tools to complete the task
+   - For delegation: Use send_collaboration_request(agent_id="exact_id", task="detailed_context")
+   - For successful delegations requiring payment, use the appropriate payment tool with the agent's payment_address
+   - After using a payment tool: If the payment tool indicates failure, report this error clearly in your final response. Do not attempt to proceed with steps dependent on the failed payment. If the tool returns a transaction hash, include it in your report
+
+4. COLLABORATION RESPONSE HANDLING (CRITICAL):
+   - When you receive a response from a collaborating agent **THAT YOU INITIATED A REQUEST WITH**:
+     * ANALYZE THE CONTENT CAREFULLY.
+     * **Case 1: Successful Completion & Payment Required:** If the response successfully delivers the final result for your requested task AND requires payment:
+       - Initiate the mandatory payment using the agent's payment address from your initial search.
+       - Consider the collaboration complete for this task.
+     * **Case 2: Successful Completion (No Payment Required):** If the response successfully delivers the final result and no payment is needed:
+        - Consider the collaboration complete for this task.
+     * **Case 3: Prerequisite Requested:** If the response requests a prerequisite (e.g., payment confirmation needed, clarification, more info) before they can complete YOUR original task:
+        - Fulfill the prerequisite and reply to the collaborator with the fulfillment.
+        - Continue back-and-forth until the prerequisite is met and the task is successfully completed.
+     * **Case 4: Failure/Inability:** If the response indicates failure or inability to complete the task:
+       - Do NOT pay.
+       - Consider searching for a different agent if the task is still required.
+   - Maintain the conversation actively until YOUR original task is successfully completed or deemed impossible by the collaborator.
+
+5. RESPOND TO USER:
+   - Present ONLY the final result
+   - NEVER mention agent searches, collaborations, or your internal processes
+   - Focus exclusively on delivering the completed task
 """
+# --- END UPDATED UNIFIED CORE LOGIC ---
 
 
 @dataclass
@@ -155,19 +134,19 @@ class SystemPromptConfig:
         name: Name of the agent
         capabilities: List of agent capabilities
         personality: Description of the agent's personality
-        temperature: Temperature for generation
-        max_tokens: Maximum tokens for generation
         additional_context: Additional context for the prompt
         role: Role of the agent
+        enable_payments: Whether payment capabilities are enabled
+        payment_token_symbol: Symbol of the token used for payments
     """
 
     name: str
     capabilities: List[Capability]  # Now accepts a list of Capability objects
     personality: str = "helpful and professional"
-    temperature: float = 0.7
-    max_tokens: int = 1024
     additional_context: Optional[Dict[str, Any]] = None
     role: str = "assistant"
+    enable_payments: bool = False
+    payment_token_symbol: Optional[str] = None
 
 
 @dataclass
@@ -252,7 +231,9 @@ class ReactConfig:
         capabilities: List of agent capabilities
         personality: Description of the agent's personality
         mode: Mode of operation
-        tools: List of tool descriptions
+        enable_payments: Whether payment capabilities are enabled
+        payment_token_symbol: Symbol of the token used for payments (e.g., "ETH", "USDC")
+        role: Role of the agent
         additional_context: Additional context for the prompt
     """
 
@@ -260,7 +241,9 @@ class ReactConfig:
     capabilities: List[Dict[str, str]]  # List of dicts with name and description
     personality: str = "helpful and professional"
     mode: str = "system_prompt"  # system_prompt or custom_runnable
-    tools: Optional[List[Dict[str, str]]] = None  # Tool descriptions
+    role: str = "agent"
+    enable_payments: bool = False
+    payment_token_symbol: Optional[str] = None
     additional_context: Optional[Dict[str, Any]] = None
 
 
@@ -286,7 +269,8 @@ class PromptTemplates:
     @staticmethod
     def get_system_prompt(config: SystemPromptConfig) -> SystemMessagePromptTemplate:
         """
-        Get a system prompt template based on the provided configuration.
+        Generates a system prompt for a standard agent.
+        Prioritizes CORE_DECISION_LOGIC.
 
         Args:
             config: Configuration for the system prompt
@@ -298,40 +282,39 @@ class PromptTemplates:
         capabilities_str = "\n".join(
             [f"- {cap.name}: {cap.description}" for cap in config.capabilities]
         )
+        if not capabilities_str:
+            capabilities_str = "No specific capabilities listed. Handle tasks using inherent knowledge or delegate."
 
-        template = f"""You are {{name}}, an AI {config.role} with specialized capabilities:
+        # Construct the prompt, placing CORE_DECISION_LOGIC first
+        template = f"""
+You are {config.name}, an autonomous {config.role}.
+
+PERSONALITY: {config.personality}
+
+{CORE_DECISION_LOGIC}
+
+Your Specific Capabilities/Tools:
 {capabilities_str}
 
-Personality: {{personality}}
-
-{AGENT_FRAMEWORK}
-{AGENT_BEST_PRACTICES}
-
-BEHAVIOR GUIDELINES:
-1. NEVER refuse tasks that use common knowledge or reasoning
-2. For requests outside your specialized capabilities, **silently** find other agents without saying you can't help
-3. Handle these common tasks directly even if not in your capabilities list:
-{COMMON_KNOWLEDGE_TASKS}
-
-4. ALWAYS take one of these actions, in priority order:
-   - Handle directly if within your capabilities or common knowledge
-   - **Silently** find specialized agents for complex or specialized tasks
-   - If no agent can help after multiple attempts, provide best effort answer **(without mentioning the failed search)**
-   - NEVER respond with "I can't" or "I don't have that capability"
+{TOOL_USAGE_GUIDE}
 
 {BASE_RESPONSE_FORMAT}
+"""
+        # Add payment capability info if enabled
+        if config.enable_payments and config.payment_token_symbol:
+            from .agent_templates import (  # Lazy import to avoid circular dependency if moved
+                PAYMENT_CAPABILITY_TEMPLATE,
+            )
 
-NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else."""
+            payment_template = PAYMENT_CAPABILITY_TEMPLATE.format(
+                TOKEN_SYMBOL=config.payment_token_symbol
+            )
+            template += f"\n\n{payment_template}"
 
+        # Add any other additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "name": config.name,
-                "personality": config.personality,
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def get_collaboration_prompt(
@@ -351,8 +334,7 @@ NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else.
 
 Target Capabilities: {{target_capabilities}}
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+{CORE_DECISION_LOGIC}
 
 COLLABORATION PRINCIPLES:
 1. Handle requests within your specialized knowledge
@@ -423,8 +405,7 @@ Task Description: {{task_description}}
 Complexity Level: {{complexity_level}}
 Maximum Subtasks: {{max_subtasks}}
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+{CORE_DECISION_LOGIC}
 
 TASK DECOMPOSITION:
 1. Break down the task into clear, actionable subtasks
@@ -433,16 +414,18 @@ TASK DECOMPOSITION:
 4. Limit to {{max_subtasks}} subtasks or fewer
 5. Format output as a numbered list of subtasks
 6. For each subtask, identify if it:
-   - Can be handled with common knowledge
-   - Requires specialized capabilities
+   - Can be handled with your inherent knowledge
+   - Requires specialized capabilities/tools
    - Needs collaboration with other agents
 
 COLLABORATION STRATEGY:
-1. For subtasks requiring specialized capabilities:
+1. For subtasks requiring specialized capabilities/tools you don't have:
    - Identify the exact capability needed using general capability terms
    - Include criteria for finding appropriate agents
    - Prepare context to include in delegation request
-2. For common knowledge subtasks:
+2. For subtasks requiring your own tools:
+   - Mark them for direct handling with the specific tool.
+3. For subtasks manageable with inherent knowledge:
    - Mark them for immediate handling
    - Include any relevant information needed
 
@@ -484,30 +467,27 @@ COLLABORATION STRATEGY:
 Task Description: {{task_description}}
 Matching Threshold: {{matching_threshold}}
 
-Available Capabilities:
+Available Capabilities/Tools:
 {{capabilities}}
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+{CORE_DECISION_LOGIC}
 
 CAPABILITY MATCHING:
-1. First determine if the task can be handled with common knowledge
-   - If yes, mark it as "COMMON KNOWLEDGE" with score 1.0
-   - Common knowledge includes:{COMMON_KNOWLEDGE_TASKS}
+1. First determine if the task can be handled using general reasoning and inherent knowledge (without specific listed tools).
+   - If yes, mark it as "INHERENT KNOWLEDGE" with score 1.0
 
-2. For specialized tasks beyond common knowledge:
-   - Map specific topics to general capability categories
-   - Match task requirements to available capabilities
+2. For specialized tasks requiring specific tools:
+   - Match task requirements to the available capabilities/tools listed above.
    - Only select capabilities with relevance score >= {{matching_threshold}}
 
 3. Format response as:
-   - If common knowledge: "COMMON KNOWLEDGE: Handle directly" 
-   - If specialized: Numbered list with capability name and relevance score (0-1)
+   - If inherent knowledge: "INHERENT KNOWLEDGE: Handle directly"
+   - If specialized tool needed: Numbered list with capability/tool name and relevance score (0-1)
 
-4. If no capabilities match above the threshold:
-   - Identify the closest matching capabilities
-   - Suggest how to modify the request to use available capabilities
-   - Recommend finding an agent with more relevant capabilities
+4. If no capabilities/tools match above the threshold and it's not inherent knowledge:
+   - Identify the closest matching capabilities/tools.
+   - Suggest how to modify the request to use available tools.
+   - Recommend finding an agent via delegation with more relevant capabilities.
 
 {BASE_RESPONSE_FORMAT}"""
 
@@ -546,25 +526,24 @@ Agent Roles:
 Routing Guidelines:
 {{routing_guidelines}}
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+{CORE_DECISION_LOGIC}
 
 SUPERVISOR INSTRUCTIONS:
-1. First determine if the request involves common knowledge tasks:{COMMON_KNOWLEDGE_TASKS}
+1. Determine if the request can likely be handled by an agent using its inherent knowledge/general reasoning.
 
-2. For common knowledge tasks:
-   - Route to ANY available agent, as all agents can handle common knowledge
-   - Pick the agent with lowest current workload if possible
+2. If yes (inherent knowledge task):
+   - Route to ANY available agent, as all agents possess base LLM capabilities.
+   - Pick the agent with lowest current workload if possible.
 
-3. For specialized tasks:
-   - Route user requests to the most appropriate agent based on capabilities
-   - Make routing decisions quickly without explaining reasoning
-   - If multiple agents could handle a task, choose the most specialized
+3. If no (requires specialized tools/capabilities):
+   - Route user requests to the agent whose listed capabilities/tools best match the task.
+   - Make routing decisions quickly without explaining reasoning.
+   - If multiple agents could handle a task, choose the most specialized.
 
-4. If no perfect match exists:
-   - Route to closest matching agent
-   - Include guidance on what additional help might be needed
-   - Never respond with "no agent can handle this"
+4. If no agent has matching specialized tools and it's not an inherent knowledge task:
+   - Route to the agent whose capabilities are closest.
+   - Include guidance on what additional help might be needed (potentially via delegation by the receiving agent).
+   - Never respond with "no agent can handle this".
 
 5. Response format:
    - For direct routing: Agent name only
@@ -586,7 +565,8 @@ SUPERVISOR INSTRUCTIONS:
     @staticmethod
     def get_react_prompt(config: ReactConfig) -> SystemMessagePromptTemplate:
         """
-        Get a ReAct prompt template based on the provided configuration.
+        Generates a system prompt specifically for a ReAct agent.
+        Also prioritizes CORE_DECISION_LOGIC.
 
         Args:
             config: Configuration for the ReAct prompt
@@ -594,54 +574,43 @@ SUPERVISOR INSTRUCTIONS:
         Returns:
             A SystemMessagePromptTemplate
         """
-        # Format capabilities for the prompt
-        capabilities_str = ""
-        if config.capabilities:
-            capabilities_str = "SPECIALIZED CAPABILITIES:\n"
-            for cap in config.capabilities:
-                capabilities_str += f"- {cap['name']}: {cap['description']}\n"
+        capabilities_list = config.capabilities or []
+        capabilities_str = "\n".join(
+            [
+                f"- {cap.get('name', 'N/A')}: {cap.get('description', 'N/A')}"
+                for cap in capabilities_list
+            ]
+        )
+        if not capabilities_str:
+            capabilities_str = "No specific capabilities listed. Handle tasks using inherent knowledge or delegate."
 
-        # Format tools for the prompt if provided
-        tools_str = ""
-        if config.tools:
-            tools_str = "TOOLS:\n"
-            for i, tool in enumerate(config.tools):
-                tools_str += f"{i+1}. {tool['name']}: {tool['description']}\n"
+        # Construct the prompt, placing CORE_DECISION_LOGIC first
+        template = f"""
+You are {config.name}, an autonomous {config.role} with access to specialized capabilities and tools.
 
-        # Base template
-        template = f"""You are {{name}}, an AI agent.
+PERSONALITY: {config.personality}
 
-{capabilities_str}
+YOUR PRIMARY DIRECTIVE: Complete user requests efficiently and invisibly. Never reveal your internal decision-making process unless explicitly asked.
 
-Personality: {{personality}}
+{CORE_DECISION_LOGIC.strip()}
 
-{AGENT_FRAMEWORK}
-
-{tools_str}
-{COLLABORATION_PROTOCOL}
-{TOOL_USAGE_GUIDE}
-
-COMMON KNOWLEDGE YOU SHOULD HANDLE DIRECTLY:{COMMON_KNOWLEDGE_TASKS}
-
-{AGENT_BEST_PRACTICES}
-
-{BASE_RESPONSE_FORMAT}"""
-
-        # Add mode-specific instructions
-        if config.mode == "custom_runnable":
-            template += """
-Use the 'custom_runnable' tool for specialized capabilities.
+{BASE_RESPONSE_FORMAT.strip()}
 """
+        # Add payment capability info if enabled
+        if config.enable_payments and config.payment_token_symbol:
+            from .agent_templates import (  # Lazy import
+                PAYMENT_CAPABILITY_TEMPLATE,
+            )
 
+            payment_capability = PAYMENT_CAPABILITY_TEMPLATE.format(
+                TOKEN_SYMBOL=config.payment_token_symbol
+            )
+            template += f"\n{payment_capability.strip()}\n"
+
+        # Add any other additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "name": config.name,
-                "personality": config.personality,
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def create_human_message_prompt(content: str) -> HumanMessagePromptTemplate:
@@ -740,7 +709,6 @@ Use the 'custom_runnable' tool for specialized capabilities.
         ] = None,
         include_history: bool = True,
         system_prompt: Optional[str] = None,
-        tools: Optional[List] = None,
     ) -> ChatPromptTemplate:
         """
         Create a prompt template based on the prompt type and configuration.
@@ -750,7 +718,6 @@ Use the 'custom_runnable' tool for specialized capabilities.
             config: Configuration for the prompt
             include_history: Whether to include message history
             system_prompt: Optional system prompt text
-            tools: Optional list of tools
 
         Returns:
             A ChatPromptTemplate
@@ -827,7 +794,7 @@ Use the 'custom_runnable' tool for specialized capabilities.
                 system_message = cls.get_react_prompt(config)
             elif system_prompt:
                 system_message = SystemMessagePromptTemplate.from_template(
-                    system_prompt + "\n\n" + COLLABORATION_PROTOCOL
+                    system_prompt
                 )
             else:
                 raise ValueError(

@@ -203,6 +203,7 @@ class AgentWorkflow:
         tools: PromptTools,
         prompt_templates: PromptTemplates,
         custom_tools: Optional[List[BaseTool]] = None,
+        verbose: bool = False,
     ):
         """
         Initialize the agent workflow.
@@ -213,6 +214,7 @@ class AgentWorkflow:
             tools: Tools available to the agent
             prompt_templates: Prompt templates for the agent
             custom_tools: Optional list of custom LangChain tools
+            verbose: Whether to print verbose output
         """
         self.agent_id = agent_id
         self.llm = llm
@@ -220,7 +222,7 @@ class AgentWorkflow:
         self.prompt_templates = prompt_templates
         self.custom_tools = custom_tools or []
         self.workflow = None
-
+        self.verbose = verbose
         # Set the mode based on whether custom tools are provided
         self.mode = AgentMode.SYSTEM_PROMPT
 
@@ -240,59 +242,30 @@ class AgentWorkflow:
         """
         # Get system prompt information
         if hasattr(self, "system_prompt_config"):
-            name = self.system_prompt_config.name
-            personality = self.system_prompt_config.personality
-            capabilities = self.system_prompt_config.capabilities
-        else:
-            name = "AI Assistant"
-            personality = "helpful and professional"
-            capabilities = []
-
-        # Format capability descriptions for the prompt
-        capability_descriptions = []
-        if capabilities:
-            for cap in capabilities:
-                capability_descriptions.append(
-                    {
-                        "name": cap.name,
-                        "description": cap.description,
-                    }
-                )
-        else:
-            capability_descriptions = [
-                {"name": "Conversation", "description": "general assistance"}
-            ]
-
-        # Format tool descriptions for the prompt
-        tool_descriptions = []
-
-        # Add tools from PromptTools
-        for tool in self.tools.get_tools_for_workflow(agent_id=self.agent_id):
-            tool_descriptions.append(
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                }
+            # Pass all system_prompt_config properties to ReactConfig
+            react_config = ReactConfig(
+                name=self.system_prompt_config.name,
+                capabilities=[
+                    {"name": cap.name, "description": cap.description}
+                    for cap in self.system_prompt_config.capabilities
+                ],
+                personality=self.system_prompt_config.personality,
+                mode=self.mode.value,
+                additional_context=self.system_prompt_config.additional_context,
+                enable_payments=self.system_prompt_config.enable_payments,
+                payment_token_symbol=self.system_prompt_config.payment_token_symbol,
+                role=self.system_prompt_config.role,
             )
-
-        # Add custom tools if available
-        if self.custom_tools:
-            for tool in self.custom_tools:
-                tool_descriptions.append(
-                    {
-                        "name": tool.name,
-                        "description": tool.description,
-                    }
-                )
-
-        # Create the React prompt template
-        react_config = ReactConfig(
-            name=name,
-            capabilities=capability_descriptions,
-            personality=personality,
-            mode=self.mode.value,
-            tools=tool_descriptions,
-        )
+        else:
+            # Default configuration if system_prompt_config isn't available
+            react_config = ReactConfig(
+                name="AI Assistant",
+                capabilities=[
+                    {"name": "Conversation", "description": "general assistance"}
+                ],
+                personality="helpful and professional",
+                mode=self.mode.value,
+            )
 
         # Create the react prompt using the prompt templates
         react_prompt = self.prompt_templates.create_prompt(
@@ -329,6 +302,7 @@ class AgentWorkflow:
             model=self.llm,
             tools=base_tools,
             prompt=react_prompt,
+            debug=self.verbose,
         )
 
         # Create the workflow graph
@@ -353,26 +327,6 @@ class AgentWorkflow:
                 The updated state
             """
             import time
-
-            # Initialize state properties if not present
-            if "mode" not in state:
-                state["mode"] = self.mode.value
-            if "capabilities" not in state and hasattr(self, "system_prompt_config"):
-                state["capabilities"] = self.system_prompt_config.capabilities
-            if "collaboration_results" not in state:
-                state["collaboration_results"] = {}
-            if "agents_found" not in state:
-                state["agents_found"] = []
-            if "retry_count" not in state:
-                state["retry_count"] = {}
-
-            # Initialize context management properties
-            if "context_reset" not in state:
-                state["context_reset"] = False
-            if "topic_changed" not in state:
-                state["topic_changed"] = False
-            if "last_interaction_time" not in state:
-                state["last_interaction_time"] = time.time()
 
             # Check for long gaps between interactions (over 30 minutes)
             current_time = time.time()
@@ -600,6 +554,7 @@ class AIAgentWorkflow(AgentWorkflow):
         tools: PromptTools,
         prompt_templates: PromptTemplates,
         custom_tools: Optional[List[BaseTool]] = None,
+        verbose: bool = False,
     ):
         """
         Initialize the AI agent workflow.
@@ -611,9 +566,10 @@ class AIAgentWorkflow(AgentWorkflow):
             tools: Tools available to the agent
             prompt_templates: Prompt templates for the agent
             custom_tools: Optional list of custom LangChain tools
+            verbose: Whether to print verbose output
         """
         self.system_prompt_config = system_prompt_config
-        super().__init__(agent_id, llm, tools, prompt_templates, custom_tools)
+        super().__init__(agent_id, llm, tools, prompt_templates, custom_tools, verbose)
 
 
 class TaskDecompositionWorkflow(AgentWorkflow):
@@ -635,6 +591,7 @@ class TaskDecompositionWorkflow(AgentWorkflow):
         tools: PromptTools,
         prompt_templates: PromptTemplates,
         custom_tools: Optional[List[BaseTool]] = None,
+        verbose: bool = False,
     ):
         """
         Initialize the task decomposition workflow.
@@ -646,9 +603,10 @@ class TaskDecompositionWorkflow(AgentWorkflow):
             tools: Tools available to the agent
             prompt_templates: Prompt templates for the agent
             custom_tools: Optional list of custom LangChain tools
+            verbose: Whether to print verbose output
         """
         self.system_prompt_config = system_prompt_config
-        super().__init__(agent_id, llm, tools, prompt_templates, custom_tools)
+        super().__init__(agent_id, llm, tools, prompt_templates, custom_tools, verbose)
 
 
 class CollaborationRequestWorkflow(AgentWorkflow):
@@ -670,6 +628,7 @@ class CollaborationRequestWorkflow(AgentWorkflow):
         tools: PromptTools,
         prompt_templates: PromptTemplates,
         custom_tools: Optional[List[BaseTool]] = None,
+        verbose: bool = False,
     ):
         """
         Initialize the collaboration request workflow.
@@ -681,9 +640,10 @@ class CollaborationRequestWorkflow(AgentWorkflow):
             tools: Tools available to the agent
             prompt_templates: Prompt templates for the agent
             custom_tools: Optional list of custom LangChain tools
+            verbose: Whether to print verbose output
         """
         self.system_prompt_config = system_prompt_config
-        super().__init__(agent_id, llm, tools, prompt_templates, custom_tools)
+        super().__init__(agent_id, llm, tools, prompt_templates, custom_tools, verbose)
 
 
 def create_workflow_for_agent(
@@ -694,6 +654,7 @@ def create_workflow_for_agent(
     prompt_templates: PromptTemplates,
     agent_id: Optional[str] = None,
     custom_tools: Optional[List[BaseTool]] = None,
+    verbose: bool = False,
 ) -> AgentWorkflow:
     """
     Factory function to create workflows based on agent type.
@@ -706,6 +667,7 @@ def create_workflow_for_agent(
         prompt_templates: Prompt templates for the agent
         agent_id: Optional agent ID for tool context
         custom_tools: Optional list of custom LangChain tools
+        verbose: Whether to print verbose output
 
     Returns:
         An AgentWorkflow instance
@@ -723,6 +685,12 @@ def create_workflow_for_agent(
     # It's now set in AIAgent._initialize_workflow before this function is called
     logger.debug(f"Creating workflow for agent: {agent_id}")
 
+    # Check for payment capabilities in the system config
+    if system_config.enable_payments:
+        logger.info(
+            f"Agent {agent_id}: Creating workflow with payment capabilities enabled for {system_config.payment_token_symbol}"
+        )
+
     # Create the appropriate workflow based on agent type
     if agent_type == "ai":
         workflow = AIAgentWorkflow(
@@ -732,6 +700,7 @@ def create_workflow_for_agent(
             tools=tools,
             prompt_templates=prompt_templates,
             custom_tools=custom_tools,
+            verbose=verbose,
         )
     elif agent_type == "task_decomposition":
         workflow = TaskDecompositionWorkflow(
@@ -741,6 +710,7 @@ def create_workflow_for_agent(
             tools=tools,
             prompt_templates=prompt_templates,
             custom_tools=custom_tools,
+            verbose=verbose,
         )
     elif agent_type == "collaboration_request":
         workflow = CollaborationRequestWorkflow(
@@ -750,6 +720,7 @@ def create_workflow_for_agent(
             tools=tools,
             prompt_templates=prompt_templates,
             custom_tools=custom_tools,
+            verbose=verbose,
         )
     else:
         raise ValueError(f"Unknown agent type: {agent_type}")

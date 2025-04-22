@@ -155,6 +155,10 @@ class TelegramAIAgent(AIAgent):
             max_tokens_per_minute: Rate limiting for token usage per minute
             max_tokens_per_hour: Rate limiting for token usage per hour
             telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
+            enable_payments: Whether to enable payments
+            verbose: Whether to enable verbose logging
+            wallet_data_dir: Directory to store wallet data
+            external_callbacks: List of external callbacks to use
         """
         # Define Telegram-specific capabilities
         telegram_capabilities = [

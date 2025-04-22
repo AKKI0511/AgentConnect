@@ -28,8 +28,19 @@ The `AIAgent` class is an autonomous, independent AI implementation that can ope
 - Rate limiting and cooldown mechanisms
 - Workflow-based processing that can include its own internal agent system
 - Tool integration for enhanced capabilities
+- Optional payment capabilities for agent-to-agent transactions
 
 Each AI agent can operate completely independently, potentially with its own internal multi-agent structure, while still being able to discover and communicate with other independent agents across the network.
+
+#### Payment Integration
+
+When created with `enable_payments=True`, the `AIAgent` integrates payment capabilities:
+
+- **Wallet Setup**: Triggers wallet initialization in `BaseAgent.__init__`
+- **AgentKit Tools**: Payment tools (e.g., `native_transfer`, `erc20_transfer`) are automatically added to the agent's workflow in `AIAgent._initialize_workflow`
+- **LLM Decision Making**: The agent's LLM decides when to use payment tools based on prompt instructions in templates like `CORE_DECISION_LOGIC` and `PAYMENT_CAPABILITY_TEMPLATE`
+- **Network Support**: Default support for Base Sepolia testnet, configurable to other networks
+- **Transaction Verification**: Built-in transaction verification and confirmation
 
 ### HumanAgent
 
@@ -243,3 +254,4 @@ if not message.verify(agent.identity):
 5. **Resource Management**: Be mindful of resource usage when creating multiple independent AI agents.
 6. **Secure Communication**: Always verify message signatures to maintain security in the decentralized network.
 7. **Autonomous Operation**: Design agents that can make independent decisions without central control.
+8. **Secure CDP Keys**: When using `enable_payments=True`, ensure CDP API keys are handled securely and never exposed.

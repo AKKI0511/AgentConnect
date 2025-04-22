@@ -80,6 +80,14 @@ AgentConnect empowers developers to create a truly decentralized ecosystem of AI
       </ul>
     </td>
     <td>
+      <h3>💰 Agent Economy</h3>
+      <ul>
+        <li>Agent-to-agent payments</li>
+        <li>Automated service transactions</li>
+        <li>Coinbase CDP integration</li>
+      </ul>
+    </td>
+    <td>
       <h3>🔌 Multi-Provider Support</h3>
       <ul>
         <li>OpenAI</li>
@@ -88,12 +96,30 @@ AgentConnect empowers developers to create a truly decentralized ecosystem of AI
         <li>Google AI</li>
       </ul>
     </td>
+  </tr>
+  <tr>
     <td>
       <h3>📊 Monitoring (LangSmith)</h3>
       <ul>
         <li>Comprehensive tracing</li>
         <li>Debugging capabilities</li>
         <li>Performance analysis</li>
+      </ul>
+    </td>
+    <td>
+      <h3>🌐 Capability Advertising</h3>
+      <ul>
+        <li>Service discovery</li>
+        <li>Skill broadcasting</li>
+        <li>Dynamic fee negotiation</li>
+      </ul>
+    </td>
+    <td>
+      <h3>🔗 Blockchain Integration</h3>
+      <ul>
+        <li>Cryptocurrency transactions</li>
+        <li>Transaction verification</li>
+        <li>Base Sepolia support</li>
       </ul>
     </td>
   </tr>
@@ -114,6 +140,15 @@ copy example.env .env  # Windows
 cp example.env .env    # Linux/Mac
 ```
 
+Set required environment variables in your `.env` file:
+```
+# Required for AI providers (at least one)
+OPENAI_API_KEY=your_openai_api_key
+# Optional for payment capabilities
+CDP_API_KEY_NAME=your_cdp_api_key_name
+CDP_API_KEY_PRIVATE_KEY=your_cdp_api_key_private_key
+```
+
 For detailed installation instructions and configuration options, see the [QuickStart Guide](docs/source/quickstart.md) and [Installation Guide](docs/source/installation.md).
 
 ## 🎮 Usage
@@ -132,6 +167,7 @@ AgentConnect includes several example applications to demonstrate different feat
 - **Research Assistant**: Task delegation and information retrieval
 - **Data Analysis**: Specialized data processing
 - **Telegram Assistant**: Telegram AI agent with multi-agent collaboration
+- **Agent Economy**: Autonomous workflow with automatic cryptocurrency payments between agents
 
 For code examples and detailed descriptions, see the [Examples Directory](examples/README.md).
 
@@ -180,6 +216,7 @@ AgentConnect integrates with LangSmith for comprehensive monitoring:
     *   View detailed traces of agent interactions
     *   Debug complex reasoning chains
     *   Analyze token usage and performance
+    *   Track payment tool calls from AgentKit integration
 
 ## 🛠️ Development
 
@@ -225,7 +262,7 @@ AgentConnect/
 - ✅ **MVP with basic agent-to-agent interactions**
 - ✅ **Autonomous communication between agents**  
 - ✅ **Capability-based agent discovery**
-- ⬜ **Coinbase AgentKit Payment Integration**
+- ✅ **Coinbase AgentKit Payment Integration**
 - ⬜ **Agent Identity & Reputation System**
 - ⬜ **Marketplace-Style Agent Discovery**
 - ⬜ **MCP Integration**

@@ -131,7 +131,7 @@ class AIAgent(BaseAgent):
             custom_tools: Optional list of custom LangChain tools for the agent
             agent_type: Type of agent workflow to create
             enable_payments: Whether to enable payment capabilities
-            verbose:
+            verbose: Whether to enable verbose logging
             wallet_data_dir: Optional custom directory for wallet data storage
             external_callbacks: Optional list of external callback handlers to include
         """

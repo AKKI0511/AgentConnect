@@ -51,6 +51,7 @@ The central registry for agent discovery and management:
 - **Agent Lifecycle Management**: Track agent status and handle registration/unregistration
 - **Organization Management**: Group agents by organization
 - **Vector Search Integration**: Coordinate with the capability discovery service
+- **Payment Address Storage**: Store and provide agent payment addresses during discovery
 
 Key methods:
 - `register()`: Register an agent with the registry
@@ -96,6 +97,7 @@ Data structure for agent registration information:
 - **Capabilities**: List of agent capabilities
 - **Identity Information**: Agent identity credentials
 - **Organization Details**: Information about the agent's organization
+- **Payment Address**: Optional cryptocurrency address for agent-to-agent payments
 
 ### Message (`message.py`)
 
@@ -123,6 +125,18 @@ The `types.py` file defines core types used throughout the framework:
 - **AgentIdentity**: Decentralized identity for agents
 - **MessageType**: Types of messages that can be exchanged
 - **ProtocolVersion**: Supported protocol versions
+- **AgentMetadata**: Agent information including optional payment address
+
+### Payment Integration
+
+The core module integrates with the Coinbase Developer Platform (CDP) for payment capabilities:
+
+- **BaseAgent Wallet Setup**: `BaseAgent.__init__` conditionally initializes agent wallets when `enable_payments=True`
+- **Payment Address Storage**: `payment_address` field in `AgentMetadata` and `AgentRegistration` 
+- **Payment Constants**: Default token symbol and amounts defined in `payment_constants.py`
+- **Capability Discovery**: Payment addresses are included in agent search results
+
+For details on how agents use payment capabilities, see `agentconnect/agents/README.md`.
 
 ### Exceptions (`exceptions.py`)
 

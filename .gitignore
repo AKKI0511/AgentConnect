@@ -190,6 +190,9 @@ examples/visualizations/
 # telegram
 groups.txt
 
+# Agent wallet data
+data/
+
 # VS Code
 .vscode/
 .idea/

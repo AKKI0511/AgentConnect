@@ -36,7 +36,7 @@ class AgentRegistry:
     by capability, and verifying agent identities.
     """
 
-    def __init__(self, vector_search_config: Dict[str, Any] = None):
+    def __init__(self, vector_search_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the agent registry.
 

@@ -24,7 +24,7 @@ Key differentiators:
 For detailed usage examples, see the README.md or visit the documentation.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 # Import subpackages to make them available to users
 from agentconnect import agents

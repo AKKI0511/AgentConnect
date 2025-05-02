@@ -286,7 +286,8 @@ class AgentWorkflow:
         base_tools = [
             self.tools.create_agent_search_tool(),
             self.tools.create_send_collaboration_request_tool(),
-            self.tools.create_task_decomposition_tool(),
+            self.tools.create_check_collaboration_result_tool(),
+            # self.tools.create_task_decomposition_tool(),
         ]
 
         # Add custom tools if available
@@ -476,9 +477,20 @@ class AgentWorkflow:
                     from sklearn.feature_extraction.text import TfidfVectorizer
                     from sklearn.metrics.pairwise import cosine_similarity
 
-                    # Extract the content from the last few messages
+                    # Extract the content from the last few messages, only if it's a string
                     recent_contents = [
-                        msg.content for msg in messages[-4:] if hasattr(msg, "content")
+                        (
+                            msg.content
+                            if isinstance(msg.content, str)
+                            else str(msg.content)
+                        )
+                        for msg in messages[-4:]
+                        if hasattr(msg, "content")
+                    ]
+
+                    # Filter out any empty or non-string contents
+                    recent_contents = [
+                        c for c in recent_contents if isinstance(c, str) and c.strip()
                     ]
 
                     if len(recent_contents) >= 2:

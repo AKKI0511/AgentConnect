@@ -294,7 +294,7 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
                     success = json_data.get("success")
                     if success is True:
                         status = "completed successfully."
-                        response_snippet = f" Response: {self._get_short_snippet(json_data.get("response"), 60)}..."
+                        response_snippet = f" Response: {self._get_short_snippet(json_data.get('response'), 60)}..."
                     elif success is False:
                         status = "failed."
                         error_reason = json_data.get("response", "Unknown reason")

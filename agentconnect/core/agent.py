@@ -878,6 +878,55 @@ class BaseAgent(ABC):
         logger.debug(f"Agent {self.agent_id} can receive message from {sender_id}.")
         return True
 
+    async def stop(self) -> None:
+        """
+        Stop the agent and cleanup resources.
+
+        This method stops the agent's processing loop, ends all active conversations,
+        and cleans up resources such as wallet providers and message queues.
+
+        Returns:
+            None
+        """
+        logger.info(f"Agent {self.agent_id}: Stopping agent...")
+
+        # Mark agent as not running to stop the message processing loop
+        self.is_running = False
+
+        # End all active conversations
+        for participant_id in list(self.active_conversations.keys()):
+            self.end_conversation(participant_id)
+
+        # Clean up wallet provider if it exists
+        if self.wallet_provider is not None:
+            try:
+                # Clean up any pending transactions or listeners
+                # Note: Additional cleanup may be needed depending on wallet implementation
+                self.wallet_provider = None
+                self.agent_kit = None
+                logger.debug(f"Agent {self.agent_id}: Cleaned up wallet provider")
+            except Exception as e:
+                logger.error(
+                    f"Agent {self.agent_id}: Error cleaning up wallet provider: {e}"
+                )
+
+        # Clear message queue to prevent processing any more messages
+        try:
+            while not self.message_queue.empty():
+                self.message_queue.get_nowait()
+                self.message_queue.task_done()
+            logger.debug(f"Agent {self.agent_id}: Cleared message queue")
+        except Exception as e:
+            logger.error(f"Agent {self.agent_id}: Error clearing message queue: {e}")
+
+        # Reset cooldown
+        self.reset_cooldown()
+
+        # Clear pending requests
+        self.pending_requests.clear()
+
+        logger.info(f"Agent {self.agent_id}: Agent stopped successfully")
+
     def reset_cooldown(self) -> None:
         """
         Reset the cooldown state of the agent.

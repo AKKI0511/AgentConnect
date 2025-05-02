@@ -58,6 +58,7 @@ dependencies = [
     "coinbase-agentkit-langchain (>=0.3.0,<0.4.0)",
     "accelerate (>=1.6.0,<2.0.0)",
     "markdownify (>=1.1.0,<2.0.0)",
+    "langchain-openai (>=0.3.14,<0.4.0)",
 ]
 
 [project.scripts]

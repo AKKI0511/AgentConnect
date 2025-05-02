@@ -4,7 +4,9 @@
   <img src="docs/source/_static/long_logo.png" alt="AgentConnect Logo" width="80%"/>
 </picture>
 
-*Build and connect independent AI agents that discover, interact, and collaborate securely.*
+*A Decentralized Framework for Autonomous Agent Collaboration*
+
+**Build and connect independent AI agents that discover, interact, and collaborate securely.**
 
 [![CI](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml)
 [![Docs](https://github.com/AKKI0511/AgentConnect/actions/workflows/docs.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/docs.yml)
@@ -13,33 +15,38 @@
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-[Installation](#-installation) •
+[Installation](#quick-start) •
 [Documentation](https://AKKI0511.github.io/AgentConnect/) •
-[Examples](examples/README.md) •
+[Examples](#examples) •
 [Contributing](CONTRIBUTING.md)
 
 </div>
 
 ## 📖 Overview
 
-AgentConnect is a revolutionary framework for building and connecting *independent* AI agents.  Unlike traditional multi-agent systems that operate within a single, centrally controlled environment, AgentConnect enables the creation of a *decentralized network* of autonomous agents.  These agents can:
+**AgentConnect provides a framework for building decentralized networks of truly autonomous AI agents, enabling the next generation of collaborative AI.**
 
-*   **Operate Independently:** Each agent is a self-contained system, potentially with its own internal multi-agent structure (using LangGraph, custom logic, or any other approach).
-*   **Discover Each Other Dynamically:** Agents discover each other based on *capabilities*, not pre-defined connections.  This allows for a flexible and adaptable network.
-*   **Communicate Securely:** Built-in message signing, verification, and communication protocols ensure secure interactions.
-*   **Collaborate on Complex Tasks:** Agents can request services from each other, exchange data, and work together to achieve goals.
-*   **Scale Horizontally:** The framework is designed to support thousands of independent agents, each with its own internal complexity.
+Move beyond traditional, centrally controlled systems and embrace an ecosystem where independent agents can:
 
-AgentConnect empowers developers to create a truly decentralized ecosystem of AI agents, opening up possibilities for complex, collaborative AI applications that were previously impossible.
+*   **Discover peers on-demand:** Locate partners via **capability broadcasts** instead of hard-wired endpoints.
+*   **Interact Securely (A2A):** Leverage built-in cryptographic verification for **trustworthy Agent-to-Agent** communication.
+*   **Execute Complex Workflows:** Request services, exchange value, and achieve goals collectively.
+*   **Autonomous Operation:** Each agent hosts its own logic—no central brain required.
+*   **Scale Limitlessly:** Support thousands of agents interacting seamlessly.
 
 ### Why AgentConnect?
 
-*   **Beyond Hierarchies:** Break free from the limitations of traditional, centrally controlled multi-agent systems.
-*   **True Agent Autonomy:** Build agents that are truly independent and can interact with any other agent in the network.
-*   **Dynamic and Flexible:**  The network adapts as agents join, leave, and update their capabilities.
-*   **Secure by Design:**  Cryptographic message verification and standardized protocols ensure secure interactions.
-*   **Unprecedented Scalability:**  Designed to scale to thousands of interacting agents.
-*   **Extensible and Customizable:**  Easily integrate custom agents, capabilities, and communication protocols.
+AgentConnect delivers unique advantages over classic multi-agent approaches:
+
+*   **Decentralized Architecture:** No central router, no single point of failure.
+*   **First-class agent autonomy:** Agents negotiate, cooperate, and evolve independently.
+*   **Interconnect Agent Systems:** Operates above internal frameworks, linking entire agent swarms.
+*   **Living ecosystem:** The network fluidly adapts as agents join, leave, or evolve their skills.
+*   **Secure A2A Communication:** Crypto-grade identity & message signing baked in.
+*   **Horizontal scalability:** Engineered for planet-scale agent populations.
+*   **Plug-and-play extensibility:** Easily integrate custom agents, capabilities, and protocols.
+*   **Integrated Agent Economy:** Seamless A2A payments powered by **Coinbase CDP & AgentKit**.
+
 
 ## ✨ Key Features
 
@@ -48,78 +55,77 @@ AgentConnect empowers developers to create a truly decentralized ecosystem of AI
     <td width="33%">
       <h3>🤖 Dynamic Agent Discovery</h3>
       <ul>
-        <li>Capability-based matching</li>
-        <li>Flexible and adaptable network</li>
-        <li>No pre-defined connections</li>
+        <li>Capability-Based lookup</li>
+        <li>Decentralized Registry</li>
+        <li>Zero static links</li>
       </ul>
     </td>
     <td width="33%">
-      <h3>⚡ Decentralized Communication</h3>
+      <h3>⚡ A2A Communication</h3>
       <ul>
-        <li>Secure message routing</li>
-        <li>No central control</li>
-        <li>Reliable message delivery</li>
+        <li>Direct Agent-to-Agent Messaging</li>
+        <li>Cryptographic signatures</li>
+        <li>No routing bottlenecks</li>
       </ul>
     </td>
     <td width="33%">
-      <h3>⚙️ Autonomous Agents</h3>
+      <h3>⚙️ True Agent Autonomy</h3>
       <ul>
-        <li>Independent operation</li>
-        <li>Own processing loop</li>
-        <li>Potentially complex internal structure</li>
+        <li>Independent Operation & Logic</li>
+        <li>Self-Managed Lifecycles</li>
+        <li>Unrestricted Collaboration</li>
       </ul>
     </td>
   </tr>
   <tr>
     <td>
-      <h3>🔒 Secure Communication</h3>
+      <h3>🔒 Trust Layer</h3>
       <ul>
-        <li>Message signing and verification</li>
-        <li>Standardized protocols</li>
-        <li>Ensures secure interactions</li>
+        <li>Verifiable identities</li>
+        <li>Tamper-proof messages</li>
+        <li>Standard Security Protocols</li>
       </ul>
     </td>
     <td>
-      <h3>💰 Agent Economy</h3>
+      <h3>💰 Built-in Agent Economy</h3>
       <ul>
-        <li>Agent-to-agent payments</li>
-        <li>Automated service transactions</li>
-        <li>Coinbase CDP integration</li>
+        <li>Autonomous A2A Payments</li>
+        <li>Coinbase CDP Integration</li>
+        <li>Instant service settlement</li>
       </ul>
     </td>
     <td>
-      <h3>🔌 Multi-Provider Support</h3>
+      <h3>🔌 Multi-LLM Support</h3>
       <ul>
-        <li>OpenAI</li>
-        <li>Anthropic</li>
-        <li>Groq</li>
-        <li>Google AI</li>
+        <li>OpenAI, Anthropic, Groq, Google</li>
+        <li>Flexible AI Core Choice</li>
+        <li>Vendor-Agnostic Intelligence</li>
       </ul>
     </td>
   </tr>
   <tr>
     <td>
-      <h3>📊 Monitoring (LangSmith)</h3>
+      <h3>📊 Deep Observability</h3>
       <ul>
-        <li>Comprehensive tracing</li>
-        <li>Debugging capabilities</li>
-        <li>Performance analysis</li>
+        <li>LangSmith tracing</li>
+        <li>Monitor tools & payments</li>
+        <li>Custom Callbacks</li>
       </ul>
     </td>
     <td>
-      <h3>🌐 Capability Advertising</h3>
+      <h3>🌐 Dynamic Capability Advertising</h3>
       <ul>
-        <li>Service discovery</li>
-        <li>Skill broadcasting</li>
-        <li>Dynamic fee negotiation</li>
+        <li>Agent Skill Broadcasting</li>
+        <li>Market-Driven Discovery</li>
+        <li>On-the-Fly Collaboration</li>
       </ul>
     </td>
     <td>
-      <h3>🔗 Blockchain Integration</h3>
+      <h3>🔗 Native Blockchain Integration</h3>
       <ul>
-        <li>Cryptocurrency transactions</li>
-        <li>Transaction verification</li>
-        <li>Base Sepolia support</li>
+        <li>Coinbase AgentKit Ready</li>
+        <li>On-Chain Value Exchange</li>
+        <li>Configurable networks</li>
       </ul>
     </td>
   </tr>
@@ -264,6 +270,7 @@ AgentConnect/
 - ✅ **Capability-based agent discovery**
 - ✅ **Coinbase AgentKit Payment Integration**
 - ⬜ **Agent Identity & Reputation System**
+- ⬜ **Asynchronous Agent Collaboration System**
 - ⬜ **Marketplace-Style Agent Discovery**
 - ⬜ **MCP Integration**
 - ⬜ **Structured Parameters SDK**
@@ -287,8 +294,6 @@ See the [Changelog](CHANGELOG.md) for a detailed history of changes to the proje
 
 ## 🙏 Acknowledgments
 
-- Built with [FastAPI](https://fastapi.tiangolo.com/), [LangChain](https://www.langchain.com/), and 
-[React](https://reactjs.org/)
 - Inspired by the need for independent autonomous multi-agent collaboration with dynamic agent discovery
 - Thanks to all contributors who have helped shape this project
 

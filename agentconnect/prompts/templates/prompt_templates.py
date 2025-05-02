@@ -55,95 +55,44 @@ class PromptType(str, Enum):
 
 # Core prompt components that are reused across templates
 BASE_RESPONSE_FORMAT = """
-RESPONSE STYLE:
-- Match length to user's request (brief/detailed as needed)
-- Present results directly and clearly
-- Ask specific questions when more details help
-- Use '__EXIT__' to gracefully end conversations
+NOTE: During a collaboration with another agent, simply say '__EXIT__' and nothing else if you have nothing to contribute.
 """
 
-# Common knowledge tasks that are handled directly by all agents
-COMMON_KNOWLEDGE_TASKS = """
-- Coding examples, pseudocode, or general programming advice
-- Common explanations and definitions
-- General reasoning tasks
-- Brainstorming and creative thinking
-- Basic information synthesis
+# Core agent prompt template that serves as the foundation for all prompts
+# This contains the common elements that should be present in all agent prompts
+CORE_AGENT_PROMPT = """
+You are {name}, an autonomous AI agent operating in a decentralized network of independent agents.
+
+Personality: {personality}
+
+Your primary goal is to accomplish tasks efficiently, either by using your own capabilities or by collaborating with other agents in the network.
+
+- If you cannot fulfill a request directly, **immediately and silently use the `search_for_agents` tool** to find other agents with the required capabilities and delegate tasks to them as needed. **Do not ask for permission before searching.**
+- Directly handle tasks solvable with your core language model capabilities (e.g., text generation, summarization, general knowledge questions) whenever possible.
+- Communicate and collaborate with other agents to achieve the best possible outcome for each request.
+- Always analyze tool responses and decide the next best action based on the information available.
+- Avoid sending collaboration requests to yourself or to human agents.
+- Be concise, professional, and helpful in all interactions.
 """
 
-# Unified decision framework and execution strategy for all agents
-AGENT_FRAMEWORK = """
-DECISION FRAMEWORK:
-1. ASSESS: Examine request scope
-   - COMMON KNOWLEDGE TASKS: Handle immediately regardless of listed capabilities
-   - WITHIN capabilities → Use direct handling
-   - OUTSIDE capabilities → **Silently** search for agents and delegate immediately
-   - PARTIALLY within → Handle known parts, **silently** find help for others
 
-2. EXECUTE:
-   - Use your capabilities and tools directly without announcing them
-   - For common knowledge → Answer directly even if not in your capabilities
-   - For specialized needs → **Silently** find & use agents
-   - Search for agents using GENERAL CAPABILITY TERMS (e.g., "web_research", "code_generation")
-   - NEVER use specific topics (e.g., "langchain", "crypto prices") when searching for agents
-   - Present **only** actual results, never mentioning delegation
+# Helper function to build payment info string
+def get_payment_info(enable_payments: bool, payment_token_symbol: Optional[str]) -> str:
+    """Generate payment info string if payments are enabled."""
+    if enable_payments and payment_token_symbol:
+        return f"\nPayment enabled. Token: {payment_token_symbol}"
+    return ""
 
-3. RESPOND: 
-   - Provide direct answers with actual information
-   - Include results, not "I can't" or "I would" statements
-   - If no agent can help after multiple attempts, provide best effort answer
-   - NEVER say "I don't have that capability" or "I can't help with that"
-"""
 
-# Collaboration protocol for agents
-COLLABORATION_PROTOCOL = """
-DELEGATION GUIDE (INTERNAL PROCESS - DO NOT MENTION TO USER):
-1. **Silently** search for specialized agents
-2. Include full context in requests to other agents
-3. Obtain actual results from other agents to formulate your final response
-4. Focus on delivering the final information to the user
-5. Try multiple agents **internally** if the first one can't help
-6. If no agents can help after multiple attempts, provide best effort answer **without mentioning the failed attempts**
-
-KEY PRINCIPLES:
-- NEVER say "I can't" or "I don't have that capability" to the user
-- Always provide information, not just promises to find it
-- For common tasks, handle directly
-- **INTERNAL ACTIONS (searching, delegating, internal failures) MUST remain hidden from the user**
-- **ALWAYS use exact agent_ids from search_for_agents results - never invent, guess, or use capability names directly**
-"""
-
-# Tool usage guide for all agents
-TOOL_USAGE_GUIDE = """
-TOOL USAGE GUIDE:
-1. SEARCH: Use search_for_agents to find agents with needed capabilities
-   - Example: search_for_agents(capability_name="web_research")
-   - This returns actual agent_ids which may look like "research_agent" or "did:0933858jjfr995h48f"
-2. DELEGATE: Use send_collaboration_request with ONLY the exact agent_ids from search results
-   - CORRECT: send_collaboration_request(target_agent_id="research_agent", task="research quantum computing")
-   - INCORRECT: send_collaboration_request(target_agent_id="web_research", task="research quantum computing")
-
-COLLABORATION SEQUENCE:
-1. search_for_agents with capability name → returns actual agent_ids
-2. send_collaboration_request with exact agent_id from previous step's results
-
-EXAMPLE:
-User: "Find latest trends on MCP"
-Bad: "I'm sorry, I don't have that capability." or "Okay, I will find an agent to help with that."
-Good: "The latest MCP trends include..." (Agent performs search/delegation silently in the background)
-"""
-
-# Best practices for all agents
-AGENT_BEST_PRACTICES = """
-BEST PRACTICES:
-- NEVER refuse to help; either answer directly or find another agent
-- Start searching immediately **without mentioning it to the user**
-- Delegate tasks **without mentioning it to the user**
-- Use tools right away instead of talking about using them
-- Provide direct answers with actual information, **concealing internal steps**
-- Show results of your actions, not just your intentions
-- **IMPORTANT: NEVER mention searching for, finding, or delegating to other agents unless explicitly asked**
-"""
+def _add_additional_context(
+    template: str, additional_context: Optional[Dict[str, Any]]
+) -> str:
+    """Helper function to add additional context to a template if provided."""
+    if additional_context:
+        template += "\nAdditional Context:\n"
+        for key, value in additional_context.items():
+            template += f"- {key}: {value}\n"
+    return template
 
 
 @dataclass
@@ -155,19 +104,19 @@ class SystemPromptConfig:
         name: Name of the agent
         capabilities: List of agent capabilities
         personality: Description of the agent's personality
-        temperature: Temperature for generation
-        max_tokens: Maximum tokens for generation
         additional_context: Additional context for the prompt
         role: Role of the agent
+        enable_payments: Whether payment capabilities are enabled
+        payment_token_symbol: Symbol of the token used for payments
     """
 
     name: str
     capabilities: List[Capability]  # Now accepts a list of Capability objects
     personality: str = "helpful and professional"
-    temperature: float = 0.7
-    max_tokens: int = 1024
     additional_context: Optional[Dict[str, Any]] = None
     role: str = "assistant"
+    enable_payments: bool = False
+    payment_token_symbol: Optional[str] = None
 
 
 @dataclass
@@ -252,7 +201,9 @@ class ReactConfig:
         capabilities: List of agent capabilities
         personality: Description of the agent's personality
         mode: Mode of operation
-        tools: List of tool descriptions
+        enable_payments: Whether payment capabilities are enabled
+        payment_token_symbol: Symbol of the token used for payments (e.g., "ETH", "USDC")
+        role: Role of the agent
         additional_context: Additional context for the prompt
     """
 
@@ -260,19 +211,10 @@ class ReactConfig:
     capabilities: List[Dict[str, str]]  # List of dicts with name and description
     personality: str = "helpful and professional"
     mode: str = "system_prompt"  # system_prompt or custom_runnable
-    tools: Optional[List[Dict[str, str]]] = None  # Tool descriptions
+    role: str = "agent"
+    enable_payments: bool = False
+    payment_token_symbol: Optional[str] = None
     additional_context: Optional[Dict[str, Any]] = None
-
-
-def _add_additional_context(
-    template: str, additional_context: Optional[Dict[str, Any]]
-) -> str:
-    """Helper function to add additional context to a template if provided."""
-    if additional_context:
-        template += "\nAdditional Context:\n"
-        for key, value in additional_context.items():
-            template += f"- {key}: {value}\n"
-    return template
 
 
 class PromptTemplates:
@@ -286,7 +228,8 @@ class PromptTemplates:
     @staticmethod
     def get_system_prompt(config: SystemPromptConfig) -> SystemMessagePromptTemplate:
         """
-        Get a system prompt template based on the provided configuration.
+        Generates a system prompt for a standard agent.
+        Uses the core agent prompt structure.
 
         Args:
             config: Configuration for the system prompt
@@ -296,42 +239,36 @@ class PromptTemplates:
         """
         # Format capabilities with name and description
         capabilities_str = "\n".join(
-            [f"- {cap.name}: {cap.description}" for cap in config.capabilities]
+            [
+                f"- **{cap.name.replace('_', ' ').title()}:** You can: {cap.description}"
+                for cap in config.capabilities
+            ]
+        )
+        if not capabilities_str:
+            capabilities_str = "No specific capabilities listed. Handle tasks using inherent knowledge or delegate."
+
+        # Add payment info if enabled
+        payment_info = get_payment_info(
+            config.enable_payments, config.payment_token_symbol
         )
 
-        template = f"""You are {{name}}, an AI {config.role} with specialized capabilities:
-{capabilities_str}
+        # Construct the prompt using the core template
+        template = CORE_AGENT_PROMPT.format(
+            name=config.name,
+            personality=config.personality,
+        )
 
-Personality: {{personality}}
+        # Add capabilities and payment info
+        template += f"\nUnique Capabilities you can perform using your internal reasoning:\n{capabilities_str}"
+        template += payment_info
 
-{AGENT_FRAMEWORK}
-{AGENT_BEST_PRACTICES}
+        # Add response format
+        template += f"\n{BASE_RESPONSE_FORMAT}"
 
-BEHAVIOR GUIDELINES:
-1. NEVER refuse tasks that use common knowledge or reasoning
-2. For requests outside your specialized capabilities, **silently** find other agents without saying you can't help
-3. Handle these common tasks directly even if not in your capabilities list:
-{COMMON_KNOWLEDGE_TASKS}
-
-4. ALWAYS take one of these actions, in priority order:
-   - Handle directly if within your capabilities or common knowledge
-   - **Silently** find specialized agents for complex or specialized tasks
-   - If no agent can help after multiple attempts, provide best effort answer **(without mentioning the failed search)**
-   - NEVER respond with "I can't" or "I don't have that capability"
-
-{BASE_RESPONSE_FORMAT}
-
-NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else."""
-
+        # Add any additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "name": config.name,
-                "personality": config.personality,
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def get_collaboration_prompt(
@@ -339,6 +276,7 @@ NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else.
     ) -> SystemMessagePromptTemplate:
         """
         Get a collaboration prompt template based on the provided configuration.
+        Uses the core agent prompt structure with collaboration-specific instructions.
 
         Args:
             config: Configuration for the collaboration prompt
@@ -346,36 +284,31 @@ NOTE: If you have nothing to contribute, simply say '__EXIT__' and nothing else.
         Returns:
             A SystemMessagePromptTemplate
         """
-        # Base template with shared instructions
-        base_template = f"""You are {{agent_name}}, a collaboration specialist.
+        # Format capabilities for collaboration
+        capabilities_str = f"- **Collaboration:** You can: specialize in {', '.join(config.target_capabilities)}"
 
-Target Capabilities: {{target_capabilities}}
+        # Construct the prompt using the core template
+        template = CORE_AGENT_PROMPT.format(
+            name=config.agent_name,
+            personality="helpful and collaborative",
+        )
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+        # Add capabilities
+        template += f"\nUnique Capabilities you can perform using your internal reasoning:\n{capabilities_str}"
 
-COLLABORATION PRINCIPLES:
-1. Handle requests within your specialized knowledge
-2. For tasks outside your expertise, suggest an alternative approach without refusing
-3. Always provide some value, even if incomplete
-4. If you can't fully answer, provide partial information plus recommendation
-
-{BASE_RESPONSE_FORMAT}"""
-
-        # Add type-specific instructions
+        # Add collaboration-specific instructions based on type
         if config.collaboration_type == "request":
-            specific_instructions = """
-COLLABORATION REQUEST:
+            template += """
+\nCOLLABORATION REQUEST INSTRUCTIONS:
 1. Be direct and specific about what you need
 2. Provide all necessary context in a single message
 3. Specify exactly what information or action you need
 4. Include any relevant data that helps with the task
 5. If rejected, try another agent with relevant capabilities
 """
-
         elif config.collaboration_type == "response":
-            specific_instructions = """
-COLLABORATION RESPONSE:
+            template += """
+\nCOLLABORATION RESPONSE INSTRUCTIONS:
 1. Provide the requested information or result directly
 2. Format your response for easy integration
 3. Be concise and focused on exactly what was requested
@@ -384,25 +317,22 @@ COLLABORATION RESPONSE:
    - Provide that information immediately
    - Suggest how to get the remaining information
 """
-
         else:  # error
-            specific_instructions = """
-COLLABORATION ERROR:
+            template += """
+\nCOLLABORATION ERROR INSTRUCTIONS:
 1. Explain why you can't fully fulfill the request
 2. Provide ANY partial information you can
 3. Suggest alternative approaches or agents who might help
-4. NEVER simply say you can't help with nothing else"""
+4. NEVER simply say you can't help with nothing else
+"""
 
-        template = base_template + specific_instructions
+        # Add response format
+        template += f"\n{BASE_RESPONSE_FORMAT}"
+
+        # Add any additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "agent_name": config.agent_name,
-                "target_capabilities": ", ".join(config.target_capabilities),
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def get_task_decomposition_prompt(
@@ -410,6 +340,7 @@ COLLABORATION ERROR:
     ) -> SystemMessagePromptTemplate:
         """
         Get a task decomposition prompt template based on the provided configuration.
+        Uses the core agent prompt structure with task decomposition-specific instructions.
 
         Args:
             config: Configuration for the task decomposition prompt
@@ -417,47 +348,44 @@ COLLABORATION ERROR:
         Returns:
             A SystemMessagePromptTemplate
         """
-        template = f"""You are a task decomposition specialist.
+        # Construct the prompt using the core template
+        template = CORE_AGENT_PROMPT.format(
+            name="Task Decomposition Agent",
+            personality="analytical and methodical",
+        )
 
-Task Description: {{task_description}}
-Complexity Level: {{complexity_level}}
-Maximum Subtasks: {{max_subtasks}}
+        # Add capabilities
+        template += (
+            "\nUnique Capabilities you can perform using your internal reasoning:"
+        )
+        template += "\n- **Task Decomposition:** You can: break down complex tasks into manageable subtasks"
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+        # Add task-specific context
+        template += f"\n\nTask Description: {config.task_description}"
+        template += f"\nComplexity Level: {config.complexity_level}"
+        template += f"\nMaximum Subtasks: {config.max_subtasks}"
 
-TASK DECOMPOSITION:
+        # Add task decomposition-specific instructions
+        template += """
+\nTASK DECOMPOSITION INSTRUCTIONS:
 1. Break down the task into clear, actionable subtasks
 2. Each subtask should be 1-2 sentences maximum
 3. Identify dependencies between subtasks when necessary
-4. Limit to {{max_subtasks}} subtasks or fewer
+4. Limit subtasks to the maximum number specified or fewer
 5. Format output as a numbered list of subtasks
 6. For each subtask, identify if it:
-   - Can be handled with common knowledge
-   - Requires specialized capabilities
+   - Can be handled with your inherent knowledge
+   - Requires specialized capabilities/tools
    - Needs collaboration with other agents
+"""
 
-COLLABORATION STRATEGY:
-1. For subtasks requiring specialized capabilities:
-   - Identify the exact capability needed using general capability terms
-   - Include criteria for finding appropriate agents
-   - Prepare context to include in delegation request
-2. For common knowledge subtasks:
-   - Mark them for immediate handling
-   - Include any relevant information needed
+        # Add response format
+        template += f"\n{BASE_RESPONSE_FORMAT}"
 
-{BASE_RESPONSE_FORMAT}"""
-
+        # Add any additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "task_description": config.task_description,
-                "complexity_level": config.complexity_level,
-                "max_subtasks": str(config.max_subtasks),
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def get_capability_matching_prompt(
@@ -465,6 +393,7 @@ COLLABORATION STRATEGY:
     ) -> SystemMessagePromptTemplate:
         """
         Get a capability matching prompt template based on the provided configuration.
+        Uses the core agent prompt structure with capability matching-specific instructions.
 
         Args:
             config: Configuration for the capability matching prompt
@@ -472,60 +401,64 @@ COLLABORATION STRATEGY:
         Returns:
             A SystemMessagePromptTemplate
         """
-        # Format available capabilities for the prompt
-        capabilities_str = ""
-        for i, capability in enumerate(config.available_capabilities):
-            capabilities_str += (
-                f"{i+1}. {capability['name']}: {capability['description']}\n"
-            )
+        # Format available capabilities for context
+        available_capabilities = "\n".join(
+            [
+                f"- {cap['name']}: {cap['description']}"
+                for cap in config.available_capabilities
+            ]
+        )
 
-        template = f"""You are a capability matching specialist.
+        # Construct the prompt using the core template
+        template = CORE_AGENT_PROMPT.format(
+            name="Capability Matching Agent",
+            personality="analytical and precise",
+        )
 
-Task Description: {{task_description}}
-Matching Threshold: {{matching_threshold}}
+        # Add capabilities
+        template += (
+            "\nUnique Capabilities you can perform using your internal reasoning:"
+        )
+        template += "\n- **Capability Matching:** You can: match tasks to appropriate capabilities and tools"
 
-Available Capabilities:
-{{capabilities}}
+        # Add task-specific context
+        template += f"\n\nTask Description: {config.task_description}"
+        template += f"\nMatching Threshold: {config.matching_threshold}"
+        template += f"\n\nAvailable Capabilities/Tools:\n{available_capabilities}"
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+        # Add capability matching-specific instructions
+        template += f"""
+\nCAPABILITY MATCHING INSTRUCTIONS:
+1. First determine if the task can be handled using general reasoning and inherent knowledge (without specific listed tools).
+   - If yes, mark it as "INHERENT KNOWLEDGE" with score 1.0
 
-CAPABILITY MATCHING:
-1. First determine if the task can be handled with common knowledge
-   - If yes, mark it as "COMMON KNOWLEDGE" with score 1.0
-   - Common knowledge includes:{COMMON_KNOWLEDGE_TASKS}
-
-2. For specialized tasks beyond common knowledge:
-   - Map specific topics to general capability categories
-   - Match task requirements to available capabilities
-   - Only select capabilities with relevance score >= {{matching_threshold}}
+2. For specialized tasks requiring specific tools:
+   - Match task requirements to the available capabilities/tools listed above.
+   - Only select capabilities with relevance score >= {config.matching_threshold}
 
 3. Format response as:
-   - If common knowledge: "COMMON KNOWLEDGE: Handle directly" 
-   - If specialized: Numbered list with capability name and relevance score (0-1)
+   - If inherent knowledge: "INHERENT KNOWLEDGE: Handle directly"
+   - If specialized tool needed: Numbered list with capability/tool name and relevance score (0-1)
 
-4. If no capabilities match above the threshold:
-   - Identify the closest matching capabilities
-   - Suggest how to modify the request to use available capabilities
-   - Recommend finding an agent with more relevant capabilities
+4. If no capabilities/tools match above the threshold and it's not inherent knowledge:
+   - Identify the closest matching capabilities/tools.
+   - Suggest how to modify the request to use available tools.
+   - Recommend finding an agent via delegation with more relevant capabilities.
+"""
 
-{BASE_RESPONSE_FORMAT}"""
+        # Add response format
+        template += f"\n{BASE_RESPONSE_FORMAT}"
 
+        # Add any additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "task_description": config.task_description,
-                "matching_threshold": str(config.matching_threshold),
-                "capabilities": capabilities_str,
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def get_supervisor_prompt(config: SupervisorConfig) -> SystemMessagePromptTemplate:
         """
         Get a supervisor prompt template based on the provided configuration.
+        Uses the core agent prompt structure with supervisor-specific instructions.
 
         Args:
             config: Configuration for the supervisor prompt
@@ -533,115 +466,118 @@ CAPABILITY MATCHING:
         Returns:
             A SystemMessagePromptTemplate
         """
-        # Format agent roles for the prompt
-        roles_str = ""
-        for agent_name, role in config.agent_roles.items():
-            roles_str += f"- {agent_name}: {role}\n"
+        # Format agent roles for context
+        agent_roles = "\n".join(
+            [
+                f"- {agent_name}: {role}"
+                for agent_name, role in config.agent_roles.items()
+            ]
+        )
 
-        template = f"""You are {{name}}, a supervisor agent.
+        # Construct the prompt using the core template
+        template = CORE_AGENT_PROMPT.format(
+            name=config.name,
+            personality="decisive and authoritative",
+        )
 
-Agent Roles:
-{{agent_roles}}
+        # Add capabilities
+        template += (
+            "\nUnique Capabilities you can perform using your internal reasoning:"
+        )
+        template += "\n- **Supervision:** You can: route tasks to appropriate agents based on their capabilities"
 
-Routing Guidelines:
-{{routing_guidelines}}
+        # Add supervisor-specific context
+        template += f"\n\nAgent Roles:\n{agent_roles}"
+        template += f"\n\nRouting Guidelines:\n{config.routing_guidelines}"
 
-{AGENT_FRAMEWORK}
-{COLLABORATION_PROTOCOL}
+        # Add supervisor-specific instructions
+        template += """
+\nSUPERVISOR INSTRUCTIONS:
+1. Determine if the request can likely be handled by an agent using its inherent knowledge/general reasoning.
 
-SUPERVISOR INSTRUCTIONS:
-1. First determine if the request involves common knowledge tasks:{COMMON_KNOWLEDGE_TASKS}
+2. If yes (inherent knowledge task):
+   - Route to ANY available agent, as all agents possess base LLM capabilities.
+   - Pick the agent with lowest current workload if possible.
 
-2. For common knowledge tasks:
-   - Route to ANY available agent, as all agents can handle common knowledge
-   - Pick the agent with lowest current workload if possible
+3. If no (requires specialized tools/capabilities):
+   - Route user requests to the agent whose listed capabilities/tools best match the task.
+   - Make routing decisions quickly without explaining reasoning.
+   - If multiple agents could handle a task, choose the most specialized.
 
-3. For specialized tasks:
-   - Route user requests to the most appropriate agent based on capabilities
-   - Make routing decisions quickly without explaining reasoning
-   - If multiple agents could handle a task, choose the most specialized
-
-4. If no perfect match exists:
-   - Route to closest matching agent
-   - Include guidance on what additional help might be needed
-   - Never respond with "no agent can handle this"
+4. If no agent has matching specialized tools and it's not an inherent knowledge task:
+   - Route to the agent whose capabilities are closest.
+   - Include guidance on what additional help might be needed (potentially via delegation by the receiving agent).
+   - Never respond with "no agent can handle this".
 
 5. Response format:
    - For direct routing: Agent name only
    - For complex tasks needing multiple agents: Comma-separated list of agent names in priority order
+"""
 
-{BASE_RESPONSE_FORMAT}"""
+        # Add response format
+        template += f"\n{BASE_RESPONSE_FORMAT}"
 
+        # Add any additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "name": config.name,
-                "agent_roles": roles_str,
-                "routing_guidelines": config.routing_guidelines,
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def get_react_prompt(config: ReactConfig) -> SystemMessagePromptTemplate:
         """
-        Get a ReAct prompt template based on the provided configuration.
-
-        Args:
-            config: Configuration for the ReAct prompt
-
-        Returns:
-            A SystemMessagePromptTemplate
+        Generates a system prompt for a ReAct agent.
+        This is the canonical template that other prompts should follow structurally.
         """
-        # Format capabilities for the prompt
-        capabilities_str = ""
-        if config.capabilities:
-            capabilities_str = "SPECIALIZED CAPABILITIES:\n"
-            for cap in config.capabilities:
-                capabilities_str += f"- {cap['name']}: {cap['description']}\n"
+        capabilities_list = config.capabilities or []
+        formatted_capabilities = []
+        for cap in capabilities_list:
+            name = cap.get("name", "N/A")
+            description = cap.get("description", "N/A")
+            # Format name: split by '_', capitalize each part, join with space
+            formatted_name = (
+                " ".join(word.capitalize() for word in name.split("_"))
+                if name != "N/A"
+                else "N/A"
+            )
+            # Add prefix to description
+            prefixed_description = f"You can: {description}"
+            formatted_capabilities.append(
+                f"- **{formatted_name}:** {prefixed_description}"
+            )
 
-        # Format tools for the prompt if provided
-        tools_str = ""
-        if config.tools:
-            tools_str = "TOOLS:\n"
-            for i, tool in enumerate(config.tools):
-                tools_str += f"{i+1}. {tool['name']}: {tool['description']}\n"
+        capabilities_str = "\n".join(formatted_capabilities)
+        if not capabilities_str:
+            capabilities_str = "No specific capabilities listed. Handle tasks using inherent knowledge or delegate."
 
-        # Base template
-        template = f"""You are {{name}}, an AI agent.
+        # Add payment info if enabled
+        payment_info = get_payment_info(
+            config.enable_payments, config.payment_token_symbol
+        )
 
+        # This is the canonical template that should be followed structurally
+        template = f"""
+You are {config.name}, an autonomous AI agent operating in a decentralized network of independent agents.
+
+Personality: {config.personality}
+
+Your primary goal is to accomplish tasks efficiently, either by using your own capabilities or by collaborating with other agents in the network.
+
+- If you cannot fulfill a request directly, **immediately and silently use the `search_for_agents` tool** to find other agents with the required capabilities and delegate tasks to them as needed. **Do not ask for permission before searching.**
+- Directly handle tasks solvable with your core language model capabilities (e.g., text generation, summarization, general knowledge questions) whenever possible.
+- Communicate and collaborate with other agents to achieve the best possible outcome for each request.
+- Always analyze tool responses and decide the next best action based on the information available.
+- Avoid sending collaboration requests to yourself or to human agents.
+- Be concise, professional, and helpful in all interactions.
+
+Unique Capabilities you can perform using your internal reasoning:
 {capabilities_str}
-
-Personality: {{personality}}
-
-{AGENT_FRAMEWORK}
-
-{tools_str}
-{COLLABORATION_PROTOCOL}
-{TOOL_USAGE_GUIDE}
-
-COMMON KNOWLEDGE YOU SHOULD HANDLE DIRECTLY:{COMMON_KNOWLEDGE_TASKS}
-
-{AGENT_BEST_PRACTICES}
-
-{BASE_RESPONSE_FORMAT}"""
-
-        # Add mode-specific instructions
-        if config.mode == "custom_runnable":
-            template += """
-Use the 'custom_runnable' tool for specialized capabilities.
+{payment_info}
 """
 
+        # Add any additional context
         template = _add_additional_context(template, config.additional_context)
 
-        return SystemMessagePromptTemplate.from_template(
-            template,
-            partial_variables={
-                "name": config.name,
-                "personality": config.personality,
-            },
-        )
+        return SystemMessagePromptTemplate.from_template(template)
 
     @staticmethod
     def create_human_message_prompt(content: str) -> HumanMessagePromptTemplate:
@@ -740,7 +676,6 @@ Use the 'custom_runnable' tool for specialized capabilities.
         ] = None,
         include_history: bool = True,
         system_prompt: Optional[str] = None,
-        tools: Optional[List] = None,
     ) -> ChatPromptTemplate:
         """
         Create a prompt template based on the prompt type and configuration.
@@ -750,7 +685,6 @@ Use the 'custom_runnable' tool for specialized capabilities.
             config: Configuration for the prompt
             include_history: Whether to include message history
             system_prompt: Optional system prompt text
-            tools: Optional list of tools
 
         Returns:
             A ChatPromptTemplate
@@ -827,7 +761,7 @@ Use the 'custom_runnable' tool for specialized capabilities.
                 system_message = cls.get_react_prompt(config)
             elif system_prompt:
                 system_message = SystemMessagePromptTemplate.from_template(
-                    system_prompt + "\n\n" + COLLABORATION_PROTOCOL
+                    system_prompt
                 )
             else:
                 raise ValueError(

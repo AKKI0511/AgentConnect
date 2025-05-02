@@ -7,8 +7,6 @@ It handles web searches, retrieves information, and creates comprehensive report
 """
 
 import os
-from typing import List
-from dotenv import load_dotenv
 
 from agentconnect.agents import AIAgent
 from agentconnect.core.types import (

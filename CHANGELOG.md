@@ -8,16 +8,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Agent payment capabilities using Coinbase Developer Platform (CDP) SDK and AgentKit.
+- Wallet persistence for agents (`agentconnect.utils.wallet_manager`).
+- CDP environment validation and payment readiness checks (`agentconnect.utils.payment_helper`).
+- Payment-related dependencies (`cdp-sdk`, `coinbase-agentkit`, `coinbase-agentkit-langchain`) to `pyproject.toml`.
+- Payment address (`payment_address`) field to `AgentMetadata` and `AgentRegistration`.
+- Payment capability template (`PAYMENT_CAPABILITY_TEMPLATE`) for agent prompts.
+- Autonomous workflow demo (`examples/autonomous_workflow`) showcasing inter-agent payments.
+- Standalone chat method in `AIAgent` for using agents without registration to a hub.
+- Response callbacks in `HumanAgent` for integration with external systems.
+- Asynchronous collaboration request status checking tool for handling delayed agent responses.
+- Enhanced reasoning step visualization in `ToolTracerCallbackHandler` for all LLM providers.
+- Comprehensive end-to-end developer guides in documentation.
+- Improved model support for OpenAI and Google AI.
 
 ### Changed
+- `BaseAgent` and `AIAgent` to initialize wallet provider and AgentKit conditionally based on `enable_payments` flag.
+- `AIAgent` workflow initialization to include AgentKit tools when payments are enabled.
+- Agent prompts (`CORE_DECISION_LOGIC`, ReAct prompts) updated to include payment instructions and context.
+- `CommunicationHub` registration updated to include `payment_address`.
+- `ToolTracerCallbackHandler` enhanced to provide specific tracing for payment tool actions.
+- Enhanced `HumanAgent` to function as an independent agent in the network with `run()` method.
+- Added `stop()` method to `BaseAgent` for proper cleanup and resource management.
+- `CommunicationHub` improved to handle late responses and request timeouts gracefully.
+- Simplified and enhanced prompt templates for more customizable agents.
+- Updated all examples to use the `stop()` method for better cleanup.
+- Refactored postprocessing logic in `agent_prompts.py` for better error handling.
 
 ### Deprecated
-
-### Removed
+- `examples/run_example.py` in favor of using the official CLI tool (`agentconnect` command)
 
 ### Fixed
+- Suppressed unnecessary warnings in capability discovery module
+- Improved error handling in agent communication
+- Fixed reasoning step extraction for different LLM providers (OpenAI, Anthropic, Google)
+- Addressed collaboration request timeouts with new polling mechanism
 
 ### Security
+- Enhanced validation for inter-agent messages
+- Implemented secure API key management
+- Added rate limiting for API calls
+- Set up environment variable handling
+- Added input validation for all API endpoints
 
 ## [0.2.0] - 2025-04-01
 

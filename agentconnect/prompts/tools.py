@@ -33,6 +33,7 @@ from agentconnect.prompts.custom_tools.registry import ToolRegistry
 from agentconnect.prompts.custom_tools.collaboration_tools import (
     create_agent_search_tool,
     create_send_collaboration_request_tool,
+    create_check_collaboration_result_tool,
 )
 from agentconnect.prompts.custom_tools.task_tools import create_task_decomposition_tool
 
@@ -55,28 +56,34 @@ class PromptTools:
     instance, ensuring that tools are properly configured for the specific agent
     using them.
 
+    The class supports both connected mode (with registry and hub) and standalone mode
+    (without registry and hub, for direct chat interactions).
+
     Attributes:
-        agent_registry: Registry for accessing agent information
-        communication_hub: Hub for agent communication
+        agent_registry: Registry for accessing agent information, can be None in standalone mode
+        communication_hub: Hub for agent communication, can be None in standalone mode
         llm: Optional language model for tools that require LLM capabilities
         _current_agent_id: ID of the agent currently using these tools
         _tool_registry: Registry for managing available tools
         _available_capabilities: Cached list of available capabilities
         _agent_specific_tools_registered: Flag indicating if agent-specific tools are registered
+        _is_standalone_mode: Flag indicating if operating in standalone mode (without registry/hub)
     """
 
     def __init__(
         self,
-        agent_registry: AgentRegistry,
-        communication_hub: CommunicationHub,
+        agent_registry: Optional[AgentRegistry] = None,
+        communication_hub: Optional[CommunicationHub] = None,
         llm=None,
     ):
         """
         Initialize the PromptTools class.
 
         Args:
-            agent_registry: Registry for accessing agent information and capabilities
-            communication_hub: Hub for agent communication and message passing
+            agent_registry: Registry for accessing agent information and capabilities.
+                           Can be None for standalone mode.
+            communication_hub: Hub for agent communication and message passing.
+                             Can be None for standalone mode.
             llm: Optional language model for tools that require LLM capabilities
         """
         self.agent_registry = agent_registry
@@ -88,6 +95,12 @@ class PromptTools:
         self._available_capabilities = []
         self.llm = llm
         self._agent_specific_tools_registered = False
+
+        # Detect if we're in standalone mode (no registry or hub)
+        self._is_standalone_mode = agent_registry is None or communication_hub is None
+
+        if self._is_standalone_mode:
+            logger.info("PromptTools initialized in standalone mode (no registry/hub)")
 
         # Register default tools that don't require an agent ID
         self._register_basic_tools()
@@ -108,8 +121,8 @@ class PromptTools:
         Register tools that require an agent ID to be set.
 
         This method registers tools that need agent context, such as agent search
-        and collaboration request tools. These tools need to know which agent is
-        making the request to properly handle permissions and collaboration chains.
+        and collaboration request tools. In standalone mode, it registers alternative
+        versions of these tools that explain the limitations.
 
         Note:
             This method will log a warning and do nothing if no agent ID is set.
@@ -120,22 +133,36 @@ class PromptTools:
 
         # Only register these tools if they haven't been registered yet
         if not self._agent_specific_tools_registered:
-            # Create and register the agent search tool
+            # Create the agent search tool (handles standalone mode internally)
             agent_search_tool = create_agent_search_tool(
                 self.agent_registry, self._current_agent_id, self.communication_hub
             )
-            self._tool_registry.register_tool(agent_search_tool)
 
-            # Create and register the collaboration request tool
+            # Create the collaboration request tool (handles standalone mode internally)
             collaboration_request_tool = create_send_collaboration_request_tool(
                 self.communication_hub, self.agent_registry, self._current_agent_id
             )
+
+            # Create the collaboration result checking tool (handles standalone mode internally)
+            collaboration_result_tool = create_check_collaboration_result_tool(
+                self.communication_hub, self.agent_registry, self._current_agent_id
+            )
+
+            if self._is_standalone_mode:
+                logger.debug(
+                    f"Registered standalone mode collaboration tools for agent: {self._current_agent_id}"
+                )
+            else:
+                logger.debug(
+                    f"Registered connected mode collaboration tools for agent: {self._current_agent_id}"
+                )
+
+            # Register the tools
+            self._tool_registry.register_tool(agent_search_tool)
             self._tool_registry.register_tool(collaboration_request_tool)
+            self._tool_registry.register_tool(collaboration_result_tool)
 
             self._agent_specific_tools_registered = True
-            logger.debug(
-                f"Registered agent-specific tools for agent: {self._current_agent_id}"
-            )
 
     def create_tool_from_function(
         self,
@@ -194,15 +221,19 @@ class PromptTools:
 
     def create_agent_search_tool(self) -> StructuredTool:
         """Create a tool for searching agents by capability."""
-        # Delegate to the implementation in custom_tools
         return create_agent_search_tool(
             self.agent_registry, self._current_agent_id, self.communication_hub
         )
 
     def create_send_collaboration_request_tool(self) -> StructuredTool:
         """Create a tool for sending collaboration requests to other agents."""
-        # Delegate to the implementation in custom_tools
         return create_send_collaboration_request_tool(
+            self.communication_hub, self.agent_registry, self._current_agent_id
+        )
+
+    def create_check_collaboration_result_tool(self) -> StructuredTool:
+        """Create a tool for checking the status of sent collaboration requests."""
+        return create_check_collaboration_result_tool(
             self.communication_hub, self.agent_registry, self._current_agent_id
         )
 
@@ -289,3 +320,14 @@ class PromptTools:
             return tools
         else:
             return self._tool_registry.get_all_tools()
+
+    @property
+    def is_standalone_mode(self) -> bool:
+        """
+        Check if the PromptTools instance is running in standalone mode.
+
+        Returns:
+            True if running in standalone mode (without registry/hub),
+            False if running in connected mode (with registry/hub)
+        """
+        return self._is_standalone_mode

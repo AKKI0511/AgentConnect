@@ -15,7 +15,6 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 # Third-party imports
-from langchain_core.callbacks import CallbackManager
 from langchain_core.callbacks.base import BaseCallbackHandler
 
 # Set up logging
@@ -293,6 +292,7 @@ class InteractionControl:
     for agent interactions.
 
     Attributes:
+        agent_id: The ID of the agent this control belongs to.
         token_config: Configuration for token-based rate limiting
         max_turns: Maximum number of turns in a conversation
         current_turn: Current turn number
@@ -301,6 +301,7 @@ class InteractionControl:
         _conversation_stats: Dictionary of conversation statistics
     """
 
+    agent_id: str
     token_config: TokenConfig
     max_turns: int = 20
     current_turn: int = 0
@@ -311,7 +312,9 @@ class InteractionControl:
     def __post_init__(self):
         """Initialize conversation stats dictionary."""
         self._conversation_stats = {}
-        logger.debug(f"InteractionControl initialized with max_turns={self.max_turns}")
+        logger.debug(
+            f"InteractionControl initialized for agent {self.agent_id} with max_turns={self.max_turns}"
+        )
 
     async def process_interaction(
         self, token_count: int, conversation_id: Optional[str] = None
@@ -412,16 +415,16 @@ class InteractionControl:
             return self._conversation_stats.get(conversation_id, {})
         return self._conversation_stats
 
-    def get_callback_manager(self) -> CallbackManager:
+    def get_callback_handlers(self) -> List[BaseCallbackHandler]:
         """
-        Create a callback manager with rate limiting for LangChain/LangGraph.
+        Create a list of callback handlers managed by InteractionControl (primarily rate limiting).
 
         Returns:
-            CallbackManager with rate limiting callbacks
+            List containing configured BaseCallbackHandler instances.
         """
-        callbacks = []
+        callbacks: List[BaseCallbackHandler] = []
 
-        # Add rate limiting callback
+        # 1. Add rate limiting callback
         rate_limiter = RateLimitingCallbackHandler(
             max_tokens_per_minute=self.token_config.max_tokens_per_minute,
             max_tokens_per_hour=self.token_config.max_tokens_per_hour,
@@ -433,4 +436,4 @@ class InteractionControl:
         # We're not adding a LangChain tracer here to avoid duplicate traces in LangSmith
         # LangSmith will automatically trace the workflow if LANGCHAIN_TRACING is enabled
 
-        return CallbackManager(callbacks)
+        return callbacks

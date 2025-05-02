@@ -13,6 +13,7 @@ from typing import Optional, List
 from dotenv import load_dotenv
 from aiogram import types
 from langchain.tools import BaseTool
+from langchain_core.callbacks import BaseCallbackHandler
 
 from agentconnect.agents.ai_agent import AIAgent
 from agentconnect.agents.telegram.bot_manager import TelegramBotManager
@@ -131,6 +132,10 @@ class TelegramAIAgent(AIAgent):
         max_tokens_per_minute: int = 5500,
         max_tokens_per_hour: int = 100000,
         telegram_token: Optional[str] = None,
+        enable_payments: bool = False,
+        verbose: bool = False,
+        wallet_data_dir: Optional[str] = None,
+        external_callbacks: Optional[List[BaseCallbackHandler]] = None,
     ):
         """
         Initialize a Telegram AI Agent.
@@ -150,6 +155,10 @@ class TelegramAIAgent(AIAgent):
             max_tokens_per_minute: Rate limiting for token usage per minute
             max_tokens_per_hour: Rate limiting for token usage per hour
             telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
+            enable_payments: Whether to enable payments
+            verbose: Whether to enable verbose logging
+            wallet_data_dir: Directory to store wallet data
+            external_callbacks: List of external callbacks to use
         """
         # Define Telegram-specific capabilities
         telegram_capabilities = [
@@ -249,6 +258,10 @@ class TelegramAIAgent(AIAgent):
             max_tokens_per_minute=max_tokens_per_minute,
             max_tokens_per_hour=max_tokens_per_hour,
             custom_tools=self._get_custom_tools(),  # Pass the custom tools to AIAgent
+            enable_payments=enable_payments,
+            verbose=verbose,
+            wallet_data_dir=wallet_data_dir,
+            external_callbacks=external_callbacks,
         )
 
     def _initialize_telegram_components(self):

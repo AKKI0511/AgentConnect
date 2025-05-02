@@ -23,4 +23,5 @@ Submodules
    agentconnect.core.agent
    agentconnect.core.exceptions
    agentconnect.core.message
+   agentconnect.core.payment_constants
    agentconnect.core.types

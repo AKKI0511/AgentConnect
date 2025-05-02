@@ -24,6 +24,7 @@ The central registry for agent discovery and management:
 - **Capability Lookup**: Provides both exact and semantic matching of capabilities 
 - **Agent Lifecycle Management**: Tracks agent availability and status
 - **Organization Grouping**: Organizes agents by organization
+- **Payment Address Handling**: Stores the optional `payment_address` provided during registration and makes it available during discovery, facilitating agent economy features.
 
 The `AgentRegistry` class acts as a facade for the entire registry subsystem, coordinating between the specialized components and providing a unified API for agent registration and discovery.
 

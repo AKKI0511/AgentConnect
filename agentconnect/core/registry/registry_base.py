@@ -36,7 +36,7 @@ class AgentRegistry:
     by capability, and verifying agent identities.
     """
 
-    def __init__(self, vector_search_config: Dict[str, Any] = None):
+    def __init__(self, vector_search_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the agent registry.
 
@@ -505,6 +505,10 @@ class AgentRegistry:
             # Add to new mode indexes
             for mode in registration.interaction_modes:
                 self._interaction_index[mode].add(agent_id)
+
+        # Update payment address if provided
+        if "payment_address" in updates:
+            registration.payment_address = updates["payment_address"]
 
         if "metadata" in updates:
             registration.metadata.update(updates["metadata"])

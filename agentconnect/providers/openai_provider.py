@@ -70,11 +70,15 @@ class OpenAIProvider(BaseProvider):
         """
         return [
             ModelName.GPT4_5_PREVIEW,
+            ModelName.GPT4_1,
+            ModelName.GPT4_1_MINI,
             ModelName.GPT4O,
             ModelName.GPT4O_MINI,
             ModelName.O1,
             ModelName.O1_MINI,
+            ModelName.O3,
             ModelName.O3_MINI,
+            ModelName.O4_MINI,
         ]
 
     def _get_provider_config(self) -> Dict[str, Any]:

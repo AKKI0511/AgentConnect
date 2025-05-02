@@ -446,7 +446,8 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = False) -> None:
 
         # Cleanup resources
         for agent in agents:
-            agent.is_running = False
+            await agent.stop()
+            print_system_message(f"Stopped agent: {agent.name}")
 
         # Cancel running tasks
         for task in tasks:

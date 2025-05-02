@@ -8,10 +8,10 @@ It handles document processing, text extraction, and format conversion.
 
 import os
 import re
-from typing import Dict, List, Any, Union
-from dotenv import load_dotenv
+from typing import Dict, Any, Union
 
 from agentconnect.agents import AIAgent
+from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 from agentconnect.core.types import (
     AgentIdentity,
     Capability,
@@ -388,6 +388,7 @@ def create_content_processing_agent(provider_type: ModelProvider, model_name: Mo
         capabilities=content_processing_capabilities,
         personality="I am a content processing specialist who excels at transforming and converting content between different formats. I can extract text from PDFs, convert HTML to markdown, and process documents for better readability. I understand how to work with relative paths from the current directory.",
         custom_tools=content_processing_tools,
+        # external_callbacks=[ToolTracerCallbackHandler(agent_id="content_processing_agent", print_tool_activity=False)],
     )
     
     return content_processing_agent 

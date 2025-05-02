@@ -69,6 +69,7 @@ The tools system provides agents with the ability to perform specific actions, p
 - **`search_for_agents`**: Searches for agents with specific capabilities using semantic matching. This tool helps agents find other specialized agents that can assist with tasks outside their capabilities.
 - **`send_collaboration_request`**: Sends a request to a specific agent to perform a task and waits for a response. This tool enables agent-to-agent delegation and collaboration.
 - **`decompose_task`**: Breaks down a complex task into smaller, manageable subtasks. This helps agents organize and tackle complex requests more effectively.
+- **AgentKit Payment Tools (e.g., `native_transfer`, `erc20_transfer`)**: When payment capabilities are enabled for an `AIAgent`, tools provided by Coinbase AgentKit are automatically added. These allow the agent to initiate and manage cryptocurrency transactions based on LLM decisions guided by payment prompts.
 
 ### Tool Architecture
 
@@ -193,7 +194,8 @@ Prompt templates are used to create different types of prompts for agents. The `
 
 - **System Prompts**: Define the agent's role, capabilities, and personality.
 - **Collaboration Prompts**: Used for collaboration requests and responses.
-- **ReAct Prompts**: Used for the ReAct agent, which makes decisions and calls tools.
+- **ReAct Prompts**: Used for the ReAct agent, which makes decisions and calls tools. This includes the `CORE_DECISION_LOGIC` template, which incorporates instructions for when to consider collaboration or payments.
+- **Payment Capability Prompts**: Includes the `PAYMENT_CAPABILITY_TEMPLATE`, which provides specific instructions and context to the LLM regarding the available payment tools and when it might be appropriate to use them for agent-to-agent transactions.
 
 ### ReAct Integration
 

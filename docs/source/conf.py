@@ -169,8 +169,10 @@ html_theme_options = {
     "navbar_end": ["navbar-icon-links", "theme-switcher"],
     # Make the navbar sticky
     "navbar_persistent": ["search-button"],
-    # Make the primary sidebar collapsible
+    # Make the primary sidebar collapsible and persistent
     "primary_sidebar_end": ["sidebar-ethical-ads"],
+    "collapse_navigation": False,
+    "navigation_depth": 4,
     # Show previous/next buttons
     "show_prev_next": True,
     # Increase contrast for better readability
@@ -178,6 +180,11 @@ html_theme_options = {
     "pygment_dark_style": "monokai",
     # Theme toggle settings
     "footer_start": ["copyright"],
+    # Sidebar collapsing behavior
+    "collapse_navigation": True,  # Allow sections to be collapsed
+    "navigation_with_keys": True, # Allow keyboard navigation
+    # Add sidebar collapse button by default
+    "header_links_before_dropdown": 6,
 }
 
 # Add custom CSS to enable styling compatible with our custom.css
@@ -190,6 +197,9 @@ html_css_files = [
 # html_js_files = [
 #     'js/custom.js',
 # ]
+
+# Template directory for custom templates
+templates_path = ['_templates']
 
 # Favicon and branding
 html_favicon = '_static/final_logo.png'

@@ -8,7 +8,7 @@ a command-line interface.
 # Standard library imports
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, Callable, List, Dict, Any
 
 # Third-party imports
 import aioconsole
@@ -47,6 +47,7 @@ class HumanAgent(BaseAgent):
         name: str,
         identity: AgentIdentity,
         organization_id: Optional[str] = None,
+        response_callbacks: Optional[List[Callable]] = None,
     ):
         """Initialize the human agent.
 
@@ -55,6 +56,7 @@ class HumanAgent(BaseAgent):
             name: Human-readable name for the agent
             identity: Identity information for the agent
             organization_id: ID of the organization the agent belongs to
+            response_callbacks: Optional list of callbacks to be called when human responds
         """
         # Create Capability objects for human capabilities
         capabilities = [
@@ -82,6 +84,8 @@ class HumanAgent(BaseAgent):
         )
         self.name = name
         self.is_active = True
+        self.response_callbacks = response_callbacks or []
+        self.last_response_data = {}
         logger.info(f"Human Agent {self.agent_id} initialized.")
 
     def _initialize_llm(self):
@@ -118,6 +122,11 @@ class HumanAgent(BaseAgent):
             )
             return
 
+        print(
+            f"{Fore.GREEN}Human Agent {self.agent_id} starting interaction with {target_agent.agent_id}{Style.RESET_ALL}"
+        )
+        print(f"{Fore.GREEN}Exit with 'exit', 'quit', or 'bye'{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}Loading...{Style.RESET_ALL}")
         while self.is_active:
             try:
                 # Get user input
@@ -169,6 +178,7 @@ class HumanAgent(BaseAgent):
                             print(
                                 f"{Fore.RED}❌ Error: {response.content}{Style.RESET_ALL}"
                             )
+                            print("-" * 40)
                             logger.error(
                                 f"Human Agent {self.agent_id} received error message: {response.content[:50]}..."
                             )
@@ -191,8 +201,10 @@ class HumanAgent(BaseAgent):
                                 f"Human Agent {self.agent_id} received processing status message: {response.content[:50]}..."
                             )
                         else:
-                            print(f"\n{Fore.CYAN}{target_agent.name}:{Style.RESET_ALL}")
+                            print("-" * 40)
+                            print(f"{Fore.CYAN}{target_agent.name}:{Style.RESET_ALL}")
                             print(f"{response.content}")
+                            print("-" * 40)
                             logger.info(
                                 f"Human Agent {self.agent_id} received and displayed response: {response.content[:50]}..."
                             )
@@ -257,8 +269,105 @@ class HumanAgent(BaseAgent):
         # Display received message
         print(f"\n{Fore.CYAN}{message.sender_id}:{Style.RESET_ALL}")
         print(f"{message.content}")
+        print("-" * 40)
         logger.info(
             f"Human Agent {self.agent_id} displayed received message from {message.sender_id}."
         )
-        self.message_queue.task_done()
-        return None
+
+        # Prompt for and get user response
+        print(
+            f"{Fore.YELLOW}Type your response or use these commands:{Style.RESET_ALL}"
+        )
+        print(
+            f"{Fore.YELLOW}- 'exit', 'quit', or 'bye' to end the conversation{Style.RESET_ALL}"
+        )
+        print(
+            f"{Fore.YELLOW}- Press Enter without typing to skip responding{Style.RESET_ALL}"
+        )
+        user_input = await aioconsole.ainput(f"\n{Fore.GREEN}You: {Style.RESET_ALL}")
+
+        # Check for exit commands
+        if user_input.lower().strip() in ["exit", "quit", "bye"]:
+            logger.info(
+                f"Human Agent {self.agent_id} ending conversation with {message.sender_id}"
+            )
+            print(
+                f"{Fore.YELLOW}Ending conversation with {message.sender_id}{Style.RESET_ALL}"
+            )
+
+            # Send an exit message to the AI
+            return Message.create(
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                content="__EXIT__",
+                sender_identity=self.identity,
+                message_type=MessageType.STOP,
+                metadata={"reason": "user_exit"},
+            )
+
+        # Log the user input
+        if user_input.strip():
+            logger.info(
+                f"Human Agent {self.agent_id} received user input: {user_input[:50]}..."
+            )
+
+            # Send response back to the sender
+            logger.info(
+                f"Human Agent {self.agent_id} sending response to {message.sender_id}: {user_input[:50]}..."
+            )
+            return Message.create(
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                content=user_input,
+                sender_identity=self.identity,
+                message_type=MessageType.TEXT,
+            )
+        else:
+            # If the user didn't enter any text, log it but don't send a response
+            logger.info(
+                f"Human Agent {self.agent_id} skipped responding to {message.sender_id}"
+            )
+            print(f"{Fore.YELLOW}No response sent.{Style.RESET_ALL}")
+            return None
+
+    async def send_message(
+        self,
+        receiver_id: str,
+        content: str,
+        message_type: MessageType = MessageType.TEXT,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Message:
+        """Override send_message to track human responses and notify callbacks"""
+        # Call the original method in the parent class
+        message = await super().send_message(
+            receiver_id, content, message_type, metadata
+        )
+
+        # Store information about this response
+        self.last_response_data = {
+            "receiver_id": receiver_id,
+            "content": content,
+            "message_type": message_type,
+            "timestamp": asyncio.get_event_loop().time(),
+        }
+
+        # Notify any registered callbacks
+        for callback in self.response_callbacks:
+            try:
+                callback(self.last_response_data)
+            except Exception as e:
+                logger.error(f"Error in response callback: {str(e)}")
+
+        return message
+
+    def add_response_callback(self, callback: Callable) -> None:
+        """Add a callback to be notified when the human sends a response"""
+        if callback not in self.response_callbacks:
+            self.response_callbacks.append(callback)
+            logger.debug(f"Human Agent {self.agent_id}: Added response callback")
+
+    def remove_response_callback(self, callback: Callable) -> None:
+        """Remove a previously registered callback"""
+        if callback in self.response_callbacks:
+            self.response_callbacks.remove(callback)
+            logger.debug(f"Human Agent {self.agent_id}: Removed response callback")

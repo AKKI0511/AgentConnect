@@ -12,12 +12,39 @@ import asyncio
 import warnings
 from typing import Dict, List, Set, Tuple, Any, Optional
 from langchain_core.vectorstores import VectorStore
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # Absolute imports from agentconnect package
 from agentconnect.core.registry.registration import AgentRegistration
 
 # Set up logging
 logger = logging.getLogger("CapabilityDiscovery")
+
+# Permanently filter out UserWarnings about relevance scores from any source
+warnings.filterwarnings(
+    "ignore", message="Relevance scores must be between 0 and 1", category=UserWarning
+)
+warnings.filterwarnings("ignore", message=".*elevance scores.*", category=UserWarning)
+
+# Monkeypatch the showwarning function to completely suppress relevance score warnings
+original_showwarning = warnings.showwarning
+
+
+def custom_showwarning(message, category, filename, lineno, file=None, line=None):
+    """
+    Custom warning handler to suppress relevance score warnings.
+
+    Args:
+        message: The warning message
+        category: The warning category
+    """
+    if category == UserWarning and "relevance scores" in str(message).lower():
+        return  # Suppress the warning completely
+    # For all other warnings, use the original function
+    return original_showwarning(message, category, filename, lineno, file, line)
+
+
+warnings.showwarning = custom_showwarning
 
 
 def check_semantic_search_requirements() -> Dict[str, bool]:
@@ -186,9 +213,6 @@ class CapabilityDiscoveryService:
                 )
                 return
 
-            # Import the necessary modules
-            from langchain_huggingface import HuggingFaceEmbeddings
-
             # Get model name from config or use default
             model_name = self._vector_store_config.get(
                 "model_name", "sentence-transformers/all-mpnet-base-v2"
@@ -203,10 +227,54 @@ class CapabilityDiscoveryService:
                 "cache_folder", "./.cache/huggingface/embeddings"
             )
 
-            self._embeddings_model = HuggingFaceEmbeddings(
-                model_name=model_name,
-                cache_folder=cache_folder,
-            )
+            # Try with explicit model_kwargs and encode_kwargs first
+            try:
+                self._embeddings_model = HuggingFaceEmbeddings(
+                    model_name=model_name,
+                    cache_folder=cache_folder,
+                    model_kwargs={"device": "cpu", "revision": "main"},
+                    encode_kwargs={"normalize_embeddings": True},
+                )
+            except Exception as model_error:
+                logger.warning(
+                    f"First embedding initialization attempt failed: {str(model_error)}"
+                )
+
+                # Try alternative initialization approach
+                try:
+                    # Import directly from sentence_transformers as fallback
+                    import sentence_transformers
+
+                    # Create the model directly first
+                    st_model = sentence_transformers.SentenceTransformer(
+                        model_name,
+                        cache_folder=cache_folder,
+                        device="cpu",
+                        revision="main",  # Use main branch which is more stable
+                    )
+
+                    # Then create embeddings with the pre-initialized model
+                    self._embeddings_model = HuggingFaceEmbeddings(
+                        model=st_model, encode_kwargs={"normalize_embeddings": True}
+                    )
+
+                    logger.info(
+                        "Initialized embeddings using pre-loaded sentence transformer model"
+                    )
+                except Exception as fallback_error:
+                    # If that fails too, try with minimal parameters
+                    logger.warning(
+                        f"Fallback embedding initialization failed: {str(fallback_error)}"
+                    )
+
+                    # Last attempt with minimal configuration
+                    self._embeddings_model = HuggingFaceEmbeddings(
+                        model_name="all-MiniLM-L6-v2",  # Try with a smaller model
+                    )
+
+                    logger.info(
+                        "Initialized embeddings with minimal configuration and smaller model"
+                    )
 
             # Reset capability map
             self._capability_to_agent_map = {}
@@ -221,7 +289,9 @@ class CapabilityDiscoveryService:
 
             logger.warning(traceback.format_exc())
 
-    async def _init_vector_store(self, documents: List, embeddings_model: Any) -> Any:
+    async def _init_vector_store(
+        self, documents: List, embeddings_model: "HuggingFaceEmbeddings"
+    ) -> Any:
         """
         Initialize vector store with the preferred backend.
 
@@ -579,14 +649,9 @@ class CapabilityDiscoveryService:
             and self._capability_to_agent_map
         ):
             try:
-                # Suppress the specific UserWarning from LangChain during the search call
-                with warnings.catch_warnings(record=False):
-                    warnings.filterwarnings(
-                        "ignore",
-                        # Use regex to match the start of the message reliably
-                        message=r"^Relevance scores must be between 0 and 1",
-                        category=UserWarning,
-                    )
+                # Completely disable all warnings during search call - no matter what, don't show warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
                     # Try using async similarity search with scores
                     try:
                         kwargs = {}
@@ -602,11 +667,32 @@ class CapabilityDiscoveryService:
                             )
                         )
 
+                # Handle any potential issues with the search results format
+                cleaned_search_results = []
+                for item in search_results:
+                    # Make sure each result is a proper tuple of (doc, score)
+                    if not isinstance(item, tuple) or len(item) != 2:
+                        logger.warning(f"Skipping malformed search result: {item}")
+                        continue
+
+                    doc, score = item
+                    # Convert score to float if necessary
+                    if hasattr(score, "item"):  # Convert numpy types
+                        score = float(score.item())
+                    elif not isinstance(score, (int, float)):
+                        try:
+                            score = float(score)
+                        except (ValueError, TypeError):
+                            logger.warning(f"Could not convert score to float: {score}")
+                            continue
+
+                    cleaned_search_results.append((doc, score))
+
                 # Process results
                 seen_agent_ids = set()
                 processed_results = []
 
-                for doc, original_score in search_results:
+                for doc, original_score in cleaned_search_results:
                     # --- Filter 1: Exclude non-positive cosine scores ---
                     # Scores <= 0 indicate orthogonality or dissimilarity in cosine similarity.
                     if original_score <= 0:

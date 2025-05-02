@@ -7,8 +7,6 @@ It handles Telegram user interactions and integration with the Telegram API.
 """
 
 import os
-from typing import List
-from dotenv import load_dotenv
 
 from agentconnect.agents.telegram.telegram_agent import TelegramAIAgent
 from agentconnect.core.types import (

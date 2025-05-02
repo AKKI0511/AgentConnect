@@ -9,6 +9,8 @@ utils/
 ├── __init__.py           # Package initialization and API exports
 ├── interaction_control.py # Rate limiting and interaction tracking
 ├── logging_config.py     # Logging configuration
+├── payment_helper.py     # Payment utilities for CDP validation and agent payment readiness
+├── wallet_manager.py     # Agent wallet persistence utilities
 └── README.md             # This file
 ```
 
@@ -45,6 +47,37 @@ Key classes and functions:
 - `disable_all_logging()`: Disable all logging output
 - `get_module_levels_for_development()`: Get recommended log levels for development
 - `setup_langgraph_logging()`: Configure logging specifically for LangGraph components
+
+### Payment Helper (`payment_helper.py`)
+
+The payment helper module provides utility functions for setting up and managing payment capabilities:
+
+- **CDP Environment Validation**: Verify CDP API keys and required packages
+- **Agent Payment Readiness**: Check if an agent is ready for payments
+- **Wallet Metadata Retrieval**: Get metadata about agent wallets
+- **Backup Utilities**: Create backups of wallet data
+
+Key functions:
+- `verify_payment_environment()`: Check required environment variables
+- `validate_cdp_environment()`: Validate the entire CDP setup including packages
+- `check_agent_payment_readiness()`: Check if an agent can make payments
+- `backup_wallet_data()`: Create backup of wallet data
+
+### Wallet Manager (`wallet_manager.py`)
+
+The wallet manager provides wallet data persistence for agents:
+
+- **Wallet Data Storage**: Save and load wallet data securely
+- **Wallet Existence Checking**: Check if wallet data exists
+- **Wallet Data Management**: Delete and backup wallet data
+- **Configuration Management**: Set custom data directories
+
+Key functions:
+- `save_wallet_data()`: Persist wallet data for an agent
+- `load_wallet_data()`: Load wallet data for an agent
+- `wallet_exists()`: Check if wallet data exists
+- `get_all_wallets()`: List all wallet files
+- `delete_wallet_data()`: Delete wallet data
 
 ## Usage Examples
 
@@ -126,6 +159,48 @@ setup_langgraph_logging(level=LogLevel.INFO)
 # Disable all logging for examples
 disable_all_logging()
 ```
+
+### Payment Utilities
+
+```python
+from agentconnect.utils import payment_helper, wallet_manager
+
+# Validate CDP environment
+is_valid, message = payment_helper.validate_cdp_environment()
+if not is_valid:
+    print(f"CDP environment is not properly configured: {message}")
+    # Set up environment...
+
+# Check agent payment readiness
+status = payment_helper.check_agent_payment_readiness(agent)
+if status["ready"]:
+    print(f"Agent is ready for payments with address: {status['payment_address']}")
+else:
+    print(f"Agent is not ready for payments: {status}")
+
+# Save wallet data
+wallet_manager.save_wallet_data(
+    agent_id="agent123",
+    wallet_data=agent.wallet_provider.export_wallet(),
+    data_dir="custom/wallet/dir"  # Optional
+)
+
+# Load wallet data
+wallet_json = wallet_manager.load_wallet_data("agent123")
+if wallet_json:
+    print("Wallet data loaded successfully")
+
+# Back up wallet data
+backup_path = payment_helper.backup_wallet_data(
+    agent_id="agent123",
+    backup_dir="wallet_backups"
+)
+print(f"Wallet backed up to: {backup_path}")
+```
+
+## Wallet Security Note
+
+IMPORTANT: The default wallet data storage implementation in `wallet_manager.py` stores wallet data unencrypted on disk, which is suitable for testing/demo purposes but NOT secure for production environments holding real assets. For production use, implement proper encryption or use a secure key management system.
 
 ## Integration with LangGraph
 

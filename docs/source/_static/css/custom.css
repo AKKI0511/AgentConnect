@@ -473,7 +473,7 @@ html[data-theme=dark] code {
 .bd-content {
   background-color: var(--pst-color-background);
   color: var(--pst-color-text-base);
-  padding: 2rem;
+  padding: 0rem;
 }
 
 /* Headers */
@@ -531,6 +531,19 @@ table td {
   }
 }
 
+/* Add specific rules for very small screens */
+@media (max-width: 470px) {
+  /* Hide secondary sidebar by default on small screens */
+  .bd-sidebar-secondary {
+    top: 52px; /* Match navbar height */
+    right: 0;
+    height: calc(100vh - 52px);
+    width: 80%;
+    max-width: 300px;
+    z-index: 999;
+  }
+}
+
 /* Copy button styling */
 button.copybtn {
   background-color: var(--pst-color-on-background);
@@ -561,4 +574,9 @@ button.copybtn:hover {
 .navbar-brand img {
     height: 2.7em; /* Adjust this value as needed for vertical alignment */
     margin-top: -0.14em; /* Optional: Fine-tune vertical positioning */
+}
+
+/* Ensure sidebar sticks to the left edge and increase content width */
+.bd-page-width {
+  max-width: 1600px; /* Adjust this value as needed */
 }

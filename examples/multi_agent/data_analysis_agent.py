@@ -9,8 +9,7 @@ It handles data processing, visualization, and insights generation.
 import os
 import io
 import json
-from typing import Dict, List, Any
-from dotenv import load_dotenv
+from typing import Dict
 from pydantic import BaseModel, Field
 
 from agentconnect.agents import AIAgent
@@ -66,13 +65,13 @@ def create_data_analysis_agent(
     data_analysis_capabilities = [
         Capability(
             name="data_analysis",
-            description="Analyzes data and provides insights",
+            description="Analyzes provided data (structured or textual) to provide insights, identify trends, assess impacts (e.g., economic), and generate summaries.",
             input_schema={"data": "string", "analysis_type": "string"},
             output_schema={"result": "string", "visualization_path": "string"},
         ),
         Capability(
             name="data_visualization",
-            description="Creates visualizations from data",
+            description="Creates visualizations from provided data",
             input_schema={"data": "string", "chart_type": "string"},
             output_schema={"visualization_path": "string", "description": "string"},
         ),
@@ -248,7 +247,10 @@ def create_data_analysis_agent(
         api_key=api_key,
         identity=data_analysis_identity,
         capabilities=data_analysis_capabilities,
-        personality="I am a data analysis specialist who excels at analyzing data, generating insights, and creating visualizations. I can process CSV and JSON data to discover patterns and present results in a clear, understandable format.",
+        personality=(
+            "I am a data analysis specialist. I excel at processing structured data (like CSV/JSON) for statistical analysis and visualization. "
+            "I can also analyze textual information to identify key trends, assess potential impacts (including economic consequences), and generate insightful summaries based on the provided context."
+        ),
         custom_tools=[data_analysis_tool],
     )
     

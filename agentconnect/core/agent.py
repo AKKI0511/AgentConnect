@@ -11,12 +11,26 @@ import time
 
 # Standard library imports
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from pathlib import Path
+from dotenv import load_dotenv
 
-from agentconnect.core.exceptions import SecurityError
+# Import wallet and payment dependencies
+from coinbase_agentkit import (
+    AgentKit,
+    AgentKitConfig,
+    CdpWalletProvider,
+    CdpWalletProviderConfig,
+    wallet_action_provider,
+    erc20_action_provider,
+    cdp_api_action_provider,
+)
 
 # Absolute imports from agentconnect package
+from agentconnect.utils import wallet_manager
+from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.message import Message
+from agentconnect.core.payment_constants import POC_PAYMENT_TOKEN_SYMBOL
 from agentconnect.core.types import (
     AgentIdentity,
     AgentMetadata,
@@ -56,6 +70,9 @@ class BaseAgent(ABC):
         active_conversations: Dictionary of active conversations
         cooldown_until: Timestamp when cooldown ends
         pending_requests: Dictionary of pending requests
+        enable_payments: Whether payment capabilities are enabled
+        wallet_provider: Wallet provider for blockchain transactions
+        agent_kit: AgentKit instance for blockchain actions
     """
 
     def __init__(
@@ -66,6 +83,8 @@ class BaseAgent(ABC):
         interaction_modes: List[InteractionMode],
         capabilities: List[Capability] = None,
         organization_id: Optional[str] = None,
+        enable_payments: bool = False,
+        wallet_data_dir: Optional[Union[str, Path]] = None,
     ):
         """
         Initialize the base agent.
@@ -77,6 +96,8 @@ class BaseAgent(ABC):
             interaction_modes: Supported interaction modes
             capabilities: List of agent capabilities
             organization_id: ID of the organization the agent belongs to
+            enable_payments: Whether to enable payment capabilities
+            wallet_data_dir: Optional custom directory for wallet data storage
         """
         self.agent_id = agent_id
         self.identity = identity
@@ -97,7 +118,110 @@ class BaseAgent(ABC):
         self.active_conversations = {}
         self.cooldown_until = 0
         self.pending_requests: Dict[str, Dict[str, Any]] = {}
+
+        # Initialize payment capabilities
+        self.enable_payments = enable_payments
+        self.wallet_provider: Optional[CdpWalletProvider] = None
+        self.agent_kit: Optional[AgentKit] = None
+
+        # Initialize wallet if payments are enabled
+        if self.enable_payments:
+            try:
+                # Load environment variables
+                load_dotenv()
+
+                # Check if this agent already has wallet data
+                wallet_data = wallet_manager.load_wallet_data(
+                    self.agent_id, wallet_data_dir
+                )
+
+                if wallet_data:
+                    logger.debug(f"Agent {self.agent_id}: Using existing wallet data")
+                else:
+                    logger.debug(
+                        f"Agent {self.agent_id}: No existing wallet data found, creating new wallet"
+                    )
+
+                # Initialize wallet provider via coinbase CDP-SDK
+                cdp_config = (
+                    CdpWalletProviderConfig(wallet_data=wallet_data)
+                    if wallet_data
+                    else None
+                )
+                self.wallet_provider = CdpWalletProvider(cdp_config)
+
+                # Prepare action providers based on the token symbol
+                action_providers = [wallet_action_provider(), cdp_api_action_provider()]
+
+                # Add ERC20 action provider if using tokens other than native ETH
+                if POC_PAYMENT_TOKEN_SYMBOL != "ETH":
+                    action_providers.append(erc20_action_provider())
+                    logger.debug(
+                        f"Agent {self.agent_id}: Added ERC20 action provider for {POC_PAYMENT_TOKEN_SYMBOL}"
+                    )
+
+                # Initialize coinbase AgentKit with wallet provider and action providers
+                agent_kit_config = AgentKitConfig(
+                    wallet_provider=self.wallet_provider,
+                    action_providers=action_providers,
+                )
+                self.agent_kit = AgentKit(agent_kit_config)
+
+                # Save wallet data if it's a new wallet
+                if not wallet_data:
+                    try:
+                        new_wallet_data = self.wallet_provider.export_wallet()
+                        wallet_manager.save_wallet_data(
+                            self.agent_id, new_wallet_data, wallet_data_dir
+                        )
+                        logger.debug(f"Agent {self.agent_id}: Saved new wallet data")
+                    except Exception as e:
+                        logger.warning(
+                            f"Agent {self.agent_id}: Error saving new wallet data: {e}"
+                        )
+
+                # Get wallet address and add to agent metadata
+                try:
+                    # Get the default wallet address
+                    wallet_address = self.wallet_provider.get_address()
+                    if wallet_address:
+                        self.metadata.payment_address = wallet_address
+                        logger.info(
+                            f"Agent {self.agent_id}: Set payment address to {wallet_address}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Agent {self.agent_id}: Could not retrieve wallet address"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Agent {self.agent_id}: Error getting wallet address: {e}"
+                    )
+
+                logger.info(
+                    f"Agent {self.agent_id}: Payment capabilities initialized successfully"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Agent {self.agent_id}: Error initializing payment capabilities: {e}"
+                )
+                self.wallet_provider = None
+                self.agent_kit = None
+                logger.warning(
+                    f"Agent {self.agent_id}: Payment capabilities disabled due to initialization error"
+                )
+
         logger.info(f"Agent {self.agent_id} ({agent_type}) initialized.")
+
+    @property
+    def payments_enabled(self) -> bool:
+        """
+        Check if payment capabilities are enabled and available.
+
+        Returns:
+            True if payment capabilities are enabled and available, False otherwise
+        """
+        return self.enable_payments and self.wallet_provider is not None
 
     @abstractmethod
     def _initialize_llm(self):
@@ -753,6 +877,55 @@ class BaseAgent(ABC):
         # Add any other conditions as needed
         logger.debug(f"Agent {self.agent_id} can receive message from {sender_id}.")
         return True
+
+    async def stop(self) -> None:
+        """
+        Stop the agent and cleanup resources.
+
+        This method stops the agent's processing loop, ends all active conversations,
+        and cleans up resources such as wallet providers and message queues.
+
+        Returns:
+            None
+        """
+        logger.info(f"Agent {self.agent_id}: Stopping agent...")
+
+        # Mark agent as not running to stop the message processing loop
+        self.is_running = False
+
+        # End all active conversations
+        for participant_id in list(self.active_conversations.keys()):
+            self.end_conversation(participant_id)
+
+        # Clean up wallet provider if it exists
+        if self.wallet_provider is not None:
+            try:
+                # Clean up any pending transactions or listeners
+                # Note: Additional cleanup may be needed depending on wallet implementation
+                self.wallet_provider = None
+                self.agent_kit = None
+                logger.debug(f"Agent {self.agent_id}: Cleaned up wallet provider")
+            except Exception as e:
+                logger.error(
+                    f"Agent {self.agent_id}: Error cleaning up wallet provider: {e}"
+                )
+
+        # Clear message queue to prevent processing any more messages
+        try:
+            while not self.message_queue.empty():
+                self.message_queue.get_nowait()
+                self.message_queue.task_done()
+            logger.debug(f"Agent {self.agent_id}: Cleared message queue")
+        except Exception as e:
+            logger.error(f"Agent {self.agent_id}: Error clearing message queue: {e}")
+
+        # Reset cooldown
+        self.reset_cooldown()
+
+        # Clear pending requests
+        self.pending_requests.clear()
+
+        logger.info(f"Agent {self.agent_id}: Agent stopped successfully")
 
     def reset_cooldown(self) -> None:
         """

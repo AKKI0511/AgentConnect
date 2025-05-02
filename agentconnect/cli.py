@@ -15,16 +15,18 @@ Usage:
     agentconnect --example research
     agentconnect --example data
     agentconnect --example telegram
+    agentconnect --example agent_economy
     agentconnect --demo        # UI compatibility under development (Windows only)
     agentconnect --check-env
     agentconnect --help
 
 Available examples:
-    chat     - Simple chat with an AI assistant
-    multi    - Multi-agent e-commerce analysis
-    research - Research assistant with multiple agents
-    data     - Data analysis and visualization assistant
-    telegram - Modular multi-agent system with Telegram integration
+    chat         - Simple chat with an AI assistant
+    multi        - Multi-agent e-commerce analysis
+    research     - Research assistant with multiple agents
+    data         - Data analysis and visualization assistant
+    telegram     - Modular multi-agent system with Telegram integration
+    agent_economy - Autonomous workflow with agent payments system
 
 Note: The demo UI is currently under development and only supported on Windows.
       For the best experience, please use the examples instead.
@@ -85,11 +87,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Available examples:
-  chat     - Simple chat with an AI assistant
-  multi    - Multi-agent e-commerce analysis
-  research - Research assistant with multiple agents
-  data     - Data analysis and visualization assistant
-  telegram - Modular multi-agent system with Telegram integration
+  chat         - Simple chat with an AI assistant
+  multi        - Multi-agent e-commerce analysis
+  research     - Research assistant with multiple agents
+  data         - Data analysis and visualization assistant
+  telegram     - Modular multi-agent system with Telegram integration
+  agent_economy - Autonomous workflow with agent payments system
 
 Examples:
   agentconnect --example chat
@@ -105,8 +108,16 @@ Examples:
     parser.add_argument(
         "--example",
         "-e",
-        choices=["chat", "multi", "research", "data", "telegram"],
-        help="Run a specific example: chat (simple AI assistant), multi (multi-agent ecommerce analysis), research (research assistant), data (data analysis assistant), or telegram (modular multi-agent system with Telegram integration)",
+        choices=[
+            "chat",
+            "multi",
+            "research",
+            "data",
+            "telegram",
+            "workflow",
+            "agent_economy",
+        ],
+        help="Run a specific example: chat (simple AI assistant), multi (multi-agent ecommerce analysis), research (research assistant), data (data analysis assistant), telegram (modular multi-agent system with Telegram integration), agent_economy (autonomous workflow with payments), or workflow (legacy name, same as agent_economy)",
     )
 
     parser.add_argument(
@@ -153,6 +164,27 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
                 "The example will run, but research capabilities will be limited"
             )
 
+    # Check for workflow dependencies
+    if example_name in ["workflow", "agent_economy"]:
+        try:
+            from langchain_community.tools.tavily_search import (  # noqa: F401
+                TavilySearchResults,  # noqa: F401
+            )
+            from langchain_community.tools.requests.tool import (  # noqa: F401
+                RequestsGetTool,  # noqa: F401
+            )
+            from langchain_community.utilities import TextRequestsWrapper  # noqa: F401
+            from colorama import init, Fore, Style  # noqa: F401
+        except ImportError:
+            logger.warning("Dependencies are missing for the agent economy demo")
+            logger.info("To install the required dependencies:")
+            logger.info("  poetry install --with demo")
+            logger.info(
+                "  or: pip install langchain-community colorama tavily-python python-dotenv"
+            )
+            logger.info("Please install the missing dependencies and try again")
+            sys.exit(1)
+
     try:
         if example_name == "chat":
             from examples import run_chat_example
@@ -174,6 +206,12 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
             from examples import run_telegram_assistant
 
             await run_telegram_assistant(enable_logging=verbose)
+        elif example_name in ["workflow", "agent_economy"]:
+            from examples.autonomous_workflow.run_workflow_demo import (
+                main as run_workflow_demo,
+            )
+
+            await run_workflow_demo(enable_logging=verbose)
         else:
             logger.error(f"Unknown example: {example_name}")
     except ImportError as e:

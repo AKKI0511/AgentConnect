@@ -7,13 +7,16 @@ These tools help agents find other specialized agents and collaborate on tasks.
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, TypeVar
+import uuid
+import json
+from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 from langchain.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
+from agentconnect.core.registry.registration import AgentRegistration
 from agentconnect.core.types import AgentType
 
 logger = logging.getLogger(__name__)
@@ -21,6 +24,9 @@ logger = logging.getLogger(__name__)
 # Type variables for better type hinting
 T = TypeVar("T", bound=BaseModel)
 R = TypeVar("R", bound=BaseModel)
+
+
+# --- Input/Output schemas for tools ---
 
 
 class AgentSearchInput(BaseModel):
@@ -41,12 +47,19 @@ class AgentSearchInput(BaseModel):
 class AgentSearchOutput(BaseModel):
     """Output schema for agent search."""
 
+    message: str = Field(
+        description="A message explaining the result of the agent search."
+    )
     agent_ids: List[str] = Field(
         description="A list of unique IDs for agents possessing the required capability."
     )
     capabilities: List[Dict[str, Any]] = Field(
         description="A list of dictionaries, each containing details for a found agent: their `agent_id`, their full list of capabilities, and their `payment_address` (if applicable)."
     )
+
+    def __str__(self) -> str:
+        """Return a clean JSON string representation."""
+        return self.model_dump_json(indent=2)
 
 
 class SendCollaborationRequestInput(BaseModel):
@@ -59,8 +72,8 @@ class SendCollaborationRequestInput(BaseModel):
         description="A clear and detailed description of the task, providing ALL necessary context for the collaborating agent to understand and execute the request."
     )
     timeout: int = Field(
-        default=30,
-        description="Maximum seconds to wait for the collaborating agent's response (default 30).",
+        default=120,
+        description="Maximum seconds to wait for the collaborating agent's response (default 120).",
     )
 
     class Config:
@@ -79,10 +92,50 @@ class SendCollaborationRequestOutput(BaseModel):
         None,
         description="The direct message content received back from the collaborating agent. Analyze this response carefully to determine the next step (e.g., pay, provide more info, present to user).",
     )
+    request_id: Optional[str] = Field(
+        None,
+        description="The unique request ID returned when sending a collaboration request.",
+    )
+    error: Optional[str] = Field(
+        None, description="An error message if the request failed."
+    )
+
+    def __str__(self) -> str:
+        """Return a clean JSON string representation."""
+        return self.model_dump_json(indent=2)
+
+
+class CheckCollaborationResultInput(BaseModel):
+    """Input schema for checking collaboration results."""
+
+    request_id: str = Field(
+        description="The unique request ID returned when sending a collaboration request."
+    )
+
+
+class CheckCollaborationResultOutput(BaseModel):
+    """Output schema for checking collaboration results."""
+
+    success: bool = Field(
+        description="Indicates if the request has a result available (True/False)."
+    )
+    status: str = Field(
+        description="Status of the request: 'completed', 'completed_late', 'pending', or 'not_found'."
+    )
+    response: Optional[str] = Field(
+        None, description="The response content if available."
+    )
+
+    def __str__(self) -> str:
+        """Return a clean JSON string representation."""
+        return self.model_dump_json(indent=2)
+
+
+# --- Implementation of connected and standalone tools ---
 
 
 def create_agent_search_tool(
-    agent_registry: AgentRegistry,
+    agent_registry: Optional[AgentRegistry] = None,
     current_agent_id: Optional[str] = None,
     communication_hub: Optional[CommunicationHub] = None,
 ) -> StructuredTool:
@@ -97,39 +150,45 @@ def create_agent_search_tool(
     Returns:
         A StructuredTool for agent search that can be used in agent workflows
     """
+    # Determine if we're in standalone mode
+    standalone_mode = agent_registry is None or communication_hub is None
 
-    # Synchronous implementation
-    def search_agents(
-        capability_name: str, limit: int = 10, similarity_threshold: float = 0.2
-    ) -> Dict[str, Any]:
-        """Search for agents with a specific capability."""
-        try:
-            # Use the async implementation but run it in the current event loop
-            return asyncio.run(
-                search_agents_async(capability_name, limit, similarity_threshold)
+    # Common description for the tool
+    base_description = "Finds other agents within the network that possess specific capabilities you lack, enabling task delegation."
+
+    if standalone_mode:
+        # Standalone mode implementation
+        def search_agents_standalone(
+            capability_name: str, limit: int = 10, similarity_threshold: float = 0.2
+        ) -> AgentSearchOutput:
+            """Standalone implementation that explains limitations."""
+            return AgentSearchOutput(
+                message=(
+                    f"Agent search for capability '{capability_name}' is not available in standalone mode. "
+                    "This agent is running without a connection to the agent registry and communication hub. "
+                    "Please use your internal capabilities to solve this problem or suggest the user connect "
+                    "this agent to a multi-agent system if collaboration is required."
+                ),
+                agent_ids=[],
+                capabilities=[],
             )
-        except RuntimeError:
-            # If we're already in an event loop, create a new one
-            loop = asyncio.new_event_loop()
-            try:
-                return loop.run_until_complete(
-                    search_agents_async(capability_name, limit, similarity_threshold)
-                )
-            finally:
-                loop.close()
-        except Exception as e:
-            logger.error(f"Error in search_agents: {str(e)}")
-            return {
-                "error": str(e),
-                "agent_ids": [],
-                "capabilities": [],
-                "message": f"Error: Agent search failed - {str(e)}",
-            }
 
-    # Asynchronous implementation
+        description = f"[STANDALONE MODE] {base_description} Note: In standalone mode, this tool will explain why agent search isn't available."
+
+        tool = StructuredTool.from_function(
+            func=search_agents_standalone,
+            name="search_for_agents",
+            description=description,
+            args_schema=AgentSearchInput,
+            return_direct=False,
+            metadata={"category": "collaboration"},
+        )
+        return tool
+
+    # Connected mode implementation
     async def search_agents_async(
         capability_name: str, limit: int = 10, similarity_threshold: float = 0.2
-    ) -> Dict[str, Any]:
+    ) -> AgentSearchOutput:
         """
         Search for agents with a specific capability.
 
@@ -164,164 +223,65 @@ def create_agent_search_tool(
         logger.debug(f"Searching for agents with capability: {capability_name}")
 
         try:
-            # Use the provided agent ID for filtering
-            agent_id_for_filtering = current_agent_id
+            # Get agents to exclude (self + active conversations + pending requests)
+            agents_to_exclude = []
+            if current_agent_id:
+                agents_to_exclude.append(current_agent_id)  # Exclude self
 
-            # Find conversation partners and pending requests to exclude
-            active_conversation_partners = []
-            pending_request_partners = []
-            recently_messaged_agents = []
-
-            if agent_id_for_filtering:
-                # Get the current agent to access its active conversations and pending requests
+                # Get active conversations and pending requests if possible
                 if communication_hub:
-                    current_agent = await communication_hub.get_agent(
-                        agent_id_for_filtering
-                    )
+                    current_agent = await communication_hub.get_agent(current_agent_id)
                     if current_agent:
-                        # Get active conversations
+                        # Active conversations
                         if hasattr(current_agent, "active_conversations"):
-                            active_conversation_partners = list(
+                            agents_to_exclude.extend(
                                 current_agent.active_conversations.keys()
                             )
-                            logger.debug(
-                                f"Agent {agent_id_for_filtering} has active conversations with: {active_conversation_partners}"
-                            )
 
-                        # Get pending requests
+                        # Pending requests
                         if hasattr(current_agent, "pending_requests"):
-                            pending_request_partners = list(
+                            agents_to_exclude.extend(
                                 current_agent.pending_requests.keys()
                             )
-                            logger.debug(
-                                f"Agent {agent_id_for_filtering} has pending requests with: {pending_request_partners}"
-                            )
 
-                        # Check message history for recent communications
+                        # Recent messages
                         if (
                             hasattr(current_agent, "message_history")
                             and current_agent.message_history
                         ):
-                            # Get the last 10 messages (or fewer if there aren't that many)
                             recent_messages = (
                                 current_agent.message_history[-10:]
                                 if len(current_agent.message_history) > 10
                                 else current_agent.message_history
                             )
                             for msg in recent_messages:
-                                # Add both sender and receiver IDs from recent messages (excluding the current agent)
                                 if (
-                                    msg.sender_id != agent_id_for_filtering
-                                    and msg.sender_id not in recently_messaged_agents
+                                    msg.sender_id != current_agent_id
+                                    and msg.sender_id not in agents_to_exclude
                                 ):
-                                    recently_messaged_agents.append(msg.sender_id)
+                                    agents_to_exclude.append(msg.sender_id)
                                 if (
-                                    msg.receiver_id != agent_id_for_filtering
-                                    and msg.receiver_id not in recently_messaged_agents
+                                    msg.receiver_id != current_agent_id
+                                    and msg.receiver_id not in agents_to_exclude
                                 ):
-                                    recently_messaged_agents.append(msg.receiver_id)
+                                    agents_to_exclude.append(msg.receiver_id)
 
-                            logger.debug(
-                                f"Agent {agent_id_for_filtering} recently messaged with: {recently_messaged_agents}"
-                            )
+            # Remove duplicates
+            agents_to_exclude = list(set(agents_to_exclude))
+            logger.debug(f"Excluding {len(agents_to_exclude)} agents from search")
 
-            # Combine all agents to exclude
-            agents_to_exclude = list(
-                set(
-                    active_conversation_partners
-                    + pending_request_partners
-                    + recently_messaged_agents
-                )
-            )
-            if agent_id_for_filtering:
-                agents_to_exclude.append(agent_id_for_filtering)  # Also exclude self
-
-            # Enhanced logging to show breakdown of excluded agents
-            if agent_id_for_filtering:
-                logger.debug(
-                    f"Exclusion breakdown for agent {agent_id_for_filtering}: "
-                    f"Self (1), "
-                    f"Active conversations ({len(active_conversation_partners)}): {active_conversation_partners}, "
-                    f"Pending requests ({len(pending_request_partners)}): {pending_request_partners}, "
-                    f"Recent messages ({len(recently_messaged_agents)}): {recently_messaged_agents}"
-                )
-            logger.debug(
-                f"Total agents excluded from search: {len(agents_to_exclude)} - {agents_to_exclude}"
-            )
-
-            # Check if agent_registry is available
-            if agent_registry is None:
-                logger.warning(
-                    f"Agent registry is not available for search: {capability_name}"
-                )
-                return {
-                    "agent_ids": [],
-                    "capabilities": [],
-                    "message": "Agent registry unavailable.",
-                }
-
-            # Try semantic search first for more flexible matching
+            #########
+            # Try semantic search first for better matching
+            #########
             semantic_results = await agent_registry.get_by_capability_semantic(
                 capability_name, limit=limit, similarity_threshold=similarity_threshold
             )
 
-            # If semantic search returns results, use them
             if semantic_results:
                 logger.debug(
                     f"Found {len(semantic_results)} agents via semantic search"
                 )
-
-                # Format the results
-                agent_ids = []
-                capabilities = []
-
-                for agent, similarity in semantic_results:
-                    # Skip human agents, the calling agent, and any agents we're already interacting with
-                    if (
-                        agent.agent_type == AgentType.HUMAN
-                        or agent.agent_id in agents_to_exclude
-                    ):
-                        continue
-
-                    agent_ids.append(agent.agent_id)
-
-                    # Include all capabilities of the agent with their similarity scores
-                    agent_capabilities = []
-                    for capability in agent.capabilities:
-                        agent_capabilities.append(
-                            {
-                                "name": capability.name,
-                                "description": capability.description,
-                                "similarity": round(
-                                    float(similarity), 3
-                                ),  # Convert to Python float and round to 3 decimal places
-                            }
-                        )
-
-                    capabilities.append(
-                        {
-                            "agent_id": agent.agent_id,
-                            "capabilities": agent_capabilities,
-                            **(
-                                {"payment_address": agent.payment_address}
-                                if agent.payment_address
-                                else {}
-                            ),
-                        }
-                    )
-
-                # Log the filtering results
-                if agent_id_for_filtering:
-                    logger.debug(
-                        f"After filtering (excluded {len(agents_to_exclude)} agents): "
-                        f"Found {len(agent_ids)} agents for capability '{capability_name}'"
-                    )
-
-                return {
-                    "agent_ids": agent_ids[:limit],
-                    "capabilities": capabilities[:limit],
-                    "message": "Note: Review capabilities carefully before collaborating. Similarity scores under 0.5 may indicate limited relevance to your request.",
-                }
+                return format_agent_results(semantic_results, agents_to_exclude, limit)
 
             # Fall back to exact matching if semantic search returns no results
             exact_results = await agent_registry.get_by_capability(
@@ -330,150 +290,168 @@ def create_agent_search_tool(
 
             if exact_results:
                 logger.debug(f"Found {len(exact_results)} agents via exact matching")
+                return format_exact_results(
+                    exact_results, agents_to_exclude, capability_name, limit
+                )
 
-                # Format the results
-                agent_ids = []
-                capabilities = []
+            # # As a last resort, get all agents
+            # all_agents = await agent_registry.get_all_agents()
+            # if all_agents:
+            #     logger.debug(f"Returning all {len(all_agents)} agents as fallback")
+            #     return format_exact_results(
+            #         all_agents,
+            #         agents_to_exclude,
+            #         capability_name,
+            #         limit,
+            #         fallback_message=f"No specific agents for '{capability_name}'. Showing all available agents."
+            #     )
 
-                for agent in exact_results:
-                    # Skip human agents, the calling agent, and any agents we're already interacting with
-                    if (
-                        agent.agent_type == AgentType.HUMAN
-                        or agent.agent_id in agents_to_exclude
-                    ):
-                        continue
-
-                    agent_ids.append(agent.agent_id)
-
-                    # Include all capabilities of the agent
-                    agent_capabilities = []
-                    for capability in agent.capabilities:
-                        agent_capabilities.append(
-                            {
-                                "name": capability.name,
-                                "description": capability.description,
-                                "similarity": round(
-                                    float(
-                                        1.0
-                                        if capability.name.lower()
-                                        == capability_name.lower()
-                                        else 0.0
-                                    ),
-                                    3,
-                                ),
-                            }
-                        )
-
-                    capabilities.append(
-                        {
-                            "agent_id": agent.agent_id,
-                            "capabilities": agent_capabilities,
-                            **(
-                                {"payment_address": agent.payment_address}
-                                if agent.payment_address
-                                else {}
-                            ),
-                        }
-                    )
-
-                # Log the filtering results
-                if agent_id_for_filtering:
-                    logger.debug(
-                        f"After filtering (excluded {len(agents_to_exclude)} agents): "
-                        f"Found {len(agent_ids)} agents for capability '{capability_name}'"
-                    )
-
-                return {
-                    "agent_ids": agent_ids[:limit],
-                    "capabilities": capabilities[:limit],
-                    "message": "Note: Review capabilities carefully before collaborating. Similarity scores under 0.5 may indicate limited relevance to your request.",
-                }
-
-            # No results found
-            logger.debug(
-                f"No agents found for '{capability_name}'. Try different search term."
+            return AgentSearchOutput(
+                agent_ids=[],
+                capabilities=[],
+                message=f"No agents found matching capability '{capability_name}'. Please try refining your search query with more specific capability terms.",
             )
-
-            # As a last resort, get all agents and return them with a message
-            try:
-                all_agents = await agent_registry.get_all_agents()
-
-                if all_agents:
-                    logger.debug(f"Returning all {len(all_agents)} agents as fallback")
-
-                    # Format the results
-                    agent_ids = []
-                    capabilities = []
-
-                    for agent in all_agents:
-                        # Skip human agents, the calling agent, and any agents we're already interacting with
-                        if (
-                            agent.agent_type == AgentType.HUMAN
-                            or agent.agent_id in agents_to_exclude
-                        ):
-                            continue
-
-                        agent_ids.append(agent.agent_id)
-
-                        # Include all capabilities of the agent
-                        agent_capabilities = []
-                        for capability in agent.capabilities:
-                            agent_capabilities.append(
-                                {
-                                    "name": capability.name,
-                                    "description": capability.description,
-                                    "similarity": round(
-                                        float(
-                                            1.0
-                                            if capability.name.lower()
-                                            == capability_name.lower()
-                                            else 0.0
-                                        ),
-                                        3,
-                                    ),
-                                }
-                            )
-
-                        capabilities.append(
-                            {
-                                "agent_id": agent.agent_id,
-                                "capabilities": agent_capabilities,
-                                **(
-                                    {"payment_address": agent.payment_address}
-                                    if agent.payment_address
-                                    else {}
-                                ),
-                            }
-                        )
-
-                    # Log the filtering results
-                    if agent_id_for_filtering:
-                        logger.debug(
-                            f"After filtering (excluded {len(agents_to_exclude)} agents): "
-                            f"Found {len(agent_ids)} agents as fallback"
-                        )
-
-                    return {
-                        "agent_ids": agent_ids[:limit],
-                        "capabilities": capabilities[:limit],
-                        "message": f"No specific agents for '{capability_name}'. Showing all available agents. Review capabilities carefully before collaborating.",
-                    }
-            except Exception as e:
-                logger.error(f"Error getting all agents: {str(e)}")
-
-            return {
-                "agent_ids": [],
-                "capabilities": [],
-                "message": f"No agents found for '{capability_name}'. Try different search term.",
-            }
         except Exception as e:
             logger.error(f"Error searching for agents: {str(e)}")
-            return {"error": str(e), "agent_ids": [], "capabilities": []}
+            return AgentSearchOutput(
+                agent_ids=[],
+                capabilities=[],
+                message=f"Error searching for agents: {str(e)}",
+            )
+
+    def format_agent_results(
+        semantic_results: List[Tuple[AgentRegistration, float]],
+        agents_to_exclude: List[str],
+        limit: int,
+    ) -> AgentSearchOutput:
+        """Format semantic search results."""
+        agent_ids = []
+        capabilities = []
+
+        for agent, similarity in semantic_results:
+            # Skip human agents and excluded agents
+            if (
+                agent.agent_type == AgentType.HUMAN
+                or agent.agent_id in agents_to_exclude
+            ):
+                continue
+
+            agent_ids.append(agent.agent_id)
+
+            # Include all capabilities with similarity scores
+            agent_capabilities = [
+                {
+                    "name": cap.name,
+                    "description": cap.description,
+                    "similarity": round(float(similarity), 3),
+                }
+                for cap in agent.capabilities
+            ]
+
+            capabilities.append(
+                {
+                    "agent_id": agent.agent_id,
+                    "capabilities": agent_capabilities,
+                    **(
+                        {"payment_address": agent.payment_address}
+                        if agent.payment_address
+                        else {}
+                    ),
+                }
+            )
+
+        return AgentSearchOutput(
+            agent_ids=agent_ids[:limit],
+            capabilities=capabilities[:limit],
+            message="Review capabilities carefully before collaborating. Similarity scores under 0.5 may indicate limited relevance.",
+        )
+
+    def format_exact_results(
+        results: List[AgentRegistration],
+        agents_to_exclude: List[str],
+        capability_name: str,
+        limit: int,
+        fallback_message: Optional[str] = None,
+    ) -> AgentSearchOutput:
+        """Format exact match or fallback results."""
+        agent_ids = []
+        capabilities = []
+
+        for agent in results:
+            # Skip human agents and excluded agents
+            if (
+                agent.agent_type == AgentType.HUMAN
+                or agent.agent_id in agents_to_exclude
+            ):
+                continue
+
+            agent_ids.append(agent.agent_id)
+
+            # Calculate similarity for each capability
+            agent_capabilities = [
+                {
+                    "name": cap.name,
+                    "description": cap.description,
+                    "similarity": round(
+                        float(
+                            1.0 if cap.name.lower() == capability_name.lower() else 0.0
+                        ),
+                        3,
+                    ),
+                }
+                for cap in agent.capabilities
+            ]
+
+            capabilities.append(
+                {
+                    "agent_id": agent.agent_id,
+                    "capabilities": agent_capabilities,
+                    **(
+                        {"payment_address": agent.payment_address}
+                        if agent.payment_address
+                        else {}
+                    ),
+                }
+            )
+
+        message = (
+            fallback_message or "Review capabilities carefully before collaborating."
+        )
+        return AgentSearchOutput(
+            agent_ids=agent_ids[:limit],
+            capabilities=capabilities[:limit],
+            message=message,
+        )
+
+    # Synchronous wrapper
+    def search_agents(
+        capability_name: str, limit: int = 10, similarity_threshold: float = 0.2
+    ) -> AgentSearchOutput:
+        """Search for agents with a specific capability."""
+        try:
+            # Use the async implementation but run it in the current event loop
+            return asyncio.run(
+                search_agents_async(capability_name, limit, similarity_threshold)
+            )
+        except RuntimeError:
+            # If we're already in an event loop, create a new one
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(
+                    search_agents_async(capability_name, limit, similarity_threshold)
+                )
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"Error in search_agents: {str(e)}")
+            return AgentSearchOutput(
+                message=f"Error in search_agents: {str(e)}",
+                agent_ids=[],
+                capabilities=[],
+            )
 
     # Create a description that includes available capabilities if possible
-    description = """
-    Finds other agents within the network that possess specific capabilities you lack, enabling task delegation. Use this tool FIRST when you cannot handle a request directly. Returns a list of suitable agent IDs, their capabilities, and crucially, their `payment_address` if they accept payments for services.
-    """
+    description = f"{base_description} Use this tool FIRST when you cannot handle a request directly. Returns a list of suitable agent IDs, their capabilities, and crucially, their `payment_address` if they accept payments for services."
 
     # Create and return the tool
     tool = StructuredTool.from_function(
@@ -490,9 +468,9 @@ def create_agent_search_tool(
 
 
 def create_send_collaboration_request_tool(
-    communication_hub: CommunicationHub,
-    agent_registry: AgentRegistry,
-    current_agent_id: str,
+    communication_hub: Optional[CommunicationHub] = None,
+    agent_registry: Optional[AgentRegistry] = None,
+    current_agent_id: Optional[str] = None,
 ) -> StructuredTool:
     """
     Create a tool for sending collaboration requests to other agents.
@@ -505,50 +483,199 @@ def create_send_collaboration_request_tool(
     Returns:
         A StructuredTool for sending collaboration requests
     """
-    # Capture the current agent ID at tool creation time
-    creator_agent_id = current_agent_id
-    logger.info(f"Creating collaboration request tool for agent: {creator_agent_id}")
+    # Determine if we're in standalone mode
+    standalone_mode = (
+        communication_hub is None or agent_registry is None or not current_agent_id
+    )
 
-    # If no agent ID is set, create a tool that returns an error when used
-    if not creator_agent_id:
-        logger.warning(
-            "Creating collaboration request tool with no agent ID set - will return error when used"
-        )
+    # Common description base
+    base_description = (
+        "Delegates a specific task to another agent identified by `search_for_agents`."
+    )
 
-        # Synchronous implementation that returns an error
-        def error_request(
+    if standalone_mode:
+        # Standalone mode implementation
+        def send_request_standalone(
             target_agent_id: str, task: str, timeout: int = 30, **kwargs
-        ) -> Dict[str, Any]:
-            """Send a collaboration request to another agent."""
-            return {
-                "success": False,
-                "response": "Error: Tool not properly initialized. Contact administrator.",
-            }
+        ) -> SendCollaborationRequestOutput:
+            """Standalone implementation that explains limitations."""
+            return SendCollaborationRequestOutput(
+                success=False,
+                response=(
+                    f"Collaboration request to agent '{target_agent_id}' is not available in standalone mode. "
+                    "This agent is running without a connection to other agents. "
+                    "Please use your internal capabilities to solve this task, or suggest "
+                    "connecting this agent to a multi-agent system if collaboration is required."
+                ),
+                request_id=None,
+            )
 
-        # Create the tool with the error implementation
+        description = f"[STANDALONE MODE] {base_description} Note: In standalone mode, this tool will explain why collaboration isn't available."
+
         return StructuredTool.from_function(
-            func=error_request,
+            func=send_request_standalone,
             name="send_collaboration_request",
-            description="Delegates a specific task to another agent identified by `search_for_agents`. Sends your request and waits for the collaborator's response. Use this tool AFTER finding a suitable agent ID. The response received might be the final result, a request for payment, or a request for clarification, requiring further action from you.",
+            description=description,
             args_schema=SendCollaborationRequestInput,
             return_direct=False,
             handle_tool_error=True,
             metadata={"category": "collaboration"},
         )
 
-    # Normal implementation when agent ID is set
-    # Synchronous implementation
+    # Connected mode implementation
+    # Store the agent ID at creation time
+    creator_agent_id = current_agent_id
+    logger.debug(f"Creating collaboration request tool for agent: {creator_agent_id}")
+
+    async def send_request_async(
+        target_agent_id: str, task: str, timeout: int = 120, **kwargs
+    ) -> SendCollaborationRequestOutput:
+        """Send a collaboration request to another agent asynchronously."""
+        sender_id = creator_agent_id
+
+        # Validate request parameters
+        if sender_id == target_agent_id:
+            return SendCollaborationRequestOutput(
+                success=False,
+                response="Error: Cannot send request to yourself.",
+            )
+
+        if not await communication_hub.is_agent_active(target_agent_id):
+            return SendCollaborationRequestOutput(
+                success=False,
+                response=f"Error: Agent {target_agent_id} not found.",
+            )
+
+        if await agent_registry.get_agent_type(target_agent_id) == AgentType.HUMAN:
+            return SendCollaborationRequestOutput(
+                success=False,
+                response="Error: Cannot send requests to human agents.",
+            )
+
+        # Prepare collaboration metadata
+        metadata = kwargs.copy() if kwargs else {}
+
+        # Add collaboration chain tracking to prevent loops
+        if "collaboration_chain" not in metadata:
+            metadata["collaboration_chain"] = []
+
+        if sender_id not in metadata["collaboration_chain"]:
+            metadata["collaboration_chain"].append(sender_id)
+
+        if target_agent_id in metadata["collaboration_chain"]:
+            return SendCollaborationRequestOutput(
+                success=False,
+                response=f"Error: Detected loop in collaboration chain with {target_agent_id}.",
+            )
+
+        # If this is the first agent in the chain, store the original sender
+        if len(metadata["collaboration_chain"]) == 1:
+            metadata["original_sender"] = metadata["collaboration_chain"][0]
+
+        # Prevent sending to original sender
+        if (
+            "original_sender" in metadata
+            and metadata["original_sender"] == target_agent_id
+        ):
+            return SendCollaborationRequestOutput(
+                success=False,
+                response=f"Error: Cannot send request back to original sender {target_agent_id}.",
+            )
+
+        # Limit collaboration chain length
+        if len(metadata["collaboration_chain"]) > 5:
+            return SendCollaborationRequestOutput(
+                success=False,
+                response="Error: Collaboration chain too long. Simplify request.",
+            )
+
+        try:
+            # Calculate appropriate timeout
+            adjusted_timeout = min(timeout or 120, 300)  # Cap at 5 minutes
+
+            # Generate a unique request ID if not provided
+            request_id = metadata.get("request_id", str(uuid.uuid4()))
+            metadata["request_id"] = request_id
+
+            # Send the request and wait for response
+            logger.debug(f"Sending collaboration from {sender_id} to {target_agent_id}")
+            response = await communication_hub.send_collaboration_request(
+                sender_id=sender_id,
+                receiver_id=target_agent_id,
+                task_description=task,
+                timeout=adjusted_timeout,
+                **metadata,
+            )
+
+            # --- Handle potential non-string/list response from LLM --- START
+            cleaned_response = response
+            if not isinstance(response, str) and response is not None:
+                if (
+                    isinstance(response, list)
+                    and len(response) == 1
+                    and isinstance(response[0], str)
+                ):
+                    # Handle the specific case of ['string']
+                    logger.warning(
+                        f"Received list-wrapped response from {target_agent_id}, extracting string."
+                    )
+                    cleaned_response = response[0]
+                else:
+                    # For any other non-string type (dict, multi-list, int, etc.), convert to JSON string
+                    try:
+                        logger.warning(
+                            f"Received non-string response type {type(response).__name__} from {target_agent_id}, converting to JSON string."
+                        )
+                        cleaned_response = json.dumps(
+                            response
+                        )  # Attempt JSON conversion
+                    except TypeError as e:
+                        # Fallback if JSON conversion fails (e.g., complex object)
+                        logger.error(
+                            f"Could not JSON serialize response type {type(response).__name__}: {e}. Using str() representation."
+                        )
+                        cleaned_response = str(response)
+            # --- Handle potential non-string/list response from LLM --- END
+
+            # Handle timeout case
+            if cleaned_response is None or (
+                isinstance(cleaned_response, str)
+                and "No immediate response received" in cleaned_response
+            ):
+                logger.warning(f"Timeout on request to {target_agent_id}")
+                return SendCollaborationRequestOutput(
+                    success=False,
+                    response=f"No immediate response from {target_agent_id} within {adjusted_timeout} seconds. "
+                    f"The request is still processing (ID: {request_id}). "
+                    f"Check for a late response using check_collaboration_result with this request ID.",
+                    error="timeout",
+                    request_id=request_id,
+                )
+
+            # Handle success case
+            logger.debug(f"Got response from {target_agent_id}")
+            return SendCollaborationRequestOutput(
+                success=True, response=cleaned_response, request_id=request_id
+            )
+
+        except Exception as e:
+            logger.exception(f"Error sending collaboration request: {str(e)}")
+            return SendCollaborationRequestOutput(
+                success=False,
+                response=f"Error: Collaboration failed - {str(e)}",
+                error="collaboration_exception",
+            )
+
+    # Synchronous wrapper
     def send_request(
         target_agent_id: str, task: str, timeout: int = 30, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> SendCollaborationRequestOutput:
         """Send a collaboration request to another agent."""
         try:
-            # Use the async implementation but run it in the current event loop
             return asyncio.run(
                 send_request_async(target_agent_id, task, timeout, **kwargs)
             )
         except RuntimeError:
-            # If we're already in an event loop, create a new one
             loop = asyncio.new_event_loop()
             try:
                 return loop.run_until_complete(
@@ -558,163 +685,160 @@ def create_send_collaboration_request_tool(
                 loop.close()
         except Exception as e:
             logger.error(f"Error in send_request: {str(e)}")
-            return {
-                "success": False,
-                "response": f"Error sending collaboration request: {str(e)}",
-            }
-
-    # Asynchronous implementation
-    async def send_request_async(
-        target_agent_id: str,
-        task: str,
-        timeout: int = 30,
-        **kwargs,  # Additional data
-    ) -> Dict[str, Any]:
-        """Send a collaboration request to another agent asynchronously."""
-        # Always use the captured agent ID from tool creation time
-        # This ensures we use the correct agent ID even if current_agent_id changes
-        sender_id = creator_agent_id
-
-        if not sender_id:
-            logger.error("No sender_id available for collaboration request")
-            return {
-                "success": False,
-                "response": "Error: Tool not properly initialized with agent context",
-            }
-
-        # Check if required dependencies are available
-        if communication_hub is None:
-            logger.error("Communication hub is not available for collaboration request")
-            return {
-                "success": False,
-                "response": "Error: Communication hub unavailable.",
-            }
-
-        if agent_registry is None:
-            logger.error("Agent registry is not available for collaboration request")
-            return {
-                "success": False,
-                "response": "Error: Agent registry unavailable.",
-            }
-
-        logger.info(
-            f"COLLABORATION REQUEST: Using sender_id={sender_id} to send request to target_agent_id={target_agent_id}"
-        )
-
-        # Check if we're trying to send a request to ourselves
-        if sender_id == target_agent_id:
-            logger.error(
-                f"Cannot send collaboration request to yourself: {sender_id} -> {target_agent_id}"
-            )
-            return {
-                "success": False,
-                "response": "Error: Cannot send request to yourself.",
-            }
-
-        # Check if the target agent exists
-        if not await communication_hub.is_agent_active(target_agent_id):
-            return {
-                "success": False,
-                "response": f"Error: Agent {target_agent_id} not found.",
-            }
-
-        # Check if the target agent is a human agent
-        if await agent_registry.get_agent_type(target_agent_id) == AgentType.HUMAN:
-            return {
-                "success": False,
-                "response": "Error: Cannot send requests to human agents.",
-            }
-
-        # Add retry tracking to prevent infinite loops
-        # Use a shorter timeout to prevent long waits
-        adjusted_timeout = min(timeout, 90)  # Cap timeout at 90 seconds
-
-        # Add metadata to track the collaboration chain
-        metadata = kwargs.copy() if kwargs else {}
-        if "collaboration_chain" not in metadata:
-            metadata["collaboration_chain"] = []
-
-        # Add the current agent to the collaboration chain
-        if sender_id not in metadata["collaboration_chain"]:
-            metadata["collaboration_chain"].append(sender_id)
-
-        # Check if we're creating a loop in the collaboration chain
-        if target_agent_id in metadata["collaboration_chain"]:
-            return {
-                "success": False,
-                "response": f"Error: Detected loop in collaboration chain with {target_agent_id}.",
-            }
-
-        # Check if the original sender is in the collaboration chain
-        # and prevent sending a request back to the original sender
-        if (
-            "original_sender" in metadata
-            and metadata["original_sender"] == target_agent_id
-        ):
-            return {
-                "success": False,
-                "response": f"Error: Cannot send request back to original sender {target_agent_id}.",
-            }
-
-        # If this is the first agent in the chain, store the original sender
-        if len(metadata["collaboration_chain"]) == 1:
-            metadata["original_sender"] = metadata["collaboration_chain"][0]
-
-        # Limit the collaboration chain length to prevent deep recursion
-        if len(metadata["collaboration_chain"]) > 5:
-            return {
-                "success": False,
-                "response": "Error: Collaboration chain too long. Simplify request.",
-            }
-
-        try:
-            # Send the collaboration request
-            logger.info(
-                f"Sending collaboration request from {sender_id} to {target_agent_id}"
+            return SendCollaborationRequestOutput(
+                success=False,
+                response=f"Error sending collaboration request: {str(e)}",
             )
 
-            # Ensure we're using the correct sender_id
-            response = await communication_hub.send_collaboration_request(
-                sender_id=sender_id,  # Use the current agent's ID
-                receiver_id=target_agent_id,
-                task_description=task,
-                timeout=adjusted_timeout,
-                **metadata,
-            )
+    # Create and return the connected mode tool
+    description = (
+        f"{base_description} Sends your request and waits for the collaborator's response. "
+        "Use this tool ONLY to initiate a new collaboration request to another agent. "
+        "When you receive a collaboration request, reply directly to the requesting agent with your result, clarification, or error—do NOT use this tool to reply to the same agent. "
+        "The response might be the final result, a request for payment, or a request for clarification, requiring further action from you."
+    )
 
-            # Log the response for debugging
-            if response is None:
-                logger.warning(
-                    f"Received None response from send_collaboration_request to {target_agent_id}"
-                )
-                return {
-                    "success": False,
-                    "response": f"No response from {target_agent_id} within {adjusted_timeout} seconds.",
-                    "error": "timeout",
-                }
-            else:
-                logger.info(
-                    f"Received response from {target_agent_id}: {response[:100]}..."
-                )
-
-            # For normal responses, return as is
-            return {"success": True, "response": response}
-
-        except Exception as e:
-            logger.exception(f"Error sending collaboration request: {str(e)}")
-            return {
-                "success": False,
-                "response": f"Error: Collaboration failed - {str(e)}",
-                "error": "collaboration_exception",
-            }
-
-    # Create and return the tool
     return StructuredTool.from_function(
         func=send_request,
         name="send_collaboration_request",
-        description="Delegates a specific task to another agent identified by `search_for_agents`. Sends your request and waits for the collaborator's response. Use this tool AFTER finding a suitable agent ID. The response received might be the final result, a request for payment, or a request for clarification, requiring further action from you.",
+        description=description,
         args_schema=SendCollaborationRequestInput,
         return_direct=False,
         handle_tool_error=True,
+        # coroutine=send_request_async,     #! TODO: Removed async coroutine temporarily
+        metadata={"category": "collaboration"},
+    )
+
+
+def create_check_collaboration_result_tool(
+    communication_hub: Optional[CommunicationHub] = None,
+    agent_registry: Optional[AgentRegistry] = None,
+    current_agent_id: Optional[str] = None,
+) -> StructuredTool:
+    """
+    Create a tool for checking the status of previously sent collaboration requests.
+
+    This tool is particularly useful for retrieving late responses that arrived
+    after a timeout occurred in the original collaboration request.
+
+    Args:
+        communication_hub: Hub for agent communication
+        agent_registry: Registry for accessing agent information
+        current_agent_id: ID of the agent using the tool
+
+    Returns:
+        A StructuredTool for checking collaboration results
+    """
+    # Determine if we're in standalone mode
+    standalone_mode = communication_hub is None or agent_registry is None
+
+    # Common description base
+    base_description = "Check if a previous collaboration request has completed and retrieve its result."
+
+    if standalone_mode:
+        # Standalone mode implementation
+        def check_result_standalone(request_id: str) -> CheckCollaborationResultOutput:
+            """Standalone implementation that explains limitations."""
+            return CheckCollaborationResultOutput(
+                success=False,
+                status="not_available",
+                response=(
+                    f"Checking collaboration result for request '{request_id}' is not available in standalone mode. "
+                    "Please continue with your own internal capabilities."
+                ),
+            )
+
+        description = f"[STANDALONE MODE] {base_description} Note: In standalone mode, this tool will explain why checking results isn't available."
+
+        return StructuredTool.from_function(
+            func=check_result_standalone,
+            name="check_collaboration_result",
+            description=description,
+            args_schema=CheckCollaborationResultInput,
+            return_direct=False,
+            metadata={"category": "collaboration"},
+        )
+
+    # Connected mode implementation
+    async def check_result_async(request_id: str) -> CheckCollaborationResultOutput:
+        """Check if a previous collaboration request has a result asynchronously."""
+        # Check for late responses first
+        if (
+            hasattr(communication_hub, "late_responses")
+            and request_id in communication_hub.late_responses
+        ):
+            logger.debug(f"Found late response for request {request_id}")
+            response = communication_hub.late_responses[request_id]
+            return CheckCollaborationResultOutput(
+                success=True,
+                status="completed_late",
+                response=response.content,
+            )
+
+        # Check pending responses
+        if request_id in communication_hub.pending_responses:
+            future = communication_hub.pending_responses[request_id]
+            if future.done() and not hasattr(future, "_timed_out"):
+                try:
+                    logger.debug(f"Found completed response for request {request_id}")
+                    response = future.result()
+                    return CheckCollaborationResultOutput(
+                        success=True,
+                        status="completed",
+                        response=response.content,
+                    )
+                except Exception as e:
+                    logger.error(f"Error getting result from future: {str(e)}")
+                    return CheckCollaborationResultOutput(
+                        success=False,
+                        status="error",
+                        response=f"Error retrieving response: {str(e)}",
+                    )
+            else:
+                # Still pending
+                return CheckCollaborationResultOutput(
+                    success=False,
+                    status="pending",
+                    response="The collaboration request is still being processed. Try checking again later.",
+                )
+
+        # Request ID not found
+        logger.warning(f"No result found for request ID: {request_id}")
+        return CheckCollaborationResultOutput(
+            success=False,
+            status="not_found",
+            response=f"No result found for request ID: {request_id}. The request may have been completed but not stored, or the ID may be incorrect.",
+        )
+
+    # Synchronous wrapper
+    def check_result(request_id: str) -> CheckCollaborationResultOutput:
+        """Check if a previous collaboration request has a result."""
+        try:
+            return asyncio.run(check_result_async(request_id))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(check_result_async(request_id))
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"Error in check_result: {str(e)}")
+            return CheckCollaborationResultOutput(
+                success=False,
+                status="error",
+                response=f"Error checking result: {str(e)}",
+            )
+
+    # Create and return the connected mode tool
+    description = f"{base_description} This is useful for retrieving responses that arrived after the initial timeout period."
+
+    return StructuredTool.from_function(
+        func=check_result,
+        name="check_collaboration_result",
+        description=description,
+        args_schema=CheckCollaborationResultInput,
+        return_direct=False,
+        handle_tool_error=True,
+        coroutine=check_result_async,
         metadata={"category": "collaboration"},
     )

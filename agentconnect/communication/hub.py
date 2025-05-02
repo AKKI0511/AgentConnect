@@ -60,6 +60,8 @@ class CommunicationHub:
         self._global_handlers: List[Callable[[Message], Awaitable[None]]] = []
         # Store pending requests as {request_id: Future}
         self.pending_responses: Dict[str, Future] = {}
+        # Store late responses as {request_id: Message}
+        self.late_responses: Dict[str, Message] = {}
 
     def add_message_handler(
         self, agent_id: str, handler: Callable[[Message], Awaitable[None]]
@@ -379,6 +381,11 @@ class CommunicationHub:
                             ):
                                 logger.warning(
                                     f"Received late response for timed out request {request_id}"
+                                )
+                                # Store the late response for potential retrieval
+                                self.late_responses[request_id] = message
+                                logger.info(
+                                    f"Stored late response for request {request_id} for potential future retrieval"
                                 )
                                 # Even though the request timed out, we still want to record the message
                                 # and notify handlers, but we won't set the result on the future
@@ -790,6 +797,11 @@ class CommunicationHub:
             if "request_id" not in metadata:
                 metadata["request_id"] = request_id
 
+            # Estimate an appropriate timeout based on task complexity
+            # Base timeout of 60 seconds plus 15 seconds per 100 characters, capped at 5 minutes
+            estimated_timeout = min(60 + (len(task_description) // 100) * 15, 300)
+            effective_timeout = kwargs.get("timeout", estimated_timeout)
+
             # Send the request and wait for response
             logger.debug(
                 f"Sending collaboration request with request_id: {metadata['request_id']}"
@@ -800,7 +812,7 @@ class CommunicationHub:
                 content=task_description,
                 message_type=MessageType.REQUEST_COLLABORATION,
                 metadata=metadata,
-                timeout=max(timeout, 60),
+                timeout=effective_timeout,
             )
 
             # Log the response status for debugging
@@ -818,10 +830,15 @@ class CommunicationHub:
                 return response.content
             else:
                 logger.warning(
-                    f"No response received from {receiver_id} within {timeout} seconds for request_id {metadata['request_id']}"
+                    f"No response received from {receiver_id} within {effective_timeout} seconds for request_id {metadata['request_id']}"
                 )
+
+                # More helpful error message that provides the request ID for later checking
                 return (
-                    f"No response received from {receiver_id} within {timeout} seconds"
+                    f"No immediate response received from {receiver_id} within {effective_timeout} seconds. "
+                    f"The request is still processing (ID: {metadata['request_id']}). "
+                    f"If you receive a response later, it will be available. "
+                    f"You can continue with other tasks and check back later."
                 )
 
         except Exception as e:

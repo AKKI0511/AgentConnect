@@ -1,6 +1,6 @@
 [project]
 name = "agentconnect"
-version = "0.2.0"
+version = "0.3.0"
 description = "AgentConnect - A framework for connecting and managing AI agents"
 authors = [
     {name = "Akshat Joshi",email = "akkijoshi0511@gmail.com"}

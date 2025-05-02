@@ -1,306 +1,431 @@
 Multi-Agent Setup Guide
-=====================
+======================
 
 .. _multi_agent_setup:
 
-Setting Up Multiple Agents
------------------------
+This guide explains how to set up multiple agents that can collaborate, discover each other based on capabilities, and work together to solve complex problems.
 
-This guide explains how to set up and manage multiple agents in AgentConnect.
-
-Prerequisites
+Introduction
 -----------
 
-Before setting up multiple agents, ensure you have:
+In AgentConnect, multi-agent systems consist of independent agents—each with their own specialized capabilities—working together through standardized communication. The framework handles agent discovery and message routing automatically, allowing you to focus on defining the agents and their skills.
 
-- Installed AgentConnect
-- API keys for the AI providers you plan to use
-- Basic understanding of the AgentConnect architecture
+The core value of multi-agent systems comes from:
 
-Creating Multiple Agents
----------------------
+- **Specialization**: Agents can focus on specific tasks they excel at
+- **Modularity**: New capabilities can be added by introducing new agents
+- **Scalability**: Systems can grow organically as needs evolve
+- **Separation of concerns**: Each agent manages its own internal logic
 
-To create multiple agents, you'll need to:
+Core Principles of Multi-Agent Setup
+-----------------------------------
 
-1. Create agent identities
-2. Initialize agents with different configurations
-3. Register them with a communication hub
+The key to enabling collaboration between agents lies in three fundamental concepts:
 
-Here's an example:
+1. **Capabilities**: Clearly defined services that agents can provide
+2. **Registry**: A directory for capability-based discovery
+3. **Communication Hub**: A message router connecting agents based on registry lookups
+
+Let's explore each of these principles:
+
+Capabilities: The Foundation of Collaboration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each agent declares its capabilities—the services it can provide to other agents. These capability definitions include:
+
+- A unique name
+- A clear description
+- Input and output schemas
+
+For example:
+
+.. code-block:: python
+
+    from agentconnect.core.types import Capability
+    
+    # Define a summarization capability
+    summarization_capability = Capability(
+        name="text_summarization",
+        description="Summarizes text content into concise form",
+        input_schema={"text": "string", "max_length": "integer"},
+        output_schema={"summary": "string"}
+    )
+    
+    # Define a data analysis capability
+    analysis_capability = Capability(
+        name="data_analysis",
+        description="Analyzes data and provides insights",
+        input_schema={"data": "string"},
+        output_schema={"analysis": "string"}
+    )
+
+When you create an agent with these capabilities, you're advertising what services the agent can provide to others in the system.
+
+Registry: The Agent Directory
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``AgentRegistry`` serves as a dynamic directory of all available agents and their capabilities. When an agent needs a specific capability, the registry provides the means to find agents that offer it.
+
+.. code-block:: python
+
+    from agentconnect.core.registry import AgentRegistry
+    
+    # Create the registry
+    registry = AgentRegistry()
+
+Communication Hub: Message Routing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``CommunicationHub`` handles message routing between agents, allowing them to exchange information regardless of where they're located:
+
+.. code-block:: python
+
+    from agentconnect.communication import CommunicationHub
+    
+    # Create the hub with reference to the registry
+    hub = CommunicationHub(registry)
+
+Step-by-Step Guide to Setup
+--------------------------
+
+Now let's walk through the steps to create a multi-agent system:
+
+Step 1: Define Agent Roles & Capabilities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First, plan what agents you need and what capabilities each should have. For example:
+
+- **Orchestrator Agent**: Coordinates workflows, interacts with users
+- **Summarizer Agent**: Specializes in condensing text into summaries
+
+For each agent, define clear, well-described capabilities that other agents can discover and use.
+
+Step 2: Create Agent Identities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each agent needs a secure identity for authentication and message signing:
+
+.. code-block:: python
+
+    from agentconnect.core.types import AgentIdentity
+    
+    # Create identities for each agent
+    orchestrator_identity = AgentIdentity.create_key_based()
+    summarizer_identity = AgentIdentity.create_key_based()
+    analyst_identity = AgentIdentity.create_key_based()
+
+Step 3: Instantiate Agents
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Create each agent with its unique identity, capabilities, and configuration:
+
+.. code-block:: python
+
+    from agentconnect.agents import AIAgent
+    from agentconnect.core.types import ModelProvider, ModelName
+    
+    # Create an orchestrator agent
+    orchestrator = AIAgent(
+        agent_id="orchestrator",
+        name="Orchestrator",
+        provider_type=ModelProvider.OPENAI,
+        model_name=ModelName.GPT4O,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        identity=orchestrator_identity,
+        capabilities=[
+            Capability(
+                name="task_management",
+                description="Manages and coordinates complex tasks",
+                input_schema={"task": "string"},
+                output_schema={"result": "string"}
+            )
+        ],
+        personality="I coordinate complex tasks by working with specialized agents."
+    )
+    
+    # Create a summarizer agent
+    summarizer = AIAgent(
+        agent_id="summarizer",
+        name="Summarizer",
+        provider_type=ModelProvider.OPENAI,
+        model_name=ModelName.GPT4O,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        identity=summarizer_identity,
+        capabilities=[
+            Capability(
+                name="text_summarization",
+                description="Summarizes text into concise form",
+                input_schema={"text": "string", "max_length": "integer"},
+                output_schema={"summary": "string"}
+            )
+        ],
+        personality="I specialize in creating concise summaries of text content."
+    )
+
+Notice how each agent has different capabilities, even though they may use the same underlying AI model.
+
+Step 4: Initialize Hub & Registry
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create the registry and hub that will connect your agents:
+
+.. code-block:: python
+
+    # Create registry and hub
+    registry = AgentRegistry()
+    hub = CommunicationHub(registry)
+
+Step 5: Register All Agents
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Register each agent with the hub to make them discoverable:
+
+.. code-block:: python
+
+    # Register all agents
+    await hub.register_agent(orchestrator)
+    await hub.register_agent(summarizer)
+
+This step is crucial—only registered agents can be discovered by others based on their capabilities.
+
+Step 6: Start Agent Run Loops
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Start each agent's processing loop so they can receive and handle messages:
+
+.. code-block:: python
+
+    # Start all agent loops
+    orchestrator_task = asyncio.create_task(orchestrator.run())
+    summarizer_task = asyncio.create_task(summarizer.run())
+
+Each agent now runs independently, listening for messages and processing them based on their internal logic.
+
+Initiating Collaboration
+----------------------
+
+There are several ways agents can collaborate within the AgentConnect framework:
+
+**Direct Agent-to-Agent Communication**
+
+The simplest approach is when one agent explicitly sends a message to another:
+
+.. code-block:: python
+
+    # Orchestrator directly messages the summarizer
+    await orchestrator.send_message(
+        receiver_id=summarizer.agent_id,
+        content="Please summarize the following text: 'AgentConnect enables decentralized agent collaboration...'",
+        message_type=MessageType.TEXT
+    )
+
+**Human-Initiated Workflows**
+
+Often, a human user initiates the workflow by interacting with a primary agent:
+
+.. code-block:: python
+
+    # Create and register a human agent
+    human = HumanAgent(
+        agent_id="human",
+        name="User",
+        identity=human_identity
+    )
+    await hub.register_agent(human)
+    
+    # Start human interaction with the primary agent
+    await human.start_interaction(orchestrator)
+
+The human's messages trigger the orchestrator, which then coordinates with other agents as needed to fulfill requests.
+
+**Capability-Based Discovery and Collaboration**
+
+In more sophisticated workflows, agents use built-in collaboration tools to discover each other and work together. These tools abstract the complexity of registry lookups and message exchange.
+
+For example, an agent might use:
+
+- ``search_for_agents`` to find other agents with specific capabilities
+- ``send_collaboration_request`` to delegate tasks and manage responses
+
+These built-in tools enable truly dynamic collaboration where agents discover and work with each other based on capabilities rather than hardcoded agent IDs. For a detailed exploration of these collaboration patterns, see the :doc:`collaborative_workflows` guide.
+
+Simplified Example: Task Delegation
+---------------------------------
+
+Here's a complete example demonstrating a basic multi-agent setup with task delegation:
 
 .. code-block:: python
 
     import asyncio
-    from agentconnect.agents import AIAgent
-    from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity, InteractionMode
-    from agentconnect.core.registry import AgentRegistry
+    import os
+    from dotenv import load_dotenv
+    
+    from agentconnect.agents import AIAgent, HumanAgent
     from agentconnect.communication import CommunicationHub
-    
-    async def setup_agents():
-        # Create an agent registry and communication hub
-        registry = AgentRegistry()
-        hub = CommunicationHub(registry)
-        
-        # Create identities for your agents
-        assistant_identity = AgentIdentity.create_key_based()
-        researcher_identity = AgentIdentity.create_key_based()
-        coder_identity = AgentIdentity.create_key_based()
-        
-        # Create an assistant agent
-        assistant_agent = AIAgent(
-            agent_id="assistant-1",
-            name="Assistant",
-            provider_type=ModelProvider.OPENAI,
-            model_name=ModelName.GPT4O,
-            api_key="your-openai-api-key",
-            identity=assistant_identity,
-            interaction_modes=[
-                InteractionMode.HUMAN_TO_AGENT,
-                InteractionMode.AGENT_TO_AGENT
-            ]
-        )
-        
-        # Create a researcher agent
-        researcher_agent = AIAgent(
-            agent_id="researcher-1",
-            name="Researcher",
-            provider_type=ModelProvider.ANTHROPIC,
-            model_name=ModelName.CLAUDE_3_7_SONNET,
-            api_key="your-anthropic-api-key",
-            identity=researcher_identity,
-            interaction_modes=[
-                InteractionMode.AGENT_TO_AGENT
-            ]
-        )
-        
-        # Create a coder agent
-        coder_agent = AIAgent(
-            agent_id="coder-1",
-            name="Coder",
-            provider_type=ModelProvider.OPENAI,
-            model_name=ModelName.GPT4O,
-            api_key="your-openai-api-key",
-            identity=coder_identity,
-            interaction_modes=[
-                InteractionMode.AGENT_TO_AGENT
-            ]
-        )
-        
-        # Register the agents with the hub
-        await hub.register_agent(assistant_agent)
-        await hub.register_agent(researcher_agent)
-        await hub.register_agent(coder_agent)
-        
-        return hub, [assistant_agent, researcher_agent, coder_agent]
-
-Configuring Agent Communication
-----------------------------
-
-Once you have multiple agents, you need to configure how they communicate:
-
-.. code-block:: python
-
-    from agentconnect.core.message import Message
-    from agentconnect.core.types import MessageType
-    
-    async def setup_communication(hub, agents):
-        assistant, researcher, coder = agents
-        
-        # Set up message handlers
-        async def assistant_handler(message):
-            print(f"Assistant received: {message.content[:50]}...")
-            # Process the message and potentially respond
-        
-        async def researcher_handler(message):
-            print(f"Researcher received: {message.content[:50]}...")
-            # Process the message and potentially respond
-        
-        async def coder_handler(message):
-            print(f"Coder received: {message.content[:50]}...")
-            # Process the message and potentially respond
-        
-        # Register the handlers with the hub
-        hub.register_message_handler(assistant.agent_id, assistant_handler)
-        hub.register_message_handler(researcher.agent_id, researcher_handler)
-        hub.register_message_handler(coder.agent_id, coder_handler)
-
-Orchestrating Multi-Agent Workflows
---------------------------------
-
-To orchestrate workflows involving multiple agents:
-
-.. code-block:: python
-
-    async def run_workflow(hub, agents):
-        assistant, researcher, coder = agents
-        
-        # User sends a request to the assistant
-        user_identity = AgentIdentity.create_key_based()
-        
-        user_message = Message.create(
-            sender_id="user-1",
-            receiver_id=assistant.agent_id,
-            content="I need to build a Python application that analyzes stock market data.",
-            sender_identity=user_identity,
-            message_type=MessageType.TEXT
-        )
-        
-        # Assistant routes the request to the researcher for information gathering
-        await hub.route_message(user_message)
-        
-        # In a real implementation, the assistant would process the message and then
-        # decide to send a message to the researcher
-        
-        research_request = Message.create(
-            sender_id=assistant.agent_id,
-            receiver_id=researcher.agent_id,
-            content="Find information about Python libraries for stock market analysis.",
-            sender_identity=assistant.identity,
-            message_type=MessageType.TEXT
-        )
-        
-        await hub.route_message(research_request)
-        
-        # The researcher would process and respond, then the assistant might
-        # send a request to the coder
-        
-        coding_request = Message.create(
-            sender_id=assistant.agent_id,
-            receiver_id=coder.agent_id,
-            content="Create a Python script that uses pandas and yfinance to analyze stock data.",
-            sender_identity=assistant.identity,
-            message_type=MessageType.TEXT
-        )
-        
-        await hub.route_message(coding_request)
-        
-        # In a real implementation, you would have proper message handling and
-        # response processing
-
-Complete Example
--------------
-
-Here's a complete example that sets up multiple agents and runs a simple workflow:
-
-.. code-block:: python
-
-    import asyncio
-    import logging
-    
-    from agentconnect.agents import AIAgent
-    from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity, MessageType, InteractionMode
-    from agentconnect.core.message import Message
     from agentconnect.core.registry import AgentRegistry
-    from agentconnect.communication import CommunicationHub
-    
-    # Set up logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    from agentconnect.core.types import (
+        AgentIdentity, 
+        Capability, 
+        InteractionMode, 
+        ModelName, 
+        ModelProvider,
+        MessageType
+    )
     
     async def main():
-        # Create an agent registry and communication hub
+        # Load environment variables
+        load_dotenv()
+        
+        # Create the registry and hub
         registry = AgentRegistry()
         hub = CommunicationHub(registry)
         
-        # Create identities for your agents
-        assistant_identity = AgentIdentity.create_key_based()
-        researcher_identity = AgentIdentity.create_key_based()
-        user_identity = AgentIdentity.create_key_based()
+        # Create agent identities
+        orchestrator_identity = AgentIdentity.create_key_based()
+        summarizer_identity = AgentIdentity.create_key_based()
+        human_identity = AgentIdentity.create_key_based()
         
-        # Create an assistant agent
-        assistant_agent = AIAgent(
-            agent_id="assistant-1",
-            name="Assistant",
+        # Create an orchestrator agent
+        orchestrator = AIAgent(
+            agent_id="orchestrator",
+            name="Orchestrator",
             provider_type=ModelProvider.OPENAI,
             model_name=ModelName.GPT4O,
-            api_key="your-openai-api-key",
-            identity=assistant_identity
+            api_key=os.getenv("OPENAI_API_KEY"),
+            identity=orchestrator_identity,
+            capabilities=[
+                Capability(
+                    name="task_coordination",
+                    description="Coordinates tasks and delegates to specialized agents",
+                    input_schema={"request": "string"},
+                    output_schema={"result": "string"}
+                )
+            ],
+            personality="I'm a coordinator who delegates tasks to specialized agents."
         )
         
-        # Create a researcher agent
-        researcher_agent = AIAgent(
-            agent_id="researcher-1",
-            name="Researcher",
-            provider_type=ModelProvider.ANTHROPIC,
-            model_name=ModelName.CLAUDE_3_7_SONNET,
-            api_key="your-anthropic-api-key",
-            identity=researcher_identity
+        # Create a summarizer agent
+        summarizer = AIAgent(
+            agent_id="summarizer",
+            name="Summarizer",
+            provider_type=ModelProvider.OPENAI,
+            model_name=ModelName.GPT4O,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            identity=summarizer_identity,
+            capabilities=[
+                Capability(
+                    name="text_summarization",
+                    description="Summarizes text into concise form",
+                    input_schema={"text": "string", "max_length": "integer"},
+                    output_schema={"summary": "string"}
+                )
+            ],
+            personality="I specialize in creating concise summaries of text content."
         )
         
-        # Register the agents with the hub
-        await hub.register_agent(assistant_agent)
-        await hub.register_agent(researcher_agent)
+        # Create a human agent
+        human = HumanAgent(
+            agent_id="human",
+            name="User",
+            identity=human_identity,
+        )
         
-        # Set up message handlers
-        async def assistant_handler(message):
-            logger.info(f"Assistant received: {message.content[:50]}...")
-            
-            if message.sender_id == "user-1":
-                # Forward to researcher for more information
-                research_request = Message.create(
-                    sender_id=assistant_agent.agent_id,
-                    receiver_id=researcher_agent.agent_id,
-                    content=f"Research this topic: {message.content}",
-                    sender_identity=assistant_agent.identity,
-                    message_type=MessageType.TEXT
-                )
-                await hub.route_message(research_request)
-            
-            elif message.sender_id == researcher_agent.agent_id:
-                # Process research results and respond to user
-                user_response = Message.create(
-                    sender_id=assistant_agent.agent_id,
-                    receiver_id="user-1",
-                    content=f"Based on research, here's what I found: {message.content}",
-                    sender_identity=assistant_agent.identity,
-                    message_type=MessageType.RESPONSE
-                )
-                await hub.route_message(user_response)
+        # Register all agents
+        await hub.register_agent(orchestrator)
+        await hub.register_agent(summarizer)
+        await hub.register_agent(human)
         
-        async def researcher_handler(message):
-            logger.info(f"Researcher received: {message.content[:50]}...")
+        # Start agent processing loops
+        orchestrator_task = asyncio.create_task(orchestrator.run())
+        summarizer_task = asyncio.create_task(summarizer.run())
+        
+        try:
+            # Simulate a direct collaboration
+            print("Demonstrating direct collaboration...")
             
-            # Simulate research process
-            research_result = f"Research results for: {message.content}"
-            
-            # Send results back to assistant
-            response = Message.create(
-                sender_id=researcher_agent.agent_id,
-                receiver_id=message.sender_id,
-                content=research_result,
-                sender_identity=researcher_agent.identity,
-                message_type=MessageType.RESPONSE
+            # Orchestrator sends a task to the summarizer
+            # Note: In a more dynamic scenario, the orchestrator might first use
+            # the search_for_agents tool to find agents with summarization capabilities
+            await orchestrator.send_message(
+                receiver_id=summarizer.agent_id,
+                content="Please summarize the following text: 'AgentConnect is a framework for building decentralized multi-agent systems. It provides tools for agent identity, messaging, and capability discovery. Agents can find and collaborate with each other based on their capabilities without centralized control.'",
+                message_type=MessageType.TEXT
             )
-            await hub.route_message(response)
-        
-        async def user_handler(message):
-            logger.info(f"User received: {message.content[:50]}...")
-            # In a real application, you would display this to the user
-        
-        # Register the handlers with the hub
-        hub.register_message_handler(assistant_agent.agent_id, assistant_handler)
-        hub.register_message_handler(researcher_agent.agent_id, researcher_handler)
-        hub.register_message_handler("user-1", user_handler)
-        
-        # Start the workflow with a user message
-        user_message = Message.create(
-            sender_id="user-1",
-            receiver_id=assistant_agent.agent_id,
-            content="Tell me about quantum computing applications.",
-            sender_identity=user_identity,
-            message_type=MessageType.TEXT
-        )
-        
-        # Send the message through the hub
-        logger.info(f"User sending message: {user_message.content}")
-        await hub.route_message(user_message)
-        
-        # In a real application, you would have a proper event loop
-        # For this example, we'll just wait a short time for the workflow to complete
-        await asyncio.sleep(5)
-        
-        logger.info("Multi-agent workflow completed")
+            
+            # In a real system, the summarizer would process this and respond
+            # The orchestrator would receive the response via its run() loop
+            
+            # Wait a moment to let the message processing occur
+            await asyncio.sleep(5)
+            
+            print("\nNow starting human interaction with orchestrator...")
+            # Start human interaction for a more natural workflow
+            await human.start_interaction(orchestrator)
+            
+        finally:
+            # Cleanup
+            print("Shutting down agents...")
+            await orchestrator.stop()
+            await summarizer.stop()
+            await hub.unregister_agent(orchestrator.agent_id)
+            await hub.unregister_agent(summarizer.agent_id)
+            await hub.unregister_agent(human.agent_id)
+            print("Done.")
     
-    # Run the async function
     if __name__ == "__main__":
-        asyncio.run(main()) 
+        asyncio.run(main())
+
+When you run this example:
+
+1. Two AI agents are created with different capabilities
+2. Both agents are registered with the hub
+3. Both agents start their processing loops
+4. The orchestrator sends a summarization task to the summarizer
+5. The human user can then interact with the orchestrator to trigger more complex workflows
+
+Monitoring Interactions
+---------------------
+
+To understand what's happening in your multi-agent system, AgentConnect provides built-in monitoring:
+
+.. code-block:: python
+
+    from agentconnect.utils.callbacks import ToolTracerCallbackHandler
+    
+    # Add this when creating an agent
+    orchestrator = AIAgent(
+        # ... other parameters ...
+        external_callbacks=[
+            ToolTracerCallbackHandler(
+                agent_id="orchestrator",
+                print_tool_activity=True,
+                print_reasoning_steps=True
+            )
+        ]
+    )
+
+The ``ToolTracerCallbackHandler`` provides detailed, color-coded output showing:
+
+- Messages sent and received
+- Tool usage and function calls
+- Agent reasoning steps
+
+For more advanced monitoring using LangSmith, see the :doc:`event_monitoring` guide.
+
+Conclusion & Next Steps
+---------------------
+
+You've now learned the fundamental principles of setting up multiple agents for collaboration in AgentConnect:
+
+1. Define clear capabilities for each agent
+2. Register all agents with the hub
+3. Start each agent's processing loop
+4. Initiate collaboration through direct messages or human interaction
+
+This setup enables a flexible, extensible multi-agent system where agents can discover and communicate with each other based on their capabilities.
+
+To build on this foundation:
+
+- Learn how to design more complex collaborative workflows in :doc:`collaborative_workflows`
+- Discover how to equip agents with external tools in :doc:`external_tools`
+- Explore options for payment-enabled agents in :doc:`agent_payment`

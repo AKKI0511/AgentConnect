@@ -1,48 +1,36 @@
 # Installation
 
-## Prerequisites
+### Prerequisites
 
 - Python 3.11 or higher
 - Poetry (Python package manager)
-- Redis server
-- Node.js 18+ and npm (for frontend)
 
-## Installing AgentConnect
+### Installing AgentConnect
 
-Currently, AgentConnect is available from source only. Direct installation via pip will be available soon.
+AgentConnect is currently available from source only. Direct installation via pip will be available soon.
 
-## Development Installation
+### Development Installation
 
-For development, you can install AgentConnect from source:
+Clone the repository and install dependencies using Poetry:
+
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-```
-
-### Using Poetry (Recommended)
-
-AgentConnect uses Poetry for dependency management:
-
-```bash
-# Install Poetry (if not already installed)
-# Visit https://python-poetry.org/docs/#installation for instructions
-
-# Install all dependencies (recommended)
-poetry install --with demo,dev
-
-# For production only
-poetry install --without dev
+poetry install --with demo,dev  # For development (recommended)
+# For production only:
+# poetry install --without dev
 ```
 
 ### Environment Setup
 
+Copy the environment template and configure your API keys:
+
 ```bash
-# Copy environment template
 copy example.env .env  # Windows
 cp example.env .env    # Linux/Mac
 ```
 
-Configure API keys in the `.env` file:
+Edit the `.env` file to set your provider and API keys:
 
 ```
 DEFAULT_PROVIDER=groq
@@ -63,18 +51,19 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 GOOGLE_API_KEY=your_google_api_key
 ```
 
-## Dependencies
+### Payment Capabilities (Optional)
 
-AgentConnect requires Python 3.11 or later and depends on the following packages:
+AgentConnect supports agent-to-agent payments through the Coinbase Developer Platform (CDP). To enable these features, add the following to your `.env`:
 
-* langchain
-* openai
-* anthropic
-* google-generativeai
-* groq
-* cryptography
-* fastapi (for API)
-* redis (for distributed communication)
+```
+CDP_API_KEY_NAME=your_cdp_api_key_name
+CDP_API_KEY_PRIVATE_KEY=your_cdp_api_key_private_key
+```
 
-These dependencies will be automatically installed when you install AgentConnect using pip or Poetry.
+To obtain CDP API keys:
+1. Create an account at [Coinbase Developer Platform](https://www.coinbase.com/cloud)
+2. Create an API key with wallet management permissions
+3. Save the API key name and private key securely
+
+By default, payment features use the Base Sepolia testnet, which is suitable for development and testing without real currency.
 

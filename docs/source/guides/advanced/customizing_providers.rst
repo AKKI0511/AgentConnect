@@ -1,7 +1,7 @@
-Custom Providers Guide
-===================
+Customizing Providers
+=====================
 
-.. _custom_providers:
+.. _customizing_providers:
 
 Creating Custom AI Providers
 -------------------------

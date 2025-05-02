@@ -15,7 +15,7 @@
    <p>
    <a href="#installation">Installation</a> •
    <a href="#quick-start">Quick Start</a> •
-   <a href="#examples">Examples</a> •
+   <a href="examples/index.html">Examples</a> •
    <a href="#documentation">Documentation</a>
    </p>
    </div>
@@ -23,23 +23,29 @@
 Overview
 ========
 
-AgentConnect is a revolutionary framework for building and connecting *independent* AI agents. Unlike traditional multi-agent systems that operate within a single, centrally controlled environment, AgentConnect enables the creation of a *decentralized network* of autonomous agents that can:
+**AgentConnect provides a framework for building decentralized networks of truly autonomous AI agents, enabling the next generation of collaborative AI.**
 
-* **Operate Independently:** Each agent is a self-contained system with its own internal logic
-* **Discover Each Other Dynamically:** Agents find each other based on capabilities, not pre-defined connections
-* **Communicate Securely:** Built-in message signing, verification, and standardized protocols
-* **Collaborate on Complex Tasks:** Request services, exchange data, and work together to achieve goals
-* **Scale Horizontally:** Support thousands of independent agents in a decentralized ecosystem
+Move beyond traditional, centrally controlled systems and embrace an ecosystem where independent agents can:
+
+*   **Discover peers on-demand:** Locate partners via **capability broadcasts** instead of hard-wired endpoints.  
+*   **Interact Securely (A2A):** Leverage built-in cryptographic verification for **trustworthy Agent-to-Agent** communication.
+*   **Execute Complex Workflows:** Request services, exchange value, and achieve goals collectively.
+*   **Autonomous Operation:** Each agent hosts its own logic—no central brain required.
+*   **Scale Limitlessly:** Support thousands of agents interacting seamlessly.
 
 Why AgentConnect?
 ----------------
 
-* **Beyond Hierarchies:** Break free from centrally controlled multi-agent systems
-* **True Agent Autonomy:** Build agents that are independent and interact with any agent in the network
-* **Dynamic Discovery:** The network adapts as agents join, leave, and update capabilities
-* **Secure Interactions:** Cryptographic verification ensures trustworthy communication
-* **Unprecedented Scalability:** Designed for thousands of interconnected agents
-* **Extensible Architecture:** Easily integrate custom agents, capabilities, and protocols
+AgentConnect delivers unique advantages over classic multi-agent approaches:
+
+*   **Decentralized Architecture:** No central router, no single point of failure.
+*   **First-class agent autonomy:** Agents negotiate, cooperate, and evolve independently.
+*   **Interconnect Agent Systems:** Operates above internal frameworks, linking entire agent swarms.
+*   **Living ecosystem:** The network fluidly adapts as agents join, leave, or evolve their skills.
+*   **Secure A2A Communication:** Crypto-grade identity & message signing baked in.
+*   **Horizontal scalability:** Engineered for planet-scale agent populations.
+*   **Plug-and-play extensibility:** Easily integrate custom agents, capabilities, and protocols.
+*   **Integrated Agent Economy:** Seamless A2A payments powered by **Coinbase CDP & AgentKit**.
 
 Key Features
 =============
@@ -50,53 +56,79 @@ Key Features
      <div class="feature-card">
        <h3>🤖 Dynamic Agent Discovery</h3>
        <ul>
-         <li>Capability-based matching</li>
-         <li>Flexible agent network</li>
-         <li>No pre-defined connections</li>
+         <li>Capability-Based lookup</li>
+         <li>Decentralized Registry</li>
+         <li>Zero static links</li>
        </ul>
      </div>
      <div class="feature-card">
-       <h3>⚡ Decentralized Communication</h3>
+       <h3>⚡ A2A Communication</h3>
        <ul>
-         <li>Secure message routing</li>
-         <li>No central control</li>
-         <li>Reliable message delivery</li>
+         <li>Direct Agent-to-Agent Messaging</li>
+         <li>Cryptographic signatures</li>
+         <li>No routing bottlenecks</li>
        </ul>
      </div>
      <div class="feature-card">
-       <h3>⚙️ Autonomous Agents</h3>
+       <h3>⚙️ True Agent Autonomy</h3>
        <ul>
-         <li>Independent operation</li>
-         <li>Own processing loop</li>
-         <li>Complex internal structure</li>
+         <li>Independent Operation & Logic</li>
+         <li>Self-Managed Lifecycles</li>
+         <li>Unrestricted Collaboration</li>
        </ul>
      </div>
    </div>
    
    <div class="feature-grid">
      <div class="feature-card">
-       <h3>🔒 Secure Communication</h3>
+       <h3>🔒 Trust Layer</h3>
        <ul>
-         <li>Message signing</li>
-         <li>Identity verification</li>
-         <li>Standardized protocols</li>
+         <li>Verifiable identities</li>
+         <li>Tamper-proof messages</li>
+         <li>Standard Security Protocols</li>
        </ul>
      </div>
      <div class="feature-card">
-       <h3>🔌 Multi-Provider Support</h3>
+       <h3>💰 Built-in Agent Economy</h3>
        <ul>
-         <li>OpenAI</li>
-         <li>Anthropic</li>
-         <li>Groq</li>
-         <li>Google AI</li>
+         <li>Autonomous A2A Payments</li>
+         <li>Coinbase CDP Integration</li>
+         <li>Instant service settlement</li>
        </ul>
      </div>
      <div class="feature-card">
-       <h3>📊 Monitoring & Tracing</h3>
+       <h3>🔌 Multi-LLM Support</h3>
        <ul>
-         <li>LangSmith integration</li>
-         <li>Comprehensive tracing</li>
-         <li>Performance analysis</li>
+         <li>OpenAI, Anthropic, Groq, Google</li>
+         <li>Flexible AI Core Choice</li>
+         <li>Vendor-Agnostic Intelligence</li>
+       </ul>
+     </div>
+   </div>
+   
+   <div class="feature-grid">
+     <div class="feature-card">
+       <h3>📊 Deep Observability</h3>
+       <ul>
+         <li>LangSmith tracing</li>
+         <li>Monitor tools & payments</li>
+         <li>Custom Callbacks</li>
+       </ul>
+     </div>
+     <div class="feature-card">
+       <h3>🌐 Dynamic Capability Advertising</h3>
+       <ul>
+         <li>Agent Skill Broadcasting</li>
+         <li>Market-Driven Discovery</li>
+         <li>On-the-Fly Collaboration</li>
+       </ul>
+     </div>
+     <div class="feature-card">
+       <h3>🔗 Native Blockchain Integration</h3>
+       <ul>
+         <li>Coinbase AgentKit Ready</li>
+         <li>On-Chain Value Exchange</li>
+         <li>Configurable networks</li>
        </ul>
      </div>
    </div>
@@ -143,13 +175,8 @@ Prerequisites
 
 - Python 3.11 or higher
 - Poetry (Python package manager)
-- Redis server
-- Node.js 18+ and npm (for frontend)
 
-Development Installation
------------------------
-
-To install AgentConnect from source:
+AgentConnect can be installed by cloning the repository and using Poetry to install dependencies. 
 
 .. code-block:: bash
 
@@ -157,53 +184,22 @@ To install AgentConnect from source:
     git clone https://github.com/AKKI0511/AgentConnect.git
     cd AgentConnect
 
-    # Using Poetry (Recommended)
-    # Install all dependencies (recommended)
-    poetry install --with demo,dev
+    # Install dependencies
+    poetry install
 
-    # For production only
-    poetry install --without dev
-
-Environment Setup
----------------
-
-.. code-block:: bash
-
-    # Copy environment template
-    copy example.env .env  # Windows
-    cp example.env .env    # Linux/Mac
-
-Configure API keys in the `.env` file:
-
-.. code-block:: bash
-
-    DEFAULT_PROVIDER=groq
-    GROQ_API_KEY=your_groq_api_key
-
-For monitoring and additional features, you can configure optional settings:
-
-.. code-block:: bash
-
-    # LangSmith for monitoring (recommended)
-    LANGSMITH_TRACING=true
-    LANGSMITH_API_KEY=your_langsmith_api_key
-    LANGSMITH_PROJECT=AgentConnect
-
-    # Additional providers
-    OPENAI_API_KEY=your_openai_api_key
-    ANTHROPIC_API_KEY=your_anthropic_api_key
-    GOOGLE_API_KEY=your_google_api_key
-
-For more detailed installation instructions, see the :doc:`installation` guide.
+For detailed installation instructions including environment setup and API configuration, see the :doc:`installation` guide.
 
 .. _quick-start:
 
 Quick Start
 =============
 
+Here's a minimal example of creating and connecting a human user with an AI assistant:
+
 .. code-block:: python
 
     import asyncio
+    import os
     from agentconnect.agents import AIAgent, HumanAgent
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication import CommunicationHub
@@ -220,7 +216,7 @@ Quick Start
             name="AI Assistant",
             provider_type=ModelProvider.OPENAI,
             model_name=ModelName.GPT4O,
-            api_key="your-openai-api-key",
+            api_key=os.getenv("OPENAI_API_KEY"),
             identity=AgentIdentity.create_key_based(),
             interaction_modes=[InteractionMode.HUMAN_TO_AGENT]
         )
@@ -233,6 +229,9 @@ Quick Start
             identity=AgentIdentity.create_key_based()
         )
         await hub.register_agent(human)
+
+        # Start AI processing loop
+        asyncio.create_task(ai_agent.run())
         
         # Start interaction between human and AI
         await human.start_interaction(ai_agent)
@@ -240,7 +239,7 @@ Quick Start
     if __name__ == "__main__":
         asyncio.run(main())
 
-For more detailed examples, check out our :doc:`quickstart` guide.
+For more detailed examples and step-by-step instructions, see the :doc:`quickstart` guide.
 
 .. _examples:
 
@@ -275,35 +274,13 @@ Documentation
    code_of_conduct
    changelog
 
-Monitoring with LangSmith
-==========================
-
-AgentConnect integrates with LangSmith for comprehensive monitoring:
-
-1. **Set up LangSmith**
-   
-   * Create an account at `LangSmith <https://smith.langchain.com/>`_
-   * Add your API key to `.env`:
-   
-   .. code-block:: bash
-   
-       LANGSMITH_TRACING=true
-       LANGSMITH_API_KEY=your_langsmith_api_key
-       LANGSMITH_PROJECT=AgentConnect
-
-2. **Monitor agent workflows**
-
-   * View detailed traces of agent interactions
-   * Debug complex reasoning chains
-   * Analyze token usage and performance
-
 Roadmap
 =======
 
 - ✅ **MVP with basic agent-to-agent interactions**
 - ✅ **Autonomous communication between agents**  
 - ✅ **Capability-based agent discovery**
-- ⬜ **Coinbase AgentKit Payment Integration**
+- ✅ **Coinbase AgentKit Payment Integration**
 - ⬜ **Agent Identity & Reputation System**
 - ⬜ **Marketplace-Style Agent Discovery**
 - ⬜ **MCP Integration**

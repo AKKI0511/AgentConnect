@@ -22,9 +22,10 @@ To use the Telegram integration, you first need to create a bot through Telegram
 1. Open Telegram and search for ``@BotFather``
 2. Start a chat with BotFather and use the ``/newbot`` command
 3. Follow the prompts to create your bot:
+
    - Provide a display name for your bot (e.g., "My AgentConnect Assistant")
    - Provide a username for your bot (must end with "bot", e.g., "my_agent_connect_bot")
-4. BotFather will provide a token that looks like this: ``123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ``
+4. BotFather will provide a token that looks like this: ``123456789:ABCdefGhIJKlmosdQRsTUVwxyZ``
 5. Save this token securely - you'll need it to initialize your Telegram agent
 
 .. warning::
@@ -83,25 +84,6 @@ The simplest way to set up a Telegram agent is as follows:
         asyncio.run(main())
 
 Save this code in a file (e.g., ``telegram_bot.py``) and run it. Your bot should now be active on Telegram.
-
-Environment Variables
---------------------
-
-For security, store your API keys and tokens in a ``.env`` file:
-
-.. code-block:: text
-
-    # Telegram Bot Token
-    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-    
-    # LLM Provider API Key (choose one)
-    GOOGLE_API_KEY=your_google_api_key
-    # OR
-    OPENAI_API_KEY=your_openai_api_key
-    # OR
-    ANTHROPIC_API_KEY=your_anthropic_api_key
-    # OR
-    GROQ_API_KEY=your_groq_api_key
 
 Advanced Configuration
 ---------------------
@@ -234,7 +216,7 @@ One of the most powerful features of the TelegramAIAgent is its ability to colla
 With this setup, when a user interacts with the Telegram bot, a sophisticated workflow can emerge:
 
 1. **Request Interpretation**: The Telegram agent analyzes the user's request to determine what capabilities are needed
-2. **Capability Discovery**: The agent uses the registry to find other agents with the required capabilities
+2. **Capability Discovery**: The agent uses it's tools to find other agents with the required capabilities
 3. **Collaboration Request**: The agent sends requests to the appropriate specialized agents
 4. **Result Integration**: The agent combines results from multiple sources into a coherent response
 5. **Content Distribution**: The agent can broadcast the finalized content to multiple groups or users
@@ -249,6 +231,7 @@ For example, when a user asks:
 The workflow might look like this:
 
 1. Telegram agent receives the request and identifies three required capabilities:
+
    - Web research
    - Data visualization
    - Group messaging
@@ -271,160 +254,20 @@ Advanced Use Cases
 Dynamic Group Announcements and Broadcasting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. note::
-   **Important:** The code examples below are provided for creating a hardcoded research-to-broadcast workflow. You do not need to implement any of this code yourself. The Telegram agent already has these capabilities built-in and will handle finding agents, requesting collaboration, and broadcasting automatically based on natural language requests.
+One of the most powerful features of the Telegram agent is its ability to dynamically create and broadcast announcements to multiple groups. The TelegramAIAgent can handle this autonomously, without requiring any manual implementation from the developer.
 
-One of the most powerful features of the Telegram agent is its ability to dynamically create and broadcast announcements to multiple groups:
+The agent uses its built-in collaboration tools (like ``search_for_agents`` and ``send_collaboration_request``) to interact with other specialized agents (such as research agents). It then uses its Telegram-specific tools (like ``create_telegram_announcement`` and ``publish_telegram_announcement``) to format and broadcast content to Telegram groups.
 
-.. code-block:: python
+As a developer, your role is to configure the TelegramAIAgent with the right ``personality`` prompt to guide this autonomous behavior, rather than coding the workflow manually. For example, your personality prompt might include instructions like:
 
-    # Example of sending an announcement to all registered groups
-    await telegram_agent.send_announcement_to_groups(
-        text="Important announcement: System maintenance scheduled for tomorrow.",
-        media_path=None,  # Optional path to media file
-        parse_mode="Markdown",  # Optional formatting (Markdown or HTML)
-        groups="all"  # Or list specific group IDs
-    )
+.. code-block::
 
-This capability allows for sophisticated use cases where the Telegram agent acts as a central broadcasting system. For example, users can:
+   When users ask you to research topics and broadcast findings, you should:
 
-1. Ask the agent to research a topic and create announcements based on the findings
-2. Request the agent to format content in a visually appealing way
-3. Have the agent automatically distribute content to multiple groups
-4. Edit or update previously sent announcements
-
-Here's a complete code example demonstrating a research-to-broadcast workflow:
-
-.. code-block:: python
-
-    async def handle_research_and_broadcast_request(telegram_agent, message_text, user_id):
-        """
-        Handle a request to research a topic and broadcast findings to groups.
-        
-        This demonstrates the full workflow from receiving a request to broadcasting
-        results across multiple channels.
-        """
-        # Parse the user request to identify the research topic
-        # For simplicity, let's assume the topic is provided directly
-        research_topic = "latest trends in artificial intelligence"
-        
-        # Step 1: Find a research agent that can help
-        research_agents = await telegram_agent.registry.find_agents_by_capability("web_research")
-        if not research_agents:
-            await telegram_agent.send_message(
-                chat_id=user_id,
-                text="I couldn't find any research agents to help with this task."
-            )
-            return
-        
-        research_agent = research_agents[0]
-        
-        # Step 2: Request collaboration for research
-        await telegram_agent.send_message(
-            chat_id=user_id,
-            text=f"Researching '{research_topic}'. This may take a moment..."
-        )
-        
-        research_response = await telegram_agent.request_collaboration(
-            target_agent_id=research_agent.agent_id,
-            capability_name="web_research",
-            input_data={"topic": research_topic, "depth": "comprehensive"}
-        )
-        
-        if not research_response or not research_response.get("success"):
-            await telegram_agent.send_message(
-                chat_id=user_id,
-                text="I encountered an issue while researching. Please try again later."
-            )
-            return
-        
-        research_findings = research_response.get("data", {}).get("findings", "No findings available")
-        research_sources = research_response.get("data", {}).get("sources", [])
-        
-        # Step 3: Create a visualization if requested
-        # Find a visualization agent
-        viz_agents = await telegram_agent.registry.find_agents_by_capability("data_visualization")
-        viz_path = None
-        
-        if viz_agents:
-            viz_agent = viz_agents[0]
-            viz_response = await telegram_agent.request_collaboration(
-                target_agent_id=viz_agent.agent_id,
-                capability_name="data_visualization",
-                input_data={
-                    "data": research_findings,
-                    "chart_type": "infographic"
-                }
-            )
-            
-            if viz_response and viz_response.get("success"):
-                viz_path = viz_response.get("data", {}).get("image_path")
-        
-        # Step 4: Format the announcement with markdown
-        formatted_announcement = f"""
-        🔍 **RESEARCH FINDINGS: {research_topic.upper()}** 🔍
-        
-        {research_findings}
-        
-        **Sources:**
-        """
-        
-        for i, source in enumerate(research_sources[:3], 1):
-            formatted_announcement += f"\n{i}. {source}"
-        
-        # Step 5: Send a preview to the user
-        await telegram_agent.send_message(
-            chat_id=user_id,
-            text="Here's a preview of the announcement:",
-            parse_mode="Markdown"
-        )
-        
-        if viz_path:
-            await telegram_agent.send_photo(
-                chat_id=user_id,
-                photo=viz_path,
-                caption=formatted_announcement,
-                parse_mode="Markdown"
-            )
-        else:
-            await telegram_agent.send_message(
-                chat_id=user_id,
-                text=formatted_announcement,
-                parse_mode="Markdown"
-            )
-        
-        # Step 6: Ask for confirmation
-        await telegram_agent.send_message(
-            chat_id=user_id,
-            text="Should I send this announcement to all registered groups?",
-            parse_mode="Markdown"
-        )
-        
-        # In a real implementation, you'd wait for the user's response
-        # For this example, we'll assume confirmation was received
-        
-        # Step 7: Broadcast to all groups
-        result = await telegram_agent.send_announcement_to_groups(
-            text=formatted_announcement,
-            media_path=viz_path,
-            parse_mode="Markdown",
-            groups="all"
-        )
-        
-        # Step 8: Report back to the user
-        if result.get("success"):
-            groups_count = len(result.get("groups", []))
-            await telegram_agent.send_message(
-                chat_id=user_id,
-                text=f"Announcement successfully sent to {groups_count} groups.",
-                parse_mode="Markdown"
-            )
-        else:
-            await telegram_agent.send_message(
-                chat_id=user_id,
-                text=f"Error sending announcement: {result.get('error')}",
-                parse_mode="Markdown"
-            )
+   1. Use collaboration tools to find and query a specialized research agent
+   2. Format the results in a visually appealing way with proper Markdown
+   3. Create and preview announcements before broadcasting
+   4. Send the finalized content to the appropriate Telegram groups
 
 Here's a practical example of how a user might interact with this feature:
 
@@ -453,21 +296,12 @@ Here's a practical example of how a user might interact with this feature:
    
    Bot: Announcement successfully sent to 5 groups.
 
-The Telegram agent can also handle media files (images, documents, videos) as part of announcements:
-
-.. code-block:: python
-
-    # Sending an announcement with media
-    await telegram_agent.send_announcement_to_groups(
-        text="Check out our latest analysis results!",
-        media_path="/path/to/chart.png",
-        groups="all"
-    )
+The TelegramAIAgent can also handle media files (images, documents, videos) as part of announcements, using its built-in tools to process and distribute this content appropriately.
 
 Editing Messages and Announcements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Users can edit previously sent messages or announcements directly through the private chat with the bot:
+The agent's autonomous capabilities extend to editing previously sent messages or announcements. Using its internal LLM workflow and specialized Telegram tools, the agent can handle edit requests directly through natural language interaction:
 
 .. code-block::
 
@@ -491,6 +325,7 @@ Users can edit previously sent messages or announcements directly through the pr
    Bot: Announcement successfully updated in 5 groups.
 
 This editing capability is particularly useful for:
+
 - Correcting information in announcements
 - Updating time-sensitive information
 - Refining messaging based on feedback
@@ -498,13 +333,13 @@ This editing capability is particularly useful for:
 Super Agent Capabilities
 ~~~~~~~~~~~~~~~~~~~~~~
 
-The combination of these features effectively makes the Telegram agent a "super agent" that can:
+The combination of these features effectively makes the Telegram agent a "super agent" that autonomously:
 
-1. Act as an interface between users and specialized agents in your network
-2. Perform complex tasks through multi-agent collaboration
-3. Broadcast results to multiple channels/groups simultaneously
-4. Manage and update previously sent content
-5. Handle media and formatted text for visually appealing messaging
+1. Acts as an interface between users and specialized agents in your network
+2. Performs complex tasks through multi-agent collaboration
+3. Broadcasts results to multiple channels/groups simultaneously
+4. Manages and updates previously sent content
+5. Handles media and formatted text for visually appealing messaging
 
 For example, a user could request:
 
@@ -513,14 +348,16 @@ For example, a user could request:
    User: Analyze last month's sales data, create a visualization, and send a summary to the Sales and 
          Executive groups with appropriate formatting.
 
-The Telegram agent would:
+The TelegramAIAgent will:
 
 1. Parse the request to understand the required capabilities
-2. Find and collaborate with a data analysis agent in the network
+2. Use its collaboration tools to find and collaborate with a data analysis agent in the network
 3. Get the analysis results and visualizations
-4. Format the content appropriately for professional presentation
+4. Use its Telegram tools to format the content appropriately for professional presentation
 5. Send specifically tailored announcements to the different groups
 6. Allow the user to edit or refine the messages if needed
+
+All of this happens through the agent's internal LLM workflow, guided by its personality prompt and using the tools provided during initialization, without any need for manual implementation by the developer.
 
 Group Management
 ~~~~~~~~~~~~~~
@@ -529,6 +366,9 @@ The Telegram agent can manage group memberships and permissions. It can add or r
 
 Customizing the Telegram Agent
 -----------------------------
+
+.. note::
+   A detailed guide on customizing and extending the TelegramAIAgent is coming soon in the :doc:`/guides/advanced/index` section. This will include advanced configuration options, custom message handling, and integration patterns.
 
 Extending Message Handlers
 ~~~~~~~~~~~~~~~~~~~~~~~~

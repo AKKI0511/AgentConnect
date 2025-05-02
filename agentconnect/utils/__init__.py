@@ -40,6 +40,11 @@ from agentconnect.utils.wallet_manager import (
     get_all_wallets,
 )
 
+# Callbacks
+from agentconnect.utils.callbacks import (
+    ToolTracerCallbackHandler,
+)
+
 __all__ = [
     # Interaction control
     "InteractionControl",
@@ -59,4 +64,6 @@ __all__ = [
     "wallet_exists",
     "delete_wallet_data",
     "get_all_wallets",
+    # Callbacks
+    "ToolTracerCallbackHandler",
 ]

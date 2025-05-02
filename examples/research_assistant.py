@@ -39,8 +39,8 @@ from agentconnect.core.types import (
     ModelName,
     ModelProvider,
 )
-from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistry
+from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 from agentconnect.utils.logging_config import (
     setup_logging,
     LogLevel,
@@ -134,7 +134,7 @@ async def setup_agents() -> Dict[str, Any]:
 
     # Fall back to other API keys if Google's isn't available
     provider_type = ModelProvider.GOOGLE
-    model_name = ModelName.GEMINI2_FLASH
+    model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
 
     if not api_key:
         print_colored("GOOGLE_API_KEY not found. Checking for alternatives...", "INFO")
@@ -175,8 +175,8 @@ async def setup_agents() -> Dict[str, Any]:
     hub = CommunicationHub(registry)
     
     # Register message logger
-    hub.add_global_handler(demo_message_logger)
-    print_colored("Registered message flow logger to visualize agent collaboration", "INFO")
+    # hub.add_global_handler(demo_message_logger)
+    # print_colored("Registered message flow logger to visualize agent collaboration", "INFO")
 
     # Create human agent
     human_identity = AgentIdentity.create_key_based()
@@ -218,6 +218,7 @@ async def setup_agents() -> Dict[str, Any]:
         identity=core_identity,
         capabilities=core_capabilities,
         personality="I am the primary interface between you and specialized agents. I understand your requests, delegate tasks to specialized agents, and present their findings in a coherent manner. I maintain conversation context and ensure a smooth experience.",
+        external_callbacks=[ToolTracerCallbackHandler("core_agent")],
     )
 
     # Create research agent
@@ -442,7 +443,7 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
     print_colored("\nSetting up agents...", "SYSTEM")
 
     agents = None
-    message_logger_registered = enable_logging
+    # message_logger_registered = enable_logging
 
     try:
         # Set up agents with logging flag
@@ -478,57 +479,60 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
             print_colored("\nCleaning up resources...", "SYSTEM")
 
             # Remove message logger if it was registered
-            if message_logger_registered and "hub" in agents:
-                try:
-                    agents["hub"].remove_global_handler(demo_message_logger)
-                    print_colored("Removed message flow logger", "INFO")
-                except Exception as e:
-                    print_colored(f"Error removing message logger: {e}", "ERROR")
+            # if message_logger_registered and "hub" in agents:
+            #     try:
+            #         # agents["hub"].remove_global_handler(demo_message_logger)
+            #         print_colored("Removed message flow logger", "INFO")
+            #     except Exception as e:
+            #         print_colored(f"Error removing message logger: {e}", "ERROR")
 
-            # Stop all agent tasks
-            if "agent_tasks" in agents:
-                for task in agents["agent_tasks"]:
-                    task.cancel()
-                    try:
-                        # Wait for task to properly cancel
-                        await asyncio.wait_for(task, timeout=2.0)
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        pass
-
-            # Unregister agents
+            # Stop all agents
             for agent_id in ["core_agent", "research_agent", "markdown_agent"]:
                 if agent_id in agents:
                     try:
+                        # Use the new stop method for proper cleanup
+                        await agents[agent_id].stop()
                         await agents["hub"].unregister_agent(agents[agent_id].agent_id)
-                        print_colored(f"Unregistered {agent_id}", "SYSTEM")
+                        print_colored(f"Stopped and unregistered {agent_id}", "SYSTEM")
                     except Exception as e:
-                        print_colored(f"Error unregistering {agent_id}: {e}", "ERROR")
+                        print_colored(f"Error stopping/unregistering {agent_id}: {e}", "ERROR")
+
+            # Cancel any remaining tasks
+            if "agent_tasks" in agents:
+                for task in agents["agent_tasks"]:
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            # Wait for task to properly cancel
+                            await asyncio.wait_for(task, timeout=2.0)
+                        except (asyncio.TimeoutError, asyncio.CancelledError):
+                            pass
 
         print_colored("Demo completed successfully!", "SYSTEM")
 
 
 # Define the global message logger function
-async def demo_message_logger(message: Message) -> None:
-    """
-    Global message handler for logging agent collaboration flow.
+# async def demo_message_logger(message: Message) -> None:
+#     """
+#     Global message handler for logging agent collaboration flow.
     
-    This handler inspects messages routed through the hub and logs specific events
-    in the research assistant demo to visualize agent collaboration.
+#     This handler inspects messages routed through the hub and logs specific events
+#     in the research assistant demo to visualize agent collaboration.
     
-    Args:
-        message (Message): The message being routed through the hub
-    """
-    if message.receiver_id == "human_user" or message.sender_id == "human_user":
-        return
-    color_type = "SYSTEM"
-    if message.sender_id == "core_agent":
-        color_type = "CORE"
-    elif message.sender_id == "research_agent":
-        color_type = "RESEARCH"
-    elif message.sender_id == "markdown_agent":
-        color_type = "MARKDOWN"
+#     Args:
+#         message (Message): The message being routed through the hub
+#     """
+#     if message.receiver_id == "human_user" or message.sender_id == "human_user":
+#         return
+#     color_type = "SYSTEM"
+#     if message.sender_id == "core_agent":
+#         color_type = "CORE"
+#     elif message.sender_id == "research_agent":
+#         color_type = "RESEARCH"
+#     elif message.sender_id == "markdown_agent":
+#         color_type = "MARKDOWN"
 
-    print_colored(f"{message.sender_id} -> {message.receiver_id}: {message.content[:50]}...", color_type)
+#     print_colored(f"{message.sender_id} -> {message.receiver_id}: {message.content[:50]}...", color_type)
         
 
 if __name__ == "__main__":

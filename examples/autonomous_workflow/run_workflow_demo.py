@@ -112,7 +112,7 @@ async def setup_agents() -> Tuple[AIAgent, AIAgent, TelegramAIAgent, HumanAgent]
     # Determine which LLM to use based on available API keys
     if google_api_key:
         provider_type = ModelProvider.GOOGLE
-        model_name = ModelName.GEMINI2_FLASH
+        model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
         api_key = google_api_key
     else:
         provider_type = ModelProvider.OPENAI
@@ -122,12 +122,7 @@ async def setup_agents() -> Tuple[AIAgent, AIAgent, TelegramAIAgent, HumanAgent]
     print_colored(f"Using {provider_type.value}: {model_name.value}", "INFO")
 
     # Configure Callback Handler
-    monitor_callback = ToolTracerCallbackHandler(
-        agent_id="user_proxy_agent",
-        print_tool_activity=True,  # OFF - Keep demo clean
-        print_reasoning_steps=True, # ON - Print LLM's generated text (reasoning)
-        print_llm_activity=True,   # OFF - Reasoning print implies LLM activity
-    )
+    monitor_callback = ToolTracerCallbackHandler(agent_id="user_proxy_agent")
 
     # Create User Proxy Agent (Workflow Orchestrator)
     user_proxy_agent = AIAgent(
@@ -302,6 +297,11 @@ async def main(enable_logging: bool = False):
         finally:
             # Cleanup
             print_colored("\nCleaning up...", "SYSTEM")
+
+            # Stop all agents
+            for agent in agents:
+                await agent.stop()
+                print_colored(f"Stopped {agent.agent_id}", "SYSTEM")
 
             # Cancel all tasks
             for task in tasks:

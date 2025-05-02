@@ -719,9 +719,8 @@ async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None
         # Stop all agents
         for agent_id, agent in agents.items():
             if agent_id not in ["registry", "hub"] and agent_id != "human_agent":
-                # Cancel the agent's processing task if it exists
-                if hasattr(agent, "_processing_task") and agent._processing_task:
-                    agent._processing_task.cancel()
+                # Use the new stop method to properly clean up resources
+                await agent.stop()
                 # Unregister from the hub
                 await agents["hub"].unregister_agent(agent.agent_id)
 

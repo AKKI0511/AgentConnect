@@ -92,7 +92,7 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
 
     # Fall back to other API keys if Google's isn't available
     provider_type = ModelProvider.GOOGLE
-    model_name = ModelName.GEMINI2_FLASH
+    model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
 
     if not api_key:
         print_colored("GOOGLE_API_KEY not found. Checking for alternatives...", "INFO")
@@ -259,15 +259,30 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
                 except Exception as e:
                     print_colored(f"Error removing message logger: {e}", "ERROR")
 
-            # Stop all agent tasks
+            # Stop all agents with the new stop method
+            for agent_id in [
+                "telegram_agent",
+                "research_agent",
+                "content_processing_agent",
+                "data_analysis_agent",
+            ]:
+                if agent_id in agents:
+                    try:
+                        await agents[agent_id].stop()
+                        print_colored(f"Stopped {agent_id}", "SYSTEM")
+                    except Exception as e:
+                        print_colored(f"Error stopping {agent_id}: {e}", "ERROR")
+
+            # Cancel any remaining tasks
             if "agent_tasks" in agents:
                 for task in agents["agent_tasks"]:
-                    task.cancel()
-                    try:
-                        # Wait for task to properly cancel
-                        await asyncio.wait_for(task, timeout=2.0)
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        pass
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            # Wait for task to properly cancel
+                            await asyncio.wait_for(task, timeout=2.0)
+                        except (asyncio.TimeoutError, asyncio.CancelledError):
+                            pass
 
             # Unregister agents
             for agent_id in [

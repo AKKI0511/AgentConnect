@@ -247,7 +247,7 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
         print_colored("\nEnding session...", "SYSTEM")
         # Cleanup
         if ai_assistant:
-            ai_assistant.is_running = False
+            await ai_assistant.stop()
         if ai_task:
             try:
                 await asyncio.wait_for(ai_task, timeout=5.0)

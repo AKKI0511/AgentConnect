@@ -35,6 +35,7 @@ Usage:
 import asyncio
 import os
 import sys
+import signal
 from typing import Dict, Any
 from dotenv import load_dotenv
 from colorama import init
@@ -92,7 +93,7 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
 
     # Fall back to other API keys if Google's isn't available
     provider_type = ModelProvider.GOOGLE
-    model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
+    model_name = ModelName.GEMINI2_FLASH
 
     if not api_key:
         print_colored("GOOGLE_API_KEY not found. Checking for alternatives...", "INFO")
@@ -207,8 +208,24 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
     print_colored("\nSetting up agents...", "SYSTEM")
 
     agents = None
+    shutdown_event = asyncio.Event()
+
+    # Set up signal handlers for graceful shutdown
+    def signal_handler():
+        print_colored("\nShutdown signal received, cleaning up...", "SYSTEM")
+        shutdown_event.set()
 
     try:
+        # Register signal handlers if supported by the platform
+        loop = asyncio.get_running_loop()
+        for sig_name in ('SIGINT', 'SIGTERM'):
+            try:
+                sig = getattr(signal, sig_name)
+                loop.add_signal_handler(sig, signal_handler)
+            except (NotImplementedError, AttributeError):
+                # Windows doesn't support POSIX signals with asyncio
+                pass
+
         # Set up agents
         agents = await setup_agents(enable_logging)
 
@@ -233,12 +250,13 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
         
         print_colored("Press Ctrl+C to stop all agents and exit.", "SYSTEM")
 
-        # Keep the main task running until interrupted
-        while True:
-            await asyncio.sleep(1)
+        # Wait for shutdown signal instead of using sleep loop
+        await shutdown_event.wait()
 
     except KeyboardInterrupt:
         print_colored("\nOperation interrupted by user", "WARNING")
+        # Ensure shutdown event is set
+        shutdown_event.set()
     except RuntimeError as e:
         print_colored(f"\nCritical error: {e}", "ERROR")
     except Exception as e:

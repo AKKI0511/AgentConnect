@@ -11,11 +11,8 @@ This directory contains examples demonstrating various features and use cases of
     ```
 2.  **Install Dependencies:** Use Poetry to install base dependencies plus optional extras needed for specific examples (like demo, research, telegram).
     ```bash
-    # Install core + demo dependencies (recommended for most examples)
-    poetry install --with demo
-
-    # Or install specific groups as needed
-    # poetry install --with research
+    # Install core + research dependencies (recommended for most examples)
+    poetry install --with research
     ```
 3.  **Set Up Environment Variables:** Copy the example environment file and fill in your API keys.
     ```bash
@@ -40,8 +37,8 @@ Replace `<example_name>` with one of the following:
 *   `multi`: Demonstrates a multi-agent system for e-commerce analysis.
 *   `research`: Research assistant workflow involving multiple agents.
 *   `data`: Data analysis assistant performing analysis and visualization tasks.
-*   `telegram`: A multi-agent system integrated with a Telegram bot interface.
-*   `agent_economy`: Autonomous workflow showcasing agent-to-agent payments.
+*   `telegram`: A multi-agent system integrated with a Telegram bot interface. (Advanced)
+*   `agent_economy`: Autonomous workflow showcasing agent-to-agent payments. (Advanced)
 
 Use the `--verbose` flag for detailed logging output.
 
@@ -108,7 +105,7 @@ All examples are configured to integrate with LangSmith for tracing and debuggin
 ## Troubleshooting
 
 *   Ensure you run commands from the project root directory.
-*   Verify all required dependencies for the chosen example are installed (e.g., `poetry install --with demo`).
+*   Verify all required dependencies for the chosen example are installed (e.g., `poetry install --with research`).
 *   Double-check that all necessary API keys and tokens are correctly set in your `.env` file.
 *   Use the `--verbose` flag when running via CLI for detailed logs.
 *   Check LangSmith traces for deeper insights into execution flow and errors.

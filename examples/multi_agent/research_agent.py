@@ -11,9 +11,12 @@ import os
 from agentconnect.agents import AIAgent
 from agentconnect.core.types import (
     AgentIdentity,
+    AgentProfile,
+    AgentType,
     Capability,
     ModelName,
     ModelProvider,
+    Skill,
 )
 
 # Add imports for research tools
@@ -41,6 +44,8 @@ def create_research_agent(provider_type: ModelProvider, model_name: ModelName, a
     
     # Create research agent with web search capabilities
     research_identity = AgentIdentity.create_key_based()
+    
+    # Define capabilities
     research_capabilities = [
         Capability(
             name="web_search",
@@ -74,7 +79,35 @@ def create_research_agent(provider_type: ModelProvider, model_name: ModelName, a
         ),
     ]
 
-    # Create research agent with search tools
+    # Define skills
+    research_skills = [
+        Skill(name="web_searching", description="Find relevant information on the web using search engines"),
+        Skill(name="academic_research", description="Retrieve academic papers and scholarly articles"),
+        Skill(name="query_formulation", description="Create effective search queries from natural language questions"),
+        Skill(name="information_synthesis", description="Combine information from multiple sources into coherent reports"),
+        Skill(name="citation_management", description="Properly cite sources in research reports"),
+        Skill(name="api_interaction", description="Retrieve information from web APIs using HTTP requests"),
+    ]
+    
+    # Create agent profile
+    research_profile = AgentProfile(
+        agent_id="research_agent",
+        agent_type=AgentType.AI,
+        name="Research Agent",
+        summary="Specialized agent for web research and information retrieval",
+        description="A research agent that searches the web, academic sources, and APIs to retrieve information on various topics. Capable of generating effective search queries, synthesizing information from multiple sources, and creating comprehensive reports with proper citations.",
+        version="1.0.0",
+        capabilities=research_capabilities,
+        skills=research_skills,
+        tags=["research", "web search", "information retrieval", "academic research", "reports"],
+        examples=[
+            "Search the web for information on climate change impacts",
+            "Create a research report on quantum computing advancements",
+            "Find academic papers about machine learning in healthcare"
+        ]
+    )
+
+    # Create research tools
     research_tools = []
     if tavily_api_key:
         try:
@@ -88,6 +121,7 @@ def create_research_agent(provider_type: ModelProvider, model_name: ModelName, a
         except Exception as e:
             print(f"Error initializing Tavily search: {e}")
 
+    # Add academic research tools
     research_tools.append(ArxivQueryRun())
     research_tools.append(WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper()))
     
@@ -96,14 +130,14 @@ def create_research_agent(provider_type: ModelProvider, model_name: ModelName, a
     research_tools.append(RequestsGetTool(requests_wrapper=requests_wrapper, allow_dangerous_requests=True))
     research_tools.append(RequestsPostTool(requests_wrapper=requests_wrapper, allow_dangerous_requests=True))
 
+    # Create and return the research agent
     research_agent = AIAgent(
         agent_id="research_agent",
-        name="Research Agent",
+        identity=research_identity,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
-        identity=research_identity,
-        capabilities=research_capabilities,
+        profile=research_profile,
         personality="I am a research specialist who excels at finding information on various topics. I generate effective search queries, retrieve information from the web, and synthesize findings into comprehensive reports with proper citations.",
         custom_tools=research_tools,
     )

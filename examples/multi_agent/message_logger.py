@@ -54,6 +54,8 @@ async def agent_message_logger(message: Message) -> None:
     # Skip logging messages to/from human agents
     if "human" in message.receiver_id.lower() or "human" in message.sender_id.lower():
         return
+    if "content_processing_agent" == message.sender_id or "content_processing_agent" == message.receiver_id:
+        return
     
     # Determine color based on sender agent
     color_type = "SYSTEM"

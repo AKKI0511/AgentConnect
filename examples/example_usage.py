@@ -31,10 +31,13 @@ from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
+    AgentProfile,
+    AgentType,
     Capability,
     InteractionMode,
     ModelName,
     ModelProvider,
+    Skill,
 )
 from agentconnect.providers import ProviderFactory
 from agentconnect.utils.logging_config import LogLevel, setup_logging
@@ -175,7 +178,7 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
 
     # Initialize agents
     human = HumanAgent(
-        agent_id="human1", name="User", identity=human_identity, organization_id="org1"
+        agent_id="human1", name="User", identity=human_identity, organization="org1"
     )
 
     # --- AI Agent Setup ---
@@ -189,6 +192,30 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
             output_schema={"response": "string"},
         )
     ]
+    
+    # Create AI agent skills
+    ai_skills = [
+        Skill(name="general_assistance", description="Provide helpful responses to user queries"),
+        Skill(name="information_retrieval", description="Retrieve and present information accurately"),
+        Skill(name="conversation", description="Engage in natural, helpful dialogue")
+    ]
+
+    # Create agent profile
+    ai_profile = AgentProfile(
+        agent_id="ai1",
+        agent_type=AgentType.AI,
+        name="Assistant",
+        summary="A helpful AI assistant for general conversation",
+        description="An AI assistant that provides helpful, accurate, and professional responses to user queries.",
+        capabilities=ai_capabilities,
+        skills=ai_skills,
+        tags=["assistant", "conversation", "help"],
+        examples=[
+            "How can I help you today?",
+            "I can answer questions on various topics.",
+            "Let me assist you with that request."
+        ]
+    )
 
     # Initialize wallet configuration if payments are enabled
     if enable_payments:
@@ -203,15 +230,12 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
 
     ai_assistant = AIAgent(
         agent_id="ai1",
-        name="Assistant",
+        identity=ai_identity,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
-        identity=ai_identity,
-        capabilities=ai_capabilities,  # Use Capability objects
-        interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
+        profile=ai_profile,
         personality="helpful and professional",
-        organization_id="org2",
         enable_payments=enable_payments,  # Enable payment capabilities if requested
     )
     # --- End AI Agent Setup ---

@@ -2,152 +2,286 @@
 Basic example demonstrating how to create and use agents in AgentConnect.
 
 This example shows:
-1. Creating AI and Human agents
-2. Setting up direct communication between agents
-3. Processing messages and handling responses
-4. Using the Communication Hub for agent interaction
+1. Using the simple chat() method for direct interaction with an AI agent
+2. Creating and configuring AI agents with different parameters
+3. Using agents in standalone mode without a communication hub
+4. Properly starting and stopping agents
 """
 
 import asyncio
-import logging
 import os
 from dotenv import load_dotenv
+import logging
 
 from agentconnect.agents.ai_agent import AIAgent
-from agentconnect.agents.human_agent import HumanAgent
 from agentconnect.core.types import (
     ModelProvider,
     ModelName,
     AgentIdentity,
-    InteractionMode,
-    MessageType,
+    AgentProfile,
+    AgentType,
+    Capability,
+    Skill,
 )
-from agentconnect.core.message import Message
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.communication.hub import CommunicationHub
+from agentconnect.utils.logging_config import setup_logging, LogLevel
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+setup_logging(level=LogLevel.INFO)
 logger = logging.getLogger("AgentExample")
 
 
-async def direct_communication_example():
-    """Example of direct communication between agents without using the hub"""
-    logger.info("=== Direct Communication Example ===")
+async def simple_chat_example():
+    """Example of using the chat() method for direct interaction with an AI agent"""
+    logger.info("=== Simple Chat Example ===")
 
     # Create an AI agent
     ai_agent = AIAgent(
-        agent_id="assistant",
-        name="AI Assistant",
+        agent_id="simple_assistant",
+        name="Simple Assistant",
         provider_type=ModelProvider.GOOGLE,
         model_name=ModelName.GEMINI2_FLASH_LITE,
         api_key=os.getenv("GOOGLE_API_KEY"),
         identity=AgentIdentity.create_key_based(),
         personality="helpful and friendly assistant",
-        organization_id="example_org",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
+    )
+
+    # Use the chat() method for direct interaction
+    logger.info("Sending query to AI agent using chat() method")
+    response = await ai_agent.chat(
+        query="What are the benefits of using a multi-agent system?",
+        conversation_id="simple_chat_example"
+    )
+
+    logger.info(f"Received response: {response}")
+
+    # You can continue the same conversation
+    logger.info("Sending follow-up query")
+    follow_up_response = await ai_agent.chat(
+        query="Can you give me a specific example of agents collaborating?",
+        conversation_id="simple_chat_example"  # Same conversation ID to maintain context
+    )
+
+    logger.info(f"Received follow-up response: {follow_up_response}")
+
+
+async def multi_conversation_example():
+    """Example showing how to maintain multiple conversations with a single agent"""
+    logger.info("\n=== Multiple Conversations Example ===")
+    
+    # Create an AI agent with AgentProfile
+    agent_profile = AgentProfile(
+        agent_id="multi_conv_assistant",
+        agent_type=AgentType.AI,
+        name="Multi-Conversation Assistant",
+        summary="An assistant that can maintain multiple conversation contexts",
+        description="An assistant that can handle multiple independent conversations simultaneously, maintaining context for each conversation.",
+        version="1.0.0",
+        capabilities=[
+            Capability(
+                name="context_management",
+                description="Maintains separate contexts for multiple conversations",
+                input_schema={"conversation_id": "string", "query": "string"},
+                output_schema={"response": "string"},
+            )
         ],
+        skills=[
+            Skill(name="context_tracking", description="Tracks conversation context across multiple threads"),
+            Skill(name="topic_switching", description="Switches between different conversation topics"),
+        ],
+        tags=["assistant", "context", "conversation"],
+        examples=[
+            "Handle multiple conversations with different topics",
+            "Maintain context across conversation threads"
+        ]
     )
-
-    # Create a human agent
-    human_agent = HumanAgent(
-        agent_id="user",
-        name="Example User",
-        identity=AgentIdentity.create_key_based(),
-        organization_id="example_org",
-    )
-
-    # Create a message from human to AI
-    message = Message.create(
-        sender_id=human_agent.agent_id,
-        receiver_id=ai_agent.agent_id,
-        content="Hello, can you tell me what the capital of France is?",
-        sender_identity=human_agent.identity,
-        message_type=MessageType.TEXT,
-    )
-
-    # Process the message
-    logger.info(f"Sending message: {message.content}")
-    response = await ai_agent.process_message(message)
-
-    if response:
-        logger.info(f"Received response: {response.content}")
-    else:
-        logger.warning("No response received")
-
-
-async def hub_communication_example():
-    """Example of communication between agents using the Communication Hub"""
-    logger.info("\n=== Hub Communication Example ===")
-
-    # Create registry and hub
-    registry = AgentRegistry()
-    hub = CommunicationHub(registry)
-
-    # Create an AI agent
+    
     ai_agent = AIAgent(
-        agent_id="research_assistant",
-        name="Research Assistant",
+        agent_id="multi_conv_assistant",
         provider_type=ModelProvider.GOOGLE,
         model_name=ModelName.GEMINI2_FLASH_LITE,
         api_key=os.getenv("GOOGLE_API_KEY"),
         identity=AgentIdentity.create_key_based(),
-        personality="knowledgeable research assistant",
-        organization_id="example_org",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
+        profile=agent_profile,
+        personality="helpful assistant that maintains context",
+    )
+    
+    # Start conversation 1
+    logger.info("Starting conversation 1 about programming")
+    response1 = await ai_agent.chat(
+        query="What are the key principles of object-oriented programming?",
+        conversation_id="programming_conversation"
+    )
+    logger.info(f"Conversation 1 response: {response1[:100]}...")
+    
+    # Start conversation 2 (different topic, different conversation ID)
+    logger.info("Starting conversation 2 about cooking")
+    response2 = await ai_agent.chat(
+        query="What are some easy recipes for beginners?",
+        conversation_id="cooking_conversation"
+    )
+    logger.info(f"Conversation 2 response: {response2[:100]}...")
+    
+    # Continue conversation 1
+    logger.info("Continuing conversation 1 about programming")
+    follow_up1 = await ai_agent.chat(
+        query="Can you give an example of polymorphism?",
+        conversation_id="programming_conversation"  # Same as first query
+    )
+    logger.info(f"Conversation 1 follow-up: {follow_up1[:100]}...")
+    
+    # Continue conversation 2
+    logger.info("Continuing conversation 2 about cooking")
+    follow_up2 = await ai_agent.chat(
+        query="How do I know when pasta is cooked properly?",
+        conversation_id="cooking_conversation"  # Same as second query
+    )
+    logger.info(f"Conversation 2 follow-up: {follow_up2[:100]}...")
+    
+    logger.info("Both conversations maintained separate context successfully")
+
+
+async def ai_agent_configuration_example():
+    """Example showing different ways to configure an AI agent"""
+    logger.info("\n=== AI Agent Configuration Example ===")
+    
+    # Basic configuration with AgentProfile
+    basic_profile = AgentProfile(
+        agent_id="basic_agent",
+        agent_type=AgentType.AI,
+        name="Basic Assistant",
+        summary="A simple assistant with minimal configuration",
+        description="A basic assistant that demonstrates minimal required configuration for an AI agent.",
+        version="1.0.0",
+    )
+    
+    basic_agent = AIAgent(
+        agent_id="basic_agent",
+        identity=AgentIdentity.create_key_based(),
+        provider_type=ModelProvider.GOOGLE,
+        model_name=ModelName.GEMINI2_FLASH_LITE,
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        profile=basic_profile,
+    )
+    logger.info("Created basic agent with minimal configuration")
+    
+    # Advanced configuration with custom model parameters
+    advanced_profile = AgentProfile(
+        agent_id="advanced_agent",
+        agent_type=AgentType.AI,
+        name="Advanced Assistant",
+        summary="An assistant with advanced configuration",
+        description="An advanced assistant that demonstrates custom model parameters and advanced configuration options.",
+        version="1.0.0",
+        capabilities=[
+            Capability(
+                name="detailed_explanations",
+                description="Provides detailed and analytical explanations",
+                input_schema={"topic": "string"},
+                output_schema={"explanation": "string"},
+            )
+        ],
+        skills=[
+            Skill(name="analytical_thinking", description="Analyzes topics in detail"),
+            Skill(name="technical_explanation", description="Explains technical concepts clearly"),
         ],
     )
-
-    # Create another AI agent
-    ai_agent2 = AIAgent(
-        agent_id="data_analyst",
-        name="Data Analyst",
+    
+    advanced_agent = AIAgent(
+        agent_id="advanced_agent",
+        identity=AgentIdentity.create_key_based(),
         provider_type=ModelProvider.GOOGLE,
         model_name=ModelName.GEMINI2_FLASH,
         api_key=os.getenv("GOOGLE_API_KEY"),
+        profile=advanced_profile,
+        personality="analytical and detailed",
+        model_config={
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "max_tokens": 500
+        },
+        max_tokens_per_minute=10000,
+        max_tokens_per_hour=100000,
+        verbose=True
+    )
+    logger.info("Created advanced agent with custom model parameters")
+    
+    # Test the advanced agent with a simple query
+    response = await advanced_agent.chat(
+        query="Explain how temperature affects AI text generation",
+        conversation_id="config_example"
+    )
+    logger.info(f"Advanced agent response: {response[:100]}...")
+
+
+async def agent_lifecycle_example():
+    """Example showing how to properly start and stop an agent"""
+    logger.info("\n=== Agent Lifecycle Example ===")
+    
+    # Create an AI agent with AgentProfile
+    lifecycle_profile = AgentProfile(
+        agent_id="lifecycle_agent",
+        agent_type=AgentType.AI,
+        name="Lifecycle Agent",
+        summary="An agent demonstrating proper lifecycle management",
+        description="An agent that demonstrates proper initialization, running, and cleanup of agent resources.",
+        version="1.0.0",
+    )
+    
+    ai_agent = AIAgent(
+        agent_id="lifecycle_agent",
+        provider_type=ModelProvider.GOOGLE,
+        model_name=ModelName.GEMINI2_FLASH_LITE,
+        api_key=os.getenv("GOOGLE_API_KEY"),
         identity=AgentIdentity.create_key_based(),
-        personality="precise and analytical data specialist",
-        organization_id="example_org",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
+        profile=lifecycle_profile,
+        personality="helpful assistant",
     )
-
-    # Register agents with the hub
-    await hub.register_agent(ai_agent)
-    await hub.register_agent(ai_agent2)
-
-    # Send a collaboration request
-    logger.info("Sending collaboration request from research_assistant to data_analyst")
-    result = await hub.send_collaboration_request(
-        sender_id="research_assistant",
-        receiver_id="data_analyst",
-        task_description="Please analyze this dataset and provide key insights: [10, 15, 20, 25, 30]",
-        timeout=30,
+    
+    # Start the agent's processing loop
+    logger.info("Starting agent processing loop")
+    agent_task = asyncio.create_task(ai_agent.run())
+    
+    # Allow some time for the agent to initialize
+    await asyncio.sleep(1)
+    
+    # Send a query while the agent is running
+    logger.info("Sending query to running agent")
+    response = await ai_agent.chat(
+        query="What's the advantage of properly starting and stopping an agent?",
+        conversation_id="lifecycle_example"
     )
-
-    logger.info(f"Collaboration result: {result}")
-
-    # Clean up
-    await hub.unregister_agent("research_assistant")
-    await hub.unregister_agent("data_analyst")
+    logger.info(f"Response from running agent: {response[:100]}...")
+    
+    # Properly stop the agent
+    logger.info("Stopping the agent")
+    await ai_agent.stop()
+    
+    # Cancel the agent task
+    agent_task.cancel()
+    try:
+        await agent_task
+    except asyncio.CancelledError:
+        logger.info("Agent task cancelled successfully")
+    
+    logger.info("Agent lifecycle example completed")
 
 
 async def main():
     try:
-        # Run the direct communication example
-        await direct_communication_example()
-
-        # Run the hub communication example
-        await hub_communication_example()
+        # Run the simple chat example
+        await simple_chat_example()
+        
+        # Run the multiple conversations example
+        await multi_conversation_example()
+        
+        # Run the configuration example
+        await ai_agent_configuration_example()
+        
+        # Run the agent lifecycle example
+        await agent_lifecycle_example()
 
         logger.info("Examples completed successfully")
     except Exception as e:

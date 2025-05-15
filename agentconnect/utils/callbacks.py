@@ -132,8 +132,11 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
             safe_inputs = inputs if isinstance(inputs, dict) else {}
 
             if tool_name == "search_for_agents":
-                capability = safe_inputs.get("capability_name", "unknown capability")
-                print_msg = f"{TOOL_COLOR}🔎 Searching for agents with capability: {capability}...{Style.RESET_ALL}"
+                search_query = safe_inputs.get("query", "unknown query")
+                output_detail = safe_inputs.get("output_detail", "default detail")
+                tags_filter = safe_inputs.get("include_tags")
+                tags_msg = f" with tags: {tags_filter}" if tags_filter else ""
+                print_msg = f"{TOOL_COLOR}🔎 Searching agents for: '{search_query}' (detail: {output_detail}{tags_msg})...{Style.RESET_ALL}"
             elif tool_name == "send_collaboration_request":
                 target_agent = safe_inputs.get("target_agent_id", "unknown agent")
                 task_snippet = self._get_short_snippet(

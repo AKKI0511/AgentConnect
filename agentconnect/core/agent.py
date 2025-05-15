@@ -33,9 +33,7 @@ from agentconnect.core.message import Message
 from agentconnect.core.payment_constants import POC_PAYMENT_TOKEN_SYMBOL
 from agentconnect.core.types import (
     AgentIdentity,
-    AgentMetadata,
-    AgentType,
-    Capability,
+    AgentProfile,
     InteractionMode,
     MessageType,
     VerificationStatus,
@@ -60,7 +58,7 @@ class BaseAgent(ABC):
     Attributes:
         agent_id: Unique identifier for the agent
         identity: Agent's decentralized identity
-        metadata: Metadata about the agent
+        profile: Comprehensive profile for the agent
         capabilities: List of agent capabilities
         message_queue: Queue for incoming messages
         message_history: History of messages sent and received
@@ -78,11 +76,9 @@ class BaseAgent(ABC):
     def __init__(
         self,
         agent_id: str,
-        agent_type: AgentType,
         identity: AgentIdentity,
         interaction_modes: List[InteractionMode],
-        capabilities: List[Capability] = None,
-        organization_id: Optional[str] = None,
+        profile: AgentProfile,
         enable_payments: bool = False,
         wallet_data_dir: Optional[Union[str, Path]] = None,
     ):
@@ -91,25 +87,20 @@ class BaseAgent(ABC):
 
         Args:
             agent_id: Unique identifier for the agent
-            agent_type: Type of agent (human, AI)
             identity: Agent's decentralized identity
             interaction_modes: Supported interaction modes
-            capabilities: List of agent capabilities
-            organization_id: ID of the organization the agent belongs to
+            profile: Comprehensive agent profile (provided by the subclass)
             enable_payments: Whether to enable payment capabilities
             wallet_data_dir: Optional custom directory for wallet data storage
         """
         self.agent_id = agent_id
         self.identity = identity
-        self.metadata = AgentMetadata(
-            agent_id=agent_id,
-            agent_type=agent_type,
-            identity=identity,
-            organization_id=organization_id,
-            capabilities=[cap.name for cap in capabilities] if capabilities else [],
-            interaction_modes=interaction_modes,
-        )
-        self.capabilities = capabilities or []
+        self.interaction_modes = interaction_modes
+        self.profile = profile
+
+        # Ensure self.capabilities points to the profile's capabilities
+        self.capabilities = self.profile.capabilities
+
         self.message_queue = asyncio.Queue()
         self.message_history: List[Message] = []
         self.is_running = False
@@ -180,14 +171,14 @@ class BaseAgent(ABC):
                             f"Agent {self.agent_id}: Error saving new wallet data: {e}"
                         )
 
-                # Get wallet address and add to agent metadata
+                # Get wallet address and add to agent profile
                 try:
                     # Get the default wallet address
                     wallet_address = self.wallet_provider.get_address()
                     if wallet_address:
-                        self.metadata.payment_address = wallet_address
+                        self.profile.payment_address = wallet_address
                         logger.info(
-                            f"Agent {self.agent_id}: Set payment address to {wallet_address}"
+                            f"Agent {self.agent_id}: Set payment address in profile to {wallet_address}"
                         )
                     else:
                         logger.warning(
@@ -211,7 +202,7 @@ class BaseAgent(ABC):
                     f"Agent {self.agent_id}: Payment capabilities disabled due to initialization error"
                 )
 
-        logger.info(f"Agent {self.agent_id} ({agent_type}) initialized.")
+        logger.info(f"Agent {self.agent_id} ({self.profile.agent_type}) initialized.")
 
     @property
     def payments_enabled(self) -> bool:
@@ -646,7 +637,7 @@ class BaseAgent(ABC):
                     # This ensures the agent can periodically check if it should stop
                     # and also allows it to process other tasks
                     try:
-                        message = await asyncio.wait_for(
+                        message: Message = await asyncio.wait_for(
                             self.message_queue.get(), timeout=0.1  # 100ms timeout
                         )
                         logger.debug(
@@ -692,7 +683,7 @@ class BaseAgent(ABC):
             self.is_running = False
             logger.info(f"Agent {self.agent_id} stopped processing loop")
 
-    async def _process_message_and_respond(self, message):
+    async def _process_message_and_respond(self, message: Message):
         """
         Process a message and send a response if needed.
 
@@ -764,7 +755,7 @@ class BaseAgent(ABC):
             logger.error(f"Error finding human in conversation chain: {str(e)}")
             return None
 
-    async def join_network(self, network):  # type: ignore
+    async def join_network(self, network):
         """
         Join an agent network for agent-to-agent communication.
 
@@ -774,12 +765,15 @@ class BaseAgent(ABC):
 
         Args:
             network: The network to join
+
+        Returns:
+            True if successfully joined, False otherwise
         """
         logger.info(f"Agent {self.agent_id} joining network.")
         self.network = network
         await network.register_agent(self)
         # Broadcast availability with capabilities
-        await network.broadcast_availability(self.agent_id, self.metadata.capabilities)
+        await network.broadcast_availability(self.agent_id, self.profile.capabilities)
         logger.info(f"Agent {self.agent_id} broadcasted availability.")
 
     def set_cooldown(self, duration: int) -> None:

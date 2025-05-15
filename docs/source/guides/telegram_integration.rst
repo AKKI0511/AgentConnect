@@ -102,12 +102,19 @@ The TelegramAIAgent supports various configuration options:
         telegram_token=os.getenv("TELEGRAM_BOT_TOKEN"),
         # Additional options
         personality="helpful, friendly, and concise",
-        organization_id="my_organization",
         groups_file="groups.txt",  # File to store registered group IDs
         max_tokens_per_minute=5500,  # Rate limiting
         max_tokens_per_hour=100000,  # Rate limiting
-        capabilities=[...]  # Custom capabilities beyond defaults
+        # Discoverable Agent Profile
+        profile=AgentProfile(
+            agent_id="telegram_assistant",
+            agent_type=AgentType.AI,
+            name="My Telegram Assistant",
+            # Other profile fields...
+        )
     )
+
+You can check all the available options in the :class:`TelegramAIAgent <agentconnect.agents.TelegramAIAgent>` class.
 
 Interacting with Your Telegram Agent
 ------------------------------------
@@ -163,6 +170,13 @@ Integration with Other Agents
 ----------------------------
 
 One of the most powerful features of the TelegramAIAgent is its ability to collaborate with other agents:
+
+.. note::
+
+   We recomend using the :class:`AgentProfile <agentconnect.core.types.AgentProfile>` to define agents for enhanced discovery.
+   For simple use cases, you can pass individual parameters like ``capabilities``, ``name`` etc.
+
+   For more details on how to define agents, please refer to the :doc:`/guides/agent_configuration` guide.
 
 .. code-block:: python
 

@@ -232,15 +232,27 @@ class CommunicationHub:
 
             # Create registration with proper identity and verification, and Capability objects
             registration = AgentRegistration(
-                agent_id=agent.agent_id,
-                organization_id=agent.metadata.organization_id,
-                agent_type=agent.metadata.agent_type,
-                interaction_modes=agent.metadata.interaction_modes,
-                capabilities=agent.capabilities,  # Use the Capability objects directly
+                agent_id=agent.profile.agent_id,
+                agent_type=agent.profile.agent_type,
                 identity=agent.identity,
-                owner_id=agent.metadata.organization_id,
-                payment_address=agent.metadata.payment_address,
-                metadata=agent.metadata.metadata,
+                interaction_modes=agent.interaction_modes,
+                name=agent.profile.name,
+                summary=agent.profile.summary,
+                description=agent.profile.description,
+                version=agent.profile.version,
+                documentation_url=agent.profile.documentation_url,
+                organization=agent.profile.organization,
+                developer=agent.profile.developer,
+                url=agent.profile.url,
+                auth_schemes=agent.profile.auth_schemes,
+                default_input_modes=agent.profile.default_input_modes,
+                default_output_modes=agent.profile.default_output_modes,
+                capabilities=agent.profile.capabilities,
+                skills=agent.profile.skills,
+                examples=agent.profile.examples,
+                tags=agent.profile.tags,
+                payment_address=agent.profile.payment_address,
+                custom_metadata=agent.profile.custom_metadata,
             )
 
             # Register with central registry first
@@ -335,8 +347,8 @@ class CommunicationHub:
                 return False
 
             # Get sender and receiver
-            sender = self.active_agents.get(message.sender_id)
-            receiver = self.active_agents.get(message.receiver_id)
+            sender: Optional[BaseAgent] = self.active_agents.get(message.sender_id)
+            receiver: Optional[BaseAgent] = self.active_agents.get(message.receiver_id)
 
             if not sender or not receiver:
                 logger.error(
@@ -446,8 +458,8 @@ class CommunicationHub:
                 raise SecurityError("Message signature verification failed")
 
             # Check interaction mode compatibility
-            sender_modes = sender.metadata.interaction_modes
-            receiver_modes = receiver.metadata.interaction_modes
+            sender_modes = sender.interaction_modes
+            receiver_modes = receiver.interaction_modes
 
             logger.debug(
                 f"Checking interaction mode compatibility: {sender_modes} -> {receiver_modes}"
@@ -518,7 +530,7 @@ class CommunicationHub:
         self, message: Message, receiver: BaseAgent
     ) -> bool:
         # Only forward cooldown message if receiver is human
-        if receiver.metadata.agent_type == AgentType.HUMAN:
+        if receiver.profile.agent_type == AgentType.HUMAN:
             await receiver.receive_message(message)
         return True
 

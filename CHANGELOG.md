@@ -8,12 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- New `AgentProfile`, `Skill` classes in `types.py` for comprehensive agent configuration
+- Enhanced capability discovery service using Qdrant vector database
+- Improved agent search tool with filtering options and customizable result detail levels
+- New folder structure for capability discovery implementation
+- Dedicated folder for collaboration tools with improved organization
 
 ### Changed
+- Simplified constructor for `BaseAgent` with focus on profile-based configuration
+- Updated `AIAgent`, `HumanAgent`, `TelegramAgent` constructor to support both profile-based and parameter-based initialization
+- Enhanced `AgentRegistration` class with additional fields for advanced searches
+- Refactored examples to use the new profile-based agent configuration
+- Reorganized package dependencies in pyproject.toml
 
 ### Deprecated
 
 ### Fixed
+- Corrected release dates in CHANGELOG.md from 2024 to 2025
 
 ### Security
 
@@ -92,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Enhanced validation for inter-agent messages
 
-## [0.1.0] - 2024-03-13
+## [0.1.0] - 2025-03-13
 
 ### Added
 - Core agent management system with multiple AI provider support:

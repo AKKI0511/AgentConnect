@@ -28,6 +28,7 @@ from agentconnect.core.message import Message
 from agentconnect.core.payment_constants import POC_PAYMENT_TOKEN_SYMBOL
 from agentconnect.core.types import (
     AgentIdentity,
+    AgentProfile,
     AgentType,
     Capability,
     InteractionMode,
@@ -79,60 +80,75 @@ class AIAgent(BaseAgent):
 
     def __init__(
         self,
+        # Required parameters from BaseAgent
         agent_id: str,
-        name: str,
+        identity: AgentIdentity,
+        # Required AIAgent parameters
         provider_type: ModelProvider,
         model_name: ModelName,
         api_key: str,
-        identity: AgentIdentity,
+        # AIAgent-specific parameters
+        profile: Optional[AgentProfile] = None,
+        name: Optional[str] = None,
         capabilities: List[Capability] = None,
         personality: str = "helpful and professional",
-        organization_id: Optional[str] = None,
         interaction_modes: List[InteractionMode] = [
             InteractionMode.HUMAN_TO_AGENT,
             InteractionMode.AGENT_TO_AGENT,
         ],
-        max_tokens_per_minute: int = 70000,
-        max_tokens_per_hour: int = 700000,
-        max_turns: int = 20,
-        is_ui_mode: bool = False,
         memory_type: MemoryType = MemoryType.BUFFER,
         prompt_tools: Optional[PromptTools] = None,
         prompt_templates: Optional[PromptTemplates] = None,
         custom_tools: Optional[List[BaseTool]] = None,
         agent_type: str = "ai",
+        model_config: Optional[Dict[str, Any]] = None,
+        # Extra configuration parameters
+        max_tokens_per_minute: int = 70000,
+        max_tokens_per_hour: int = 700000,
+        max_turns: int = 20,
+        is_ui_mode: bool = False,
         enable_payments: bool = False,
         verbose: bool = False,
         wallet_data_dir: Optional[Union[str, Path]] = None,
         external_callbacks: Optional[List[BaseCallbackHandler]] = None,
-        model_config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the AI agent.
 
+        There are two ways to initialize an AIAgent:
+
+        1. Profile-based (recommended): Provide `agent_id`, `identity`, and `profile` parameters
+           along with any agent-specific settings.
+
+        2. Parameter-based (legacy): Provide individual parameters like `name`,
+           `capabilities`, etc.
+
+        NOTE: The `personality` parameter is provided in the system prompt config, not the profile.
+
         Args:
             agent_id: Unique identifier for the agent
-            name: Human-readable name for the agent
+            identity: Identity information for the agent
             provider_type: Type of model provider (e.g., OpenAI, Anthropic)
             model_name: Name of the model to use
             api_key: API key for the model provider
-            identity: Identity information for the agent
+            profile: Comprehensive agent profile (recommended approach) RECOMMENDED: Use this parameter to access richer profile options like summary, description, version, documentation_url, url, auth_schemes, default_input_modes, default_output_modes, skills, examples, and tags. Note that 'personality' is never included in this profile as it's internal.
+            name: Human-readable name for the agent
             capabilities: List of agent capabilities
-            personality: Description of the agent's personality
-            organization_id: ID of the organization the agent belongs to
+            personality: Description of the agent's personality (Passed to the system prompt)
             interaction_modes: List of supported interaction modes
-            max_tokens_per_minute: Maximum tokens per minute for rate limiting
-            max_tokens_per_hour: Maximum tokens per hour for rate limiting
-            is_ui_mode: Whether the agent is running in UI mode
             memory_type: Type of memory storage to use
             prompt_tools: Optional tools for the agent
             prompt_templates: Optional prompt templates for the agent
             custom_tools: Optional list of custom LangChain tools for the agent
             agent_type: Type of agent workflow to create
+            model_config: Optional dict of default model parameters (e.g., temperature, max_tokens)
+            max_tokens_per_minute: Maximum tokens per minute for rate limiting
+            max_tokens_per_hour: Maximum tokens per hour for rate limiting
+            max_turns: Maximum number of terms in a conversation
+            is_ui_mode: Whether the agent is running in UI mode
             enable_payments: Whether to enable payment capabilities
             verbose: Whether to enable verbose logging
             wallet_data_dir: Optional custom directory for wallet data storage
             external_callbacks: Optional list of external callback handlers to include
-            model_config: Optional dict of default model parameters (e.g., temperature, max_tokens)
         """
         # Validate CDP environment if payments are requested
         actual_enable_payments = enable_payments
@@ -154,21 +170,37 @@ class AIAgent(BaseAgent):
         # Store the model config before initializing LLM
         self.model_config = model_config or {}
 
-        # Initialize base agent
+        # Create or use the provided profile
+        if profile is None:
+            # Ensure required parameters are available when not using profile
+            if name is None:
+                raise ValueError("name is required when not using profile")
+
+            # Construct the profile with basic information from individual parameters
+            profile = AgentProfile(
+                agent_id=agent_id,
+                agent_type=AgentType.AI,  # Hardcoded for AIAgent
+                name=name,
+                capabilities=capabilities or [],
+                # Leave description empty or provide a generic one - do NOT use personality
+                description="",
+            )
+
+        # Initialize base agent with profile
         super().__init__(
             agent_id=agent_id,
-            agent_type=AgentType.AI,
             identity=identity,
-            capabilities=capabilities or [],
-            organization_id=organization_id,
             interaction_modes=interaction_modes,
+            profile=profile,
             enable_payments=actual_enable_payments,
             wallet_data_dir=wallet_data_dir,
         )
 
         # Store agent-specific attributes
-        self.name = name
-        self.personality = personality
+        self.personality = (
+            personality  # This is used only for the system prompt, not exposed
+        )
+        self.name = name or profile.name
         self.last_processed_message_id = None
         self.provider_type = provider_type
         self.model_name = model_name
@@ -202,7 +234,7 @@ class AIAgent(BaseAgent):
         self.llm = self._initialize_llm()
         logger.debug(f"Initialized LLM for AI Agent {self.agent_id}: {self.llm}")
         logger.info(
-            f"AI Agent {self.agent_id} initialized with {len(self.capabilities)} capabilities"
+            f"AI Agent {self.agent_id} initialized with {len(self.profile.capabilities)} capabilities"
         )
 
     @property
@@ -297,8 +329,8 @@ class AIAgent(BaseAgent):
                 )
 
             self.system_config = SystemPromptConfig(
-                name=self.name,
-                capabilities=self.capabilities,
+                name=self.profile.name,
+                capabilities=self.profile.capabilities,
                 personality=self.personality,
                 additional_context=additional_context,
             )
@@ -748,8 +780,8 @@ class AIAgent(BaseAgent):
 
                 # Create standalone system config
                 self.system_config = SystemPromptConfig(
-                    name=self.name,
-                    capabilities=self.capabilities,
+                    name=self.profile.name,
+                    capabilities=self.profile.capabilities,
                     personality=self.personality,
                     additional_context={
                         "standalone_mode": (

@@ -14,9 +14,12 @@ from agentconnect.agents import AIAgent
 from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 from agentconnect.core.types import (
     AgentIdentity,
+    AgentProfile,
+    AgentType,
     Capability,
     ModelName,
     ModelProvider,
+    Skill,
 )
 
 # Import document processing tools
@@ -47,6 +50,8 @@ def create_content_processing_agent(provider_type: ModelProvider, model_name: Mo
     """
     # Create content processing agent with custom tools
     content_processing_identity = AgentIdentity.create_key_based()
+    
+    # Define capabilities
     content_processing_capabilities = [
         Capability(
             name="content_processing",
@@ -79,6 +84,32 @@ def create_content_processing_agent(provider_type: ModelProvider, model_name: Mo
             output_schema={"text": "string", "num_pages": "integer", "metadata": "object"},
         ),
     ]
+    
+    # Define skills
+    content_processing_skills = [
+        Skill(name="pdf_processing", description="Extract and process text from PDF documents"),
+        Skill(name="text_chunking", description="Split large texts into manageable chunks"),
+        Skill(name="format_conversion", description="Convert between different document formats"),
+        Skill(name="html_processing", description="Process and transform HTML content"),
+    ]
+    
+    # Create agent profile
+    content_processing_profile = AgentProfile(
+        agent_id="content_processing_agent",
+        agent_type=AgentType.AI,
+        name="Content Processing Agent",
+        summary="Specialized agent for document processing and format conversion",
+        description="A document processing agent that handles text extraction, format conversion, and content transformation. Capable of processing PDFs, HTML documents, and large text files. Provides services for text chunking, format conversion, and metadata extraction.",
+        version="1.0.0",
+        capabilities=content_processing_capabilities,
+        skills=content_processing_skills,
+        tags=["content", "processing", "pdf", "markdown", "conversion", "documents"],
+        examples=[
+            "Extract text from a PDF file",
+            "Convert HTML content to markdown",
+            "Split a large text into smaller chunks"
+        ]
+    )
 
     # Create content processing tools
     content_processing_tools = []
@@ -377,18 +408,17 @@ def create_content_processing_agent(provider_type: ModelProvider, model_name: Mo
         )
     )
 
-    # Create the content processing agent with custom tools
+    # Create the content processing agent with AgentProfile
     content_processing_agent = AIAgent(
         agent_id="content_processing_agent",
-        name="Content Processing Agent",
+        identity=content_processing_identity,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
-        identity=content_processing_identity,
-        capabilities=content_processing_capabilities,
-        personality="I am a content processing specialist who excels at transforming and converting content between different formats. I can extract text from PDFs, convert HTML to markdown, and process documents for better readability. I understand how to work with relative paths from the current directory.",
+        profile=content_processing_profile,
+        personality="I am a specialized document processing assistant. I can extract text from PDFs, convert between document formats, and process large text files. I excel at text chunking, format conversion, and content transformation to make information more accessible and useful.",
         custom_tools=content_processing_tools,
-        # external_callbacks=[ToolTracerCallbackHandler(agent_id="content_processing_agent", print_tool_activity=False)],
+        external_callbacks=[ToolTracerCallbackHandler(agent_id="content_processing_agent", print_tool_activity=True)],
     )
     
     return content_processing_agent 

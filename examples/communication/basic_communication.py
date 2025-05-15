@@ -6,11 +6,13 @@ This example shows:
 2. Sending messages between agents
 3. Using the request-response pattern
 4. Handling collaboration requests
+5. Implementing agent-to-agent collaboration
 """
 
 import asyncio
 import logging
 import os
+from dotenv import load_dotenv
 
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import (
@@ -23,9 +25,13 @@ from agentconnect.core.types import (
 from agentconnect.core.message import Message
 from agentconnect.communication.hub import CommunicationHub
 from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.utils.logging_config import setup_logging, LogLevel
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+setup_logging(level=LogLevel.INFO)
 logger = logging.getLogger("CommunicationExample")
 
 
@@ -48,7 +54,6 @@ async def main():
         api_key=os.getenv("GOOGLE_API_KEY"),
         identity=AgentIdentity.create_key_based(),
         personality="knowledgeable research assistant",
-        organization_id="example_org",
         interaction_modes=[
             InteractionMode.HUMAN_TO_AGENT,
             InteractionMode.AGENT_TO_AGENT,
@@ -63,7 +68,6 @@ async def main():
         api_key=os.getenv("GOOGLE_API_KEY"),
         identity=AgentIdentity.create_key_based(),
         personality="precise and analytical data specialist",
-        organization_id="example_org",
         interaction_modes=[
             InteractionMode.HUMAN_TO_AGENT,
             InteractionMode.AGENT_TO_AGENT,
@@ -120,9 +124,58 @@ async def main():
 
     logger.info(f"Collaboration result: {result[:50]}...")
 
-    # Clean up
+    # Example 4: Specialized agents collaboration
+    logger.info("\nExample 4: Specialized agents collaboration")
+    
+    # Create specialized agents
+    research_assistant = AIAgent(
+        agent_id="research_assistant",
+        name="Research Assistant",
+        provider_type=ModelProvider.GOOGLE,
+        model_name=ModelName.GEMINI2_FLASH_LITE,
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        identity=AgentIdentity.create_key_based(),
+        personality="knowledgeable research assistant specialized in finding information",
+        interaction_modes=[
+            InteractionMode.HUMAN_TO_AGENT,
+            InteractionMode.AGENT_TO_AGENT,
+        ],
+    )
+
+    data_analyst = AIAgent(
+        agent_id="data_analyst",
+        name="Data Analyst",
+        provider_type=ModelProvider.GOOGLE,
+        model_name=ModelName.GEMINI2_FLASH,
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        identity=AgentIdentity.create_key_based(),
+        personality="precise and analytical data specialist who excels at interpreting numbers",
+        interaction_modes=[
+            InteractionMode.HUMAN_TO_AGENT,
+            InteractionMode.AGENT_TO_AGENT,
+        ],
+    )
+
+    # Register specialized agents
+    await hub.register_agent(research_assistant)
+    await hub.register_agent(data_analyst)
+    
+    # Send a collaboration request between specialized agents
+    logger.info("Sending collaboration request from research_assistant to data_analyst")
+    specialized_result = await hub.send_collaboration_request(
+        sender_id="research_assistant",
+        receiver_id="data_analyst",
+        task_description="Please analyze this dataset and provide key insights: [10, 15, 20, 25, 30]",
+        timeout=30,
+    )
+
+    logger.info(f"Specialized collaboration result: {specialized_result[:100]}...")
+
+    # Clean up all agents
     await hub.unregister_agent("agent1")
     await hub.unregister_agent("agent2")
+    await hub.unregister_agent("research_assistant")
+    await hub.unregister_agent("data_analyst")
 
     logger.info("Example completed successfully")
 

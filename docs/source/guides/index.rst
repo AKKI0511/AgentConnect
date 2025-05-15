@@ -15,9 +15,9 @@ Welcome to the AgentConnect Guides! These practical, step-by-step tutorials will
 
 Core Concepts & Getting Started
 -----------------------------------
-Build a solid foundation by understanding the core components (Registry, Hub, Capabilities, Identity) and setting up your first agent.
+Build a solid foundation by understanding the core components (Registry, Hub, Profile, Identity) and setting up your first agent.
 
-*   `Core Concepts <core_concepts.html>`_: Key concepts like the Agent Registry, Communication Hub, Capabilities, and Agent Identity.
+*   `Core Concepts <core_concepts.html>`_: Key concepts like the Agent Registry, Communication Hub, Agent Profile, and Agent Identity.
 *   `Your First Agent <first_agent.html>`_: Create and run a simple AI agent, configure its provider, and interact with it.
 *   `Human-in-the-Loop <human_in_the_loop.html>`_: Integrate a `HumanAgent` for interactive sessions or approvals.
 
@@ -32,9 +32,9 @@ Build a solid foundation by understanding the core components (Registry, Hub, Ca
 
 Building Multi-Agent Systems
 -------------------------------
-Learn how to orchestrate multiple agents that discover each other dynamically and collaborate by defining capabilities and designing interaction workflows.
+Learn how to orchestrate multiple agents that discover each other dynamically and collaborate by defining Agent Profiles and designing interaction workflows.
 
-*   `Multi-Agent Setup <multi_agent_setup.html>`_: Registering multiple agents (AI, Human, etc.) and defining their capabilities.
+*   `Multi-Agent Setup <multi_agent_setup.html>`_: Registering multiple agents (AI, Human, etc.) and defining their Profiles.
 *   `Collaborative Workflows <collaborative_workflows.html>`_: Design patterns for common multi-agent tasks like information gathering, task delegation, and parallel processing.
 
 .. toctree::
@@ -62,7 +62,7 @@ Customize the behavior of provided agents (like `AIAgent`) and understand the fr
 
 Specialized Use Cases & Integrations
 -----------------------------------------
-Explore specific applications like agent payments, Telegram integration, and connecting agents to external tools via capabilities.
+Explore specific applications like agent payments, Telegram integration, and connecting agents to external sources via tools.
 
 *   `Agent Payments <agent_payment.html>`_: Enabling and managing agent-to-agent payments.
 *   `Telegram Integration <telegram_integration.html>`_: Building AI assistants accessible via Telegram.

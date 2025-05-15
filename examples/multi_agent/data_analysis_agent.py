@@ -15,9 +15,12 @@ from pydantic import BaseModel, Field
 from agentconnect.agents import AIAgent
 from agentconnect.core.types import (
     AgentIdentity,
+    AgentProfile,
+    AgentType,
     Capability,
     ModelName,
     ModelProvider,
+    Skill,
 )
 from agentconnect.prompts.tools import PromptTools
 from agentconnect.core.registry import AgentRegistry
@@ -62,6 +65,8 @@ def create_data_analysis_agent(
     """
     # Create data analysis agent with visualization capabilities
     data_analysis_identity = AgentIdentity.create_key_based()
+    
+    # Define capabilities
     data_analysis_capabilities = [
         Capability(
             name="data_analysis",
@@ -76,6 +81,33 @@ def create_data_analysis_agent(
             output_schema={"visualization_path": "string", "description": "string"},
         ),
     ]
+    
+    # Define skills
+    data_analysis_skills = [
+        Skill(name="statistical_analysis", description="Perform statistical analysis on structured data"),
+        Skill(name="data_visualization", description="Create charts and graphs from data"),
+        Skill(name="correlation_analysis", description="Identify relationships between variables in datasets"),
+        Skill(name="trend_identification", description="Recognize patterns and trends in time-series data"),
+        Skill(name="economic_impact_assessment", description="Evaluate potential economic consequences from data"),
+    ]
+    
+    # Create agent profile
+    data_analysis_profile = AgentProfile(
+        agent_id="data_analysis_agent",
+        agent_type=AgentType.AI,
+        name="Data Analysis Agent",
+        summary="Specialized agent for data analysis and visualization",
+        description="A data analysis agent that processes structured data (CSV/JSON) for statistical analysis and visualization. Capable of identifying trends, analyzing correlations, assessing impacts, and generating insightful summaries from provided data.",
+        version="1.0.0",
+        capabilities=data_analysis_capabilities,
+        skills=data_analysis_skills,
+        tags=["data", "analysis", "visualization", "statistics", "trends", "insights"],
+        examples=[
+            "Analyze a CSV dataset and provide summary statistics",
+            "Generate correlation analysis between variables in a dataset",
+            "Create visualizations from structured data"
+        ]
+    )
 
     # Function for data analysis tool
     def analyze_data(data: str, analysis_type: str = "summary") -> Dict[str, str]:
@@ -238,15 +270,14 @@ def create_data_analysis_agent(
         category="data_analysis",
     )
 
-    # Create the data analysis agent with custom tools
+    # Create the data analysis agent with AgentProfile
     data_analysis_agent = AIAgent(
         agent_id="data_analysis_agent",
-        name="Data Analysis Agent",
+        identity=data_analysis_identity,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
-        identity=data_analysis_identity,
-        capabilities=data_analysis_capabilities,
+        profile=data_analysis_profile,
         personality=(
             "I am a data analysis specialist. I excel at processing structured data (like CSV/JSON) for statistical analysis and visualization. "
             "I can also analyze textual information to identify key trends, assess potential impacts (including economic consequences), and generate insightful summaries based on the provided context."

@@ -135,7 +135,7 @@ async def setup_agents() -> Dict[str, Any]:
     # Fall back to other API keys if Google's isn't available
     provider_type = ModelProvider.GOOGLE
     model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
-
+ 
     if not api_key:
         print_colored("GOOGLE_API_KEY not found. Checking for alternatives...", "INFO")
 

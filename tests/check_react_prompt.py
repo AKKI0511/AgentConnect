@@ -1,11 +1,6 @@
 """
 Tests for React prompts with payment capabilities.
 """
-import sys
-import os
-
-# Add the parent directory to the system path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from agentconnect.prompts.templates.prompt_templates import (
     ReactConfig,

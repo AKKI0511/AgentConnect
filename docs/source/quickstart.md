@@ -49,7 +49,7 @@ async def main():
 
     # Human agent
     human = HumanAgent(
-        agent_id="human1", name="User", identity=human_identity, organization_id="org1"
+        agent_id="human1", name="User", identity=human_identity,
     )
 
     # AI agent (choose your provider/model and set API key in .env)
@@ -66,7 +66,6 @@ async def main():
         )],
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         personality="helpful and professional",
-        organization_id="org2",
     )
     
     # Register agents with the hub for discovery

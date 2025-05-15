@@ -17,12 +17,12 @@ Overall Vision: Independent Agents
 
 At its heart, AgentConnect is designed to create a network of independent, potentially heterogeneous agents that can discover and communicate with each other securely. Unlike traditional centralized systems, AgentConnect promotes agent autonomy - each agent makes its own decisions about when, how, and with whom to interact.
 
-The framework is built around the ``BaseAgent`` abstract class (``agentconnect/core/agent.py``), which provides the foundation for all agents in the system. This base class defines common functionality such as identity management, message handling, and capability declaration, while leaving implementation details to specific agent types like ``AIAgent`` or ``HumanAgent``.
+The framework is built around the :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` abstract class, which provides the foundation for all agents in the system. This base class defines common functionality such as identity management, message handling, and capability declaration, while leaving implementation details to specific agent types like :class:`AIAgent <agentconnect.agents.AIAgent>` or :class:`HumanAgent <agentconnect.agents.HumanAgent>`.
 
 Communication Hub
 ----------------
 
-The Communication Hub (``CommunicationHub`` in ``agentconnect/communication/hub.py``) is the central message router that facilitates agent-to-agent communication. It's important to understand that while the hub routes messages, it doesn't control agent behavior.
+The Communication Hub (:class:`CommunicationHub <agentconnect.communication.CommunicationHub>`) is the central message router that facilitates agent-to-agent communication. It's important to understand that while the hub routes messages, it doesn't control agent behavior.
 
 Key responsibilities of the Communication Hub:
 
@@ -36,41 +36,52 @@ The Hub provides a standardized communication channel while preserving agent aut
 Agent Registry
 -------------
 
-The Agent Registry (``AgentRegistry`` in ``agentconnect/core/registry/registry_base.py``) serves as the dynamic directory or "phone book" where agents register themselves and their capabilities. It enables other agents to discover potential collaborators based on the capabilities they offer.
+The Agent Registry (:class:`AgentRegistry <agentconnect.core.registry.AgentRegistry>`) serves as the dynamic directory or "phone book" where agents register themselves by providing a comprehensive **Agent Profile**. This profile details their identity, capabilities, skills, and other metadata. The registry enables other agents to discover potential collaborators by searching these rich profiles.
 
 Key functions of the Agent Registry:
 
 1. **Agent Registration**: Manages the registration of agents with verification
-2. **Capability Indexing**: Maintains searchable indexes of agent capabilities
+2. **Agent Profile Indexing**: Maintains searchable indexes of agent profiles
 3. **Identity Verification**: Ensures agent identities are cryptographically verified
 4. **Discovery**: Allows agents to find other agents based on various criteria
 
 The registry doesn't impose or manage agent behavior - it simply provides the discovery mechanism that enables agents to find each other.
 
-Capabilities
------------
+.. admonition:: Advanced Registry Configuration (Coming Soon)
+   :class: note
 
-Capabilities (``Capability`` class in ``agentconnect/core/types.py``) are standardized declarations of what an agent can do. Each capability has a name, description, and defined input/output schemas that allow other agents to understand how to interact with it.
+   The ``AgentRegistry`` is highly configurable, especially its semantic search capabilities powered by Qdrant. You can customize aspects like the embedding model, Qdrant connection parameters (in-memory, local, or cloud), and other performance-tuning settings for the vector store.
 
-The capability system enables semantic discovery - agents can locate other agents based on the functionality they need rather than knowing specific identifiers in advance.
+   While a dedicated guide for these advanced configurations is planned for the `Advanced Guides <advanced/index.html>`_
+   section, you can currently find detailed information and examples in the following README files within the AgentConnect repository:
 
-A typical capability definition looks like:
+   - `AgentConnect Registry README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/core/registry/README.md>`_
+   - `Capability Discovery Implementation README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/core/registry/capability_discovery_impl/README.md>`_
 
-.. code-block:: python
+   These documents provide the necessary details for developers looking to fine-tune the registry's vector search behavior for specific needs.
 
-    Capability(
-        name="conversation",
-        description="General conversation and assistance",
-        input_schema={"query": "string"},
-        output_schema={"response": "string"},
-    )
+Agent Profile
+-------------
 
-When an agent registers with the system, its capabilities become discoverable by other agents who may need those services.
+The Agent Profile (:class:`AgentProfile <agentconnect.core.types.AgentProfile>`) is a comprehensive, structured description of an agent. Think of it as an agent's detailed resume or business card. It's crucial for how agents are understood, discovered, and interacted with within the AgentConnect framework.
+
+Instead of just declaring isolated functions, an `AgentProfile` provides a richer picture, typically including:
+
+*   **Basic Identity**: Who the agent is (ID, name, type like AI or Human).
+*   **Purpose**: A summary and detailed description of what the agent does.
+*   **Capabilities**: Specific services or tasks the agent can perform, each with its own description.
+*   **Skills**: Broader areas of expertise.
+*   **Interaction Details**: How to communicate with the agent (e.g., expected input/output types, endpoint URL).
+*   **Tags & Examples**: Keywords for filtering and illustrative use cases.
+
+By providing this rich, centralized profile, agents can be discovered more effectively. For example, another agent can search for "an agent that can translate documents and has experience with legal text" not just by a single capability name. This allows for more nuanced and semantic discovery, making it easier for agents to find the best collaborator for a given task.
+
+When an agent registers, its entire profile is made available to the Agent Registry, enabling sophisticated search and matching.
 
 Agent Identity
 -------------
 
-Every agent in the system has a unique, cryptographically verifiable identity (``AgentIdentity`` in ``agentconnect/core/types.py``). This identity includes:
+Every agent in the system has a unique, cryptographically verifiable identity (:class:`AgentIdentity <agentconnect.core.types.AgentIdentity>`). This identity includes:
 
 1. **Decentralized Identifier (DID)**: A globally unique identifier
 2. **Public Key**: Used to verify message signatures
@@ -82,7 +93,7 @@ The identity system ensures secure communications by enabling agents to verify t
 Messages
 -------
 
-All inter-agent communication happens through standardized ``Message`` objects (``agentconnect/core/message.py``). Each message contains:
+All inter-agent communication happens through standardized :class:`Message <agentconnect.core.message.Message>` objects. Each message contains:
 
 1. **Unique ID**: For tracking and referencing
 2. **Sender/Receiver IDs**: Who sent the message and who should receive it
@@ -99,9 +110,9 @@ How These Components Work Together
 
 The flow of agent interaction typically follows this pattern:
 
-1. Agents register with the Agent Registry, declaring their identity and capabilities
-2. An agent needs to use a capability provided by another agent
-3. The agent queries the Registry to find agents offering that capability
+1. Agents register with the Agent Registry, declaring their identity and comprehensive `AgentProfile`.
+2. An agent needs to use a service or capability provided by another agent.
+3. The agent queries the Registry to find agents whose profiles indicate they offer that service or capability.
 4. The agent creates a signed Message and sends it via the Communication Hub
 5. The Hub looks up the recipient agent and delivers the message
 6. The receiving agent verifies the message signature and processes the request

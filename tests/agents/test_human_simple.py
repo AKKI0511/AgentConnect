@@ -58,7 +58,7 @@ async def main():
         agent_id="human1",
         name="User",
         identity=human_identity,
-        organization_id="org1",
+        organization="org1",
         response_callbacks=[response_handler]
     )
     
@@ -72,7 +72,6 @@ async def main():
         capabilities=[],
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         personality="helpful",
-        organization_id="org1",
     )
     
     try:

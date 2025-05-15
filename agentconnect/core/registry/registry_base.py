@@ -55,14 +55,15 @@ class AgentRegistry:
         self._organization_index: Dict[str, Set[str]] = {}
         self._owner_index: Dict[str, Set[str]] = {}
         self._verified_agents: Set[str] = set()
+        self._initialized_event = asyncio.Event()
 
         # Set default vector search configuration if not provided
         if vector_search_config is None:
             vector_search_config = {
                 "model_name": "sentence-transformers/all-mpnet-base-v2",
                 "cache_folder": "./.cache/huggingface/embeddings",
-                "prefer_backend": "faiss",  # Use FAISS by default (falls back to USearch if available)
                 "vector_store_path": "./.cache/vector_stores",
+                "in_memory": True,
             }
 
         # Initialize capability discovery service with configuration
@@ -75,71 +76,32 @@ class AgentRegistry:
             exist_ok=True,
         )
 
-        # Initialize embeddings model and try to load existing vector store
+        # Initialize embeddings model etc. in background
         asyncio.create_task(self._initialize_vector_search())
 
     async def _initialize_vector_search(self) -> None:
         """
         Initialize vector search capabilities.
-
-        This method:
-
-        1. Initializes the embeddings model
-        2. Attempts to load existing vector store from disk
-        3. If loading fails, precomputes embeddings for all existing capabilities
+        Ensures the embedding model and Qdrant client/collection are ready.
+        Signals readiness via _initialized_event.
         """
         try:
-            # Initialize the embeddings model first
+            # Initialize the embeddings model and Qdrant collection
             await self._capability_discovery.initialize_embeddings_model()
-
-            # Try to load existing vector store if available
-            vector_store_path = self._vector_search_config.get("vector_store_path")
-
-            if vector_store_path:
-                try:
-                    success = await self._capability_discovery.load_vector_store(
-                        vector_store_path
-                    )
-                    if success:
-                        logger.info(
-                            f"Successfully loaded vector store from {vector_store_path}"
-                        )
-                        # Still need to populate the capability map
-                        if self._agents:
-                            for agent_id, registration in self._agents.items():
-                                for capability in registration.capabilities:
-                                    doc_id = f"{agent_id}:{capability.name}"
-                                    self._capability_discovery._capability_to_agent_map[
-                                        doc_id
-                                    ] = registration
-                        return
-                    else:
-                        logger.info(
-                            "Could not load vector store, will precompute embeddings"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to load vector store: {str(e)}")
-
-            # Precompute embeddings for all existing capabilities
-            if self._agents:
-                await self._capability_discovery.precompute_all_capability_embeddings(
-                    self._agents
-                )
-
-                # Try to save the computed vector store for future use
-                if vector_store_path:
-                    try:
-                        await self._capability_discovery.save_vector_store(
-                            vector_store_path
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to save vector store: {str(e)}")
+            # No need to precompute here, registration handles updates
         except Exception as e:
             logger.exception(f"Error initializing vector search: {str(e)}")
+        finally:
+            # Signal that core initialization is complete (or failed)
+            self._initialized_event.set()
+
+    async def ensure_initialized(self):
+        """Wait until the core registry initialization is complete."""
+        await self._initialized_event.wait()
 
     async def register(self, registration: AgentRegistration) -> bool:
         """
-        Register a new agent with verification.
+        Register a new agent with verification. Waits for initialization first.
 
         Args:
             registration: Registration information for the agent
@@ -147,8 +109,16 @@ class AgentRegistry:
         Returns:
             True if registration was successful, False otherwise
         """
+        await self.ensure_initialized()  # Wait for init before proceeding
         try:
             logger.info(f"Attempting to register agent: {registration.agent_id}")
+
+            # Check if agent already exists
+            if registration.agent_id in self._agents:
+                logger.warning(
+                    f"Agent with ID {registration.agent_id} already registered. Use update_registration to modify."
+                )
+                return False
 
             # Verify agent identity
             logger.debug("Verifying agent identity")
@@ -167,12 +137,7 @@ class AgentRegistry:
 
             logger.info(f"Successfully registered agent: {registration.agent_id}")
 
-            # Try to save the updated vector store
-            vector_store_path = self._vector_search_config.get("vector_store_path")
-            if vector_store_path:
-                asyncio.create_task(
-                    self._capability_discovery.save_vector_store(vector_store_path)
-                )
+            # Removed call to save_vector_store
 
             return True
 
@@ -204,25 +169,25 @@ class AgentRegistry:
                 self._interaction_index[mode].add(registration.agent_id)
 
             # Update organization index
-            if registration.organization_id:
-                if registration.organization_id not in self._organization_index:
-                    self._organization_index[registration.organization_id] = set()
-                self._organization_index[registration.organization_id].add(
+            if registration.organization:
+                if registration.organization not in self._organization_index:
+                    self._organization_index[registration.organization] = set()
+                self._organization_index[registration.organization].add(
                     registration.agent_id
                 )
 
-            # Update owner index
-            if registration.owner_id:
-                if registration.owner_id not in self._owner_index:
-                    self._owner_index[registration.owner_id] = set()
-                self._owner_index[registration.owner_id].add(registration.agent_id)
+            # Update owner index (now using developer)
+            if registration.developer:
+                if registration.developer not in self._owner_index:
+                    self._owner_index[registration.developer] = set()
+                self._owner_index[registration.developer].add(registration.agent_id)
 
             # Update capability embeddings cache
-            asyncio.create_task(
-                self._capability_discovery.update_capability_embeddings_cache(
-                    registration
-                )
+            await self._capability_discovery.update_capability_embeddings_cache(
+                registration
             )
+
+            # Removed call to save_vector_store
 
             logger.debug("Successfully updated all indexes")
 
@@ -261,14 +226,10 @@ class AgentRegistry:
                         self._capabilities_index[capability.name].remove(agent_id)
 
             # Clear embeddings cache for this agent
-            self._capability_discovery.clear_agent_embeddings_cache(agent_id)
+            # Note: clear_agent_embeddings_cache now handles the Qdrant deletion
+            await self._capability_discovery.clear_agent_embeddings_cache(agent_id)
 
-            # Try to save the updated vector store
-            vector_store_path = self._vector_search_config.get("vector_store_path")
-            if vector_store_path:
-                asyncio.create_task(
-                    self._capability_discovery.save_vector_store(vector_store_path)
-                )
+            # Removed call to save_vector_store
 
             logger.info(f"Successfully unregistered agent: {agent_id}")
             return True
@@ -303,6 +264,7 @@ class AgentRegistry:
         capability_description: str,
         limit: int = 10,
         similarity_threshold: float = 0.1,
+        filters: Optional[Dict[str, List[str]]] = None,
     ) -> List[Tuple[AgentRegistration, float]]:
         """
         Find agents by capability description using semantic search.
@@ -311,12 +273,19 @@ class AgentRegistry:
             capability_description: Description of the capability to search for
             limit: Maximum number of results to return (default: 10)
             similarity_threshold: Minimum similarity score to include in results (default: 0.1)
+            filters: Optional dictionary for filtering. Keys can include "tags",
+                     "organization", "developer", "default_input_modes", "default_output_modes", "auth_schemes".
+                     Values are lists of strings to match for the respective key.
 
         Returns:
             List of tuples containing agent registrations and similarity scores
         """
         return await self._capability_discovery.find_by_capability_semantic(
-            capability_description, self._agents, limit, similarity_threshold
+            capability_description,
+            self._agents,
+            limit,
+            similarity_threshold,
+            filters=filters,
         )
 
     async def get_all_capabilities(self) -> List[str]:
@@ -386,19 +355,17 @@ class AgentRegistry:
         """
         return self._agents.get(agent_id)
 
-    async def get_by_organization(
-        self, organization_id: str
-    ) -> List[AgentRegistration]:
+    async def get_by_organization(self, organization: str) -> List[AgentRegistration]:
         """
         Find agents by organization.
 
         Args:
-            organization_id: ID of the organization
+            organization: ID/name of the organization
 
         Returns:
             List of agent registrations in the specified organization
         """
-        agent_ids = self._organization_index.get(organization_id, set())
+        agent_ids = self._organization_index.get(organization, set())
         return [self._agents[agent_id] for agent_id in agent_ids]
 
     async def get_verified_agents(self) -> List[AgentRegistration]:
@@ -469,7 +436,8 @@ class AgentRegistry:
                     self._capabilities_index[cap.name].discard(agent_id)
 
             # Clear old capability embeddings from cache
-            self._capability_discovery.clear_agent_embeddings_cache(agent_id)
+            # Note: clear_agent_embeddings_cache now handles the Qdrant deletion
+            await self._capability_discovery.clear_agent_embeddings_cache(agent_id)
 
             # Update capabilities
             registration.capabilities = capabilities
@@ -481,37 +449,59 @@ class AgentRegistry:
                 self._capabilities_index[cap.name].add(agent_id)
 
             # Update capability embeddings cache
-            asyncio.create_task(
-                self._capability_discovery.update_capability_embeddings_cache(
-                    registration
-                )
+            await self._capability_discovery.update_capability_embeddings_cache(
+                registration
             )
 
-            # Try to save the updated vector store
-            vector_store_path = self._vector_search_config.get("vector_store_path")
-            if vector_store_path:
-                asyncio.create_task(
-                    self._capability_discovery.save_vector_store(vector_store_path)
-                )
+            # Removed call to save_vector_store
 
+        # Handle the renamed fields
         if "interaction_modes" in updates:
             # Remove from old mode indexes
             for mode in registration.interaction_modes:
                 self._interaction_index[mode].discard(agent_id)
 
-            # Update modes
+            # Update interaction_modes
             registration.interaction_modes = updates["interaction_modes"]
 
             # Add to new mode indexes
             for mode in registration.interaction_modes:
                 self._interaction_index[mode].add(agent_id)
 
+        if "default_input_modes" in updates:
+            registration.default_input_modes = updates["default_input_modes"]
+
+        if "default_output_modes" in updates:
+            registration.default_output_modes = updates["default_output_modes"]
+
         # Update payment address if provided
         if "payment_address" in updates:
             registration.payment_address = updates["payment_address"]
 
+        # Handle both old and new metadata fields
         if "metadata" in updates:
-            registration.metadata.update(updates["metadata"])
+            registration.custom_metadata.update(updates["metadata"])
+
+        if "custom_metadata" in updates:
+            registration.custom_metadata.update(updates["custom_metadata"])
+
+        # Handle other profile fields
+        for field in [
+            "name",
+            "summary",
+            "description",
+            "version",
+            "documentation_url",
+            "organization",
+            "developer",
+            "url",
+            "auth_schemes",
+            "skills",
+            "examples",
+            "tags",
+        ]:
+            if field in updates:
+                setattr(registration, field, updates[field])
 
         return registration
 
@@ -520,7 +510,7 @@ class AgentRegistry:
         Find agents by owner.
 
         Args:
-            owner_id: ID of the owner
+            owner_id: ID of the owner (now using developer field)
 
         Returns:
             List of agent registrations owned by the specified owner
@@ -534,11 +524,12 @@ class AgentRegistry:
 
         Args:
             agent_id: ID of the agent
-            owner_id: ID of the owner
+            owner_id: ID of the owner (now using developer field)
 
         Returns:
             True if the user owns the agent, False otherwise
         """
         if agent_id not in self._agents:
             return False
-        return self._agents[agent_id].owner_id == owner_id
+        # Use developer field instead of owner_id
+        return self._agents[agent_id].developer == owner_id

@@ -99,25 +99,32 @@ Advertising Paid Services
 
 There are two important ways to advertise paid services in AgentConnect:
 
-1. **For service discovery** - Include cost information in capability metadata so other agents can discover and evaluate the cost:
+1. **For service discovery** - Include cost information in your agent's ``AgentProfile`` so other agents can discover and evaluate the cost:
 
 .. code-block:: python
 
-    from agentconnect.core.types import Capability
+    from agentconnect.core.types import AgentProfile, Capability, AgentType
 
-    # Define a capability with cost information
-    research_capability = Capability(
-        name="research_service",
-        description="Conducts in-depth research on any topic for 2 USDC per request",
-        input_schema={"topic": "string"},
-        output_schema={"research": "string"},
-        metadata={"cost": "2 USDC", "payment_token": "USDC"}
-    )
-
-    # Create agent with this capability
+    # Create an agent with payment information in its profile
     agent = AIAgent(
         # ... other parameters ...
-        capabilities=[research_capability],
+        profile=AgentProfile(
+            agent_id="research_service_agent",
+            agent_type=AgentType.AI,
+            name="Research Specialist",
+            summary="Provides in-depth research services for a fee",
+            description="A specialized agent that conducts thorough research on any topic for a fee",
+            capabilities=[
+                Capability(
+                    name="research_service",
+                    description="Conducts in-depth research on any topic for 2 USDC per request",
+                    input_schema={"topic": "string"},
+                    output_schema={"research": "string"}
+                )
+            ],
+            tags=["research", "paid-service"],
+            custom_metadata={"payment_info": {"cost": "2 USDC", "payment_token": "USDC"}}
+        ),
         enable_payments=True
     )
 
@@ -140,7 +147,7 @@ There are two important ways to advertise paid services in AgentConnect:
         """
     )
 
-Properly configuring both the capability metadata and personality ensures that agents can discover your paid services and correctly handle the payment workflow.
+Properly configuring both the ``AgentProfile`` with cost information and personality with payment instructions ensures that agents can discover your paid services and correctly handle the payment workflow.
 
 Discovering Payment-Capable Agents
 -------------------------------
@@ -282,31 +289,37 @@ Important security considerations when using payment capabilities:
 Example: Agent Economy Workflow
 ----------------------------
 
-The following example demonstrates a multi-agent system with payment capabilities, featuring a research agent and a telegram broadcast agent that charge for their services:
+The following example demonstrates a multi-agent system with payment capabilities, featuring a research agent and a user proxy agent that can pay for services:
 
 .. code-block:: python
 
     from agentconnect.agents.ai_agent import AIAgent
-    from agentconnect.core.types import AgentIdentity, Capability, ModelProvider, ModelName
+    from agentconnect.core.types import AgentProfile, AgentType, Capability, AgentIdentity, ModelProvider, ModelName
     
     # Define token address (for example, USDC on Base Sepolia)
     BASE_SEPOLIA_USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
     
-    # Create Research Agent
+    # Create Research Agent with payment capabilities
     research_agent = AIAgent(
         agent_id="research_agent",
-        name="Research Specialist",
         provider_type=ModelProvider.OPENAI,
         model_name=ModelName.GPT4O,
         api_key="your_openai_api_key",
         identity=AgentIdentity.create_key_based(),
-        capabilities=[
-            Capability(
-                name="general_research",
-                description="Performs detailed research on a given topic, providing a structured report.",
-                metadata={"cost": "2 USDC"}
-            )
-        ],
+        profile=AgentProfile(
+            agent_id="research_agent",
+            agent_type=AgentType.AI,
+            name="Research Specialist",
+            summary="Provides detailed research reports for a fee",
+            capabilities=[
+                Capability(
+                    name="general_research",
+                    description="Performs detailed research on a given topic for 2 USDC per request, providing a structured report."
+                )
+            ],
+            tags=["research", "paid-service"],
+            custom_metadata={"payment_info": {"cost": "2 USDC", "payment_token": "USDC"}}
+        ),
         enable_payments=True,
         personality="""You are a Research Specialist that provides detailed research reports.
 
@@ -323,11 +336,16 @@ The following example demonstrates a multi-agent system with payment capabilitie
     # Create User Proxy Agent (Workflow Orchestrator)
     user_proxy_agent = AIAgent(
         agent_id="user_proxy_agent",
-        name="Workflow Orchestrator",
         provider_type=ModelProvider.OPENAI,
         model_name=ModelName.GPT4O,
         api_key="your_openai_api_key",
         identity=AgentIdentity.create_key_based(),
+        profile=AgentProfile(
+            agent_id="user_proxy_agent",
+            agent_type=AgentType.AI,
+            name="Workflow Orchestrator",
+            summary="Coordinates workflows and handles payments to other agents"
+        ),
         enable_payments=True,
         personality="""You are a workflow orchestrator responsible for managing payments and returning results.
         Payment Details (USDC on Base Sepolia):

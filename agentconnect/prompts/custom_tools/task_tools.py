@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, TypeVar
 
-from langchain.tools import StructuredTool
+from langchain_core.tools.structured import StructuredTool
 from langchain.llms.base import BaseLLM
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser

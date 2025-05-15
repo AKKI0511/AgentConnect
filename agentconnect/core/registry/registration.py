@@ -7,7 +7,8 @@ information of agents in the system.
 
 # Standard library imports
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import (
@@ -15,6 +16,7 @@ from agentconnect.core.types import (
     AgentType,
     Capability,
     InteractionMode,
+    Skill,
 )
 
 
@@ -23,27 +25,55 @@ class AgentRegistration:
     """
     Registration information for an agent.
 
-    This class stores the registration information for an agent, including
-    its identity, capabilities, and interaction modes.
+    This class stores the complete registration information for an agent, including
+    its identity, capabilities, skills, and metadata needed for discovery and interaction.
 
     Attributes:
         agent_id: Unique identifier for the agent
-        organization_id: ID of the organization the agent belongs to
         agent_type: Type of agent (human, AI)
         interaction_modes: Supported interaction modes
-        capabilities: List of agent capabilities
         identity: Agent's decentralized identity
-        owner_id: ID of the agent's owner
+        name: Name of the agent
+        summary: Brief summary of the agent's purpose
+        description: Detailed description of the agent
+        version: Version of the agent
+        documentation_url: URL to the agent's documentation
+        organization: Organization or entity providing the agent (e.g., 'Acme Corp', 'did:org:123').
+                     Using a verifiable ID is recommended for robustness.
+        developer: Individual or team that developed the agent (e.g., 'Alice', 'did:person:abc').
+                  Using a verifiable ID is recommended.
+        url: Endpoint URL for the agent
+        auth_schemes: List of supported authentication schemes
+        default_input_modes: List of supported input modes
+        default_output_modes: List of supported output modes
+        capabilities: List of capabilities the agent provides
+        skills: List of skills the agent possesses
+        examples: Example inputs/outputs or use cases
+        tags: Keywords for filtering
         payment_address: Agent's primary wallet address for receiving payments
-        metadata: Additional information about the agent
+        custom_metadata: Additional custom metadata about the agent
+        registered_at: When the agent was registered
     """
 
     agent_id: str
-    organization_id: Optional[str]
     agent_type: AgentType
     interaction_modes: list[InteractionMode]
-    capabilities: list[Capability]
     identity: AgentIdentity
-    owner_id: Optional[str] = None
+    name: Optional[str] = None
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    version: Optional[str] = None
+    documentation_url: Optional[str] = None
+    organization: Optional[str] = None  # Replaces organization_id
+    developer: Optional[str] = None  # Replaces owner_id
+    url: Optional[str] = None
+    auth_schemes: List[str] = field(default_factory=list)
+    default_input_modes: List[str] = field(default_factory=list)
+    default_output_modes: List[str] = field(default_factory=list)
+    capabilities: List[Capability] = field(default_factory=list)
+    skills: List[Skill] = field(default_factory=list)
+    examples: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
     payment_address: Optional[str] = None
-    metadata: Dict = field(default_factory=dict)
+    custom_metadata: Dict[str, Any] = field(default_factory=dict)  # Replaces metadata
+    registered_at: datetime = field(default_factory=datetime.now)

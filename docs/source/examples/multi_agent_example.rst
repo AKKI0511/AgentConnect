@@ -54,7 +54,6 @@ Setting Up Multiple Agents
             )
         ],
         personality="thorough and analytical researcher",
-        organization_id="example_org",
         interaction_modes=[InteractionMode.AGENT_TO_AGENT],
     )
     
@@ -74,7 +73,6 @@ Setting Up Multiple Agents
             )
         ],
         personality="precise and detail-oriented analyst",
-        organization_id="example_org",
         interaction_modes=[InteractionMode.AGENT_TO_AGENT],
     )
     
@@ -94,7 +92,6 @@ Setting Up Multiple Agents
             )
         ],
         personality="creative and articulate writer",
-        organization_id="example_org",
         interaction_modes=[InteractionMode.AGENT_TO_AGENT],
     )
     
@@ -193,7 +190,6 @@ AgentConnect's true power comes from decentralized capability discovery. Here's 
             api_key=os.getenv("GOOGLE_API_KEY"),
             identity=AgentIdentity.create_key_based(),
             interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
-            organization_id="example_org",
         )
         
         # Register this agent
@@ -335,7 +331,6 @@ Here's a complete example that ties everything together:
                     )
                 ],
                 personality="thorough researcher",
-                organization_id="example_org",
                 interaction_modes=[InteractionMode.AGENT_TO_AGENT, InteractionMode.HUMAN_TO_AGENT],
             ),
             "analyst": AIAgent(
@@ -354,7 +349,6 @@ Here's a complete example that ties everything together:
                     )
                 ],
                 personality="precise analyst",
-                organization_id="example_org",
                 interaction_modes=[InteractionMode.AGENT_TO_AGENT, InteractionMode.HUMAN_TO_AGENT],
             ),
             "writer": AIAgent(
@@ -373,7 +367,6 @@ Here's a complete example that ties everything together:
                     )
                 ],
                 personality="creative writer",
-                organization_id="example_org",
                 interaction_modes=[InteractionMode.AGENT_TO_AGENT, InteractionMode.HUMAN_TO_AGENT],
             ),
         }
@@ -383,7 +376,7 @@ Here's a complete example that ties everything together:
             agent_id="human_user",
             name="Example User",
             identity=AgentIdentity.create_key_based(),
-            organization_id="example_org",
+            organization="example_org",
         )
         
         # Register all agents

@@ -27,7 +27,7 @@ Overview
 
 Move beyond traditional, centrally controlled systems and embrace an ecosystem where independent agents can:
 
-*   **Discover peers on-demand:** Locate partners via **capability broadcasts** instead of hard-wired endpoints.  
+*   **Discover peers on-demand:** Locate partners by searching rich **Agent Profiles** instead of hard-wired endpoints.
 *   **Interact Securely (A2A):** Leverage built-in cryptographic verification for **trustworthy Agent-to-Agent** communication.
 *   **Execute Complex Workflows:** Request services, exchange value, and achieve goals collectively.
 *   **Autonomous Operation:** Each agent hosts its own logic—no central brain required.
@@ -56,7 +56,7 @@ Key Features
      <div class="feature-card">
        <h3>🤖 Dynamic Agent Discovery</h3>
        <ul>
-         <li>Capability-Based lookup</li>
+         <li>Profile-Based Lookup</li>
          <li>Decentralized Registry</li>
          <li>Zero static links</li>
        </ul>
@@ -116,9 +116,9 @@ Key Features
        </ul>
      </div>
      <div class="feature-card">
-       <h3>🌐 Dynamic Capability Advertising</h3>
+       <h3>🌐 Agent Profile Advertising</h3>
        <ul>
-         <li>Agent Skill Broadcasting</li>
+         <li>Publish Comprehensive Agent Details</li>
          <li>Market-Driven Discovery</li>
          <li>On-the-Fly Collaboration</li>
        </ul>
@@ -143,7 +143,7 @@ AgentConnect is built on three core pillars that enable decentralized agent coll
    <div class="architecture">
      <div class="arch-component">
        <h3>1. Decentralized Agent Registry</h3>
-       <p>A registry that allows agents to publish capabilities and discover other agents. This is <em>not</em> a central controller, but a directory service that agents can query to find collaborators that meet their needs.</p>
+       <p>A registry that allows agents to publish their detailed characteristics and service offerings and discover other agents. This is <em>not</em> a central controller, but a directory service that agents can query to find collaborators that meet their needs.</p>
      </div>
      <div class="arch-component">
        <h3>2. Communication Hub</h3>

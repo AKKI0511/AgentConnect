@@ -23,6 +23,7 @@ from agentconnect.core.types import (
     Capability,
     InteractionMode,
     MessageType,
+    AgentProfile,
 )
 
 # Set up logging
@@ -46,7 +47,7 @@ class HumanAgent(BaseAgent):
         agent_id: str,
         name: str,
         identity: AgentIdentity,
-        organization_id: Optional[str] = None,
+        organization: Optional[str] = None,
         response_callbacks: Optional[List[Callable]] = None,
     ):
         """Initialize the human agent.
@@ -55,7 +56,7 @@ class HumanAgent(BaseAgent):
             agent_id: Unique identifier for the agent
             name: Human-readable name for the agent
             identity: Identity information for the agent
-            organization_id: ID of the organization the agent belongs to
+            organization: Organization or entity providing the agent
             response_callbacks: Optional list of callbacks to be called when human responds
         """
         # Create Capability objects for human capabilities
@@ -74,14 +75,22 @@ class HumanAgent(BaseAgent):
             ),
         ]
 
-        super().__init__(
+        # Create the agent profile
+        profile = AgentProfile(
             agent_id=agent_id,
             agent_type=AgentType.HUMAN,
+            name=name,
+            organization=organization,
+            capabilities=capabilities,
+        )
+
+        super().__init__(
+            agent_id=agent_id,
             identity=identity,
             interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
-            capabilities=capabilities,
-            organization_id=organization_id,
+            profile=profile,
         )
+
         self.name = name
         self.is_active = True
         self.response_callbacks = response_callbacks or []
@@ -161,7 +170,7 @@ class HumanAgent(BaseAgent):
 
                 # Wait for and handle response
                 try:
-                    response = await self.message_queue.get()
+                    response: Optional[Message] = await self.message_queue.get()
                     logger.debug(
                         f"Human Agent {self.agent_id} received response from {response.sender_id if response else 'nobody'}."
                     )

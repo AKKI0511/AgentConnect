@@ -8,14 +8,15 @@ interact with an AI agent through Telegram.
 import asyncio
 import logging
 import os
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Union
+from pathlib import Path
 
 from dotenv import load_dotenv
 from aiogram import types
 from langchain.tools import BaseTool
 from langchain_core.callbacks import BaseCallbackHandler
 
-from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.agents.ai_agent import AIAgent, MemoryType
 from agentconnect.agents.telegram.bot_manager import TelegramBotManager
 from agentconnect.agents.telegram.message_processor import TelegramMessageProcessor
 from agentconnect.agents.telegram.keyboards import (
@@ -32,9 +33,12 @@ from agentconnect.core.types import (
     MessageType,
     ModelName,
     ModelProvider,
+    AgentProfile,
 )
 from agentconnect.communication.hub import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
+from agentconnect.prompts.tools import PromptTools
+from agentconnect.prompts.templates.prompt_templates import PromptTemplates
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +66,24 @@ class TelegramAIAgent(AIAgent):
         model_name (ModelName): Specific LLM to use (e.g., GEMINI2_FLASH, GPT4)
         api_key (str): API key for the LLM provider
         identity (AgentIdentity): Identity information for the agent
+        profile (Optional[AgentProfile], optional): Comprehensive agent profile. If provided, other individual parameters like name, capabilities, description might be overridden or supplemented by the profile's content.
+        model_config (Optional[Dict[str, Any]], optional): Optional dict of default model parameters (e.g., temperature, max_tokens).
         capabilities (List[Capability], optional): Additional capabilities beyond Telegram-specific ones
         personality (str, optional): Description of the agent's personality
-        organization_id (str, optional): ID of the organization the agent belongs to
         interaction_modes (List[InteractionMode], optional): Supported interaction modes
-        groups_file (str, optional): File path to store registered group IDs
         max_tokens_per_minute (int, optional): Rate limiting for token usage per minute
         max_tokens_per_hour (int, optional): Rate limiting for token usage per hour
+        max_turns (int, optional): Maximum number of turns in a conversation.
+        is_ui_mode (bool, optional): Whether the agent is running in UI mode.
+        memory_type (MemoryType, optional): Type of memory storage to use.
+        prompt_tools (Optional[PromptTools], optional): Optional tools for the agent.
+        prompt_templates (Optional[PromptTemplates], optional): Optional prompt templates for the agent.
+        agent_type (str, optional): Type of agent workflow to create (e.g., "ai", "structured_chat").
+        enable_payments (bool, optional): Whether to enable payments
+        verbose (bool, optional): Whether to enable verbose logging
+        wallet_data_dir (Optional[Union[str, Path]], optional): Directory to store wallet data. Can be a string path or a Path object.
+        external_callbacks (Optional[List[BaseCallbackHandler]], optional): List of external callbacks to use
+        groups_file (str, optional): File path to store registered group IDs
         telegram_token (str, optional): Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
 
     Note:
@@ -115,50 +130,69 @@ class TelegramAIAgent(AIAgent):
 
     def __init__(
         self,
+        # Required parameters from BaseAgent
         agent_id: str,
-        name: str,
+        identity: AgentIdentity,
+        # Required AIAgent parameters
         provider_type: ModelProvider,
         model_name: ModelName,
         api_key: str,
-        identity: AgentIdentity,
+        # AIAgent-specific parameters
+        profile: Optional[AgentProfile] = None,
+        name: Optional[str] = None,
         capabilities: List[Capability] = None,
         personality: str = "helpful and friendly",
-        organization_id: Optional[str] = None,
         interaction_modes: List[InteractionMode] = [
             InteractionMode.HUMAN_TO_AGENT,
             InteractionMode.AGENT_TO_AGENT,
         ],
-        groups_file: str = "groups.txt",
+        memory_type: MemoryType = MemoryType.BUFFER,
+        prompt_tools: Optional[PromptTools] = None,
+        prompt_templates: Optional[PromptTemplates] = None,
+        agent_type: str = "ai",
+        model_config: Optional[Dict[str, Any]] = None,
+        # Extra configuration parameters
         max_tokens_per_minute: int = 5500,
         max_tokens_per_hour: int = 100000,
-        telegram_token: Optional[str] = None,
+        max_turns: int = 20,
+        is_ui_mode: bool = False,
         enable_payments: bool = False,
         verbose: bool = False,
-        wallet_data_dir: Optional[str] = None,
+        wallet_data_dir: Optional[Union[str, Path]] = None,
         external_callbacks: Optional[List[BaseCallbackHandler]] = None,
+        # TelegramAIAgent-specific parameters
+        groups_file: str = "groups.txt",
+        telegram_token: Optional[str] = None,
     ):
         """
         Initialize a Telegram AI Agent.
 
         Args:
             agent_id: Unique identifier for the agent
-            name: Human-readable name for the agent (appears in Telegram)
-            provider_type: Type of LLM provider (e.g., GOOGLE, OPENAI)
-            model_name: Specific LLM to use (e.g., GEMINI2_FLASH, GPT4)
-            api_key: API key for the LLM provider
             identity: Identity information for the agent
-            capabilities: Additional capabilities beyond Telegram-specific ones
+            provider_type: Type of LLM provider (e.g., OpenAI, Anthropic)
+            model_name: Name of the model to use
+            api_key: API key for the model provider
+            profile: Comprehensive agent profile (recommended approach)
+            name: Human-readable name for the agent (appears in Telegram)
+            capabilities: List of agent capabilities
             personality: Description of the agent's personality
-            organization_id: ID of the organization the agent belongs to
-            interaction_modes: Supported interaction modes
-            groups_file: File path to store registered group IDs
-            max_tokens_per_minute: Rate limiting for token usage per minute
-            max_tokens_per_hour: Rate limiting for token usage per hour
-            telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
-            enable_payments: Whether to enable payments
+            interaction_modes: List of supported interaction modes
+            memory_type: Type of memory storage to use
+            prompt_tools: Optional tools for the agent
+            prompt_templates: Optional prompt templates for the agent
+            agent_type: Type of agent workflow to create
+            model_config: Optional dict of default model parameters (e.g., temperature, max_tokens)
+            max_tokens_per_minute: Maximum tokens per minute for rate limiting
+            max_tokens_per_hour: Maximum tokens per hour for rate limiting
+            max_turns: Maximum number of terms in a conversation
+            is_ui_mode: Whether the agent is running in UI mode
+            enable_payments: Whether to enable payment capabilities
             verbose: Whether to enable verbose logging
-            wallet_data_dir: Directory to store wallet data
-            external_callbacks: List of external callbacks to use
+            wallet_data_dir: Optional custom directory for wallet data storage
+            external_callbacks: Optional list of external callback handlers to include
+            groups_file: File path to store registered group IDs
+            telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
         """
         # Define Telegram-specific capabilities
         telegram_capabilities = [
@@ -211,6 +245,12 @@ class TelegramAIAgent(AIAgent):
             ),
         ]
 
+        if profile:
+            if profile.capabilities:
+                profile.capabilities += telegram_capabilities
+            else:
+                profile.capabilities = telegram_capabilities
+
         # Combine provided capabilities with Telegram-specific ones
         all_capabilities = (capabilities or []) + telegram_capabilities
 
@@ -246,18 +286,25 @@ class TelegramAIAgent(AIAgent):
         # Initialize the AIAgent with all capabilities and custom tools
         super().__init__(
             agent_id=agent_id,
-            name=name,
+            identity=identity,
             provider_type=provider_type,
             model_name=model_name,
             api_key=api_key,
-            identity=identity,
+            profile=profile,
+            name=name,
             capabilities=all_capabilities,
             personality=personality,
-            organization_id=organization_id,
             interaction_modes=interaction_modes,
+            memory_type=memory_type,
+            prompt_tools=prompt_tools,
+            prompt_templates=prompt_templates,
+            custom_tools=self._get_custom_tools(),
+            agent_type=agent_type,
+            model_config=model_config,
             max_tokens_per_minute=max_tokens_per_minute,
             max_tokens_per_hour=max_tokens_per_hour,
-            custom_tools=self._get_custom_tools(),  # Pass the custom tools to AIAgent
+            max_turns=max_turns,
+            is_ui_mode=is_ui_mode,
             enable_payments=enable_payments,
             verbose=verbose,
             wallet_data_dir=wallet_data_dir,

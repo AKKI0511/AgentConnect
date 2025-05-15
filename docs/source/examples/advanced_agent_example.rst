@@ -134,7 +134,6 @@ Now we'll create an agent that can use our custom tool:
             )
         ],
         personality="helpful weather expert",
-        organization_id="example_org",
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
         prompt_tools=prompt_tools,  # Pass our customized PromptTools instance
         # Pass our custom tool in the custom_tools list
@@ -371,7 +370,6 @@ Here's a complete example that combines custom tools with task decomposition:
                 )
             ],
             personality="methodical and detail-oriented weather scientist",
-            organization_id="example_org",
             interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
             prompt_tools=prompt_tools,
             custom_tools=[analysis_tool],  # Include our custom analysis tool
@@ -402,7 +400,7 @@ Here's a complete example that combines custom tools with task decomposition:
             agent_id="user",
             name="Example User",
             identity=AgentIdentity.create_key_based(),
-            organization_id="example_org",
+            organization="example_org",
         )
         
         await hub.register_agent(human)
@@ -560,7 +558,6 @@ AgentConnect offers full compatibility with LangChain v0.3.x and LangGraph, allo
             )
         ],
         personality="cautious and data-driven financial advisor",
-        organization_id="example_org",
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         # Include LangChain tools directly in the custom_tools parameter
         custom_tools=[calculate_risk_score, search_tool],
@@ -744,7 +741,6 @@ You can also use LangGraph for complex agent workflows within AgentConnect:
                 )
             ],
             personality="methodical and data-driven investment advisor",
-            organization_id="example_org",
             interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         )
         

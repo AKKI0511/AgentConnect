@@ -1,6 +1,9 @@
 Examples
 ========
 
+.. attention::
+   **Important Notice**: The examples in this documentation have not been recently refactored to reflect several significant changes in the AgentConnect framework. For the most up-to-date examples and references, please follow the guides in the :doc:`../guides/index` section and refer to the `examples section of our GitHub repository <https://github.com/AKKI0511/AgentConnect/tree/main/examples>`_. These examples will be refactored soon to align with the latest framework changes.
+
 This section contains examples demonstrating how to use the AgentConnect framework.
 
 .. note::

@@ -30,7 +30,6 @@ Here's how to implement a custom agent:
            name: str,
            identity: AgentIdentity,
            special_feature: str,
-           organization_id: Optional[str] = None,
        ):
            # Define agent capabilities
            capabilities = [
@@ -49,7 +48,6 @@ Here's how to implement a custom agent:
                identity=identity,
                capabilities=capabilities,
                interaction_modes=[InteractionMode.AGENT_TO_AGENT],
-               organization_id=organization_id,
            )
            
            self.name = name
@@ -95,7 +93,6 @@ Here's how to use the custom agent:
        name="CustomProcessor",
        identity=AgentIdentity.create_key_based(),
        special_feature="advanced_nlp",
-       organization_id="example_org",
    )
    
    # Create another agent to interact with the custom agent
@@ -106,7 +103,6 @@ Here's how to use the custom agent:
        model_name=ModelName.GPT4O,
        api_key=os.getenv("OPENAI_API_KEY"),
        identity=AgentIdentity.create_key_based(),
-       organization_id="example_org",
    )
    
    # Send a message from regular agent to custom agent
@@ -147,7 +143,6 @@ Here's how to integrate the custom agent with the communication hub:
        name="CustomAgent",
        identity=AgentIdentity.create_key_based(),
        special_feature="data_transformation",
-       organization_id="example_org",
    )
    
    regular_agent = AIAgent(
@@ -157,7 +152,6 @@ Here's how to integrate the custom agent with the communication hub:
        model_name=ModelName.GEMINI2_FLASH,
        api_key=os.getenv("GOOGLE_API_KEY"),
        identity=AgentIdentity.create_key_based(),
-       organization_id="example_org",
        interaction_modes=[InteractionMode.AGENT_TO_AGENT],
    )
    

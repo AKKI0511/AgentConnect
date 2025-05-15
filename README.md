@@ -28,7 +28,7 @@
 
 Move beyond traditional, centrally controlled systems and embrace an ecosystem where independent agents can:
 
-*   **Discover peers on-demand:** Locate partners via **capability broadcasts** instead of hard-wired endpoints.
+*   **Discover peers on-demand:** Locate partners by searching rich **Agent Profiles** instead of hard-wired endpoints.
 *   **Interact Securely (A2A):** Leverage built-in cryptographic verification for **trustworthy Agent-to-Agent** communication.
 *   **Execute Complex Workflows:** Request services, exchange value, and achieve goals collectively.
 *   **Autonomous Operation:** Each agent hosts its own logic—no central brain required.
@@ -55,7 +55,7 @@ AgentConnect delivers unique advantages over classic multi-agent approaches:
     <td width="33%">
       <h3>🤖 Dynamic Agent Discovery</h3>
       <ul>
-        <li>Capability-Based lookup</li>
+        <li>Profile-Based Lookup</li>
         <li>Decentralized Registry</li>
         <li>Zero static links</li>
       </ul>
@@ -113,9 +113,9 @@ AgentConnect delivers unique advantages over classic multi-agent approaches:
       </ul>
     </td>
     <td>
-      <h3>🌐 Dynamic Capability Advertising</h3>
+      <h3>🌐 Agent Profile Advertising</h3>
       <ul>
-        <li>Agent Skill Broadcasting</li>
+        <li>Publish Comprehensive Agent Details</li>
         <li>Market-Driven Discovery</li>
         <li>On-the-Fly Collaboration</li>
       </ul>
@@ -197,7 +197,7 @@ For more information about the demo application, see the [Demo Documentation](de
 
 AgentConnect is built on three core pillars that enable decentralized agent collaboration:
 
-1.  **Decentralized Agent Registry:**  A registry that allows agents to publish their capabilities and discover other agents.  This is *not* a central controller, but rather a directory service.  Agents can query the registry to find other agents that meet their needs.
+1.  **Decentralized Agent Registry:**  A registry that allows agents to publish their detailed characteristics and service offerings and discover other agents.  This is *not* a central controller, but rather a directory service.  Agents can query the registry to find other agents that meet their needs.
 2.  **Communication Hub:**  A message routing system that facilitates secure communication between agents.  The hub ensures reliable message delivery, but does *not* dictate agent behavior or control the network.
 3.  **Independent Agent Systems:**  Each agent is a self-contained unit, built using the tools and frameworks of the developer's choice (LangGraph, custom logic, etc.).  Agents interact with the network through standardized protocols, but their internal workings are independent.
 

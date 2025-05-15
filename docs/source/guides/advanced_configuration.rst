@@ -62,7 +62,6 @@ You can customize agent behavior by configuring various parameters:
             )
         ],
         personality="helpful and informative assistant",
-        organization_id="your-org-id",
         # Model-specific parameters
         max_tokens_per_minute = 5500,
         max_tokens_per_hour = 100000,
@@ -122,7 +121,6 @@ Configure the agent registry for agent discovery and capability matching:
     # Register an agent with the registry
     registration = AgentRegistration(
         agent_id="agent-1",
-        organization_id="org-1",
         agent_type=AgentType.AI,
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
         capabilities=[
@@ -279,7 +277,6 @@ Here's a complete example that demonstrates various configuration options:
                 )
             ],
             personality="helpful and informative",
-            organization_id="example-org"
         )
         
         # Create human agent
@@ -287,7 +284,7 @@ Here's a complete example that demonstrates various configuration options:
             agent_id="human-user",
             name="Human User",
             identity=AgentIdentity.create_key_based(),
-            organization_id="example-org"
+            organization="example-org"
         )
         
         # Register agents

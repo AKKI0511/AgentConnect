@@ -22,26 +22,26 @@ Core Principles of Multi-Agent Setup
 
 The key to enabling collaboration between agents lies in three fundamental concepts:
 
-1. **Capabilities**: Clearly defined services that agents can provide
+1. **Capabilities & Profiles**: Clearly defined agent profiles with specific capabilities they can provide
 2. **Registry**: A directory for capability-based discovery
 3. **Communication Hub**: A message router connecting agents based on registry lookups
 
 Let's explore each of these principles:
 
-Capabilities: The Foundation of Collaboration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Agent Profiles & Capabilities: The Foundation of Collaboration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each agent declares its capabilities—the services it can provide to other agents. These capability definitions include:
+Each agent declares its capabilities—the services it can provide to other agents—as part of its ``AgentProfile``. These capability definitions include:
 
 - A unique name
 - A clear description
-- Input and output schemas
+- Input and output schemas (optional)
 
 For example:
 
 .. code-block:: python
 
-    from agentconnect.core.types import Capability
+    from agentconnect.core.types import Capability, AgentProfile, AgentType, Skill
     
     # Define a summarization capability
     summarization_capability = Capability(
@@ -58,13 +58,37 @@ For example:
         input_schema={"data": "string"},
         output_schema={"analysis": "string"}
     )
+    
+    # Create an AgentProfile for a summarizer agent
+    summarizer_profile = AgentProfile(
+        agent_id="summarizer_agent",
+        agent_type=AgentType.AI,
+        name="Text Summarizer",
+        summary="Specializes in creating concise summaries of long texts",
+        description="This agent can summarize articles, papers, and long texts into shorter versions while preserving key information.",
+        capabilities=[summarization_capability],
+        skills=[Skill(name="text_compression", description="Ability to compress text while retaining meaning")],
+        tags=["summarization", "text processing", "content"]
+    )
+    
+    # Create an AgentProfile for an analyzer agent
+    analyzer_profile = AgentProfile(
+        agent_id="data_analyzer",
+        agent_type=AgentType.AI,
+        name="Data Analyzer",
+        summary="Specializes in analyzing datasets and extracting insights",
+        description="This agent can analyze different types of data and provide statistical insights and visualizations.",
+        capabilities=[analysis_capability],
+        skills=[Skill(name="statistical_analysis", description="Ability to analyze numerical data")],
+        tags=["analysis", "data", "insights"]
+    )
 
-When you create an agent with these capabilities, you're advertising what services the agent can provide to others in the system.
+When you create an agent with these profiles, you're providing a rich description of what services the agent can provide to others in the system, making discovery and collaboration more effective.
 
 Registry: The Agent Directory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``AgentRegistry`` serves as a dynamic directory of all available agents and their capabilities. When an agent needs a specific capability, the registry provides the means to find agents that offer it.
+The ``AgentRegistry`` serves as a dynamic directory of all available agents and their profiles. When an agent needs a specific capability, the registry provides the means to find agents that offer it.
 
 .. code-block:: python
 
@@ -90,15 +114,15 @@ Step-by-Step Guide to Setup
 
 Now let's walk through the steps to create a multi-agent system:
 
-Step 1: Define Agent Roles & Capabilities
+Step 1: Define Agent Roles & Profiles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-First, plan what agents you need and what capabilities each should have. For example:
+First, plan what agents you need and what profiles each should have. For example:
 
 - **Orchestrator Agent**: Coordinates workflows, interacts with users
 - **Summarizer Agent**: Specializes in condensing text into summaries
 
-For each agent, define clear, well-described capabilities that other agents can discover and use.
+For each agent, define a clear, comprehensive AgentProfile with well-described capabilities that other agents can discover and use.
 
 Step 2: Create Agent Identities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -117,21 +141,20 @@ Each agent needs a secure identity for authentication and message signing:
 Step 3: Instantiate Agents
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Create each agent with its unique identity, capabilities, and configuration:
+Create each agent with its unique identity, profile, and provider configuration:
 
 .. code-block:: python
 
     from agentconnect.agents import AIAgent
-    from agentconnect.core.types import ModelProvider, ModelName
+    from agentconnect.core.types import ModelProvider, ModelName, AgentProfile, AgentType, Capability, Skill, InteractionMode
     
-    # Create an orchestrator agent
-    orchestrator = AIAgent(
+    # Create an orchestrator profile
+    orchestrator_profile = AgentProfile(
         agent_id="orchestrator",
+        agent_type=AgentType.AI,
         name="Orchestrator",
-        provider_type=ModelProvider.OPENAI,
-        model_name=ModelName.GPT4O,
-        api_key=os.getenv("OPENAI_API_KEY"),
-        identity=orchestrator_identity,
+        summary="Coordinates tasks and delegates to specialized agents",
+        description="This agent manages complex workflows by breaking them down and delegating subtasks to specialized agents.",
         capabilities=[
             Capability(
                 name="task_management",
@@ -140,17 +163,19 @@ Create each agent with its unique identity, capabilities, and configuration:
                 output_schema={"result": "string"}
             )
         ],
-        personality="I coordinate complex tasks by working with specialized agents."
+        skills=[
+            Skill(name="task_delegation", description="Ability to delegate tasks to appropriate specialized agents")
+        ],
+        tags=["orchestration", "coordination", "workflow"]
     )
     
-    # Create a summarizer agent
-    summarizer = AIAgent(
+    # Create a summarizer profile
+    summarizer_profile = AgentProfile(
         agent_id="summarizer",
+        agent_type=AgentType.AI,
         name="Summarizer",
-        provider_type=ModelProvider.OPENAI,
-        model_name=ModelName.GPT4O,
-        api_key=os.getenv("OPENAI_API_KEY"),
-        identity=summarizer_identity,
+        summary="Creates concise summaries of text content",
+        description="This agent specializes in condensing long text into shorter, more digestible summaries while preserving key information.",
         capabilities=[
             Capability(
                 name="text_summarization",
@@ -159,10 +184,40 @@ Create each agent with its unique identity, capabilities, and configuration:
                 output_schema={"summary": "string"}
             )
         ],
-        personality="I specialize in creating concise summaries of text content."
+        skills=[
+            Skill(name="text_comprehension", description="Understanding and extracting key information from text")
+        ],
+        tags=["summarization", "content", "text"]
+    )
+    
+    # Create an orchestrator agent using its profile
+    orchestrator = AIAgent(
+        agent_id=orchestrator_profile.agent_id,
+        provider_type=ModelProvider.OPENAI,
+        model_name=ModelName.GPT4O,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        identity=orchestrator_identity,
+        profile=orchestrator_profile,
+        personality="I coordinate complex tasks by working with specialized agents.",
+        interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT]
+    )
+    
+    # Create a summarizer agent using its profile
+    summarizer = AIAgent(
+        agent_id=summarizer_profile.agent_id,
+        provider_type=ModelProvider.OPENAI,
+        model_name=ModelName.GPT4O,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        identity=summarizer_identity,
+        profile=summarizer_profile,
+        personality="I specialize in creating concise summaries of text content.",
+        interaction_modes=[InteractionMode.AGENT_TO_AGENT]
     )
 
-Notice how each agent has different capabilities, even though they may use the same underlying AI model.
+.. note:: 
+    Using the ``AgentProfile`` approach provides richer metadata for agent discovery, improves semantic search within the registry, and makes collaboration more effective. The profile contains all the external-facing information about what an agent is and can do, while the ``AIAgent`` constructor handles how it operates (provider, model, personality, etc.).
+
+Notice how each agent has a unique profile with different capabilities, even though they may use the same underlying AI model.
 
 Step 4: Initialize Hub & Registry
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -269,7 +324,10 @@ Here's a complete example demonstrating a basic multi-agent setup with task dele
         InteractionMode, 
         ModelName, 
         ModelProvider,
-        MessageType
+        MessageType,
+        AgentProfile,
+        AgentType,
+        Skill
     )
     
     async def main():
@@ -285,14 +343,13 @@ Here's a complete example demonstrating a basic multi-agent setup with task dele
         summarizer_identity = AgentIdentity.create_key_based()
         human_identity = AgentIdentity.create_key_based()
         
-        # Create an orchestrator agent
-        orchestrator = AIAgent(
+        # Create agent profiles
+        orchestrator_profile = AgentProfile(
             agent_id="orchestrator",
+            agent_type=AgentType.AI,
             name="Orchestrator",
-            provider_type=ModelProvider.OPENAI,
-            model_name=ModelName.GPT4O,
-            api_key=os.getenv("OPENAI_API_KEY"),
-            identity=orchestrator_identity,
+            summary="Coordinates tasks and delegates to specialized agents",
+            description="This agent manages complex workflows by breaking them down and delegating subtasks to specialized agents.",
             capabilities=[
                 Capability(
                     name="task_coordination",
@@ -301,17 +358,18 @@ Here's a complete example demonstrating a basic multi-agent setup with task dele
                     output_schema={"result": "string"}
                 )
             ],
-            personality="I'm a coordinator who delegates tasks to specialized agents."
+            skills=[
+                Skill(name="workflow_management", description="Managing complex workflows")
+            ],
+            tags=["orchestration", "coordination", "workflow"]
         )
         
-        # Create a summarizer agent
-        summarizer = AIAgent(
+        summarizer_profile = AgentProfile(
             agent_id="summarizer",
+            agent_type=AgentType.AI,
             name="Summarizer",
-            provider_type=ModelProvider.OPENAI,
-            model_name=ModelName.GPT4O,
-            api_key=os.getenv("OPENAI_API_KEY"),
-            identity=summarizer_identity,
+            summary="Creates concise summaries of text content",
+            description="This agent specializes in condensing long text into shorter, more digestible summaries while preserving key information.",
             capabilities=[
                 Capability(
                     name="text_summarization",
@@ -320,7 +378,32 @@ Here's a complete example demonstrating a basic multi-agent setup with task dele
                     output_schema={"summary": "string"}
                 )
             ],
-            personality="I specialize in creating concise summaries of text content."
+            skills=[
+                Skill(name="text_comprehension", description="Understanding and extracting key information from text")
+            ],
+            tags=["summarization", "content", "text"]
+        )
+        
+        # Create agents using their profiles
+        orchestrator = AIAgent(
+            agent_id=orchestrator_profile.agent_id,
+            provider_type=ModelProvider.OPENAI,
+            model_name=ModelName.GPT4O,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            identity=orchestrator_identity,
+            profile=orchestrator_profile,
+            personality="I'm a coordinator who delegates tasks to specialized agents.",
+        )
+        
+        summarizer = AIAgent(
+            agent_id=summarizer_profile.agent_id,
+            provider_type=ModelProvider.OPENAI,
+            model_name=ModelName.GPT4O,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            identity=summarizer_identity,
+            profile=summarizer_profile,
+            personality="I specialize in creating concise summaries of text content.",
+            interaction_modes=[InteractionMode.AGENT_TO_AGENT]
         )
         
         # Create a human agent
@@ -377,7 +460,7 @@ Here's a complete example demonstrating a basic multi-agent setup with task dele
 
 When you run this example:
 
-1. Two AI agents are created with different capabilities
+1. Two AI agents are created with different profiles and capabilities
 2. Both agents are registered with the hub
 3. Both agents start their processing loops
 4. The orchestrator sends a summarization task to the summarizer
@@ -417,15 +500,16 @@ Conclusion & Next Steps
 
 You've now learned the fundamental principles of setting up multiple agents for collaboration in AgentConnect:
 
-1. Define clear capabilities for each agent
+1. Define comprehensive agent profiles for each agent
 2. Register all agents with the hub
 3. Start each agent's processing loop
 4. Initiate collaboration through direct messages or human interaction
 
-This setup enables a flexible, extensible multi-agent system where agents can discover and communicate with each other based on their capabilities.
+This setup enables a flexible, extensible multi-agent system where agents can discover and communicate with each other based on their profiles and capabilities.
 
 To build on this foundation:
 
 - Learn how to design more complex collaborative workflows in :doc:`collaborative_workflows`
 - Discover how to equip agents with external tools in :doc:`external_tools`
 - Explore options for payment-enabled agents in :doc:`agent_payment`
+- Learn more about configuring individual agents in :doc:`agent_configuration`

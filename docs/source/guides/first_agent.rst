@@ -79,37 +79,55 @@ Each agent needs a secure identity for authentication and messaging:
 Configuring the AI Agent
 ----------------------
 
-Now we'll create our AI agent with specific capabilities:
+AgentConnect now recommends configuring your AI agent using an `AgentProfile`. This provides a single, comprehensive, and structured way to define all the agent's characteristics, making your agent easier to discover and manage. While you can still use individual parameters (like `name` or `capabilities`) for backward compatibility, using `AgentProfile` is the preferred and future-proof approach.
+
+Here's how to define a simple `AgentProfile` and use it to initialize your AI agent:
 
 .. code-block:: python
 
-    # Create an AI agent with a specific provider/model
-    ai_assistant = AIAgent(
-        agent_id="ai1",                          # Unique identifier
-        name="Assistant",                        # Human-readable name
-        provider_type=ModelProvider.OPENAI,      # Choose your provider
-        model_name=ModelName.GPT4O,              # Choose your model
-        api_key=os.getenv("OPENAI_API_KEY"),     # API key from .env
-        identity=ai_identity,                    # Identity created earlier
+    from agentconnect.core.types import AgentProfile, Capability, AgentType, ModelProvider, ModelName, AgentIdentity, InteractionMode
+    
+    # Example AgentProfile
+    my_agent_profile = AgentProfile(
+        agent_id="my_chat_agent_01",
+        agent_type=AgentType.AI,
+        name="ChattyHelper",
+        summary="A simple AI agent that can greet and echo messages.",
         capabilities=[
             Capability(
-                name="conversation",
-                description="General conversation and assistance",
-                input_schema={"query": "string"},
-                output_schema={"response": "string"},
+                name="greet_user",
+                description="Responds to user greetings."
+            ),
+            Capability(
+                name="echo_message",
+                description="Repeats any message sent to it."
             )
         ],
-        interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
-        personality="helpful and professional",   # Personality traits
-        organization_id="org1",                   # Optional organization grouping
+        # You can also add other fields like:
+        # description="A more detailed explanation of what this agent does and its purpose.",
+        # version="1.0.0",
+        # tags=["example", "chatbot", "beginner"]
     )
 
-The key parameters you can adjust:
+    # Create an AI agent using the profile (recommended)
+    ai_assistant = AIAgent(
+        agent_id=my_agent_profile.agent_id,  # Usually matches profile.agent_id
+        identity=ai_identity,                # Identity created earlier
+        provider_type=ModelProvider.OPENAI,  # Choose your provider
+        model_name=ModelName.GPT4O_MINI,     # Choose your model
+        api_key=os.getenv("OPENAI_API_KEY"),# API key from .env
+        profile=my_agent_profile,            # Pass the profile here
+        # ... other AIAgent-specific parameters if needed
+    )
 
-- **provider_type**: Choose from ``ModelProvider.OPENAI``, ``ModelProvider.ANTHROPIC``, ``ModelProvider.GOOGLE``, etc.
-- **model_name**: Select from ``ModelName.GPT4O``, ``ModelName.O1``, ``ModelName.CLAUDE_3_7_SONNET``, etc.
-- **capabilities**: Define what your agent can do (these are discoverable by other agents)
-- **personality**: Adjust how your agent responds
+**Why use AgentProfile?**
+
+- `AgentProfile` is the new recommended method for configuring an agent because it provides a single, comprehensive, and structured way to define all its characteristics.
+- While individual parameters (like a standalone `name` or `capabilities` list) might still function for simpler cases or backward compatibility, `AgentProfile` is the preferred approach for its richness and clarity.
+- This detailed `AgentProfile` is what gets registered with the `AgentRegistry` and is essential for effective agent discovery, especially with the enhanced semantic search features.
+- The `AIAgent` constructor will still require other fundamental parameters like `identity`, `provider_type`, `model_name`, and `api_key`, in addition to the `profile`.
+
+**Note:** Fields such as `name`, `capabilities`, and more are now part of the `AgentProfile` object, not direct arguments to `AIAgent`.
 
 Configuring a Human Agent
 -----------------------
@@ -123,7 +141,7 @@ For interactive testing, let's create a human agent that can chat with our AI:
         agent_id="human1",              # Unique identifier
         name="User",                    # Human-readable name
         identity=human_identity,        # Identity created earlier
-        organization_id="org1",         # Optional organization grouping
+        organization="org1",         # Optional organization grouping
     )
 
 Registering Agents
@@ -190,7 +208,9 @@ Here's the complete script:
         Capability, 
         InteractionMode, 
         ModelName, 
-        ModelProvider
+        ModelProvider, 
+        AgentProfile, 
+        AgentType
     )
     
     async def main():
@@ -210,26 +230,36 @@ Here's the complete script:
             agent_id="human1",
             name="User",
             identity=human_identity,
-            organization_id="org1"
+            organization="org1"
         )
         
-        # Create an AI agent
+        # Define the AgentProfile for the AI agent
+        my_agent_profile = AgentProfile(
+            agent_id="my_chat_agent_01",
+            agent_type=AgentType.AI,
+            name="ChattyHelper",
+            summary="A simple AI agent that can greet and echo messages.",
+            capabilities=[
+                Capability(
+                    name="greet_user",
+                    description="Responds to user greetings."
+                ),
+                Capability(
+                    name="echo_message",
+                    description="Repeats any message sent to it."
+                )
+            ],
+            # Optionally add more fields like description, version, tags, etc.
+        )
+        
+        # Create the AI agent using the profile
         ai_assistant = AIAgent(
-            agent_id="ai1",
-            name="Assistant",
-            provider_type=ModelProvider.OPENAI,  # Or ModelProvider.GROQ, etc.
-            model_name=ModelName.GPT4O,          # Choose your model
-            api_key=os.getenv("OPENAI_API_KEY"),
+            agent_id=my_agent_profile.agent_id,
             identity=ai_identity,
-            capabilities=[Capability(
-                name="conversation",
-                description="General conversation and assistance",
-                input_schema={"query": "string"},
-                output_schema={"response": "string"},
-            )],
-            interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
-            personality="helpful and professional",
-            organization_id="org1",
+            provider_type=ModelProvider.OPENAI,
+            model_name=ModelName.GPT4O_MINI,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            profile=my_agent_profile,
         )
         
         # Register agents with the hub

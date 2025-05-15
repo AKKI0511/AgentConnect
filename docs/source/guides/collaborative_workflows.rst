@@ -27,7 +27,7 @@ AgentConnect includes a set of tools specifically designed for agent-to-agent co
 2. ``send_collaboration_request``: Sends tasks to other agents and awaits responses
 3. ``check_collaboration_result``: Polls for results of requests that previously timed out
 
-These tools abstract the complexity of registry lookups and message exchanges, making it easier to build dynamic, capability-driven workflows. Typically, these tools are created and provided to agents via the ``PromptTools`` class, which handles their initialization with appropriate dependencies.
+These tools abstract the complexity of registry lookups and message exchanges, making it easier to build dynamic, capability-driven workflows. Typically, these tools are created and provided to agents via the :class:`PromptTools <agentconnect.prompts.PromptTools>` class, which handles their initialization with appropriate dependencies.
 
 Finding Collaborators: ``search_for_agents``
 ----------------------------------------
@@ -37,29 +37,119 @@ The first step in dynamic collaboration is finding other agents that can provide
 Purpose
 ~~~~~~~
 
-The ``search_for_agents`` tool allows an agent to search the registry for other agents offering specific capabilities. It performs semantic search on capability descriptions, making it more flexible than exact name matching.
+The ``search_for_agents`` tool allows an agent to find other agents by performing a **semantic search** across their comprehensive ``AgentProfile``'s. This includes fields like name, summary, description, capabilities, skills, tags, and examples. This approach is much more powerful than just matching capability names, as it can understand the semantics and context of what an agent is looking for.
 
 Inputs
 ~~~~~~
 
-- ``capability_name`` (required): The name or description of the capability needed
-- ``limit`` (optional): Maximum number of agents to return
-- ``similarity_threshold`` (optional): Minimum similarity score for matching
+- ``query: str`` (required): A natural language query describing the desired agent function, capability, skill, or general purpose. For example, "an agent that can analyze financial data" or "a creative writer for blog posts." This is used for semantic search against agent profiles.
+
+- ``top_k: int`` (default: 5): Maximum number of agent results to return. This can be adjusted based on whether you want more options (higher value) or just the best matches (lower value).
+
+- ``strictness: float`` (default: 0.2): Similarity threshold (0.0 to 1.0) for the semantic search. Higher values mean stricter matching. Results below this score are typically excluded.
+
+- ``output_detail: str`` (default: "summary"): Controls the level of detail in the returned agent information:
+
+  - ``'minimal'``: Returns basic identifiers (agent_id, name, URL, payment_address)
+  - ``'summary'``: Includes minimal fields plus summary and tags
+  - ``'capabilities'``: Includes summary fields plus capabilities and skills lists
+  - ``'full'``: Returns all available information from the agent's profile (description, examples, version, etc.)
+
+  The details returned for each agent depend on this parameter and the completeness of the found agent's ``AgentProfile``.
+
+- ``include_tags: Optional[List[str]]`` (default: None): Allows filtering for agents that have at least one of the specified exact tags, in addition to the semantic query. For example, ["finance", "data-analysis"] would only return agents that have at least one of these tags.
 
 Outputs
-~~~~~~~
+~~~~~~
 
-The tool returns a structured result containing matching agent IDs, their capabilities, and payment addresses (if available). This makes it easy for the agent to decide which collaborator to work with based on their specific requirements.
+The tool returns an ``AgentSearchOutput`` structure containing:
+
+- ``message: str``: A summary message about the search operation (e.g., "Successfully found X agents matching your criteria" or error details).
+
+- ``results: List[AgentSearchResultItem]``: A list of found agents. Each ``AgentSearchResultItem`` includes:
+
+  - ``agent_id: str``: Unique identifier for the agent
+  - ``similarity_score: float``: Relevance score of the agent to the query (higher is better)
+  - Various fields from the agent's ``AgentProfile`` depending on the ``output_detail`` level requested, such as:
+
+    - Basic identification: ``agent_id``, ``name``, ``url``, ``payment_address``
+    - Summary information: ``summary``, ``tags``
+    - Capability details: ``capabilities``, ``skills``
+    - Full profile details: ``description``, ``examples``, ``version``, ``organization``, etc.
+
+Example Usage of ``search_for_agents``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Here are some examples of how an agent might use this tool:
+
+1. **Searching for a general capability**:
+
+   .. code-block:: json
+
+       // Agent needs someone to write articles
+       {
+           "query": "an agent that can write blog posts about technology",
+       }
+
+2. **Searching with specific skills and tags**:
+
+   .. code-block:: json
+
+       // Agent needs a Python expert for financial data analysis  
+       {
+           "query": "expert in Python for financial data analysis", 
+           "include_tags": ["finance", "data-analysis"]
+       }
+       // Agent can check if any results have a high similarity_score
+
+3. **Requesting full details**:
+
+   .. code-block:: json
+
+       // Agent wants all details for top matches
+       {
+           "query": "image generation service", 
+           "top_k": 2, 
+           "output_detail": "full"
+       }
+       // Agent could examine capabilities, examples, and other details to choose the best match
+
+After receiving search results, an agent would typically:
+
+1. Check the similarity scores to ensure good matches
+2. Review the capabilities and summaries of top results
+3. Select one or more collaborators based on their specific needs
+4. Use the ``agent_id`` to send a collaboration request/s
+
+Importance of Rich ``AgentProfile``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The effectiveness and richness of search results heavily depend on how well other agents have defined their ``AgentProfile``'s. A detailed and descriptive profile with comprehensive capabilities, skills, examples, and appropriate tags leads to better discoverability. When creating agents for your system:
+
+- Provide clear, descriptive summaries and descriptions
+- Define capabilities with detailed descriptions
+- Add relevant skills and examples
+- Use appropriate tags for categorization
+- Fill in as many profile fields as applicable to your agent's purpose
+
+The more information provided in an agent's profile, the easier it will be for other agents to find it through semantic search when they need its services.
 
 Automatic Filtering
 ~~~~~~~~~~~~~~~~~~
 
-The tool automatically excludes the calling agent itself, agents already in active conversations, agents with recent interaction timeouts, and human agents by default.
+The tool automatically excludes:
+
+- The calling agent itself
+- Agents already in active conversations with the caller
+- Agents with recent interaction timeouts
+- Human agents by default
+
+This filtering ensures that search results are relevant and only include agents that are appropriate for collaboration.
 
 Internal Mechanism
 ~~~~~~~~~~~~~~~~
 
-This tool leverages the ``AgentRegistry``'s semantic search capabilities to find agents based on capability descriptions. It applies additional filtering logic to exclude inappropriate agents and provides results in a format that's easy for agents to process.
+This tool leverages the ``AgentRegistry``'s semantic search capabilities (using vector embeddings) on the full ``AgentProfile``'s of registered agents. It performs deep semantic matching beyond simple keyword matching, understanding the intent and context of the search query. The tool also applies additional filtering logic to exclude inappropriate agents and provides results in a format that's easy for agents to process.
 
 Delegating Tasks: ``send_collaboration_request``
 --------------------------------------------

@@ -8,7 +8,7 @@ This guide explains how to integrate human users into your AgentConnect workflow
 Introduction
 -----------
 
-The ``HumanAgent`` class (defined in ``agentconnect/agents/human_agent.py``) serves as the bridge between AI workflows and human users through a terminal interface. It allows AI agents to request human input, approvals, or reviews without requiring a pre-defined conversation structure.
+The :class:`HumanAgent <agentconnect.agents.HumanAgent>` class serves as the bridge between AI workflows and human users through a terminal interface. It allows AI agents to request human input, approvals, or reviews without requiring a pre-defined conversation structure.
 
 The ``HumanAgent`` supports two distinct interaction patterns:
 
@@ -31,7 +31,7 @@ Here's how to set up a ``HumanAgent`` as a workflow participant:
         agent_id="human1",
         name="User",
         identity=human_identity,
-        organization_id="org1"
+        organization="org1"
     )
     
     # Register with the hub
@@ -50,6 +50,8 @@ In a typical workflow, an AI agent sends a message to the human agent requesting
 .. code-block:: python
 
     # AI agent sends a request to the human agent
+    # NOTE: You don't have to manually send messages to the human agent.
+    #       The HumanAgent will automatically receive messages from other agents.
     await ai_agent.send_message(
         receiver_id=human.agent_id,
         content="Task completed: Report generated. Please review and respond 'approve' or 'request changes [your comments]'.",
@@ -82,7 +84,7 @@ When the ``HumanAgent`` (running via its ``run()`` loop) receives a message, the
    
       You: 
 
-3. The script execution **pauses** at this point, waiting for the human to type a response, using ``aioconsole.ainput`` to capture the input.
+3. The agent waits for the human to type a response.
 
 This interaction happens directly in the terminal where you're running your script—there's no separate interface.
 
@@ -118,10 +120,9 @@ Response Sent Back to AI
 
 When the human types a response, the ``HumanAgent`` packages it into a standard ``Message`` object and sends it back to the original AI agent sender via the ``CommunicationHub``:
 
-1. The human's input is captured by ``aioconsole.ainput``
-2. The ``HumanAgent`` creates a ``Message`` with the input as content
-3. The message is sent back to the original sender (the AI agent)
-4. The AI agent can then process this response in its own ``process_message`` method
+1. The ``HumanAgent`` creates a ``Message`` with the input as content
+2. The message is sent back to the original sender (the AI agent)
+3. The AI agent can then process this response in its own ``process_message`` method
 
 Use Case Example: Approval Workflow
 ---------------------------------
@@ -184,7 +185,7 @@ Here's a complete example demonstrating a human approval workflow:
             agent_id="human1",
             name="User",
             identity=human_identity,
-            organization_id="org1"
+            organization="org1"
         )
         
         # Create an AI agent
@@ -203,7 +204,6 @@ Here's a complete example demonstrating a human approval workflow:
             )],
             interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
             personality="professional and thorough",
-            organization_id="org1",
         )
         
         # Register both agents with the hub
@@ -293,7 +293,7 @@ To use callbacks, provide a list of functions when creating the ``HumanAgent``:
         agent_id="human1",
         name="User",
         identity=human_identity,
-        organization_id="org1",
+        organization="org1",
         response_callbacks=[on_human_response]  # Add our callback
     )
 

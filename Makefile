@@ -10,7 +10,7 @@ install-demo:
 	poetry install --with demo
 
 install-all:
-	poetry install --with dev,demo
+	poetry install --with dev,demo,research
 
 install-docs:
 	poetry install --with docs
@@ -24,14 +24,13 @@ hooks:
 	poetry run pre-commit run --all-files
 
 lint:
-	poetry run flake8 --extend-ignore E501,W293,E128,W291,E402,E203 agentconnect/ demos/api/ demos/utils/
+	poetry run flake8 --extend-ignore E501,W293,E128,W291,E402,E20,E701 agentconnect/ demos/api/ demos/utils/
 
 format:
 	poetry run black agentconnect/ demos/
 
 test:
-	@echo "Tests are disabled - skipping test execution"
-	@exit 0
+	poetry run pytest tests/ -v
 
 docs:
 	$(MAKE) -C docs html

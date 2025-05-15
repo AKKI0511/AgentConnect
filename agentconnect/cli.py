@@ -178,7 +178,7 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
         except ImportError:
             logger.warning("Dependencies are missing for the agent economy demo")
             logger.info("To install the required dependencies:")
-            logger.info("  poetry install --with demo")
+            logger.info("  poetry install --with research")
             logger.info(
                 "  or: pip install langchain-community colorama tavily-python python-dotenv"
             )
@@ -217,7 +217,7 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
     except ImportError as e:
         logger.error(f"Error importing example: {e}")
         logger.info("Make sure you have installed the required dependencies.")
-        logger.info("Try: poetry install --with demo")
+        logger.info("Try: poetry install --with demo,research")
         sys.exit(1)
     except Exception as e:
         logger.exception(f"Error running example {example_name}: {e}")

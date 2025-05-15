@@ -19,7 +19,7 @@ to enable seamless agent-to-agent communication and collaboration.
 import logging
 from typing import Any, Awaitable, Callable, List, Optional, Type, TypeVar
 
-from langchain.tools import StructuredTool
+from langchain_core.tools.structured import StructuredTool
 
 # Standard library imports
 from pydantic import BaseModel
@@ -30,9 +30,13 @@ from agentconnect.core.registry import AgentRegistry
 from agentconnect.prompts.custom_tools.registry import ToolRegistry
 
 # Import implementations from custom_tools
-from agentconnect.prompts.custom_tools.collaboration_tools import (
+from agentconnect.prompts.custom_tools.collaboration.agent_search_tool import (
     create_agent_search_tool,
+)
+from agentconnect.prompts.custom_tools.collaboration.send_collaboration_request_tool import (
     create_send_collaboration_request_tool,
+)
+from agentconnect.prompts.custom_tools.collaboration.check_collaboration_result_tool import (
     create_check_collaboration_result_tool,
 )
 from agentconnect.prompts.custom_tools.task_tools import create_task_decomposition_tool

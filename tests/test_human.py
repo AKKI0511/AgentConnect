@@ -31,7 +31,7 @@ async def main():
         agent_id="human1",
         name="User",
         identity=human_identity,
-        organization_id="org1"
+        organization="org1"
     )
 
     # Create an AI agent
@@ -50,7 +50,6 @@ async def main():
         )],
         interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
         personality="professional and thorough",
-        organization_id="org1",
     )
 
     # Register both agents with the hub

@@ -23,6 +23,7 @@ from agentconnect.core.registry.capability_discovery import CapabilityDiscoveryS
 from agentconnect.core.registry.identity_verification import (
     verify_agent_identity,
 )
+from agentconnect.core.config import registry_settings
 
 # Set up logging
 logger = logging.getLogger("AgentRegistry")
@@ -47,6 +48,11 @@ class AgentRegistry:
             vector_search_config: Optional configuration for vector search capability
         """
         logger.info("Initializing AgentRegistry")
+        # TODO: CRITICAL - Implement persistence for the agent registry. (Future plans)
+        # The current implementation stores agent registrations (_agents, _capabilities_index, etc.)
+        # in-memory, meaning all registration data is lost upon server restart.
+        # Consider using the existing Qdrant vector store to also store AgentRegistration
+        # payloads, or integrate a dedicated database / file-based persistence mechanism.
         self._agents: Dict[str, AgentRegistration] = {}
         self._capabilities_index: Dict[str, Set[str]] = {}
         self._interaction_index: Dict[InteractionMode, Set[str]] = {
@@ -57,14 +63,10 @@ class AgentRegistry:
         self._verified_agents: Set[str] = set()
         self._initialized_event = asyncio.Event()
 
-        # Set default vector search configuration if not provided
+        # Use settings if vector_search_config is not provided
         if vector_search_config is None:
-            vector_search_config = {
-                "model_name": "sentence-transformers/all-mpnet-base-v2",
-                "cache_folder": "./.cache/huggingface/embeddings",
-                "vector_store_path": "./.cache/vector_stores",
-                "in_memory": True,
-            }
+            logger.debug("Using default vector search configuration from settings")
+            vector_search_config = registry_settings.get_vector_search_config()
 
         # Initialize capability discovery service with configuration
         self._capability_discovery = CapabilityDiscoveryService(vector_search_config)
@@ -224,6 +226,34 @@ class AgentRegistry:
                 if capability.name in self._capabilities_index:
                     if agent_id in self._capabilities_index[capability.name]:
                         self._capabilities_index[capability.name].remove(agent_id)
+                        if not self._capabilities_index[
+                            capability.name
+                        ]:  # If capability set becomes empty
+                            del self._capabilities_index[capability.name]
+
+            # Organization index cleanup
+            if (
+                registration.organization
+                and registration.organization in self._organization_index
+            ):
+                if agent_id in self._organization_index[registration.organization]:
+                    self._organization_index[registration.organization].remove(agent_id)
+                    if not self._organization_index[
+                        registration.organization
+                    ]:  # If org set becomes empty
+                        del self._organization_index[registration.organization]
+
+            # Owner (developer) index cleanup
+            if registration.developer and registration.developer in self._owner_index:
+                if agent_id in self._owner_index[registration.developer]:
+                    self._owner_index[registration.developer].remove(agent_id)
+                    if not self._owner_index[
+                        registration.developer
+                    ]:  # If owner set becomes empty
+                        del self._owner_index[registration.developer]
+
+            # CRITICAL FIX: Cleanup from _verified_agents set
+            self._verified_agents.discard(agent_id)
 
             # Clear embeddings cache for this agent
             # Note: clear_agent_embeddings_cache now handles the Qdrant deletion

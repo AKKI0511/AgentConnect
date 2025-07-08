@@ -8,6 +8,7 @@ The Registry subsystem manages agent information, discovery, and identity verifi
 registry/
 ├── __init__.py                     # Package exports
 ├── capability_discovery_impl/      # Implementation details for semantic search
+├── search/                         # Search interface schemas and utilities
 ├── registry_base.py                # AgentRegistry class
 ├── capability_discovery.py         # CapabilityDiscoveryService 
 ├── identity_verification.py        # Identity verification functions
@@ -40,9 +41,28 @@ Stores agent data including identity, capabilities, skills, metadata, and config
 
 Main fields include `agent_id`, `agent_type`, `interaction_modes`, `identity`, `name`, `capabilities`, `skills`, `tags`, and `developer` among others.
 
+### Search Interface
+
+The `search/` subdirectory provides standardized schemas and utilities for agent search operations across all AgentConnect interfaces. It serves as the interface layer between the registry domain and external consumers (API servers, MCP servers, LangChain tools, etc.).
+
+See [Search Module Documentation](search/README.md) for detailed information about search schemas, utilities, and usage patterns.
+
 ## Configuration
 
-Configure the registry with a simple dictionary:
+Configure via environment variables or `.env` file:
+
+```bash
+# Vector search settings
+AGENTCONNECT_REGISTRY_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+AGENTCONNECT_REGISTRY_IN_MEMORY=true
+AGENTCONNECT_REGISTRY_CACHE_FOLDER=./.cache/embeddings
+
+# For production with external Qdrant
+AGENTCONNECT_REGISTRY_IN_MEMORY=false
+AGENTCONNECT_REGISTRY_URL=http://localhost:6333
+```
+
+For custom configuration, pass a dictionary:
 
 ```python
 config = {
@@ -80,8 +100,8 @@ from agentconnect.core.registry import AgentRegistry, AgentRegistration
 from agentconnect.core.types import AgentIdentity, AgentType, Capability, InteractionMode
 
 async def main():
-    # Initialize registry
-    registry = AgentRegistry(vector_search_config={"in_memory": True})
+    # Initialize registry (default config)
+    registry = AgentRegistry()
     await registry.ensure_initialized()  # Wait for initialization (Generally not needed as it's handled internally)
     
     # Create and register an agent

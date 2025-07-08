@@ -6,9 +6,9 @@ information of agents in the system.
 """
 
 # Standard library imports
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import (
@@ -20,8 +20,7 @@ from agentconnect.core.types import (
 )
 
 
-@dataclass
-class AgentRegistration:
+class AgentRegistration(BaseModel):
     """
     Registration information for an agent.
 
@@ -67,13 +66,13 @@ class AgentRegistration:
     organization: Optional[str] = None  # Replaces organization_id
     developer: Optional[str] = None  # Replaces owner_id
     url: Optional[str] = None
-    auth_schemes: List[str] = field(default_factory=list)
-    default_input_modes: List[str] = field(default_factory=list)
-    default_output_modes: List[str] = field(default_factory=list)
-    capabilities: List[Capability] = field(default_factory=list)
-    skills: List[Skill] = field(default_factory=list)
-    examples: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
+    auth_schemes: List[str] = Field(default_factory=list)
+    default_input_modes: List[str] = Field(default_factory=list)
+    default_output_modes: List[str] = Field(default_factory=list)
+    capabilities: List[Capability] = Field(default_factory=list)
+    skills: List[Skill] = Field(default_factory=list)
+    examples: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
     payment_address: Optional[str] = None
-    custom_metadata: Dict[str, Any] = field(default_factory=dict)  # Replaces metadata
-    registered_at: datetime = field(default_factory=datetime.now)
+    custom_metadata: Dict[str, Any] = Field(default_factory=dict)  # Replaces metadata
+    registered_at: datetime = Field(default_factory=datetime.now)

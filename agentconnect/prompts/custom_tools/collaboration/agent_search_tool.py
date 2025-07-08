@@ -3,217 +3,22 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from langchain_core.tools.structured import StructuredTool
-from pydantic import BaseModel, Field
 
 from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.core.registry.registration import AgentRegistration, Capability, Skill
+from agentconnect.core.registry import AgentRegistry, AgentRegistration
 from agentconnect.core.types import AgentType
+
+# Import from centralized schemas and utilities
+from agentconnect.core.registry.search import (
+    AgentSearchInput,
+    AgentSearchOutput,
+    AgentSearchResultItem,
+    populate_search_result_item,
+)
 
 logger = logging.getLogger(__name__)
 
-# --- Updated Input/Output schemas for agent search tool ---
-
-
-class AgentSearchInput(BaseModel):
-    """Input schema for agent search."""
-
-    query: str = Field(
-        description="The natural language query describing the desired capability, skill, or agent function. This will be used for semantic search against agent profiles."
-    )
-    top_k: int = Field(
-        default=5,
-        ge=1,
-        le=20,
-        description="Maximum number of agent results to return (default 5).",
-    )
-    strictness: float = Field(
-        default=0.2,
-        ge=0.0,
-        le=1.0,
-        description="Similarity threshold (0.0 to 1.0). Results below this score are typically excluded. Higher values mean stricter matching. Default is 0.2.",
-    )
-    output_detail: str = Field(
-        default="summary",
-        description="Controls the level of detail in the returned agent information. Options: 'minimal', 'summary', 'capabilities', 'full'. Default is 'summary'.",
-        pattern="^(minimal|summary|capabilities|full)$",
-    )
-    include_tags: Optional[List[str]] = Field(
-        default=None,
-        description="Optional list of tags. If provided, results will be filtered to agents that have AT LEAST ONE of these exact tags, in addition to semantic query matching.",
-    )
-
-
-class AgentSearchResultItem(BaseModel):
-    """Defines the structure for each agent in the search results."""
-
-    # Required fields
-    agent_id: str = Field(description="Unique identifier for the agent.")
-    similarity_score: float = Field(
-        description="Relevance score of the agent to the main query (e.g., 0.0 to 1.0+). Higher is generally better."
-    )
-
-    # Minimal level fields
-    name: Optional[str] = Field(None, description="Name of the agent.")
-    url: Optional[str] = Field(
-        None,
-        description="Endpoint URL for the agent, if applicable for direct or future A2A communication.",
-    )
-    payment_address: Optional[str] = Field(
-        None,
-        description="Agent's primary wallet address if payments are required for its services.",
-    )
-
-    # Summary level fields
-    summary: Optional[str] = Field(
-        None, description="Brief summary of the agent's purpose and functions."
-    )
-    tags: Optional[List[str]] = Field(
-        None,
-        description="Keywords associated with the agent for categorization or filtering.",
-    )
-
-    # Capabilities level fields
-    capabilities: Optional[List[Dict[str, str]]] = Field(
-        None,
-        description="List of capabilities (each a dict with 'name' and 'description') the agent provides.",
-    )
-    skills: Optional[List[Dict[str, str]]] = Field(
-        None,
-        description="List of skills (each a dict with 'name' and 'description') the agent possesses.",
-    )
-
-    # Full level fields
-    description: Optional[str] = Field(
-        None,
-        description="Detailed description of the agent, its functionalities, and use cases.",
-    )
-    examples: Optional[List[str]] = Field(
-        None,
-        description="Example inputs, outputs, or interaction scenarios for the agent.",
-    )
-    version: Optional[str] = Field(
-        None, description="Version of the agent software or definition."
-    )
-    organization: Optional[str] = Field(
-        None,
-        description="The organization or entity providing or responsible for the agent.",
-    )
-    developer: Optional[str] = Field(
-        None, description="The individual or team that developed the agent."
-    )
-    auth_schemes: Optional[List[str]] = Field(
-        None,
-        description="List of authentication schemes supported or required by the agent (for future use or specific integrations).",
-    )
-    default_input_modes: Optional[List[str]] = Field(
-        None,
-        description="List of primary data types or modes the agent accepts as input (e.g., 'text', 'application/json').",
-    )
-    default_output_modes: Optional[List[str]] = Field(
-        None,
-        description="List of primary data types or modes the agent produces as output.",
-    )
-
-    class Config:
-        """Config for the AgentSearchResultItem."""
-
-        extra = "ignore"
-
-
-class AgentSearchOutput(BaseModel):
-    """Output schema for agent search, containing a list of results."""
-
-    message: str = Field(
-        description="A summary message about the search operation (e.g., 'Successfully found X agents', 'No agents matched your criteria', or error details)."
-    )
-    results: List[AgentSearchResultItem] = Field(
-        default_factory=list,
-        description="A list of found agents. Each item's detail level is determined by the 'output_detail' input parameter.",
-    )
-
-    def __str__(self) -> str:
-        """Return a clean JSON string representation."""
-        return self.model_dump_json(indent=2, exclude_none=True)
-
-
 # --- Implementation of agent search tool ---
-
-
-def _format_capabilities_for_output(cap_list: List[Capability]) -> List[Dict[str, str]]:
-    return [
-        {"name": cap.name, "description": cap.description or ""} for cap in cap_list
-    ]
-
-
-def _format_skills_for_output(skill_list: List[Skill]) -> List[Dict[str, str]]:
-    return [
-        {"name": skill.name, "description": skill.description or ""}
-        for skill in skill_list
-    ]
-
-
-def _populate_search_result_item(
-    registration: AgentRegistration, similarity_score: float, output_detail_level: str
-) -> AgentSearchResultItem:
-    """Helper to populate AgentSearchResultItem based on output_detail_level."""
-    item_data = {
-        "agent_id": registration.agent_id,
-        "similarity_score": round(similarity_score, 4),
-    }
-
-    # Minimal level fields (always try to populate if available)
-    if registration.name:
-        item_data["name"] = registration.name
-    if registration.url:
-        item_data["url"] = registration.url
-    if registration.payment_address:
-        item_data["payment_address"] = registration.payment_address
-
-    if output_detail_level == "minimal":
-        return AgentSearchResultItem(**item_data)
-
-    # Summary level fields
-    if registration.summary:
-        item_data["summary"] = registration.summary
-    if registration.tags:
-        item_data["tags"] = registration.tags
-
-    if output_detail_level == "summary":
-        return AgentSearchResultItem(**item_data)
-
-    # Capabilities level fields
-    if registration.capabilities:
-        item_data["capabilities"] = _format_capabilities_for_output(
-            registration.capabilities
-        )
-    if (
-        registration.skills
-    ):  # Assuming skills structure is similar or defined in AgentRegistration
-        item_data["skills"] = _format_skills_for_output(registration.skills)
-
-    if output_detail_level == "capabilities":
-        return AgentSearchResultItem(**item_data)
-
-    # Full level fields (all remaining defined in AgentSearchResultItem)
-    if registration.description:
-        item_data["description"] = registration.description
-    if registration.examples:
-        item_data["examples"] = registration.examples
-    if registration.version:
-        item_data["version"] = registration.version
-    if registration.organization:
-        item_data["organization"] = registration.organization
-    if registration.developer:
-        item_data["developer"] = registration.developer
-    if registration.auth_schemes:
-        item_data["auth_schemes"] = registration.auth_schemes
-    if registration.default_input_modes:
-        item_data["default_input_modes"] = registration.default_input_modes
-    if registration.default_output_modes:
-        item_data["default_output_modes"] = registration.default_output_modes
-
-    return AgentSearchResultItem(**item_data)
 
 
 def create_agent_search_tool(
@@ -353,7 +158,8 @@ def create_agent_search_tool(
                     ):
                         continue
 
-                    item = _populate_search_result_item(reg, score, output_detail)
+                    # Use the centralized utility function
+                    item = populate_search_result_item(reg, score, output_detail)
                     processed_results.append(item)
                     if len(processed_results) >= top_k:
                         break
@@ -440,56 +246,3 @@ def create_agent_search_tool(
         coroutine=search_agents_async_impl if is_async else None,
         metadata={"category": "collaboration"},
     )
-
-
-# Example of how this tool might be registered (illustration purposes)
-# if __name__ == '__main__':
-#     # This is just for testing the schema and basic flow, does not run full system
-#     from agentconnect.core.registry.registration import Capability
-#
-#     # Mock agent registry for local testing
-#     class MockAgentRegistry:
-#         async def get_by_capability_semantic(self, capability_description, limit, similarity_threshold, filters=None):
-#             print(f"Mock search: {capability_description}, limit {limit}, threshold {similarity_threshold}, filters {filters}")
-#             reg1 = AgentRegistration(agent_id="agent1", agent_type=AgentType.AI, name="FinanceBot", summary="Good with numbers",
-#                                      capabilities=[Capability(name="calc", description="calculates things")], tags=["finance", "math"],
-#                                      payment_address="0x123", url="http://agent1.example.com")
-#             reg2 = AgentRegistration(agent_id="agent2", agent_type=AgentType.AI, name="WriterBot", summary="Writes text",
-#                                      capabilities=[Capability(name="write", description="writes text")], tags=["writing", "nlp"],
-#                                      description="A very detailed description.", examples=["example use case"])
-#
-#             all_results = [(reg1, 0.9), (reg2, 0.85)]
-#
-#             # Basic filter sim for testing 'include_tags'
-#             if filters and "tags" in filters:
-#                 filtered_results = []
-#                 required_tags = set(filters["tags"])
-#                 for r, s in all_results:
-#                     if r.tags and not required_tags.isdisjoint(r.tags):
-#                         filtered_results.append((r,s))
-#                 return filtered_results
-#             return all_results
-#
-#     # Test function
-#     async def test_tool():
-#         mock_registry = MockAgentRegistry()
-#         search_tool = create_agent_search_tool(agent_registry=mock_registry, current_agent_id="test_caller")
-#
-#         print("---- Test 1: Default (summary) ----")
-#         result1 = await search_tool.acoroutine(query="find someone good with numbers", top_k=1, strictness=0.1)
-#         print(result1)
-#
-#         print("\n---- Test 2: Minimal ----")
-#         result2 = await search_tool.acoroutine(query="writers", top_k=1, output_detail="minimal")
-#         print(result2)
-#
-#         print("\n---- Test 3: Full with tag filter----")
-#         result3 = await search_tool.acoroutine(query="finance", top_k=1, output_detail="full", include_tags=["finance"])
-#         print(result3)
-#
-#         print("\n---- Test 4: Tag filter no match ----")
-#         result4 = await search_tool.acoroutine(query="finance", top_k=1, output_detail="summary", include_tags=["nonexistent_tag"])
-#         print(result4)
-#
-#     if __name__ == '__main__':
-#         asyncio.run(test_tool())

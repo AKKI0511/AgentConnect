@@ -179,15 +179,15 @@ Usage:
 1. Configure via environment variables:
 ```bash
 # Registry settings
-AGENTCONNECT_REGISTRY_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-AGENTCONNECT_REGISTRY_IN_MEMORY=true
+AGENTCONNECT_REGISTRY_model_name=sentence-transformers/all-MiniLM-L6-v2
+AGENTCONNECT_REGISTRY_in_memory=true
 
 # API settings  
-API_HOST=localhost
-API_PORT=8000
+AGENTCONNECT_REGISTRY_API_host=localhost
+AGENTCONNECT_REGISTRY_API_port=8000
 
 # Logging
-AGENTCONNECT_LOG_LEVEL=INFO
+AGENTCONNECT_level=INFO
 ```
 
 2. Use configuration with registry settings:

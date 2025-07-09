@@ -53,13 +53,13 @@ Configure via environment variables or `.env` file:
 
 ```bash
 # Vector search settings
-AGENTCONNECT_REGISTRY_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-AGENTCONNECT_REGISTRY_IN_MEMORY=true
-AGENTCONNECT_REGISTRY_CACHE_FOLDER=./.cache/embeddings
+AGENTCONNECT_REGISTRY_model_name=sentence-transformers/all-MiniLM-L6-v2
+AGENTCONNECT_REGISTRY_in_memory=true
+AGENTCONNECT_REGISTRY_cache_folder=./.cache/embeddings
 
 # For production with external Qdrant
-AGENTCONNECT_REGISTRY_IN_MEMORY=false
-AGENTCONNECT_REGISTRY_URL=http://localhost:6333
+AGENTCONNECT_REGISTRY_in_memory=false
+AGENTCONNECT_REGISTRY_url=http://localhost:6333
 ```
 
 For custom configuration, pass a dictionary:

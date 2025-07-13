@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved agent search tool with filtering options and customizable result detail levels
 - New folder structure for capability discovery implementation
 - Dedicated folder for collaboration tools with improved organization
+- MCP (Model Context Protocol) server (`agentconnect.mcp`) implementation for agent discovery and search tool
+- Registry API server (`agentconnect.servers`) with FastAPI-based REST endpoints for agent operations
+- Registry API client (`agentconnect.clients`) with async HTTP interface and retry logic
+- Centralized search module (`agentconnect.core.registry.search`) with unified schemas and utilities
+- Centralized configuration system (`agentconnect.core.config`) with Pydantic-based settings
+- Comprehensive test suite for clients, servers, and MCP integration
 
 ### Changed
 - Simplified constructor for `BaseAgent` with focus on profile-based configuration
@@ -20,11 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced `AgentRegistration` class with additional fields for advanced searches
 - Refactored examples to use the new profile-based agent configuration
 - Reorganized package dependencies in pyproject.toml
+- `AgentRegistration` converted from dataclass to Pydantic BaseModel
+- `CommunicationHub` to support both local and remote registry clients
+- Agent search tool to use centralized search schemas
+- Project dependencies updated with MCP protocol and FastAPI support
 
 ### Deprecated
 
 ### Fixed
 - Corrected release dates in CHANGELOG.md from 2024 to 2025
+- Agent unregistration to properly call registry.unregister() method
+- Registry index management for capabilities and organizations
+- Agent registration update process to handle all fields correctly
 
 ### Security
 

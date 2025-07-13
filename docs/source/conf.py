@@ -5,6 +5,7 @@
 
 import os
 import sys
+import importlib.metadata
 # Add the project root directory to the Python path so that autodoc can find the modules
 sys.path.insert(0, os.path.abspath('../..'))
 
@@ -28,8 +29,8 @@ project = 'AgentConnect'
 copyright = '2025, Akshat Joshi'
 author = 'Akshat Joshi'
 
-version = '0.3.0'
-release = '0.3.0'
+version = importlib.metadata.version("agentconnect")
+release = version
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

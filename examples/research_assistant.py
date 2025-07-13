@@ -496,6 +496,9 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
                         print_colored(f"Stopped and unregistered {agent_id}", "SYSTEM")
                     except Exception as e:
                         print_colored(f"Error stopping/unregistering {agent_id}: {e}", "ERROR")
+            
+            # Unregister human agent
+            await agents["hub"].unregister_agent(agents["human_agent"].agent_id)
 
             # Cancel any remaining tasks
             if "agent_tasks" in agents:

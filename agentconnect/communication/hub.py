@@ -13,8 +13,10 @@ import time
 import uuid
 from asyncio import Future
 from typing import Awaitable, Callable, Dict, List, Optional
+from datetime import datetime
 
 from agentconnect.communication.protocols.agent import SimpleAgentProtocol
+from agentconnect.clients.registry_client import RegistryAPIClient
 
 # Absolute imports from agentconnect package
 from agentconnect.core.agent import BaseAgent
@@ -22,9 +24,16 @@ from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistration, AgentRegistry
 from agentconnect.core.types import AgentType, InteractionMode, MessageType
+from agentconnect.core.config import registry_settings
 
 # Set up logging
 logger = logging.getLogger("CommunicationHub")
+
+# Configure hub logging from settings
+logging.basicConfig(
+    level=getattr(logging, registry_settings.logging.level),
+    format=registry_settings.logging.format,
+)
 
 
 class CommunicationHub:
@@ -43,7 +52,7 @@ class CommunicationHub:
     The hub simply enables discovery and communication without controlling behavior.
     """
 
-    def __init__(self, registry: AgentRegistry):
+    def __init__(self, registry: AgentRegistry | RegistryAPIClient):
         """
         Initialize the communication hub.
 
@@ -62,6 +71,8 @@ class CommunicationHub:
         self.pending_responses: Dict[str, Future] = {}
         # Store late responses as {request_id: Message}
         self.late_responses: Dict[str, Message] = {}
+
+        logger.info("CommunicationHub initialized")
 
     def add_message_handler(
         self, agent_id: str, handler: Callable[[Message], Awaitable[None]]
@@ -253,6 +264,7 @@ class CommunicationHub:
                 tags=agent.profile.tags,
                 payment_address=agent.profile.payment_address,
                 custom_metadata=agent.profile.custom_metadata,
+                registered_at=datetime.now(),
             )
 
             # Register with central registry first
@@ -298,7 +310,13 @@ class CommunicationHub:
             del self.active_agents[agent_id]
 
             # Update registry status
-            await self.registry.update_registration(agent_id, {"status": "unavailable"})
+            # await self.registry.update_registration(agent_id, {"status": "unavailable"})
+            # Instead of trying to update a status, perform a full unregistration
+            success_unreg = await self.registry.unregister(agent_id)
+            if not success_unreg:
+                logger.warning(
+                    f"Failed to unregister agent {agent_id} from the underlying registry."
+                )
 
             # Clean up any pending messages for this agent
             for other_agent in self.active_agents.values():

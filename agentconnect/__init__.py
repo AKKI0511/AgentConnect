@@ -24,7 +24,7 @@ Key differentiators:
 For detailed usage examples, see the README.md or visit the documentation.
 """
 
-__version__ = "0.3.0"
+import importlib.metadata
 
 # Import subpackages to make them available to users
 from agentconnect import agents
@@ -35,6 +35,7 @@ from agentconnect import prompts
 from agentconnect import utils
 
 # Define public API - specify what should be exposed when a user does "from agentconnect import *"
+__version__ = importlib.metadata.version("agentconnect")
 __all__ = [
     "agents",
     "communication",

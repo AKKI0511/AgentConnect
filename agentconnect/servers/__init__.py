@@ -1,19 +1,19 @@
 """
-AgentConnect Servers Package
+AgentConnect Servers (import-safe package)
 
-This package provides server implementations for AgentConnect services,
-offering RESTful APIs and service endpoints for distributed agent management.
+Run via CLI:
+    .. code-block:: bash
 
-Available Servers:
-- RegistryAPIServer: FastAPI-based REST API for agent registry operations
+        uvicorn agentconnect.servers.registry_api_server:app
+
+Programmatic:
+    .. code-block:: python
+
+        from agentconnect.servers.registry_api_server import create_registry_api_app
+        from agentconnect.servers.config import RegistryAPISettings
+
+        settings = RegistryAPISettings()
+        app = create_registry_api_app(settings)
+
+This package does not perform imports or side effects at package import time.
 """
-
-from agentconnect.servers.registry_api_server import app as registry_api_app
-
-# Export the main FastAPI application
-__all__ = [
-    "registry_api_app",
-]
-
-# Version and metadata
-__description__ = "AgentConnect server implementations"

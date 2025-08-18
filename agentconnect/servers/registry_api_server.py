@@ -8,7 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -20,51 +20,81 @@ from agentconnect.core.registry.search import (
     populate_search_result_item,
 )
 from agentconnect.core.types import Capability, InteractionMode, AgentType, Skill
-from agentconnect.core.config import registry_settings
+from agentconnect.servers.config import RegistryAPISettings
 
 logger = logging.getLogger(__name__)
-# Configure logging based on settings
-logging.basicConfig(
-    level=getattr(logging, registry_settings.logging.level),
-    format=registry_settings.logging.format,
-)
 
 # Global variable to hold the registry instance, initialized via lifespan
 _agent_registry_instance: Optional[AgentRegistry] = None
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _agent_registry_instance
-    logger.info("Initializing AgentRegistry for API Server...")
-    # Get vector search config from settings
-    vector_search_config = registry_settings.get_vector_search_config()
-    logger.debug(f"Using vector search config: {vector_search_config}")
+def create_registry_api_app(
+    settings: Optional[RegistryAPISettings] = None,
+) -> FastAPI:
+    """Factory to create a FastAPI app for the Registry API.
 
-    _agent_registry_instance = AgentRegistry(vector_search_config=vector_search_config)
-    await _agent_registry_instance.ensure_initialized()
-    logger.info("AgentRegistry initialized and ready for API Server.")
-    yield
-    # Clean up resources if any (e.g., closing vector store if not in-memory)
-    logger.info("AgentRegistry API Server shutting down.")
-    _agent_registry_instance = None
+    - If settings is None, load from environment using RegistryAPISettings().
+    - Configures CORS and lifespan using the provided settings.
+    """
+
+    resolved_settings = settings or RegistryAPISettings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):  # type: ignore[override]
+        global _agent_registry_instance
+        # Configure logging levels without altering Uvicorn's handlers
+        level = getattr(logging, resolved_settings.log_level, logging.INFO)
+        logging.getLogger().setLevel(level)
+        # Align Uvicorn loggers as well for consistency when running under Uvicorn
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            logging.getLogger(name).setLevel(level)
+        logger.info("Starting AgentConnect Registry API Server...")
+
+        # Create vector search settings based on server configuration
+        vector_search_settings = resolved_settings.vector_search
+
+        logger.debug(
+            f"Using vector search settings: {vector_search_settings.model_name}"
+        )
+        logger.debug(f"Vector store type: {vector_search_settings.deployment.type}")
+
+        _agent_registry_instance = AgentRegistry(
+            vector_search_config=vector_search_settings
+        )
+        await _agent_registry_instance.ensure_initialized()
+        logger.info("AgentRegistry initialized and ready for API Server.")
+        yield
+        # Clean up resources if any (e.g., closing vector store if not in-memory)
+        logger.info("AgentRegistry API Server shutting down.")
+        _agent_registry_instance = None
+
+    app = FastAPI(
+        title="AgentConnect Registry API Server",
+        description="Provides API access to an AgentRegistry instance.",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+
+    # Configure CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=resolved_settings.allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Register routes
+    app.include_router(router)
+
+    # Attach resolved settings for introspection if needed by host environments
+    app.state.registry_settings = resolved_settings
+
+    return app
 
 
-app = FastAPI(
-    title="AgentConnect Registry API Server",
-    description="Provides API access to an AgentRegistry instance.",
-    version="0.1.0",
-    lifespan=lifespan,
-)
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=registry_settings.api.allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Router and models
+router = APIRouter()
 
 
 # Pydantic model for the update payload
@@ -105,7 +135,7 @@ def get_registry() -> AgentRegistry:
 
 
 # --- Health Check Endpoint ---
-@app.get(
+@router.get(
     "/health",
     status_code=200,
     summary="Check server health and registry initialization status",
@@ -137,7 +167,7 @@ async def health_check_endpoint():
 # --- API Endpoints ---
 
 
-@app.get(
+@router.get(
     "/agents/verified",
     response_model=List[AgentRegistration],
     summary="Get all verified agents",
@@ -154,7 +184,7 @@ async def get_verified_agents_endpoint() -> List[AgentRegistration]:
         )
 
 
-@app.post(
+@router.post(
     "/agents/register", status_code=201, summary="Register a new agent", tags=["Agents"]
 )
 async def register_agent_endpoint(
@@ -185,7 +215,7 @@ async def register_agent_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get(
+@router.get(
     "/agents/{agent_id}",
     response_model=Optional[AgentRegistration],
     summary="Get agent registration details",
@@ -201,7 +231,7 @@ async def get_agent_registration_endpoint(agent_id: str) -> Optional[AgentRegist
     return registration
 
 
-@app.get(
+@router.get(
     "/agents",
     response_model=List[AgentRegistration],
     summary="Get all registered agents",
@@ -212,7 +242,7 @@ async def get_all_agents_endpoint() -> List[AgentRegistration]:
     return await registry.get_all_agents()
 
 
-@app.put(
+@router.put(
     "/agents/{agent_id}",
     response_model=Optional[AgentRegistration],
     summary="Update agent registration details",
@@ -243,7 +273,7 @@ async def update_agent_registration_endpoint(
     return updated_registration
 
 
-@app.delete(
+@router.delete(
     "/agents/{agent_id}",
     status_code=200,
     summary="Unregister an agent",
@@ -272,7 +302,7 @@ async def unregister_agent_endpoint(agent_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post(
+@router.post(
     "/agents/search/semantic",
     response_model=AgentSearchOutput,
     summary="Search agents by semantic capability",
@@ -324,7 +354,7 @@ async def search_agents_semantic_endpoint(
         )
 
 
-@app.get(
+@router.get(
     "/agents/search/capability-exact",
     response_model=List[AgentRegistration],
     summary="Search agents by exact capability name",
@@ -358,7 +388,7 @@ async def search_agents_by_capability_exact_endpoint(
         )
 
 
-@app.get(
+@router.get(
     "/capabilities",
     response_model=List[str],
     summary="Get all unique capability names",
@@ -375,7 +405,7 @@ async def get_all_capabilities_endpoint() -> List[str]:
         )
 
 
-@app.get(
+@router.get(
     "/agents/interaction-mode/{mode}",
     response_model=List[AgentRegistration],
     summary="Find agents by interaction mode",
@@ -399,7 +429,7 @@ async def get_agents_by_interaction_mode_endpoint(
         )
 
 
-@app.get(
+@router.get(
     "/agents/organization/{organization_name}",
     response_model=List[AgentRegistration],
     summary="Find agents by organization",
@@ -418,7 +448,7 @@ async def get_agents_by_organization_endpoint(
         )
 
 
-@app.post(
+@router.post(
     "/agents/{agent_id}/verify",
     response_model=bool,
     summary="Verify an agent's identity (triggers verification process)",
@@ -443,7 +473,7 @@ async def verify_agent_endpoint(agent_id: str) -> bool:
         raise HTTPException(status_code=500, detail=f"Error verifying agent: {str(e)}")
 
 
-@app.get(
+@router.get(
     "/agents/owner/{owner_id}",
     response_model=List[AgentRegistration],
     summary="Find agents by owner (developer)",
@@ -461,7 +491,7 @@ async def get_agents_by_owner_endpoint(owner_id: str) -> List[AgentRegistration]
         )
 
 
-@app.get(
+@router.get(
     "/agents/{agent_id}/verify-owner/{owner_id}",
     response_model=bool,
     summary="Verify if a user owns an agent (developer)",
@@ -487,6 +517,10 @@ async def verify_agent_owner_endpoint(agent_id: str, owner_id: str) -> bool:
         )
 
 
+# Create module-level app (e.g., uvicorn agentconnect.servers.registry_api_server:app)
+app = create_registry_api_app()
+
+
 # Example: How to run this server (e.g., using uvicorn)
 # uvicorn agentconnect.servers.registry_api_server:app --reload --port 8000
 #
@@ -494,10 +528,13 @@ if __name__ == "__main__":
     import uvicorn
 
     # This allows running directly with `python -m agentconnect.servers.registry_api_server`
-    # Using settings from config
+    # Using standalone server settings from environment variables
+    _settings = RegistryAPISettings()
+    _app = create_registry_api_app(_settings)
     uvicorn.run(
-        app,
-        host=registry_settings.api.host,
-        port=registry_settings.api.port,
-        reload=registry_settings.api.debug,
+        _app,
+        host=_settings.host,
+        port=_settings.port,
+        reload=_settings.reload,
+        log_level=_settings.log_level.lower(),
     )

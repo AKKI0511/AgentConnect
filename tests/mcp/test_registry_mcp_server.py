@@ -94,12 +94,11 @@ class TestIntegrationLayer:
     @pytest.mark.asyncio
     async def test_health_check_integration_works(self):
         """Test that health check function works as expected."""
-        with patch('agentconnect.mcp.registry_mcp_server.registry_settings') as mock_settings, \
+        with patch('agentconnect.mcp.registry_mcp_server.agentconnect_settings') as mock_settings, \
              patch('httpx.AsyncClient') as mock_client_class:
             
             # Setup mocks
-            mock_settings.api.host = "localhost"
-            mock_settings.api.port = 8000
+            mock_settings.clients.registry.base_url = "http://localhost:8000"
             
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client

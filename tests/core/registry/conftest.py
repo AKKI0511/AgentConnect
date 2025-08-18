@@ -21,6 +21,7 @@ from agentconnect.core.registry.capability_discovery_impl.embedding_utils import
 from agentconnect.core.registry.capability_discovery_impl.qdrant_client import (
     initialize_qdrant_clients
 )
+from agentconnect.config.models import VectorSearchSettings
 
 # Sample test data
 @pytest.fixture
@@ -189,8 +190,8 @@ async def embeddings_model():
         pytest.skip("Embedding model not available")
         return None
     
-    config = {"model_name": "all-MiniLM-L6-v2"}  # Use small model for tests
-    return create_huggingface_embeddings(config)
+    vs = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})
+    return create_huggingface_embeddings(vs)
 
 @pytest.fixture
 async def qdrant_clients():
@@ -199,18 +200,19 @@ async def qdrant_clients():
         pytest.skip("Qdrant client not available")
         return None, None
     
-    config = {"in_memory": True}
-    return await initialize_qdrant_clients(config)
+    vs = VectorSearchSettings.model_validate({"deployment": {"type": "in_memory"}})
+    return await initialize_qdrant_clients(vs)
 
 @pytest.fixture
 async def discovery_service():
     """Provide a discovery service for testing."""
     # Create with in-memory Qdrant
-    service = CapabilityDiscoveryService({
-        "in_memory": True,
-        "use_quantization": False,  # Disable for faster tests
-        "model_name": "all-MiniLM-L6-v2"  # Use small model for faster tests
+    vs = VectorSearchSettings.model_validate({
+        "deployment": {"type": "in_memory"},
+        "advanced": {"use_quantization": False},
+        "model_name": "all-MiniLM-L6-v2",
     })
+    service = CapabilityDiscoveryService(vs)
     
     # Initialize embeddings model
     await service.initialize_embeddings_model()

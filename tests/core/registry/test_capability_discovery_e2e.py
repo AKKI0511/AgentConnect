@@ -415,16 +415,13 @@ class TestCapabilityDiscoveryE2E:
         test_registrations["weather-agent-1"] = removed_agent
 
     @pytest.mark.asyncio
-    async def test_fallback_when_embeddings_unavailable(self, discovery_service: CapabilityDiscoveryService, test_registrations: Dict[str, AgentRegistration], capabilities_index: Dict[str, Set[str]]):
+    async def test_fallback_when_embeddings_unavailable(self, test_registrations: Dict[str, AgentRegistration], capabilities_index: Dict[str, Set[str]]):
         """Test fallback to string matching when embeddings are unavailable."""
         print_header("Testing Fallback When Embeddings Unavailable")
         
         print_step("Creating discovery service with embeddings disabled")
         # Create with minimal config to simulate missing embeddings
         service = CapabilityDiscoveryService({"in_memory": True})
-        
-        # Initialize without embeddings model - this should fall back to string-based methods
-        await service.initialize_embeddings_model()
         
         test_registrations = create_test_registrations()
         capabilities_index = extract_capabilities_index(test_registrations)

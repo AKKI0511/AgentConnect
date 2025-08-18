@@ -18,6 +18,9 @@ Usage:
     agentconnect --example agent_economy
     agentconnect --demo        # UI compatibility under development (Windows only)
     agentconnect --check-env
+    agentconnect config init   # Generate example configuration file
+    agentconnect config show   # Show current configuration
+    agentconnect config validate <file.yaml>  # Validate configuration file
     agentconnect --help
 
 Available examples:
@@ -37,6 +40,7 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 from agentconnect import __version__
@@ -94,12 +98,41 @@ Available examples:
   telegram     - Modular multi-agent system with Telegram integration
   agent_economy - Autonomous workflow with agent payments system
 
+Configuration commands:
+  agentconnect config init              - Generate example agentconnect.yaml
+  agentconnect config show              - Show current merged configuration
+  agentconnect config validate <file>   - Validate configuration file
+
 Examples:
   agentconnect --example chat
   agentconnect --example multi --verbose
   agentconnect --check-env
+  agentconnect config init
         """,
     )
+
+    # Add subcommands
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Config subcommand
+    config_parser = subparsers.add_parser("config", help="Configuration management")
+    config_subparsers = config_parser.add_subparsers(
+        dest="config_action", help="Configuration actions"
+    )
+
+    # Config init
+    config_subparsers.add_parser(
+        "init", help="Generate example agentconnect.yaml configuration file"
+    )
+
+    # Config show
+    config_subparsers.add_parser("show", help="Show current merged configuration")
+
+    # Config validate
+    validate_parser = config_subparsers.add_parser(
+        "validate", help="Validate configuration file"
+    )
+    validate_parser.add_argument("file", help="Path to configuration file to validate")
 
     parser.add_argument(
         "--version", "-v", action="store_true", help="Show version and exit"
@@ -345,6 +378,95 @@ def check_environment() -> None:
     logger.info("Environment check completed")
 
 
+def handle_config_command(action: str, file_path: Optional[str] = None) -> None:
+    """
+    Handle configuration commands.
+
+    Args:
+        action: The config action (init, show, validate)
+        file_path: Optional file path for validate action
+    """
+    try:
+        from agentconnect.config import settings
+        from agentconnect.config.loaders import (
+            save_example_config,
+            validate_config_file,
+        )
+        import json
+    except ImportError as e:
+        logger.error(f"Failed to import configuration modules: {e}")
+        sys.exit(1)
+
+    if action == "init":
+        # Generate example configuration file
+        try:
+            output_path = Path.cwd() / "agentconnect.yaml"
+            if output_path.exists():
+                response = input(
+                    f"File {output_path} already exists. Overwrite? (y/N): "
+                )
+                if response.lower() not in ["y", "yes"]:
+                    logger.info("Configuration generation cancelled")
+                    return
+
+            save_example_config(output_path)
+            print(f"✅ Example configuration saved to: {output_path}")
+            print("📝 Edit this file to customize your AgentConnect configuration")
+            print("🔗 See documentation: agentconnect/config/README.md")
+
+        except Exception as e:
+            logger.error(f"Failed to generate configuration file: {e}")
+            sys.exit(1)
+
+    elif action == "show":
+        # Show current merged configuration
+        try:
+            print("Current AgentConnect Configuration:")
+            print("=" * 50)
+
+            # Convert to dict and pretty print
+            config_dict = settings.model_dump_yaml_safe()
+
+            # Try to use PyYAML for better formatting
+            try:
+                import yaml
+
+                print(yaml.dump(config_dict, default_flow_style=False, sort_keys=True))
+            except ImportError:
+                # Fallback to JSON if PyYAML not available
+                print(json.dumps(config_dict, indent=2, sort_keys=True))
+
+        except Exception as e:
+            logger.error(f"Failed to show configuration: {e}")
+            sys.exit(1)
+
+    elif action == "validate":
+        # Validate configuration file
+        if not file_path:
+            logger.error("File path is required for validate action")
+            sys.exit(1)
+
+        try:
+            file_path_obj = Path(file_path)
+            if not file_path_obj.exists():
+                logger.error(f"Configuration file not found: {file_path}")
+                sys.exit(1)
+
+            if validate_config_file(file_path_obj):
+                print(f"✅ Configuration file {file_path} is valid")
+            else:
+                print(f"❌ Configuration file {file_path} is invalid")
+                sys.exit(1)
+
+        except Exception as e:
+            logger.error(f"Failed to validate configuration file: {e}")
+            sys.exit(1)
+
+    else:
+        logger.error(f"Unknown config action: {action}")
+        sys.exit(1)
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     args = parse_args()
@@ -361,6 +483,16 @@ def main() -> None:
 
         if args.check_env:
             check_environment()
+            return
+
+        if args.command == "config":
+            if args.config_action:
+                file_path = getattr(args, "file", None)
+                handle_config_command(args.config_action, file_path)
+            else:
+                print(
+                    "No config action specified. Use 'agentconnect config --help' for available actions."
+                )
             return
 
         if args.example:

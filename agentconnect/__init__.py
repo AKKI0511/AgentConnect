@@ -29,6 +29,7 @@ import importlib.metadata
 # Import subpackages to make them available to users
 from agentconnect import agents
 from agentconnect import communication
+from agentconnect import config
 from agentconnect import core
 from agentconnect import providers
 from agentconnect import prompts
@@ -39,6 +40,7 @@ __version__ = importlib.metadata.version("agentconnect")
 __all__ = [
     "agents",
     "communication",
+    "config",
     "core",
     "providers",
     "prompts",

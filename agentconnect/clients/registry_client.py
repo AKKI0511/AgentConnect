@@ -21,30 +21,17 @@ from agentconnect.core.registry.search import (
     AgentSearchResultItem,
 )
 from agentconnect.core.types import AgentType, InteractionMode
-from agentconnect.core.config import registry_settings
+from agentconnect.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Default timeout from settings or fallback
-DEFAULT_TIMEOUT = 30.0  # seconds
-DEFAULT_CONNECT_TIMEOUT = 10.0  # seconds
-DEFAULT_READ_TIMEOUT = 30.0  # seconds
-DEFAULT_POOL_TIMEOUT = 5.0  # seconds
 
-# Retry configuration
-MAX_RETRIES = 3
-RETRY_BACKOFF_FACTOR = 0.5  # seconds
-RETRYABLE_STATUS_CODES = {
-    502,
-    503,
-    504,
-}  # Bad Gateway, Service Unavailable, Gateway Timeout
-
-
-def with_retry(max_retries: int = MAX_RETRIES):
+def with_retry(
+    max_retries: Optional[int] = None,
+    retry_backoff_factor: Optional[float] = None,
+    retryable_status_codes: Optional[List[int]] = None,
+):
     """Decorator to add exponential backoff retry logic to async methods."""
-    if max_retries < 0:
-        raise ValueError("max_retries must be >= 0")
 
     def decorator(func):
         """Decorator to add exponential backoff retry logic to async methods."""
@@ -52,19 +39,52 @@ def with_retry(max_retries: int = MAX_RETRIES):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             """Wrapper function with retry logic."""
+            # Get configuration from settings if not provided
+            client_settings = settings.clients.registry
+
+            actual_max_retries = (
+                max_retries if max_retries is not None else client_settings.max_retries
+            )
+            actual_backoff_factor = (
+                retry_backoff_factor
+                if retry_backoff_factor is not None
+                else client_settings.retry_backoff_factor
+            )
+            actual_retryable_codes = (
+                set(retryable_status_codes)
+                if retryable_status_codes is not None
+                else set(client_settings.retryable_status_codes)
+            )
+
+            if actual_max_retries < 0:
+                raise ValueError("max_retries must be >= 0")
+
             last_exception = None
 
-            for attempt in range(max_retries + 1):  # 0 to max_retries
+            for attempt in range(actual_max_retries + 1):  # 0 to max_retries
                 try:
                     return await func(*args, **kwargs)
-                except httpx.RequestError as e:
+                except httpx.HTTPStatusError as e:
+                    # Check if status code is retryable
+                    if e.response.status_code not in actual_retryable_codes:
+                        raise e
                     last_exception = e
-                    if attempt == max_retries:
+                    if attempt == actual_max_retries:
                         break
 
-                    wait_time = RETRY_BACKOFF_FACTOR * (2**attempt)
+                    wait_time = actual_backoff_factor * (2**attempt)
                     logger.warning(
-                        f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {wait_time}s..."
+                        f"Request failed with status {e.response.status_code} (attempt {attempt + 1}/{actual_max_retries + 1}): {e}. Retrying in {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                except httpx.RequestError as e:
+                    last_exception = e
+                    if attempt == actual_max_retries:
+                        break
+
+                    wait_time = actual_backoff_factor * (2**attempt)
+                    logger.warning(
+                        f"Request failed (attempt {attempt + 1}/{actual_max_retries + 1}): {e}. Retrying in {wait_time}s..."
                     )
                     await asyncio.sleep(wait_time)
                 except Exception as e:
@@ -82,7 +102,29 @@ def with_retry(max_retries: int = MAX_RETRIES):
 class RegistryAPIClient:
     """
     Client for interacting with the AgentConnect Registry API Server.
-    This client mimics the interface of agentconnect.core.registry.AgentRegistry.
+    This client mimics the interface of `agentconnect.core.registry.AgentRegistry`.
+
+    Quickstart Example:
+        .. code-block:: python
+
+            import asyncio
+            from agentconnect.clients import RegistryAPIClient
+
+            async def main():
+                async with RegistryAPIClient() as client:
+                    # Get all registered agents
+                    agents = await client.get_all_agents()
+                    print(f"Found {len(agents)} agents")
+
+                    # Search for agents by capability
+                    results = await client.get_by_capability_semantic(
+                        capability_description="data analysis",
+                        limit=5
+                    )
+                    for agent, score in results:
+                        print(f"{agent.name}: {score:.3f}")
+
+            asyncio.run(main())
     """
 
     def __init__(
@@ -92,47 +134,72 @@ class RegistryAPIClient:
         connect_timeout: Optional[float] = None,
         read_timeout: Optional[float] = None,
         pool_timeout: Optional[float] = None,
-        max_connections: int = 10,
-        max_keepalive_connections: int = 5,
+        max_connections: Optional[int] = None,
+        max_keepalive_connections: Optional[int] = None,
     ):
         """
         Initialize the API client.
 
+        All None values will default to the corresponding AgentConnect client settings
+        from the configuration (`settings.clients.registry`).
+
         Args:
-            base_url: The base URL of the AgentRegistry API server. If None, constructed from settings.
-            timeout: Default timeout for HTTP requests. If None, uses DEFAULT_TIMEOUT.
-            connect_timeout: Timeout for establishing connections. If None, uses DEFAULT_CONNECT_TIMEOUT.
-            read_timeout: Timeout for reading responses. If None, uses DEFAULT_READ_TIMEOUT.
-            pool_timeout: Timeout for acquiring connection from pool. If None, uses DEFAULT_POOL_TIMEOUT.
+            base_url: The base URL of the `AgentRegistry` API server.
+            timeout: Default timeout for HTTP requests in seconds.
+            connect_timeout: Timeout for establishing connections in seconds.
+            read_timeout: Timeout for reading responses in seconds.
+            pool_timeout: Timeout for acquiring connection from pool in seconds.
             max_connections: Maximum number of connections in the pool.
             max_keepalive_connections: Maximum number of keep-alive connections.
         """
-        if base_url is None:
-            # Construct from settings if not provided
-            host = registry_settings.api.host
-            port = registry_settings.api.port
-            # Adjust host if it's 0.0.0.0 (which is not valid for a client)
-            if host == "0.0.0.0":
-                host = "localhost"
-            base_url = f"http://{host}:{port}"
+        client_settings = settings.clients.registry
 
-        if not base_url.endswith("/"):
-            base_url += "/"
-
-        self.base_url = base_url
+        # Resolve base URL from args or settings; raise clear error if missing
+        resolved_base_url = (
+            base_url if base_url is not None else client_settings.base_url
+        )
+        if not resolved_base_url:
+            raise ValueError(
+                "RegistryAPIClient base_url is not configured. Set clients.registry.base_url in agentconnect.yaml or pass base_url explicitly."
+            )
+        self.base_url = (
+            resolved_base_url
+            if resolved_base_url.endswith("/")
+            else f"{resolved_base_url}/"
+        )
 
         # Create timeout configuration
         timeout_config = httpx.Timeout(
-            timeout=timeout or DEFAULT_TIMEOUT,
-            connect=connect_timeout or DEFAULT_CONNECT_TIMEOUT,
-            read=read_timeout or DEFAULT_READ_TIMEOUT,
-            pool=pool_timeout or DEFAULT_POOL_TIMEOUT,
+            timeout=timeout if timeout is not None else client_settings.default_timeout,
+            connect=(
+                connect_timeout
+                if connect_timeout is not None
+                else client_settings.connect_timeout
+            ),
+            read=(
+                read_timeout
+                if read_timeout is not None
+                else client_settings.read_timeout
+            ),
+            pool=(
+                pool_timeout
+                if pool_timeout is not None
+                else client_settings.pool_timeout
+            ),
         )
 
         # Create limits configuration for connection pooling
         limits = httpx.Limits(
-            max_connections=max_connections,
-            max_keepalive_connections=max_keepalive_connections,
+            max_connections=(
+                max_connections
+                if max_connections is not None
+                else client_settings.max_connections
+            ),
+            max_keepalive_connections=(
+                max_keepalive_connections
+                if max_keepalive_connections is not None
+                else client_settings.max_keepalive_connections
+            ),
         )
 
         self._client = httpx.AsyncClient(
@@ -222,18 +289,13 @@ class RegistryAPIClient:
                 logger.debug(f"{method} {endpoint} resulted in 404 Not Found.")
                 return None  # Mimic AgentRegistry behavior (e.g. get_registration returns None)
 
-            elif response.status_code in RETRYABLE_STATUS_CODES:
-                # These status codes will be handled by the retry decorator
-                raise httpx.RequestError(
-                    f"Retryable error: {response.status_code} {response.reason_phrase}"
-                )
-
-            logger.warning(
-                f"API request {method} {endpoint} failed with status {response.status_code}: {response.text}"
-            )
-            return None  # General failure or unexpected status
+            # Raise HTTPStatusError for all other error codes - let retry decorator handle retryable ones
+            response.raise_for_status()
 
         except httpx.RequestError:
+            # Re-raise for retry decorator to handle
+            raise
+        except httpx.HTTPStatusError:
             # Re-raise for retry decorator to handle
             raise
         except Exception as e:

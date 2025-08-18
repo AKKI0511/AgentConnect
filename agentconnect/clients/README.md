@@ -19,6 +19,8 @@ The clients module contains HTTP-based clients that communicate with AgentConnec
 
 ### RegistryAPIClient
 
+> **Note:** The `RegistryAPIClient` is currently not thread-safe. Consider creating separate client instances for each thread. This will be addressed in future releases.
+
 **File:** `registry_client.py`
 
 A comprehensive HTTP client for interacting with the AgentConnect Registry API Server. This client mirrors the interface of the local `AgentRegistry` class but operates over HTTP/REST APIs.
@@ -34,9 +36,9 @@ A comprehensive HTTP client for interacting with the AgentConnect Registry API S
 #### Configuration
 
 ```python
-from agentconnect.clients.registry_client import RegistryAPIClient
+from agentconnect.clients import RegistryAPIClient
 
-# Basic usage - auto-detects server from settings
+# Basic usage - auto-detects server from settings.clients.registry.base_url
 client = RegistryAPIClient()
 
 # Custom configuration
@@ -81,9 +83,9 @@ client = RegistryAPIClient(
 
 ```python
 import asyncio
-from agentconnect.clients.registry_client import RegistryAPIClient
-from agentconnect.core.registry.registration import AgentRegistration
-from agentconnect.core.types import AgentType, InteractionMode, AgentIdentity, Capability
+from agentconnect.clients import RegistryAPIClient
+from agentconnect.core.registry import AgentRegistration
+from agentconnect.core import AgentType, InteractionMode, AgentIdentity, Capability
 
 async def register_agent_example():
     async with RegistryAPIClient() as client:
@@ -203,26 +205,36 @@ finally:
     await client.close()  # Important: clean up resources
 ```
 
-#### Retry Configuration
-
-The client automatically retries failed requests with exponential backoff:
-
-- **Max Retries:** 3 attempts
-- **Backoff Factor:** 0.5 seconds base
-- **Retryable Status Codes:** 502, 503, 504 (server errors)
-- **Non-retryable Errors:** 400, 401, 403, 404 (client errors)
-
 #### Configuration Settings
 
-The client uses settings from `agentconnect.core.config.registry_settings`:
+The client uses `settings` from `agentconnect.config` and can be configured via `agentconnect.yaml`:
 
 ```python
-# Default configuration from settings
-registry_settings.api.host        # Default: "localhost"
-registry_settings.api.port        # Default: 8000
-registry_settings.api.debug       # Default: False
-registry_settings.api.allowed_origins  # CORS settings
+# Client configuration (available via settings.clients.registry)
+settings.clients.registry.base_url                    # Default: "http://localhost:8000"
+settings.clients.registry.default_timeout             # Default: 30.0
+settings.clients.registry.connect_timeout             # Default: 10.0
+settings.clients.registry.read_timeout                # Default: 30.0
+settings.clients.registry.pool_timeout                # Default: 5.0
+settings.clients.registry.max_retries                 # Default: 3
+settings.clients.registry.retry_backoff_factor        # Default: 0.5
+settings.clients.registry.retryable_status_codes      # Default: [502, 503, 504]
+settings.clients.registry.max_connections             # Default: 10
+settings.clients.registry.max_keepalive_connections   # Default: 5
 ```
+
+Example `agentconnect.yaml` configuration:
+
+```yaml
+clients:
+  registry:
+    base_url: "http://production-registry:8000"
+    default_timeout: 60.0
+    max_retries: 5
+    max_connections: 20
+```
+
+**Note:** Server configuration is separate and uses environment variables with the `AGENTCONNECT_REGISTRY_` prefix for infrastructure deployment.
 
 #### Dependencies
 
@@ -230,10 +242,6 @@ registry_settings.api.allowed_origins  # CORS settings
 # Required packages
 poetry add httpx pydantic
 ```
-
-#### Thread Safety
-
-The `RegistryAPIClient` is **not thread-safe**. Create separate client instances for each thread or use proper synchronization mechanisms.
 
 #### Best Practices
 
@@ -267,7 +275,7 @@ poetry run pytest tests/clients/ -v
    - Consider retry configuration
 
 3. **Authentication Errors**
-   - Verify API server configuration
+   - Verify Registry API server is properly configured (check environment variables with `AGENTCONNECT_REGISTRY_` prefix)
    - Check CORS settings for web clients
 
 4. **Serialization Errors**

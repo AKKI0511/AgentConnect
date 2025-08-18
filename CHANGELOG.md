@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registry API server (`agentconnect.servers`) with FastAPI-based REST endpoints for agent operations
 - Registry API client (`agentconnect.clients`) with async HTTP interface and retry logic
 - Centralized search module (`agentconnect.core.registry.search`) with unified schemas and utilities
-- Centralized configuration system (`agentconnect.core.config`) with Pydantic-based settings
-- Comprehensive test suite for clients, servers, and MCP integration
+- Centralized SDK configuration system (`agentconnect.config`) with a single global settings object, YAML-based overrides, and helper utilities to generate, inspect, and validate configuration files
+- New configuration CLI: `agentconnect config {init, show, validate}`
+- Standalone server configuration via environment variables with production-friendly defaults and vector store options
+- Comprehensive test suite for clients, servers, config, and MCP integration
 
 ### Changed
 - Simplified constructor for `BaseAgent` with focus on profile-based configuration
@@ -30,14 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CommunicationHub` to support both local and remote registry clients
 - Agent search tool to use centralized search schemas
 - Project dependencies updated with MCP protocol and FastAPI support
+- Adopted centralized settings across clients, agents, registry, communication hub, MCP, and utils
+- Unified vector store configuration with in-memory, local-file, and remote modes
+- Environment example files reorganized for clarity: root `example.env` for SDK-level variables; new `demos/.env.example` for demo-local secrets
 
 ### Deprecated
+
+### Removed
+- Legacy core configuration module, replaced by centralized settings
+- Temporary payment constants, consolidated into configuration
 
 ### Fixed
 - Corrected release dates in CHANGELOG.md from 2024 to 2025
 - Agent unregistration to properly call registry.unregister() method
 - Registry index management for capabilities and organizations
 - Agent registration update process to handle all fields correctly
+- Updated Google provider and types to reflect Gemini model changes
 
 ### Security
 

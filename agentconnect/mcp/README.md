@@ -280,34 +280,24 @@ asyncio.run(find_agents_example())
 
 ## Configuration
 
-The MCP server uses the same configuration as the main AgentConnect framework. All configuration is handled through the `agentconnect.core.config` module.
+The MCP server reads SDK configuration from `agentconnect.config.settings`. Ensure `agentconnect.yaml` sets `clients.registry.base_url` so the MCP server knows where to reach the Registry API.
 
-### Registry API Settings
-```env
-# Registry API Server configuration (optional - defaults shown)
-AGENTCONNECT_REGISTRY_API_host=localhost
-AGENTCONNECT_REGISTRY_API_port=8000
-AGENTCONNECT_REGISTRY_API_debug=false
-AGENTCONNECT_REGISTRY_API_allowed_origins='["http://localhost:5173","http://localhost:3000"]'
+Example `agentconnect.yaml` snippet:
+
+```yaml
+clients:
+  registry:
+    base_url: "http://localhost:8000"
+
+mcp:
+  agent_discovery:
+    enabled: true
+    top_k: 5
+    strictness: 0.2
+    output_detail: "summary"  # minimal | summary | capabilities | full
 ```
 
-### Vector Search Settings
-```env
-# Vector search configuration (optional - defaults shown)
-AGENTCONNECT_REGISTRY_model_name=sentence-transformers/all-mpnet-base-v2
-AGENTCONNECT_REGISTRY_cache_folder=./.cache/huggingface/embeddings
-AGENTCONNECT_REGISTRY_vector_store_path=./.cache/vector_stores
-AGENTCONNECT_REGISTRY_in_memory=true
-```
-
-### Logging Settings
-```env
-# Logging configuration (optional - defaults shown)
-AGENTCONNECT_level=INFO
-AGENTCONNECT_format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-```
-
-> **Note:** The MCP server uses hardcoded `logging.INFO` level in its main execution. To change MCP server logging, modify the `logging.basicConfig(level=logging.INFO)` line in `registry_mcp_server.py`.
+> Server deployment is configured via environment variables only. See `agentconnect/servers/README.md`.
 
 ## Development
 
@@ -404,7 +394,7 @@ If you see a red signal for the MCP server:
 2. **Verify the MCP server can start:**
    ```bash
    poetry run python -m agentconnect.mcp.registry_mcp_server
-   # Should show: "Starting AgentConnect Registry MCP Server..."
+    # Should show: "Starting AgentConnect agent discovery MCP tools..."
    ```
 
 3. **Check the path in mcp.json:**
@@ -441,14 +431,11 @@ If you see a red signal for the MCP server:
 - Check if agents are properly registered in the registry
 - Verify the Registry API server has access to the vector search engine
 
-### Health Monitoring
+### Behavior and Defaults
 
-The MCP server includes built-in health monitoring:
-
-```python
-# Health check is performed automatically on startup and when tools are called
-# You can monitor the logs for health status updates
-```
+- The MCP server inherits the global logging level from your config.
+- Health check is performed automatically on startup and when tools are called.
+- Defaults come from `settings.mcp.agent_discovery`. No secrets are introduced here; secrets remain in environment variables only.
 
 ## API Reference
 

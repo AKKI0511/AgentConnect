@@ -21,10 +21,14 @@ from agentconnect.core.registry.search import (
 )
 from agentconnect.core.registry.registration import AgentRegistration
 from agentconnect.core.types import AgentType
-from agentconnect.core.config import registry_settings
+from agentconnect.config import settings as agentconnect_settings
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
+
+
+# --- Health Constants ---
+HEALTH_TIMEOUT_SECONDS = 5.0
 
 
 # --- Application Context ---
@@ -40,15 +44,15 @@ class AppContext:
 async def check_registry_api_health() -> bool:
     """Check if the Registry API server is running and healthy."""
     try:
-        host = registry_settings.api.host
-        port = registry_settings.api.port
-        # Adjust host if it's 0.0.0.0 (which is not valid for a client)
-        if host == "0.0.0.0":
-            host = "localhost"
-        base_url = f"http://{host}:{port}"
+        # Use the client settings to get the base URL for health checks
+        base_url = agentconnect_settings.clients.registry.base_url
+        if not base_url:
+            raise RuntimeError("clients.registry.base_url is not configured")
+        if not base_url.endswith("/"):
+            base_url += "/"
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{base_url}/health")
+        async with httpx.AsyncClient(timeout=HEALTH_TIMEOUT_SECONDS) as client:
+            response = await client.get(f"{base_url}health")
             if response.status_code == 200:
                 health_data = response.json()
                 logger.info(f"Registry API health check: {health_data}")
@@ -63,7 +67,14 @@ async def check_registry_api_health() -> bool:
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     """Manage application lifecycle with shared registry client."""
-    logger.info("Starting AgentConnect Registry MCP Server...")
+    logger.info("Starting AgentConnect agent discovery MCP tools...")
+    defaults = agentconnect_settings.mcp.agent_discovery
+    logger.info(
+        "Agent discovery defaults: top_k=%s, strictness=%s, output_detail=%s",
+        defaults.top_k,
+        defaults.strictness,
+        defaults.output_detail,
+    )
 
     # Initialize registry client
     registry_client = RegistryAPIClient()
@@ -81,7 +92,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         yield context
     finally:
         # Cleanup on shutdown
-        logger.info("Shutting down AgentConnect Registry MCP Server...")
+        logger.info("Shutting down AgentConnect agent discovery MCP tools...")
         await context.registry_client.close()
 
 
@@ -109,9 +120,9 @@ Each result includes an agent_id - save this to send collaboration requests to t
 async def search_for_agents_tool(
     ctx: Context,
     query: str,
-    top_k: int = 5,
-    strictness: float = 0.2,
-    output_detail: str = "summary",
+    top_k: int = agentconnect_settings.mcp.agent_discovery.top_k,
+    strictness: float = agentconnect_settings.mcp.agent_discovery.strictness,
+    output_detail: str = agentconnect_settings.mcp.agent_discovery.output_detail,
     include_tags: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
@@ -150,10 +161,13 @@ async def search_for_agents_tool(
         app_ctx.is_healthy = await check_registry_api_health()
 
         if not app_ctx.is_healthy:
+            expected = agentconnect_settings.clients.registry.base_url or "<unset>"
+            if not expected.endswith("/"):
+                expected += "/"
             error_msg = (
                 f"Agent search for query '{query}' is not available. "
                 "Registry API server is not running or healthy. "
-                f"Expected location: http://{registry_settings.api.host}:{registry_settings.api.port}/health. "
+                f"Expected location: {expected}health. "
                 "Please ensure the AgentConnect Registry API server is running."
             )
             await ctx.error(error_msg)
@@ -233,6 +247,13 @@ if __name__ == "__main__":
     )
 
     try:
+        # Early exit if disabled
+        if not agentconnect_settings.mcp.agent_discovery.enabled:
+            logger.info(
+                "Agent discovery is disabled via settings.mcp.agent_discovery.enabled=false. Exiting."
+            )
+            sys.exit(0)
+
         # Run with stdio transport for MCP clients like Cursor
         mcp.run()
     except KeyboardInterrupt:

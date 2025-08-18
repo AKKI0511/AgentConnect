@@ -25,7 +25,7 @@ from langchain_core.tools import BaseTool
 # Absolute imports from agentconnect package
 from agentconnect.core.agent import BaseAgent
 from agentconnect.core.message import Message
-from agentconnect.core.payment_constants import POC_PAYMENT_TOKEN_SYMBOL
+from agentconnect.config import settings as global_settings
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,
@@ -350,18 +350,19 @@ class AIAgent(BaseAgent):
                 logger.info(
                     f"AI Agent {self.agent_id}: Added {len(agentkit_tools)} AgentKit payment tools: {tool_names}"
                 )
+                configured_symbol = global_settings.payments.default_token_symbol
                 payment_tool = (
                     "native_transfer"
-                    if POC_PAYMENT_TOKEN_SYMBOL == "ETH"
+                    if configured_symbol == "ETH"
                     else "erc20_transfer"
                 )
                 logger.info(
-                    f"AI Agent {self.agent_id}: Will use {payment_tool} for payments with {POC_PAYMENT_TOKEN_SYMBOL} token"
+                    f"AI Agent {self.agent_id}: Will use {payment_tool} for payments with {configured_symbol} token"
                 )
 
                 # Enable payment capabilities in the system prompt config
                 self.system_config.enable_payments = True
-                self.system_config.payment_token_symbol = POC_PAYMENT_TOKEN_SYMBOL
+                self.system_config.payment_token_symbol = configured_symbol
                 logger.info(
                     f"AI Agent {self.agent_id}: Enabled payment capabilities in system prompt"
                 )

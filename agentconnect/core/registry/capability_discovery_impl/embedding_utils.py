@@ -6,8 +6,12 @@ This module provides functions related to embeddings generation and similarity c
 
 import logging
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Optional, Union
 from langchain_huggingface import HuggingFaceEmbeddings
+
+# Absolute imports from agentconnect package
+from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config import settings
 
 # Configure logger
 logger = logging.getLogger("CapabilityDiscovery.EmbeddingUtils")
@@ -115,13 +119,13 @@ def cosine_similarity(vec1, vec2):
 
 
 def create_huggingface_embeddings(
-    config: Dict[str, Any],
+    config: Union[VectorSearchSettings, None] = None,
 ) -> Optional[HuggingFaceEmbeddings]:
     """
     Create a HuggingFace embeddings model with the given configuration.
 
     Args:
-        config: Dictionary containing configuration for embeddings model
+        config: VectorSearchSettings for embeddings model, or None to use global `settings.registry.vector_search`.
 
     Returns:
         HuggingFace embeddings model or None if initialization failed
@@ -129,16 +133,18 @@ def create_huggingface_embeddings(
     try:
         from langchain_huggingface import HuggingFaceEmbeddings
 
-        # Get model name from config or use default
-        model_name = config.get("model_name", "sentence-transformers/all-mpnet-base-v2")
+        if config is None:
+            model_name = settings.registry.vector_search.model_name
+            cache_folder = settings.registry.vector_search.cache_folder
+        else:
+            model_name = config.model_name
+            cache_folder = config.cache_folder
 
         logger.info(
             f"Initializing embeddings model {model_name} for semantic search..."
         )
 
         # Create embeddings model with caching
-        cache_folder = config.get("cache_folder", "./.cache/huggingface/embeddings")
-
         # Try with explicit model_kwargs and encode_kwargs first
         try:
             embeddings_model = HuggingFaceEmbeddings(

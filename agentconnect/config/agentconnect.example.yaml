@@ -1,0 +1,54 @@
+# AgentConnect Configuration
+# This file contains developer-facing configuration options.
+# Secrets and API keys should be set as environment variables, not here.
+
+# Global settings
+project_name: "AgentConnect"
+
+# Agent Registry configuration
+registry:
+  vector_search:
+    model_name: "sentence-transformers/all-mpnet-base-v2"
+    cache_folder: "./.cache/huggingface/embeddings"
+    vector_store_path: "./.cache/vector_stores"
+
+    # Deployment mode (exactly one)
+    deployment:
+      type: "in_memory"  # "local_file" or "remote" also supported
+      # For local_file: path: "./local_qdrant_db"
+      # For remote: url: "http://localhost:6333" (API key via QDRANT_API_KEY)
+
+    # Advanced tuning (optional)
+    advanced:
+      timeout: 30
+      grpc_port: null
+      prefer_grpc: false
+      use_quantization: true
+      vectors_on_disk: false
+      index_on_disk: false
+      batch_size: 100
+
+# Payments configuration
+# Non-secrets only. CDP API keys must be provided via environment variables:
+#   - CDP_API_KEY_NAME
+#   - CDP_API_KEY_PRIVATE_KEY
+payments:
+  default_token_symbol: "USDC"      # e.g., USDC or ETH; drives ERC-20 vs native tools
+  wallet_data_dir: "data/agent_wallets"  # where agent wallets are stored (non-secret path)
+
+# Communication system settings
+communication:
+  enable_message_history: true  # Track message history (disable for performance)
+
+# Client configurations
+clients:
+  registry:
+    base_url: "http://localhost:8000"
+
+# MCP settings
+mcp:
+  agent_discovery:
+    enabled: true
+    top_k: 5
+    strictness: 0.2
+    output_detail: "summary"  # minimal | summary | capabilities | full

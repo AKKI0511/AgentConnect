@@ -33,8 +33,6 @@ from agentconnect.utils.logging_config import (
 from agentconnect.utils.wallet_manager import (
     load_wallet_data,
     save_wallet_data,
-    set_wallet_data_dir,
-    set_default_data_dir,
     wallet_exists,
     delete_wallet_data,
     get_all_wallets,
@@ -59,8 +57,6 @@ __all__ = [
     # Wallet management
     "load_wallet_data",
     "save_wallet_data",
-    "set_wallet_data_dir",
-    "set_default_data_dir",
     "wallet_exists",
     "delete_wallet_data",
     "get_all_wallets",

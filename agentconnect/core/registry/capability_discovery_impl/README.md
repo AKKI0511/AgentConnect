@@ -117,30 +117,27 @@ matching_agents = await discovery_service.find_by_capability_semantic(
 
 ### Advanced Configuration
 
-The system can be configured with custom embedding models and Qdrant parameters through a flat configuration dictionary:
+The system can be configured with custom embedding models and Qdrant parameters programmatically using `VectorSearchSettings` (construct directly or via a nested dict):
 
 ```python
+from agentconnect.config.models import VectorSearchSettings
+
 config = {
-    # Embedding model configuration
-    "model_name": "sentence-transformers/all-MiniLM-L6-v2",  # Default: all-mpnet-base-v2
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
     "cache_folder": "./.cache/huggingface/embeddings",
-    
-    # Qdrant connection options (choose one)
-    "in_memory": True,
-    # "path": "./local_qdrant",  # Local file-based storage
-    # "url": "http://qdrant.example.com",  # Remote server
-    # "host": "localhost",  # Alternative to URL
-    # "port": 6333,
-    # "api_key": "your-api-key",
-    
-    # Qdrant collection options
-    "use_quantization": True,  # Use INT8 quantization (4x storage reduction)
-    "vectors_on_disk": False,  # Keep vectors in memory for speed
-    "index_on_disk": False,    # Keep index in memory for speed
-    "batch_size": 100          # Batch size for indexing operations
+    "deployment": {"type": "in_memory"},
+    # "deployment": {"type": "local_file", "path": "./local_qdrant"},
+    # "deployment": {"type": "remote", "url": "http://qdrant.example.com"},
+    "advanced": {
+        "use_quantization": True,
+        "vectors_on_disk": False,
+        "index_on_disk": False,
+        "batch_size": 100,
+    },
 }
 
-discovery_service = CapabilityDiscoveryService(vector_store_config=config)
+vs = VectorSearchSettings.model_validate(config)
+discovery_service = CapabilityDiscoveryService(vector_search_config=vs)
 ```
 
 ## Performance Optimization Techniques
@@ -169,6 +166,8 @@ Each module includes self-contained test functions that can be run directly:
 # Example test for indexing
 python -c "from agentconnect.core.registry.capability_discovery_impl.indexing import main; import asyncio; asyncio.run(main())"
 ```
+
+> Note: The recommended way to configure capability discovery is via `agentconnect.yaml` under `registry.vector_search`. Programmatic usage must pass a `VectorSearchSettings` instance (construct directly or via a nested dict). For convenience, the implementation functions accept `None` to fall back to `settings.registry.vector_search`. See [AgentConnect Configuration](../../../config/README.md) for full configuration details.
 
 ## Future Enhancements
 

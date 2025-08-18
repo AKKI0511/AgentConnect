@@ -30,7 +30,7 @@ from coinbase_agentkit import (
 from agentconnect.utils import wallet_manager
 from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.message import Message
-from agentconnect.core.payment_constants import POC_PAYMENT_TOKEN_SYMBOL
+from agentconnect.config import settings as global_settings
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,
@@ -145,10 +145,11 @@ class BaseAgent(ABC):
                 action_providers = [wallet_action_provider(), cdp_api_action_provider()]
 
                 # Add ERC20 action provider if using tokens other than native ETH
-                if POC_PAYMENT_TOKEN_SYMBOL != "ETH":
+                payment_symbol = global_settings.payments.default_token_symbol
+                if payment_symbol != "ETH":
                     action_providers.append(erc20_action_provider())
                     logger.debug(
-                        f"Agent {self.agent_id}: Added ERC20 action provider for {POC_PAYMENT_TOKEN_SYMBOL}"
+                        f"Agent {self.agent_id}: Added ERC20 action provider for {payment_symbol}"
                     )
 
                 # Initialize coinbase AgentKit with wallet provider and action providers

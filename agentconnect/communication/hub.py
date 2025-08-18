@@ -24,16 +24,44 @@ from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistration, AgentRegistry
 from agentconnect.core.types import AgentType, InteractionMode, MessageType
-from agentconnect.core.config import registry_settings
+from agentconnect.config import settings
 
-# Set up logging
+# Set up logging (application should configure logging globally)
 logger = logging.getLogger("CommunicationHub")
 
-# Configure hub logging from settings
-logging.basicConfig(
-    level=getattr(logging, registry_settings.logging.level),
-    format=registry_settings.logging.format,
-)
+# TODO (Next Release): Implement robust concurrency and parallelism handling
+# ====================================================================
+# Current implementation has several concurrency issues that need addressing:
+
+# 1. **Thread-Safe Request Management**:
+#    - Add proper locking for pending_responses and late_responses dictionaries
+#    - Implement thread-safe cleanup mechanisms
+
+# 2. **Backpressure and Rate Limiting**:
+#    - Implement proper backpressure when max_pending_requests is reached
+#    - Add request queuing with priority levels (system > collaboration > regular)
+#    - Implement exponential backoff for failed requests
+
+# 3. **Resource Lifecycle Management**:
+#    - Add request expiration with configurable TTL
+#    - Implement periodic cleanup tasks for expired requests
+#    - Add memory usage monitoring and alerts
+
+# 4. **Robust Error Handling**:
+#    - Handle agent disconnections gracefully during pending requests
+#    - Implement circuit breaker pattern for failing agents
+#    - Add retry mechanisms with jitter
+
+# 5. **Performance Optimizations**:
+#    - Consider using asyncio.Queue for request management
+#    - Implement connection pooling for high-throughput scenarios
+#    - Add metrics and observability for performance monitoring
+
+# 6. **Message Ordering and Delivery Guarantees**:
+#    - Implement message ordering for conversations
+#    - Add delivery confirmation mechanisms
+#    - Consider implementing message persistence for critical messages
+# ====================================================================
 
 
 class CommunicationHub:
@@ -61,7 +89,12 @@ class CommunicationHub:
         """
         self.registry = registry
         self.active_agents: Dict[str, BaseAgent] = {}
-        self._message_history: List[Message] = []
+
+        # Configure message history based on settings
+        self._message_history: List[Message] = (
+            [] if settings.communication.enable_message_history else None
+        )
+
         self.agent_protocol = SimpleAgentProtocol()
         self._message_handlers: Dict[
             str, List[Callable[[Message], Awaitable[None]]]
@@ -352,7 +385,8 @@ class CommunicationHub:
 
             # Special handling for system messages
             if message.message_type == MessageType.SYSTEM:
-                self._message_history.append(message)
+                if self._message_history is not None:
+                    self._message_history.append(message)
                 await self._notify_handlers(message, is_special=True)
                 logger.info(f"Added system message to history: {message.content}")
                 return True
@@ -377,7 +411,8 @@ class CommunicationHub:
             # Handle special message types
             if message.message_type in [MessageType.COOLDOWN, MessageType.STOP]:
                 # Store in history and notify handlers before special handling
-                self._message_history.append(message)
+                if self._message_history is not None:
+                    self._message_history.append(message)
                 await self._notify_handlers(message, is_special=True)
 
                 if message.message_type == MessageType.COOLDOWN:
@@ -450,7 +485,8 @@ class CommunicationHub:
                         f"Collaboration response from {message.sender_id} to {message.receiver_id} has no response_to metadata"
                     )
 
-                self._message_history.append(message)
+                if self._message_history is not None:
+                    self._message_history.append(message)
                 await self._notify_handlers(message)
                 return True
 
@@ -516,7 +552,8 @@ class CommunicationHub:
                     message.metadata["original_sender"] = message.sender_id
 
             # Record in history
-            self._message_history.append(message)
+            if self._message_history is not None:
+                self._message_history.append(message)
 
             # !IMPORTANT CHANGE: Create a task to deliver the message to the receiver
             # This ensures that the message is processed immediately without waiting for the agent's message queue
@@ -596,7 +633,11 @@ class CommunicationHub:
         """Get message history"""
         try:
             logger.debug("Retrieving message history")
-            return self._message_history.copy()
+            if self._message_history is not None:
+                return self._message_history.copy()
+            else:
+                logger.warning("Message history is disabled in configuration")
+                return []
         except Exception as e:
             logger.exception(f"Error getting message history: {str(e)}")
             return []

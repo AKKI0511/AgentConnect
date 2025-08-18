@@ -4,6 +4,11 @@ Wallet persistence utilities for the AgentConnect framework.
 This module provides utility functions to manage wallet data persistence
 for individual agents within the AgentConnect framework. It specifically facilitates the storage
 and retrieval of wallet state to enable consistent wallet access across agent restarts.
+
+Note:
+- The wallet directory is configured via YAML using ``payments.wallet_data_dir``.
+- Legacy runtime setter utilities ``set_wallet_data_dir`` and ``set_default_data_dir`` are
+  deprecated no-ops retained only for compatibility and are ignored at runtime.
 """
 
 import json
@@ -11,76 +16,60 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
+from agentconnect.config import settings as global_settings
+
 # Import dependencies directly since they're required
 from cdp import WalletData
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Default path for wallet data storage
-DEFAULT_DATA_DIR = Path("data/agent_wallets")
+# Default path for wallet data storage (driven by configuration)
+DEFAULT_DATA_DIR = Path(global_settings.payments.wallet_data_dir)
 
 
 def set_default_data_dir(data_dir: Union[str, Path]) -> Path:
     """
-    Set the default directory for wallet data storage globally.
+    [DEPRECATED] Set the default directory for wallet data storage globally.
+
+    NOTE: This function is now a no-op. Wallet directory is controlled by
+    YAML configuration (payments.wallet_data_dir) and runtime setters are ignored.
 
     Args:
         data_dir: Path to the directory where wallet data will be stored
-                 Can be a string or Path object
+                 Can be a string or Path object (IGNORED)
 
     Returns:
-        Path object pointing to the created directory
-
-    Raises:
-        IOError: If the directory can't be created
+        Path object pointing to the DEFAULT_DATA_DIR (from YAML config)
     """
-    global DEFAULT_DATA_DIR
-    try:
-        # Convert to Path if it's a string
-        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
-
-        # Create directory if it doesn't exist
-        data_dir_path.mkdir(parents=True, exist_ok=True)
-
-        # Update the global default
-        DEFAULT_DATA_DIR = data_dir_path
-
-        logger.info(f"Set default wallet data directory to: {data_dir_path}")
-        return data_dir_path
-    except Exception as e:
-        error_msg = f"Error setting default wallet data directory: {e}"
-        logger.error(error_msg)
-        raise IOError(error_msg)
+    logger.warning(
+        "set_default_data_dir() is deprecated and ignored. "
+        "Wallet directory is controlled by YAML configuration (payments.wallet_data_dir). "
+        f"Using configured directory: {DEFAULT_DATA_DIR}"
+    )
+    return DEFAULT_DATA_DIR
 
 
 def set_wallet_data_dir(data_dir: Union[str, Path]) -> Path:
     """
-    Set a custom directory for wallet data storage.
+    [DEPRECATED] Set a custom directory for wallet data storage.
+
+    NOTE: This function is now a no-op. Wallet directory is controlled by
+    YAML configuration (payments.wallet_data_dir) and runtime setters are ignored.
 
     Args:
         data_dir: Path to the directory where wallet data will be stored
-                 Can be a string or Path object
+                 Can be a string or Path object (IGNORED)
 
     Returns:
-        Path object pointing to the created directory
-
-    Raises:
-        IOError: If the directory can't be created
+        Path object pointing to the DEFAULT_DATA_DIR (from YAML config)
     """
-    try:
-        # Convert to Path if it's a string
-        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
-
-        # Create directory if it doesn't exist
-        data_dir_path.mkdir(parents=True, exist_ok=True)
-
-        logger.info(f"Set wallet data directory to: {data_dir_path}")
-        return data_dir_path
-    except Exception as e:
-        error_msg = f"Error setting wallet data directory: {e}"
-        logger.error(error_msg)
-        raise IOError(error_msg)
+    logger.warning(
+        "set_wallet_data_dir() is deprecated and ignored. "
+        "Wallet directory is controlled by YAML configuration (payments.wallet_data_dir). "
+        f"Using configured directory: {DEFAULT_DATA_DIR}"
+    )
+    return DEFAULT_DATA_DIR
 
 
 def save_wallet_data(
@@ -98,16 +87,17 @@ def save_wallet_data(
 
     Args:
         agent_id: String identifier for the agent.
-        wallet_data: The wallet data to save. Can be a cdp.WalletData object,
-                     a Dict representation, or a JSON string.
-        data_dir: Optional custom directory for wallet data storage.
-                 If None, uses the DEFAULT_DATA_DIR.
+        wallet_data: The wallet data to save. Can be a cdp.WalletData object, a Dict representation, or a JSON string.
+        data_dir: Optional custom directory for wallet data storage. If None, uses the DEFAULT_DATA_DIR.
 
     Raises:
         IOError: If the data directory can't be created or the file can't be written.
     """
-    # Determine the data directory to use
-    data_dir_path = set_wallet_data_dir(data_dir) if data_dir else DEFAULT_DATA_DIR
+    # Check if data_dir was provided
+    if data_dir is not None:
+        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
+    else:
+        data_dir_path = DEFAULT_DATA_DIR
     data_dir_path.mkdir(parents=True, exist_ok=True)
 
     # File path for this agent's wallet data
@@ -145,8 +135,7 @@ def load_wallet_data(
 
     Args:
         agent_id: String identifier for the agent.
-        data_dir: Optional custom directory for wallet data storage.
-                 If None, uses the DEFAULT_DATA_DIR.
+        data_dir: Optional custom directory for wallet data storage. If None, uses the DEFAULT_DATA_DIR.
 
     Returns:
         The loaded wallet data as a JSON string if the file exists, otherwise None.
@@ -154,8 +143,12 @@ def load_wallet_data(
     Raises:
         IOError: If the file exists but can't be read properly.
     """
-    # Determine the data directory to use
-    data_dir_path = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
+    # Check if data_dir was provided
+    if data_dir is not None:
+        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
+    else:
+        data_dir_path = DEFAULT_DATA_DIR
+
     file_path = data_dir_path / f"{agent_id}_wallet.json"
 
     if not file_path.exists():
@@ -184,14 +177,17 @@ def wallet_exists(agent_id: str, data_dir: Optional[Union[str, Path]] = None) ->
 
     Args:
         agent_id: String identifier for the agent.
-        data_dir: Optional custom directory for wallet data storage.
-                 If None, uses the DEFAULT_DATA_DIR.
+        data_dir: Optional custom directory for wallet data storage. If None, uses the DEFAULT_DATA_DIR.
 
     Returns:
         True if wallet data exists, False otherwise.
     """
-    # Determine the data directory to use
-    data_dir_path = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
+    # Check if data_dir was provided
+    if data_dir is not None:
+        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
+    else:
+        data_dir_path = DEFAULT_DATA_DIR
+
     file_path = data_dir_path / f"{agent_id}_wallet.json"
 
     exists = file_path.exists()
@@ -208,14 +204,16 @@ def get_all_wallets(data_dir: Optional[Union[str, Path]] = None) -> List[Dict]:
     Get information about all wallet files in the specified directory.
 
     Args:
-        data_dir: Optional custom directory for wallet data storage.
-                 If None, uses the DEFAULT_DATA_DIR.
+        data_dir: Optional custom directory for wallet data storage. If None, uses the DEFAULT_DATA_DIR.
 
     Returns:
         List of dictionaries with wallet information (agent_id, file_path, etc.)
     """
-    # Determine the data directory to use
-    data_dir_path = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
+    # Check if data_dir was provided
+    if data_dir is not None:
+        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
+    else:
+        data_dir_path = DEFAULT_DATA_DIR
 
     if not data_dir_path.exists():
         logger.debug(f"Wallet data directory {data_dir_path} does not exist")
@@ -263,14 +261,17 @@ def delete_wallet_data(
 
     Args:
         agent_id: String identifier for the agent.
-        data_dir: Optional custom directory for wallet data storage.
-                 If None, uses the DEFAULT_DATA_DIR.
+        data_dir: Optional custom directory for wallet data storage. If None, uses the DEFAULT_DATA_DIR.
 
     Returns:
         True if wallet data was successfully deleted, False otherwise.
     """
-    # Determine the data directory to use
-    data_dir_path = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
+    # Check if data_dir was provided
+    if data_dir is not None:
+        data_dir_path = Path(data_dir) if isinstance(data_dir, str) else data_dir
+    else:
+        data_dir_path = DEFAULT_DATA_DIR
+
     file_path = data_dir_path / f"{agent_id}_wallet.json"
 
     if not file_path.exists():

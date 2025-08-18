@@ -6,10 +6,14 @@ for vector search operations.
 """
 
 import logging
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Tuple, Optional, List, Union
 from langchain_core.embeddings import Embeddings
 from qdrant_client import QdrantClient, AsyncQdrantClient
 from qdrant_client.local.async_qdrant_local import AsyncQdrantLocal
+
+# Absolute imports from agentconnect package
+from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config import settings
 
 # Configure logger
 logger = logging.getLogger("CapabilityDiscovery.QdrantClient")
@@ -19,13 +23,13 @@ DEFAULT_COLLECTION_NAME = "agent_capabilities"
 
 
 async def initialize_qdrant_clients(
-    config: Dict[str, Any],
+    config: Union[VectorSearchSettings, None] = None,
 ) -> Tuple[Optional[QdrantClient], Optional[AsyncQdrantClient]]:
     """
     Initialize both synchronous and asynchronous Qdrant clients.
 
     Args:
-        config: Dictionary containing configuration for Qdrant clients
+        config: VectorSearchSettings for Qdrant clients, or None to use global `settings.registry.vector_search`.
 
     Returns:
         Tuple of (sync_client, async_client) or (None, None) if initialization failed
@@ -33,42 +37,49 @@ async def initialize_qdrant_clients(
     try:
         from qdrant_client import QdrantClient, AsyncQdrantClient
 
-        # Get Qdrant configuration
-        host = config.get("host", "localhost")
-        port = config.get("port", 6333)
-        api_key = config.get("api_key", None)
-        url = config.get("url", None)
-        grpc_port = config.get("grpc_port", None)
-        prefer_grpc = config.get("prefer_grpc", False)
-        timeout = config.get("timeout", 30)
+        if config is None:
+            connection_config = settings.registry.vector_search.get_connection_config()
+        else:
+            connection_config = config.get_connection_config()
 
-        # Check if in-memory mode is requested
-        in_memory = config.get("in_memory", False)
-        local_path = config.get("path", None)
+        timeout = connection_config.get("timeout", 30)
+        prefer_grpc = connection_config.get("prefer_grpc", False)
+        grpc_port = connection_config.get("grpc_port", None)
+
+        # Deployment details
+        deployment = (
+            config.deployment
+            if config is not None
+            else settings.registry.vector_search.deployment
+        )
+        mode = deployment.type
+        local_path = None
+        remote_url = None
+        remote_api_key = None
+
+        if mode == "local_file":
+            local_path = deployment.path
+        elif mode == "remote":
+            remote_url = deployment.url
+            # Unwrap SecretStr safely for use with the client
+            api_key_value = deployment.api_key
+            if hasattr(api_key_value, "get_secret_value"):
+                api_key_value = api_key_value.get_secret_value()
+            remote_api_key = api_key_value
 
         # Create synchronous client
         sync_client = None
-        if in_memory:
+        if mode == "in_memory":
             logger.info("Initializing in-memory Qdrant client")
             sync_client = QdrantClient(":memory:")
-        elif local_path:
+        elif mode == "local_file":
             logger.info(f"Initializing local Qdrant client at {local_path}")
             sync_client = QdrantClient(path=local_path)
-        elif url:
-            logger.info(f"Initializing Qdrant client with URL {url}")
+        elif mode == "remote":
+            logger.info(f"Initializing Qdrant client with URL {remote_url}")
             sync_client = QdrantClient(
-                url=url,
-                api_key=api_key,
-                grpc_port=grpc_port,
-                prefer_grpc=prefer_grpc,
-                timeout=timeout,
-            )
-        else:
-            logger.info(f"Initializing Qdrant client with host={host}, port={port}")
-            sync_client = QdrantClient(
-                host=host,
-                port=port,
-                api_key=api_key,
+                url=remote_url,
+                api_key=remote_api_key,
                 grpc_port=grpc_port,
                 prefer_grpc=prefer_grpc,
                 timeout=timeout,
@@ -76,29 +87,17 @@ async def initialize_qdrant_clients(
 
         # Create async client with same parameters
         async_client = None
-        if in_memory:
+        if mode == "in_memory":
             logger.info("Initializing in-memory Async Qdrant client")
             async_client = AsyncQdrantClient(":memory:")
-        elif local_path:
+        elif mode == "local_file":
             logger.info(f"Initializing local Async Qdrant client at {local_path}")
             async_client = AsyncQdrantClient(path=local_path)
-        elif url:
-            logger.info(f"Initializing Async Qdrant client with URL {url}")
+        elif mode == "remote":
+            logger.info(f"Initializing Async Qdrant client with URL {remote_url}")
             async_client = AsyncQdrantClient(
-                url=url,
-                api_key=api_key,
-                grpc_port=grpc_port,
-                prefer_grpc=prefer_grpc,
-                timeout=timeout,
-            )
-        else:
-            logger.info(
-                f"Initializing Async Qdrant client with host={host}, port={port}"
-            )
-            async_client = AsyncQdrantClient(
-                host=host,
-                port=port,
-                api_key=api_key,
+                url=remote_url,
+                api_key=remote_api_key,
                 grpc_port=grpc_port,
                 prefer_grpc=prefer_grpc,
                 timeout=timeout,
@@ -118,7 +117,7 @@ async def init_qdrant_collection(
     async_client: AsyncQdrantClient,
     embeddings_model: Embeddings | None = None,
     collection_name: str = DEFAULT_COLLECTION_NAME,
-    config: Dict[str, Any] = None,
+    config: Union[VectorSearchSettings, None] = None,
 ) -> bool:
     """
     Initialize the Qdrant collection with optimized configuration.
@@ -127,12 +126,11 @@ async def init_qdrant_collection(
         async_client: Initialized AsyncQdrantClient
         embeddings_model: Initialized embeddings model
         collection_name: Name of the collection to create
-        config: Dictionary containing collection configuration
+        config: VectorSearchSettings for performance flags, or None to use global `settings.registry.vector_search`.
 
     Returns:
         True if collection was initialized successfully, False otherwise
     """
-    config = config or {}
     try:
         # Check if collection already exists
         collection_exists = await async_client.collection_exists(collection_name)
@@ -201,7 +199,23 @@ async def init_qdrant_collection(
 
             # Use scalar quantization if enabled in config
             quantization_config = None
-            if config.get("use_quantization", True):
+            use_quantization = (
+                config.advanced.use_quantization
+                if config is not None
+                else settings.registry.vector_search.advanced.use_quantization
+            )
+            index_on_disk = (
+                config.advanced.index_on_disk
+                if config is not None
+                else settings.registry.vector_search.advanced.index_on_disk
+            )
+            vectors_on_disk = (
+                config.advanced.vectors_on_disk
+                if config is not None
+                else settings.registry.vector_search.advanced.vectors_on_disk
+            )
+
+            if use_quantization:
                 from qdrant_client.http import models as qdrant_models
 
                 # Configure scalar quantization for 4x storage reduction with minimal accuracy loss
@@ -218,22 +232,19 @@ async def init_qdrant_collection(
             # Configure vector params with optimized HNSW index
             from qdrant_client.http import models as qdrant_models
 
-            # Create HNSW config as a dictionary instead of an object
-            # This is the expected format according to Qdrant docs
+            # Create HNSW config
             hnsw_config = qdrant_models.HnswConfigDiff(
                 m=16,  # Number of bidirectional links created for each new element (default: 16)
                 ef_construct=100,  # Controls index build time vs quality (higher=better quality, slower build)
                 full_scan_threshold=10000,  # Threshold for using brute force search instead of HNSW
                 max_indexing_threads=4,  # Number of threads to use for indexing
-                on_disk=config.get(
-                    "index_on_disk", False
-                ),  # Whether to store index on disk
+                on_disk=index_on_disk,  # Whether to store index on disk
             )
 
             vector_config = qdrant_models.VectorParams(
                 size=expected_vector_size,
                 distance=qdrant_models.Distance.COSINE,
-                on_disk=config.get("vectors_on_disk", False),
+                on_disk=vectors_on_disk,
                 # Pass HNSW config as HnswConfigDiff object
                 hnsw_config=hnsw_config,
                 # Add quantization if enabled

@@ -8,7 +8,7 @@ including semantic search using embeddings and simpler string matching methods.
 # Standard library imports
 import logging
 import asyncio
-from typing import Dict, List, Set, Tuple, Any, Optional
+from typing import Dict, List, Set, Tuple, Any, Optional, Union
 
 # Import from implementation modules
 from agentconnect.core.registry.capability_discovery_impl.embedding_utils import (
@@ -33,6 +33,8 @@ from agentconnect.core.registry.capability_discovery_impl.indexing import (
 
 # Absolute imports from agentconnect package
 from agentconnect.core.registry.registration import AgentRegistration
+from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config import settings as global_settings
 
 # Set up logging
 logger = logging.getLogger("CapabilityDiscovery")
@@ -49,23 +51,44 @@ class CapabilityDiscoveryService:
     # Collection name for agent profiles and capabilities
     COLLECTION_NAME = DEFAULT_COLLECTION_NAME
 
-    def __init__(self, vector_store_config: Dict[str, Any] = None):
+    def __init__(
+        self,
+        vector_search_config: Optional[
+            Union[VectorSearchSettings, Dict[str, Any]]
+        ] = None,
+    ):
         """
         Initialize the capability discovery service.
 
         Args:
-            vector_store_config: Optional configuration for vector store
-                                 Can include 'host', 'port', 'api_key', 'model_name', etc.
+            vector_search_config: Optional vector search configuration. Accepts either a `VectorSearchSettings` instance or a `dict` shaped like the Pydantic model (with `deployment` and `advanced` nested objects).
         """
         self._embeddings_model = None
         self._qdrant_client = None  # Synchronous Qdrant client
         self._async_qdrant_client = None  # Asynchronous Qdrant client
         self._capability_to_agent_map: Dict[str, AgentRegistration] = {}
-        self._vector_store_config = vector_store_config or {}
+        if vector_search_config is None:
+            self._vector_store_config = global_settings.registry.vector_search
+        elif isinstance(vector_search_config, VectorSearchSettings):
+            self._vector_store_config = vector_search_config
+        else:
+            self._vector_store_config = VectorSearchSettings.model_validate(
+                vector_search_config
+            )
         self._available_backends = {}
         self._vector_store_initialized = asyncio.Event()
         self._vector_store_initialized.clear()
         self._collection_initialized = False
+
+    def _get_batch_size(self) -> int:
+        """Resolve batch size from config for backward compatibility.
+
+        Supports both Pydantic model settings and plain dict configs.
+        """
+        try:
+            return self._vector_store_config.advanced.batch_size
+        except Exception:
+            return 100
 
     async def initialize_embeddings_model(self):
         """
@@ -235,7 +258,7 @@ class CapabilityDiscoveryService:
                     self.COLLECTION_NAME,
                     self._embeddings_model,
                     agent_registrations,
-                    self._vector_store_config.get("batch_size", 100),
+                    self._get_batch_size(),
                 )
             )
 

@@ -49,48 +49,65 @@ See [Search Module Documentation](search/README.md) for detailed information abo
 
 ## Configuration
 
-Configure via environment variables or `.env` file:
+Use the SDK YAML configuration (`agentconnect.yaml`) for the registry component.
 
-```bash
-# Vector search settings
-AGENTCONNECT_REGISTRY_model_name=sentence-transformers/all-MiniLM-L6-v2
-AGENTCONNECT_REGISTRY_in_memory=true
-AGENTCONNECT_REGISTRY_cache_folder=./.cache/embeddings
+Example `agentconnect.yaml` snippet for `registry.vector_search`:
 
-# For production with external Qdrant
-AGENTCONNECT_REGISTRY_in_memory=false
-AGENTCONNECT_REGISTRY_url=http://localhost:6333
+```yaml
+registry:
+  vector_search:
+    model_name: "sentence-transformers/all-mpnet-base-v2"
+    cache_folder: "./.cache/huggingface/embeddings"
+    vector_store_path: "./.cache/vector_stores"
+    deployment:
+      type: "in_memory"             # or "local_file" / "remote"
+      # path: "./local_qdrant_db"   # if local_file
+      # url: "http://localhost:6333" # if remote
+    advanced:
+      timeout: 30
+      prefer_grpc: false
+      grpc_port: null
+      use_quantization: true
+      vectors_on_disk: false
+      index_on_disk: false
+      batch_size: 100
 ```
 
-For custom configuration, pass a dictionary:
+- For remote deployments, the Qdrant API key is read from the `QDRANT_API_KEY` environment variable.
+- Server deployment uses environment variables only; see [AgentConnect Servers](../../servers/README.md).
+
+Python usage examples:
 
 ```python
-config = {
-    # For testing or simple usage
-    "in_memory": True,                  # No external server needed
-    
-    # For production (examples)
-    # "path": "./local_qdrant_db",     # Local file storage
-    # "url": "http://localhost:6333",  # Remote Qdrant server
-    # "url": "https://xyz-example.us-east.aws.cloud.qdrant.io", # Qdrant Cloud
-    # "api_key": "your-qdrant-api-key", # For Qdrant Cloud or secured instances
-    
-    # Optional settings
-    "model_name": "sentence-transformers/all-mpnet-base-v2",  # Default embedding model
-    "timeout": 30,                      # Client timeout for remote connections
-    "use_quantization": True,           # Storage reduction
-    "batch_size": 100                   # For indexing operations
-}
+from agentconnect.config import settings
+from agentconnect.core.registry import AgentRegistry
+from agentconnect.config.models import VectorSearchSettings
 
-registry = AgentRegistry(vector_search_config=config)
+# 1) Use settings populated from agentconnect.yaml
+registry = AgentRegistry(vector_search_config=settings.registry.vector_search)
+
+# 2) Or pass a VectorSearchSettings instance
+custom_settings = VectorSearchSettings(
+    model_name="sentence-transformers/all-mpnet-base-v2",
+    deployment={"type": "in_memory"},
+)
+registry2 = AgentRegistry(vector_search_config=custom_settings)
+
+# 3) Optional dict override (must match Pydantic shape)
+override = {
+    "model_name": "sentence-transformers/all-mpnet-base-v2",
+    "deployment": {"type": "remote", "url": "http://localhost:6333"},
+    "advanced": {"timeout": 30, "batch_size": 100}
+}
+registry3 = AgentRegistry(vector_search_config=override)
 ```
 
-> **Important:** When not using `in_memory` mode, you must have a Qdrant server running:
-> - For `url` option: You need a Qdrant server running at the specified URL (Docker container or cloud instance)
-> - For Qdrant Cloud: Create an account at [Qdrant Cloud](https://qdrant.tech/), set up a cluster, and use the provided URL and API key
-> - For local Docker deployment: `docker run -p 6333:6333 qdrant/qdrant`
+> When not using `in_memory` mode, you must have a Qdrant server running:
+> - For `deployment.type: remote`: Ensure a Qdrant server is reachable at the configured `url` (Docker, self-hosted, or Qdrant Cloud)
+> - For [Qdrant Cloud](https://qdrant.tech/): Create a cluster, set `url`, and set `QDRANT_API_KEY` in your environment
+> - For local Docker: `docker run -p 6333:6333 qdrant/qdrant`
 >
-> See the [official Qdrant documentation](https://qdrant.tech/documentation/) for detailed setup instructions.
+> See the [official Qdrant documentation](https://qdrant.tech/documentation/) for detailed setup.
 
 ## Basic Usage
 

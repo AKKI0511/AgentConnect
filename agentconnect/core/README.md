@@ -8,7 +8,6 @@ The core module provides the foundational components of the AgentConnect framewo
 core/
 ├── __init__.py              # Package initialization and API exports
 ├── agent.py                 # BaseAgent abstract class
-├── config.py                # Configuration management system
 ├── exceptions.py            # Core exception definitions
 ├── message.py               # Message class for agent communication
 ├── types.py                 # Core type definitions and enumerations
@@ -25,6 +24,13 @@ core/
 ```
 
 ## Key Components
+
+## Configuration
+
+- Use `from agentconnect.config import settings` to access the global settings loaded from `agentconnect.yaml`.
+- Apply runtime overrides with `AgentConnectSettings.create_from_dict(...)` or `load_settings(...)`.
+- Secrets are provided via environment variables; general configuration lives in YAML. See the
+  [AgentConnect Configuration guide](../config/README.md).
 
 ### BaseAgent (`agent.py`)
 
@@ -157,51 +163,6 @@ The core module integrates with the Coinbase Developer Platform (CDP) for paymen
 - **Capability Discovery**: Payment addresses are included in agent search results
 
 For details on how agents use payment capabilities, see `agentconnect/agents/README.md`.
-
-### Configuration System (`config.py`)
-
-The configuration system provides centralized, Pydantic-based configuration management for AgentConnect:
-
-- **Environment Variable Support**: Loads settings from environment variables with prefixes
-- **`.env` File Support**: Reads configuration from `.env` files
-- **Type Safety**: Uses Pydantic models for validation and type checking
-- **Sensible Defaults**: Provides working defaults for all settings
-- **Hierarchical Configuration**: Organizes settings by component (registry, API, logging)
-
-Key configuration classes:
-- `VectorSearchSettings`: Vector search configuration for the agent registry
-- `RegistryAPISettings`: Configuration for the Registry API Server
-- `LoggingSettings`: Centralized logging configuration
-- `RegistrySettings`: Main configuration class combining all registry-related settings
-
-Usage:
-
-1. Configure via environment variables:
-```bash
-# Registry settings
-AGENTCONNECT_REGISTRY_model_name=sentence-transformers/all-MiniLM-L6-v2
-AGENTCONNECT_REGISTRY_in_memory=true
-
-# API settings  
-AGENTCONNECT_REGISTRY_API_host=localhost
-AGENTCONNECT_REGISTRY_API_port=8000
-
-# Logging
-AGENTCONNECT_level=INFO
-```
-
-2. Use configuration with registry settings:
-```python
-from agentconnect.core.config import registry_settings
-
-# Use configuration with registry
-registry = AgentRegistry(
-    vector_search_config=registry_settings.get_vector_search_config()
-)
-
-# Access API settings
-api_config = registry_settings.api
-```
 
 ### Exceptions (`exceptions.py`)
 
@@ -355,17 +316,17 @@ agents = await registry.get_by_capability_semantic(
 ### Advanced Configuration
 
 ```python
-from agentconnect.core.config import VectorSearchSettings
+from agentconnect.config.models import VectorSearchSettings
+from agentconnect.core import AgentRegistry
 
-# Configure the agent registry with custom vector store settings
+# Configure the agent registry with custom vector search settings
 custom_vector_settings = VectorSearchSettings(
-    in_memory=True,  # Use an in-memory vector store
+    deployment={"type": "in_memory"},  # Use an in-memory vector store
     model_name="sentence-transformers/all-MiniLM-L6-v2",  # Use a smaller, faster model
     cache_folder="./embeddings_cache",  # Specify cache location
-    vector_store_path="./.cache/vector_stores"  # Path for persistent vector storage
 )
 
-registry = AgentRegistry(vector_search_config=custom_vector_settings.model_dump())
+registry = AgentRegistry(vector_search_config=custom_vector_settings)
 
 # Register agents...
 ```

@@ -67,14 +67,11 @@ Key functions:
 
 The wallet manager provides wallet data persistence for agents:
 
-- **Wallet Data Storage**: Save and load wallet data securely
 - **Wallet Existence Checking**: Check if wallet data exists
 - **Wallet Data Management**: Delete and backup wallet data
 - **Configuration Management**: Set custom data directories
 
 Key functions:
-- `save_wallet_data()`: Persist wallet data for an agent
-- `load_wallet_data()`: Load wallet data for an agent
 - `wallet_exists()`: Check if wallet data exists
 - `get_all_wallets()`: List all wallet files
 - `delete_wallet_data()`: Delete wallet data

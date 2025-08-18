@@ -29,6 +29,7 @@ from agentconnect.core.registry.capability_discovery_impl.indexing import (
     update_capability_embeddings,
     extract_capability_index
 )
+from agentconnect.config.models import VectorSearchSettings
 
 
 # Tests for embedding_utils.py
@@ -126,9 +127,8 @@ class TestEmbeddingUtils:
         print_header("Testing HuggingFace Embeddings Creation")
         
         print_step("Creating embeddings model with default config")
-        config = {"model_name": "all-MiniLM-L6-v2"}  # Use small model for tests
-        
-        embeddings_model = create_huggingface_embeddings(config)
+        vs = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})
+        embeddings_model = create_huggingface_embeddings(vs)
         
         if embeddings_model:
             print_success("Successfully created embeddings model")
@@ -164,7 +164,7 @@ class TestQdrantClient:
         print_header("Testing Qdrant Client Initialization")
         
         print_step("Initializing in-memory Qdrant clients")
-        config = {"in_memory": True}
+        config = VectorSearchSettings.model_validate({"deployment": {"type": "in_memory"}})
         
         try:
             sync_client, async_client = await initialize_qdrant_clients(config)
@@ -210,8 +210,8 @@ class TestQdrantClient:
         print_header("Testing Qdrant Collection Initialization")
         
         print_step("Creating embeddings model")
-        config = {"model_name": "all-MiniLM-L6-v2"}  # Use small model for tests
-        embeddings_model = create_huggingface_embeddings(config)
+        vs_emb = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})
+        embeddings_model = create_huggingface_embeddings(vs_emb)
         
         if not embeddings_model:
             print_warning("Failed to create embeddings model, skipping test")
@@ -219,7 +219,7 @@ class TestQdrantClient:
             return
         
         print_step("Initializing in-memory Qdrant clients")
-        qdrant_config = {"in_memory": True}
+        qdrant_config = VectorSearchSettings.model_validate({"deployment": {"type": "in_memory"}, "advanced": {"use_quantization": False}})
         sync_client, async_client = await initialize_qdrant_clients(qdrant_config)
         
         if not sync_client or not async_client:
@@ -229,13 +229,12 @@ class TestQdrantClient:
         
         print_step("Initializing Qdrant collection")
         collection_name = "test_collection"
-        collection_config = {"use_quantization": False}  # Disable for faster tests
         
         result = await init_qdrant_collection(
-            async_client, 
-            embeddings_model, 
-            collection_name, 
-            collection_config
+            async_client,
+            embeddings_model,
+            collection_name,
+            qdrant_config,
         )
         
         assert result, "Collection initialization should succeed"
@@ -404,7 +403,7 @@ class TestIndexing:
         test_registrations = create_test_registrations()
         
         print_step("Creating embeddings model")
-        config = {"model_name": "all-MiniLM-L6-v2"}  # Use small model for tests
+        config = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})  # Use small model for tests
         embeddings_model = create_huggingface_embeddings(config)
         
         if not embeddings_model:
@@ -413,7 +412,7 @@ class TestIndexing:
             return
         
         print_step("Initializing in-memory Qdrant clients")
-        qdrant_config = {"in_memory": True}
+        qdrant_config = VectorSearchSettings.model_validate({"deployment": {"type": "in_memory"}})
         sync_client, async_client = await initialize_qdrant_clients(qdrant_config)
         
         if not sync_client or not async_client:

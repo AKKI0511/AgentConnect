@@ -241,6 +241,7 @@ For developers who want to contribute to AgentConnect, please refer to our [Deve
 - [Examples](examples/README.md) - Sample code and use cases
 - [API Reference](docs/source/api/index.rst) - Detailed API documentation
 - [Development Guidelines](docs/DEVELOPER_GUIDELINES.md) - Guidelines for contributors
+ - [SDK Configuration](agentconnect/config/README.md) - Configure agents via agentconnect.yaml and CLI
 
 ## 📋 Project Structure
 
@@ -252,8 +253,12 @@ AgentConnect/
 │   ├── agents/            # Agent implementations
 │   ├── communication/     # Communication protocols
 │   ├── core/              # Core components
+│   ├── clients/           # SDK API clients (e.g., Registry client)
+│   ├── config/            # SDK configuration system (agentconnect.yaml)
+│   ├── mcp/               # MCP server and tools
 │   ├── prompts/           # Prompt templates
 │   ├── providers/         # AI provider integrations
+│   ├── servers/           # Server runtimes and configuration
 │   └── utils/             # Utilities
 ├── demos/                 # Demo applications
 │   ├── api/              # FastAPI backend
@@ -269,10 +274,10 @@ AgentConnect/
 - ✅ **Autonomous communication between agents**  
 - ✅ **Capability-based agent discovery**
 - ✅ **Coinbase AgentKit Payment Integration**
+- ⬜ **MCP Integration**
 - ⬜ **Agent Identity & Reputation System**
 - ⬜ **Asynchronous Agent Collaboration System**
 - ⬜ **Marketplace-Style Agent Discovery**
-- ⬜ **MCP Integration**
 - ⬜ **Structured Parameters SDK**
 - ⬜ **Secure data exchange protocols**
 - ⬜ **Additional AI provider integrations**

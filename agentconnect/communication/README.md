@@ -105,8 +105,6 @@ async def main():
             Capability(
                 name="web_search",
                 description="Can search the web for information",
-                input_schema={"query": "string"},
-                output_schema={"results": "string"}
             )
         ],
         # other parameters...
@@ -139,6 +137,24 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+```
+
+## Configuration
+
+You can toggle message history via `agentconnect.yaml`:
+
+```yaml
+communication:
+  enable_message_history: true  # or false
+```
+
+When using a remote registry, you can pass a `RegistryAPIClient()` to `CommunicationHub`, which reads `settings.clients.registry.base_url`:
+
+```python
+from agentconnect.communication import CommunicationHub
+from agentconnect.clients import RegistryAPIClient
+
+hub = CommunicationHub(RegistryAPIClient())
 ```
 
 ## Best Practices

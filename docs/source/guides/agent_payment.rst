@@ -68,7 +68,15 @@ This automatically:
 Wallet Configuration
 --------------------------
 
-By default, wallet configuration is loaded from environment variables. You can customize wallet storage by specifying a custom wallet data directory:
+Wallet configuration is managed through YAML configuration. In your ``agentconnect.yaml``:
+
+.. code-block:: yaml
+
+    payments:
+      default_token_symbol: "USDC"      # or "ETH" for native
+      wallet_data_dir: "data/agent_wallets"  # Directory for wallet storage
+
+You can also customize wallet storage per-agent at runtime by passing a directory:
 
 .. code-block:: python
 
@@ -85,6 +93,9 @@ By default, wallet configuration is loaded from environment variables. You can c
         enable_payments=True,  # Enable payment capabilities
         wallet_data_dir=Path("custom/wallet/directory")  # Custom wallet storage location
     )
+
+Network Selection
+-----------------
 
 You can control the network used for payments by setting the ``CDP_NETWORK_ID`` environment variable:
 
@@ -215,7 +226,7 @@ The following payment tools are automatically made available to the agent's LLM 
 - ``request_faucet_funds``: Requests testnet funds from a faucet.
 - ``address_reputation``: Checks reputation for an address.
 
-**From `Erc20ActionProvider` (Added if payment token is not ETH):**
+**From `Erc20ActionProvider` (Added when token symbol used by the agent is not ``ETH``):**
 
 - ``get_balance``: Gets the balance of a specific ERC-20 token.
 - ``transfer``: Transfers a specified amount of an ERC-20 token.
@@ -267,7 +278,7 @@ AgentConnect provides utilities for managing agent wallets:
 Wallet Data Structure
 ^^^^^^^^^^^^^^^^^^^^
 
-Wallet data is stored in JSON files named ``{agent_id}_wallet.json`` in the specified data directory (default: ``data/agent_wallets/``). The structure includes:
+Wallet data is stored in JSON files named ``{agent_id}_wallet.json`` in the directory specified by ``payments.wallet_data_dir`` in your YAML configuration (default: ``data/agent_wallets/``). The structure includes:
 
 - ``wallet_id``: Unique identifier for the wallet
 - ``seed``: The wallet seed phrase (sensitive data)

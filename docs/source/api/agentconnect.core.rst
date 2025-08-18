@@ -21,6 +21,7 @@ Submodules
    :maxdepth: 4
 
    agentconnect.core.agent
+   agentconnect.core.config
    agentconnect.core.exceptions
    agentconnect.core.message
    agentconnect.core.payment_constants

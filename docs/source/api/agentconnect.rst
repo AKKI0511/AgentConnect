@@ -13,10 +13,14 @@ Subpackages
    :maxdepth: 4
 
    agentconnect.agents
+   agentconnect.clients
    agentconnect.communication
+   agentconnect.config
    agentconnect.core
+   agentconnect.mcp
    agentconnect.prompts
    agentconnect.providers
+   agentconnect.servers
    agentconnect.utils
 
 Submodules

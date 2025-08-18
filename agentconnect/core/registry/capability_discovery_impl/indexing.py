@@ -434,17 +434,24 @@ async def main():
         custom_metadata={"test_key": "test_value"},
     )
 
-    # Initialize Qdrant clients using the helper function
-    sync_client, async_client = await initialize_qdrant_clients({"in_memory": True})
-    collection_name = "test_indexing_collection"  # Using a distinct name for this test
-    embeddings_model = create_huggingface_embeddings(
-        config={"model_name": "sentence-transformers/all-MiniLM-L6-v2"}
+    # Initialize Qdrant clients using the helper function (VectorSearchSettings)
+    from agentconnect.config.models import VectorSearchSettings
+
+    vs = VectorSearchSettings.model_validate(
+        {
+            "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+            "deployment": {"type": "in_memory"},
+        }
     )
+    sync_client, async_client = await initialize_qdrant_clients(vs)
+    collection_name = "test_indexing_collection"  # Using a distinct name for this test
+    embeddings_model = create_huggingface_embeddings(vs)
     agent_registrations = {"test_agent": registration}
     collection_initialized = await init_qdrant_collection(
         async_client=async_client,
         embeddings_model=embeddings_model,
         collection_name=collection_name,
+        config=vs,
     )
     if not collection_initialized:
         print(f"Failed to initialize collection '{collection_name}'. Exiting test.")

@@ -9,7 +9,7 @@ and capability matching.
 import asyncio
 import logging
 import os
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple, Any, Union
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import (
@@ -23,7 +23,8 @@ from agentconnect.core.registry.capability_discovery import CapabilityDiscoveryS
 from agentconnect.core.registry.identity_verification import (
     verify_agent_identity,
 )
-from agentconnect.core.config import registry_settings
+from agentconnect.config import settings as global_settings
+from agentconnect.config.models import VectorSearchSettings
 
 # Set up logging
 logger = logging.getLogger("AgentRegistry")
@@ -37,7 +38,12 @@ class AgentRegistry:
     by capability, and verifying agent identities.
     """
 
-    def __init__(self, vector_search_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        vector_search_config: Optional[
+            Union[VectorSearchSettings, Dict[str, Any]]
+        ] = None,
+    ):
         """
         Initialize the agent registry.
 
@@ -63,23 +69,40 @@ class AgentRegistry:
         self._verified_agents: Set[str] = set()
         self._initialized_event = asyncio.Event()
 
-        # Use settings if vector_search_config is not provided
+        # Ensure vector_search_config is a proper Pydantic model
         if vector_search_config is None:
-            logger.debug("Using default vector search configuration from settings")
-            vector_search_config = registry_settings.get_vector_search_config()
+            self._vector_search_config = global_settings.registry.vector_search
+        elif isinstance(vector_search_config, VectorSearchSettings):
+            self._vector_search_config = vector_search_config
+        else:
+            self._vector_search_config = VectorSearchSettings.model_validate(
+                vector_search_config
+            )
 
-        # Initialize capability discovery service with configuration
-        self._capability_discovery = CapabilityDiscoveryService(vector_search_config)
-        self._vector_search_config = vector_search_config
+        # Initialize capability discovery service with Pydantic configuration
+        self._capability_discovery = CapabilityDiscoveryService(
+            self._vector_search_config
+        )
 
         # Create vector store directory if it doesn't exist
         os.makedirs(
-            vector_search_config.get("vector_store_path", "./.cache/vector_stores"),
+            self._vector_search_config.vector_store_path,
             exist_ok=True,
         )
 
         # Initialize embeddings model etc. in background
-        asyncio.create_task(self._initialize_vector_search())
+        # Only create task if there's a running event loop
+        try:
+            asyncio.get_running_loop()
+            asyncio.create_task(self._initialize_vector_search())
+        except RuntimeError:
+            # No event loop running, initialization will happen on first use
+            logger.debug("No event loop running, vector search initialization deferred")
+
+    @property
+    def vector_search_settings(self) -> VectorSearchSettings:
+        """Get the vector search settings as a Pydantic model."""
+        return self._vector_search_config
 
     async def _initialize_vector_search(self) -> None:
         """

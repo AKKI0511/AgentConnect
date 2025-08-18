@@ -115,7 +115,7 @@ async def setup_agents() -> Tuple[AIAgent, AIAgent, TelegramAIAgent, HumanAgent]
     # Determine which LLM to use based on available API keys
     if google_api_key:
         provider_type = ModelProvider.GOOGLE
-        model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
+        model_name = ModelName.GEMINI2_5_FLASH
         api_key = google_api_key
     else:
         provider_type = ModelProvider.OPENAI

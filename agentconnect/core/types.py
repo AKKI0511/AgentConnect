@@ -71,15 +71,13 @@ class ModelName(str, Enum):
     GEMMA2_90B = "gemma2-9b-it"
 
     # Google Models
-    GEMINI2_5_PRO_PREVIEW = "gemini-2.5-pro-preview-03-25"
-    GEMINI2_5_PRO_EXP = "gemini-2.5-pro-exp-03-25"
-    GEMINI2_5_FLASH_PREVIEW = "gemini-2.5-flash-preview-04-17"
+    GEMINI2_5_PRO = "gemini-2.5-pro"
+    GEMINI2_5_FLASH = "gemini-2.5-flash"
+    GEMINI2_5_FLASH_LITE = "gemini-2.5-flash-lite"
     GEMINI2_FLASH = "gemini-2.0-flash"
     GEMINI2_FLASH_LITE = "gemini-2.0-flash-lite"
     GEMINI2_PRO_EXP = "gemini-2.0-pro-exp-02-05"
     GEMINI2_FLASH_THINKING_EXP = "gemini-2.0-flash-thinking-exp-01-21"
-    GEMINI1_5_FLASH = "gemini-1.5-flash"
-    GEMINI1_5_PRO = "gemini-1.5-pro"
 
     @classmethod
     def get_default_for_provider(cls, provider: ModelProvider) -> "ModelName":

@@ -96,14 +96,14 @@ def _load_yaml_config() -> Dict[str, Any]:
         with open(config_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f) or {}
 
-        logger.info(f"Loaded configuration from {config_path}")
+        logger.info("Loaded configuration from %s", config_path)
         return config_data
 
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing YAML config file {config_path}: {e}")
+    except yaml.YAMLError:
+        logger.error("Error parsing YAML config file %s", config_path, exc_info=True)
         return {}
-    except Exception as e:
-        logger.error(f"Error reading config file {config_path}: {e}")
+    except Exception:
+        logger.error("Error reading config file %s", config_path, exc_info=True)
         return {}
 
 
@@ -173,10 +173,9 @@ def load_settings(**overrides) -> AgentConnectSettings:
     # Create settings instance from merged config
     try:
         settings = AgentConnectSettings.create_from_dict(config_data)
-        logger.debug("Successfully loaded AgentConnect configuration")
         return settings
-    except Exception as e:
-        logger.error(f"Error creating settings from config: {e}")
+    except Exception:
+        logger.error("Error creating settings from config", exc_info=True)
         # Fallback to defaults if config is invalid
         logger.warning("Falling back to default configuration")
         return AgentConnectSettings()
@@ -250,10 +249,10 @@ def save_example_config(path: Optional[Path] = None) -> Path:
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(config_content)
-        logger.info(f"Example configuration saved to {path}")
+        logger.info("Example configuration saved to %s", path)
         return path
-    except Exception as e:
-        logger.error(f"Error saving example config to {path}: {e}")
+    except Exception:
+        logger.error("Error saving example config to %s", path, exc_info=True)
         raise
 
 
@@ -277,12 +276,12 @@ def validate_config_file(path: Path) -> bool:
 
         # Try to create settings instance
         AgentConnectSettings.create_from_dict(config_data)
-        logger.info(f"Configuration file {path} is valid")
+        logger.info("Configuration file %s is valid", path)
         return True
 
-    except yaml.YAMLError as e:
-        logger.error(f"YAML syntax error in {path}: {e}")
+    except yaml.YAMLError:
+        logger.error("YAML syntax error in %s", path, exc_info=True)
         return False
-    except Exception as e:
-        logger.error(f"Configuration validation error in {path}: {e}")
+    except Exception:
+        logger.error("Configuration validation error in %s", path, exc_info=True)
         return False

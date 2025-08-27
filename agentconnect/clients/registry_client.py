@@ -74,7 +74,11 @@ def with_retry(
 
                     wait_time = actual_backoff_factor * (2**attempt)
                     logger.warning(
-                        f"Request failed with status {e.response.status_code} (attempt {attempt + 1}/{actual_max_retries + 1}): {e}. Retrying in {wait_time}s..."
+                        "Transient HTTP %s attempt=%s/%s backoff=%ss",
+                        e.response.status_code,
+                        attempt + 1,
+                        actual_max_retries + 1,
+                        wait_time,
                     )
                     await asyncio.sleep(wait_time)
                 except httpx.RequestError as e:
@@ -84,7 +88,10 @@ def with_retry(
 
                     wait_time = actual_backoff_factor * (2**attempt)
                     logger.warning(
-                        f"Request failed (attempt {attempt + 1}/{actual_max_retries + 1}): {e}. Retrying in {wait_time}s..."
+                        "Network error attempt=%s/%s backoff=%ss",
+                        attempt + 1,
+                        actual_max_retries + 1,
+                        wait_time,
                     )
                     await asyncio.sleep(wait_time)
                 except Exception as e:
@@ -215,12 +222,6 @@ class RegistryAPIClient:
         self._initialized_event = asyncio.Event()
         self._initialized_event.set()  # Client is "initialized" upon instantiation
 
-        logger.debug(
-            f"RegistryAPIClient initialized with base_url: {self.base_url}, "
-            f"timeout: {timeout_config}, limits: max_conn={max_connections}, "
-            f"max_keepalive={max_keepalive_connections}"
-        )
-
     async def close(self):
         """Closes the underlying HTTPX client. Should be called on cleanup."""
         await self._client.aclose()
@@ -244,8 +245,11 @@ class RegistryAPIClient:
             request_duration = time.time() - start_time
 
             logger.debug(
-                f"{method} {endpoint} -> {response.status_code} "
-                f"({request_duration:.3f}s)"
+                "%s %s status=%s duration_ms=%d",
+                method,
+                endpoint,
+                response.status_code,
+                int(request_duration * 1000.0),
             )
 
             if response.status_code == expected_status:
@@ -271,14 +275,21 @@ class RegistryAPIClient:
                         )
                     except ValidationError as e:
                         logger.error(
-                            f"Pydantic validation error for {method} {endpoint}: {e.json()}"
+                            "Validation error for %s %s: %s",
+                            method,
+                            endpoint,
+                            e.json(),
                         )
                         return None
                     except (
                         Exception
                     ) as e:  # Catch broader JSON parsing errors or other issues
                         logger.error(
-                            f"Error parsing response for {method} {endpoint}: {response.text} - {e}"
+                            "Error parsing response for %s %s: %s - %s",
+                            method,
+                            endpoint,
+                            response.text,
+                            e,
                         )
                         return None
                 elif expected_status == 204:  # No content expected
@@ -286,21 +297,18 @@ class RegistryAPIClient:
                 return response.json()  # Return raw JSON if no model specified
 
             elif response.status_code == 404:
-                logger.debug(f"{method} {endpoint} resulted in 404 Not Found.")
+                logger.debug("%s %s status=404", method, endpoint)
                 return None  # Mimic AgentRegistry behavior (e.g. get_registration returns None)
 
             # Raise HTTPStatusError for all other error codes - let retry decorator handle retryable ones
             response.raise_for_status()
 
-        except httpx.RequestError:
-            # Re-raise for retry decorator to handle
-            raise
-        except httpx.HTTPStatusError:
-            # Re-raise for retry decorator to handle
-            raise
-        except Exception as e:
+        except Exception:
             logger.error(
-                f"Unexpected error in _request for {method} {endpoint}: {str(e)}"
+                "Unexpected error in _request method=%s endpoint=%s",
+                method,
+                endpoint,
+                exc_info=True,
             )
             return None
 
@@ -399,7 +407,8 @@ class RegistryAPIClient:
 
         if not isinstance(search_output_data.results, list):  # Ensure results is a list
             logger.warning(
-                f"Semantic search returned non-list results: {search_output_data.results}"
+                "Semantic search returned non-list results: %s",
+                search_output_data.results,
             )
             return []
 
@@ -415,7 +424,8 @@ class RegistryAPIClient:
             else:
                 # This case should ideally not happen if Pydantic parsing is correct
                 logger.warning(
-                    f"Skipping unexpected item type in search results: {type(item_data)}"
+                    "Skipping unexpected item type in search results: %s",
+                    type(item_data),
                 )
                 continue
 

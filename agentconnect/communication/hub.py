@@ -23,11 +23,16 @@ from agentconnect.core.agent import BaseAgent
 from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistration, AgentRegistry
-from agentconnect.core.types import AgentType, InteractionMode, MessageType
+from agentconnect.core.types import (
+    AgentType,
+    InteractionMode,
+    MessageType,
+    VerificationStatus,
+)
 from agentconnect.config import settings
 
 # Set up logging (application should configure logging globally)
-logger = logging.getLogger("CommunicationHub")
+logger = logging.getLogger(__name__)
 
 # TODO (Next Release): Implement robust concurrency and parallelism handling
 # ====================================================================
@@ -105,8 +110,6 @@ class CommunicationHub:
         # Store late responses as {request_id: Message}
         self.late_responses: Dict[str, Message] = {}
 
-        logger.info("CommunicationHub initialized")
-
     def add_message_handler(
         self, agent_id: str, handler: Callable[[Message], Awaitable[None]]
     ) -> None:
@@ -122,8 +125,6 @@ class CommunicationHub:
         """
         if not agent_id or not handler:
             raise ValueError("agent_id and handler must be provided")
-
-        logger.debug(f"Adding message handler for agent {agent_id}")
 
         # Tag the handler with the agent_id for cleanup
         setattr(handler, "__agent_id__", agent_id)
@@ -147,7 +148,6 @@ class CommunicationHub:
         if not handler:
             raise ValueError("handler must be provided")
 
-        logger.debug("Adding global message handler")
         if handler not in self._global_handlers:  # Prevent duplicate handlers
             self._global_handlers.append(handler)
 
@@ -163,7 +163,6 @@ class CommunicationHub:
         Returns:
             bool: True if handler was removed, False if not found
         """
-        logger.debug(f"Removing message handler for agent {agent_id}")
         if agent_id in self._message_handlers:
             original_length = len(self._message_handlers[agent_id])
             self._message_handlers[agent_id] = [
@@ -185,7 +184,6 @@ class CommunicationHub:
         Returns:
             bool: True if handler was removed, False if not found
         """
-        logger.debug("Removing global message handler")
         original_length = len(self._global_handlers)
         self._global_handlers = [h for h in self._global_handlers if h != handler]
         return len(self._global_handlers) < original_length
@@ -196,7 +194,6 @@ class CommunicationHub:
         Args:
             agent_id (str): The ID of the agent
         """
-        logger.debug(f"Clearing all message handlers for agent {agent_id}")
         # Remove specific handlers
         if agent_id in self._message_handlers:
             # Get the handlers before deleting
@@ -230,8 +227,8 @@ class CommunicationHub:
             for handler in global_handlers:
                 try:
                     await handler(message)
-                except Exception as e:
-                    logger.error(f"Error in global message handler: {str(e)}")
+                except Exception:
+                    logger.error("Global message handler error", exc_info=True)
                     # Remove failed handler
                     if handler in self._global_handlers:
                         self._global_handlers.remove(handler)
@@ -243,9 +240,11 @@ class CommunicationHub:
                 for handler in sender_handlers:
                     try:
                         await handler(message)
-                    except Exception as e:
+                    except Exception:
                         logger.error(
-                            f"Error in message handler for sender {message.sender_id}: {str(e)}"
+                            "Sender handler error (sender_id=%s)",
+                            message.sender_id,
+                            exc_info=True,
                         )
                         # Remove failed handler
                         if message.sender_id in self._message_handlers:
@@ -258,22 +257,22 @@ class CommunicationHub:
                 for handler in receiver_handlers:
                     try:
                         await handler(message)
-                    except Exception as e:
+                    except Exception:
                         logger.error(
-                            f"Error in message handler for receiver {message.receiver_id}: {str(e)}"
+                            "Receiver handler error (receiver_id=%s)",
+                            message.receiver_id,
+                            exc_info=True,
                         )
                         # Remove failed handler
                         if message.receiver_id in self._message_handlers:
                             self._message_handlers[message.receiver_id].remove(handler)
 
-        except Exception as e:
-            logger.error(f"Error notifying message handlers: {str(e)}")
+        except Exception:
+            logger.error("Error notifying handlers", exc_info=True)
 
     async def register_agent(self, agent: BaseAgent) -> bool:
         """Register agent for active communication"""
         try:
-            logger.info(f"Attempting to register agent: {agent.agent_id}")
-
             # Create registration with proper identity and verification, and Capability objects
             registration = AgentRegistration(
                 agent_id=agent.profile.agent_id,
@@ -302,7 +301,9 @@ class CommunicationHub:
 
             # Register with central registry first
             if not await self.registry.register(registration):
-                logger.error(f"Failed to register agent {agent.agent_id} with registry")
+                logger.error(
+                    "Failed to register agent %s with registry", agent.agent_id
+                )
                 return False
 
             # Add to active agents
@@ -311,21 +312,18 @@ class CommunicationHub:
             # Set hub and registry in the agent
             agent.hub = self
             agent.registry = self.registry
-            logger.debug(f"Set registry and hub for agent {agent.agent_id}")
-            logger.info(f"Successfully registered agent: {agent.agent_id}")
+            logger.info("Agent registered %s", agent.agent_id)
             return True
 
-        except Exception as e:
-            logger.exception(f"Error registering agent {agent.agent_id}: {str(e)}")
+        except Exception:
+            logger.error("Error registering agent %s", agent.agent_id, exc_info=True)
             return False
 
     async def unregister_agent(self, agent_id: str) -> bool:
         """Unregister an agent from active communication"""
         try:
-            logger.info(f"Attempting to unregister agent: {agent_id}")
-
             if agent_id not in self.active_agents:
-                logger.warning(f"Agent {agent_id} not found in active agents")
+                logger.warning("Agent not active %s", agent_id)
                 return False
 
             # First clear all message handlers for this agent
@@ -347,20 +345,18 @@ class CommunicationHub:
             # Instead of trying to update a status, perform a full unregistration
             success_unreg = await self.registry.unregister(agent_id)
             if not success_unreg:
-                logger.warning(
-                    f"Failed to unregister agent {agent_id} from the underlying registry."
-                )
+                logger.warning("Registry unregistration failed for %s", agent_id)
 
             # Clean up any pending messages for this agent
             for other_agent in self.active_agents.values():
                 if agent_id in other_agent.active_conversations:
                     other_agent.end_conversation(agent_id)
 
-            logger.info(f"Successfully unregistered agent: {agent_id}")
+            logger.info("Agent unregistered %s", agent_id)
             return True
 
-        except Exception as e:
-            logger.exception(f"Error unregistering agent {agent_id}: {str(e)}")
+        except Exception:
+            logger.error("Error unregistering agent %s", agent_id, exc_info=True)
             return False
 
     async def route_message(self, message: Message) -> bool:
@@ -379,22 +375,19 @@ class CommunicationHub:
             True if message was successfully routed, False otherwise
         """
         try:
-            logger.debug(
-                f"Routing message from {message.sender_id} to {message.receiver_id}"
-            )
+            route_start = time.time()
 
             # Special handling for system messages
             if message.message_type == MessageType.SYSTEM:
                 if self._message_history is not None:
                     self._message_history.append(message)
                 await self._notify_handlers(message, is_special=True)
-                logger.info(f"Added system message to history: {message.content}")
                 return True
 
             # Validate that sender and receiver are different
             if message.sender_id == message.receiver_id:
                 logger.error(
-                    f"Cannot route message to self: {message.sender_id} -> {message.receiver_id}"
+                    "Cannot route message to self (agent_id=%s)", message.sender_id
                 )
                 return False
 
@@ -403,8 +396,10 @@ class CommunicationHub:
             receiver: Optional[BaseAgent] = self.active_agents.get(message.receiver_id)
 
             if not sender or not receiver:
-                logger.error(
-                    f"Sender or receiver not found. Sender: {bool(sender)}, Receiver: {bool(receiver)}"
+                logger.warning(
+                    "Missing participant (sender_id=%s receiver_id=%s)",
+                    message.sender_id,
+                    message.receiver_id,
                 )
                 return False
 
@@ -422,22 +417,13 @@ class CommunicationHub:
 
             # Special handling for collaboration responses
             if message.message_type == MessageType.COLLABORATION_RESPONSE:
-                logger.info(
-                    f"Received collaboration response from {message.sender_id} to {message.receiver_id}"
-                )
 
                 # Check if this is a response to a pending request
                 if message.metadata and "response_to" in message.metadata:
                     request_id = message.metadata["response_to"]
-                    logger.debug(
-                        f"Found response_to metadata with request_id: {request_id}"
-                    )
 
                     if request_id in self.pending_responses:
                         future = self.pending_responses[request_id]
-                        logger.debug(
-                            f"Found pending future for request_id: {request_id}, future.done(): {future.done()}"
-                        )
 
                         if not future.done():
                             # Check if the future has timed out
@@ -445,13 +431,10 @@ class CommunicationHub:
                                 future, "_timed_out", False
                             ):
                                 logger.warning(
-                                    f"Received late response for timed out request {request_id}"
+                                    "Late response recorded (request_id=%s)", request_id
                                 )
                                 # Store the late response for potential retrieval
                                 self.late_responses[request_id] = message
-                                logger.info(
-                                    f"Stored late response for request {request_id} for potential future retrieval"
-                                )
                                 # Even though the request timed out, we still want to record the message
                                 # and notify handlers, but we won't set the result on the future
                             else:
@@ -462,27 +445,22 @@ class CommunicationHub:
                                     loop.call_soon_threadsafe(
                                         future.set_result, message
                                     )
-                                    logger.debug(
-                                        f"Successfully set result for pending request {request_id}"
+                                except Exception:
+                                    logger.error(
+                                        "Error setting future result (request_id=%s)",
+                                        request_id,
+                                        exc_info=True,
                                     )
-                                except Exception as e:
-                                    logger.exception(
-                                        f"Error setting result for future: {str(e)}"
-                                    )
-                            logger.info(
-                                f"Successfully handled collaboration response from {message.sender_id} to {message.receiver_id}"
-                            )
-                        else:
-                            logger.debug(
-                                f"Future for request {request_id} is already done"
-                            )
                     else:
                         logger.warning(
-                            f"No pending request found for response with request_id {request_id}"
+                            "No pending request for response (request_id=%s)",
+                            request_id,
                         )
                 else:
                     logger.warning(
-                        f"Collaboration response from {message.sender_id} to {message.receiver_id} has no response_to metadata"
+                        "Collaboration response missing response_to (sender_id=%s receiver_id=%s)",
+                        message.sender_id,
+                        message.receiver_id,
                     )
 
                 if self._message_history is not None:
@@ -490,38 +468,24 @@ class CommunicationHub:
                 await self._notify_handlers(message)
                 return True
 
-            # Verify identities
-            logger.debug("Verifying sender identity")
-            if not await sender.verify_identity():
-                logger.error(f"Sender {sender.agent_id} identity verification failed")
-                raise SecurityError("Sender identity verification failed")
+            # Verify identities only if not already verified (noise mitigation)
+            if sender.identity.verification_status != VerificationStatus.VERIFIED:
+                if not await sender.verify_identity():
+                    raise SecurityError("Sender identity verification failed")
 
-            logger.debug("Verifying receiver identity")
-            if not await receiver.verify_identity():
-                logger.error(
-                    f"Receiver {receiver.agent_id} identity verification failed"
-                )
-                raise SecurityError("Receiver identity verification failed")
+            if receiver.identity.verification_status != VerificationStatus.VERIFIED:
+                if not await receiver.verify_identity():
+                    raise SecurityError("Receiver identity verification failed")
 
             # Verify message signature
-            logger.debug("Verifying message signature")
             if not message.verify(sender.identity):
-                logger.error(
-                    f"Message signature verification failed for sender {sender.agent_id}"
-                )
                 raise SecurityError("Message signature verification failed")
 
             # Check interaction mode compatibility
             sender_modes = sender.interaction_modes
             receiver_modes = receiver.interaction_modes
 
-            logger.debug(
-                f"Checking interaction mode compatibility: {sender_modes} -> {receiver_modes}"
-            )
             if not any(mode in receiver_modes for mode in sender_modes):
-                logger.error(
-                    f"Incompatible interaction modes between {sender.agent_id} and {receiver.agent_id}"
-                )
                 raise ValueError("Incompatible interaction modes")
 
             # Apply protocol validation for agent-to-agent communication
@@ -529,17 +493,11 @@ class CommunicationHub:
                 InteractionMode.AGENT_TO_AGENT in sender_modes
                 and InteractionMode.AGENT_TO_AGENT in receiver_modes
             ):
-                logger.debug("Validating agent-to-agent protocol")
                 if not await self.agent_protocol.validate_message(message):
-                    logger.error("Agent protocol validation failed")
                     return False
 
             # Special handling for collaboration requests and responses
             if message.message_type == MessageType.REQUEST_COLLABORATION:
-                # Log the collaboration request
-                logger.info(
-                    f"Collaboration request from {message.sender_id} to {message.receiver_id}: {message.content[:50]}..."
-                )
 
                 # Ensure collaboration chain is properly initialized
                 if "collaboration_chain" not in message.metadata:
@@ -560,10 +518,28 @@ class CommunicationHub:
             async def deliver_message():
                 try:
                     await receiver.receive_message(message)
-                    logger.debug(f"Message delivered to {receiver.agent_id}")
-                except Exception as e:
-                    logger.exception(
-                        f"Error delivering message to {receiver.agent_id}: {str(e)}"
+                    logger.debug(
+                        "Routed message sender=%s receiver=%s type=%s request_id=%s duration=%dms",
+                        sender.agent_id,
+                        receiver.agent_id,
+                        message.message_type.value,
+                        (
+                            message.metadata.get("request_id")
+                            if message.metadata
+                            else None
+                        ),
+                        int((time.time() - route_start) * 1000.0),
+                    )
+                except Exception:
+                    logger.error(
+                        "Error delivering message sender=%s receiver=%s request_id=%s",
+                        sender.agent_id,
+                        receiver.agent_id,
+                        (
+                            message.metadata.get("request_id")
+                            if message.metadata
+                            else None
+                        ),
                     )
 
             # Schedule the delivery task
@@ -572,13 +548,11 @@ class CommunicationHub:
             # Notify message handlers
             await self._notify_handlers(message)
 
-            logger.info(
-                f"Successfully routed message from {message.sender_id} to {message.receiver_id}"
-            )
+            # Do not emit route summary here; delivery task logs success or error
             return True
 
-        except Exception as e:
-            logger.exception(f"Error routing message: {str(e)}")
+        except Exception:
+            logger.error("Error routing message", exc_info=True)
             return False
 
     async def _handle_cooldown_message(
@@ -592,9 +566,6 @@ class CommunicationHub:
     async def _handle_stop_message(
         self, message: Message, sender: BaseAgent, receiver: BaseAgent
     ) -> bool:
-        logger.info(
-            f"Received STOP message from {sender.agent_id} to {receiver.agent_id}"
-        )
         # Forward the STOP message to the receiver
         await receiver.receive_message(message)
         return True
@@ -602,10 +573,9 @@ class CommunicationHub:
     async def get_agent(self, agent_id: str) -> Optional[BaseAgent]:
         """Get an active agent by ID"""
         try:
-            logger.debug(f"Getting agent: {agent_id}")
             return self.active_agents.get(agent_id)
         except Exception as e:
-            logger.exception(f"Error getting agent {agent_id}: {str(e)}")
+            logger.error("Error getting agent %s: %s", agent_id, e)
             return None
 
     async def get_all_agents(self) -> List[BaseAgent]:
@@ -619,10 +589,9 @@ class CommunicationHub:
             external modification of the internal state.
         """
         try:
-            logger.debug("Getting all active agents")
             return list(self.active_agents.values())
         except Exception as e:
-            logger.exception(f"Error getting all agents: {str(e)}")
+            logger.error("Error getting all agents: %s", e)
             return []
 
     async def is_agent_active(self, agent_id: str) -> bool:
@@ -632,14 +601,13 @@ class CommunicationHub:
     def get_message_history(self) -> List[Message]:
         """Get message history"""
         try:
-            logger.debug("Retrieving message history")
             if self._message_history is not None:
                 return self._message_history.copy()
             else:
-                logger.warning("Message history is disabled in configuration")
+                logger.warning("Message history disabled in config")
                 return []
         except Exception as e:
-            logger.exception(f"Error getting message history: {str(e)}")
+            logger.error("Error getting message history: %s", e)
             return []
 
     async def send_message_and_wait_response(
@@ -673,25 +641,20 @@ class CommunicationHub:
         try:
             # Validate sender and receiver
             if sender_id not in self.active_agents:
-                logger.error(f"Error: Sender agent {sender_id} is not active")
+                logger.error("Sender agent not active %s", sender_id)
                 return None
 
             if receiver_id not in self.active_agents:
-                logger.error(f"Error: Receiver agent {receiver_id} is not active")
+                logger.error("Receiver agent not active %s", receiver_id)
                 return None
 
             # Validate that sender and receiver are different
             if sender_id == receiver_id:
-                logger.error(
-                    f"Error: Cannot send message to yourself (sender_id={sender_id}, receiver_id={receiver_id})"
-                )
+                logger.error("Cannot send message to self (agent_id=%s)", sender_id)
                 return None
 
             # Generate a unique request ID
             request_id = metadata.get("request_id", str(uuid.uuid4()))
-            logger.debug(
-                f"Generated request_id: {request_id} for message from {sender_id} to {receiver_id}"
-            )
 
             # Create metadata with request ID if not provided
             metadata["request_id"] = request_id
@@ -701,9 +664,6 @@ class CommunicationHub:
 
             # Store the future in pending_responses
             self.pending_responses[request_id] = response_future
-            logger.debug(
-                f"Stored future for request_id: {request_id} in pending_responses"
-            )
 
             # Create and send the message
             message = Message.create(
@@ -730,13 +690,12 @@ class CommunicationHub:
                 if request_id in self.pending_responses:
                     del self.pending_responses[request_id]
                 logger.error(
-                    f"Failed to route message from {sender_id} to {receiver_id} with request_id: {request_id}"
+                    "Failed to route message sender=%s receiver=%s request_id=%s",
+                    sender_id,
+                    receiver_id,
+                    request_id,
                 )
                 return None
-
-            logger.debug(
-                f"Successfully routed message from {sender_id} to {receiver_id} with request_id: {request_id}"
-            )
 
             # Wait for the response with timeout
             try:
@@ -748,9 +707,6 @@ class CommunicationHub:
                 while not done_waiting:
                     # Check if the future is done
                     if response_future.done():
-                        logger.debug(
-                            f"Future for request_id: {request_id} is done, getting result"
-                        )
                         response = response_future.result()
                         return response
 
@@ -758,7 +714,9 @@ class CommunicationHub:
                     elapsed_time = time.time() - start_time
                     if elapsed_time >= timeout:
                         logger.warning(
-                            f"Timeout waiting for response to request {request_id} after {elapsed_time:.2f} seconds"
+                            "Timeout waiting for response (request_id=%s) duration=%dms",
+                            request_id,
+                            int(elapsed_time * 1000.0),
                         )
 
                         # Mark the request as timed out but keep it in pending_responses
@@ -772,9 +730,6 @@ class CommunicationHub:
                             async def delayed_cleanup():
                                 await asyncio.sleep(60)  # 1 minute grace period
                                 if request_id in self.pending_responses:
-                                    logger.debug(
-                                        f"Cleaning up timed out request {request_id}"
-                                    )
                                     del self.pending_responses[request_id]
 
                             asyncio.create_task(delayed_cleanup())
@@ -788,14 +743,16 @@ class CommunicationHub:
 
                 return None
 
-            except Exception as e:
-                logger.exception(
-                    f"Error waiting for response to request {request_id}: {str(e)}"
+            except Exception:
+                logger.error(
+                    "Error waiting for response (request_id=%s)",
+                    request_id,
+                    exc_info=True,
                 )
                 return None
 
-        except Exception as e:
-            logger.exception(f"Error in send_message_and_wait_response: {str(e)}")
+        except Exception:
+            logger.error("Error in send_message_and_wait_response", exc_info=True)
             return None
 
     async def send_collaboration_request(
@@ -831,18 +788,20 @@ class CommunicationHub:
             # Validate sender and receiver
             if sender_id not in self.active_agents:
                 error_msg = f"Error: Sender agent {sender_id} is not active"
-                logger.error(error_msg)
+                logger.error("Sender agent not active %s", sender_id)
                 return error_msg
 
             if receiver_id not in self.active_agents:
                 error_msg = f"Error: Receiver agent {receiver_id} is not active"
-                logger.error(error_msg)
+                logger.error("Receiver agent not active %s", receiver_id)
                 return error_msg
 
             # Validate that sender and receiver are different
             if sender_id == receiver_id:
                 error_msg = f"Error: Cannot send collaboration request to yourself (sender_id={sender_id}, receiver_id={receiver_id})"
-                logger.error(error_msg)
+                logger.error(
+                    "Cannot send collaboration request to self (agent_id=%s)", sender_id
+                )
                 return error_msg
 
             # Prepare metadata
@@ -858,10 +817,7 @@ class CommunicationHub:
             if "original_sender" not in metadata and metadata["collaboration_chain"]:
                 metadata["original_sender"] = metadata["collaboration_chain"][0]
 
-            # Log the collaboration request
-            logger.info(
-                f"Sending collaboration request from {sender_id} to {receiver_id}: {task_description[:50]}..."
-            )
+            # No hot-path start DEBUG; rely on single delivery DEBUG and WARN/ERROR
 
             # Generate a unique request ID for tracking
             request_id = str(uuid.uuid4())
@@ -874,9 +830,6 @@ class CommunicationHub:
             effective_timeout = kwargs.get("timeout", estimated_timeout)
 
             # Send the request and wait for response
-            logger.debug(
-                f"Sending collaboration request with request_id: {metadata['request_id']}"
-            )
             response = await self.send_message_and_wait_response(
                 sender_id=sender_id,
                 receiver_id=receiver_id,
@@ -888,20 +841,15 @@ class CommunicationHub:
 
             # Log the response status for debugging
             if response:
-                logger.info(
-                    f"Received collaboration response from {receiver_id} to {sender_id} with request_id {metadata['request_id']}"
+                logger.debug(
+                    "Received collaboration response (request_id=%s)",
+                    metadata["request_id"],
                 )
-
-                # Check if the response contains a function call
-                if "<function=" in response.content:
-                    logger.info(
-                        f"Received function call response from {receiver_id} to {sender_id}"
-                    )
-
                 return response.content
             else:
                 logger.warning(
-                    f"No response received from {receiver_id} within {effective_timeout} seconds for request_id {metadata['request_id']}"
+                    "No response received within timeout (request_id=%s)",
+                    metadata["request_id"],
                 )
 
                 # More helpful error message that provides the request ID for later checking
@@ -913,6 +861,8 @@ class CommunicationHub:
                 )
 
         except Exception as e:
-            error_msg = f"Error sending collaboration request: {str(e)}"
-            logger.exception(error_msg)
-            return error_msg
+            error_msg = "Error sending collaboration request"
+            logger.error(
+                "%s sender=%s receiver=%s: %s", error_msg, sender_id, receiver_id, e
+            )
+            return f"{error_msg}: {str(e)}"

@@ -18,7 +18,7 @@ from agentconnect.core.message import Message
 from agentconnect.core.types import AgentIdentity, MessageType, ProtocolVersion
 
 # Configure logging
-logger = logging.getLogger("CollaborationProtocol")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -133,10 +133,11 @@ class CollaborationProtocol(BaseProtocol):
     ) -> Message:
         """Format a message according to the collaboration protocol."""
         try:
-            logger.debug(f"Formatting message from {sender_id} to {receiver_id}")
-
             if not self._check_message_type(message_type):
-                logger.error(f"Unsupported message type: {message_type}")
+                logger.error(
+                    "Unsupported message type: %s",
+                    getattr(message_type, "value", str(message_type)),
+                )
                 raise ValueError(f"Message type {message_type} not supported")
 
             base_metadata = {
@@ -155,34 +156,34 @@ class CollaborationProtocol(BaseProtocol):
                 message_type=message_type,
                 metadata=base_metadata,
             )
-            logger.debug("Message formatted successfully")
             return message
 
         except Exception as e:
-            logger.exception(f"Error formatting message: {str(e)}")
+            logger.error("Error formatting message: %s", e)
             raise
 
     async def validate_message(self, message: Message) -> bool:
         """Validate message against protocol requirements."""
         try:
-            logger.debug(f"Validating message from {message.sender_id}")
-
             # Protocol version check
             protocol_version = message.protocol_version
             if protocol_version != self.version:
                 logger.error(
-                    f"Protocol version mismatch. Expected {self.version}, got {protocol_version}"
+                    "Protocol version mismatch expected=%s got=%s",
+                    getattr(self.version, "value", str(self.version)),
+                    getattr(protocol_version, "value", str(protocol_version)),
                 )
                 return False
 
             # Message type validation
             if not self._check_message_type(message.message_type):
-                logger.error(f"Unsupported message type: {message.message_type}")
+                logger.error(
+                    "Unsupported message type: %s",
+                    getattr(message.message_type, "value", str(message.message_type)),
+                )
                 return False
-
-            logger.debug("Message validation successful")
             return True
 
         except Exception as e:
-            logger.exception(f"Error validating message: {str(e)}")
+            logger.error("Error validating message: %s", e)
             return False

@@ -11,14 +11,12 @@ from langchain_core.embeddings import Embeddings
 from qdrant_client import AsyncQdrantClient
 
 from agentconnect.core.registry.registration import AgentRegistration
-
-# Configure logger
-logger = logging.getLogger("CapabilityDiscovery.Search")
-
-# Local imports
 from agentconnect.core.registry.capability_discovery_impl.embedding_utils import (
     calculate_similarity,
 )
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 async def find_by_capability_name(
@@ -54,9 +52,6 @@ async def find_by_capability_name(
     Returns:
         List of agent registrations with the specified capability
     """
-    logger.debug(
-        f"Searching agents with capability: {capability_name}, limit: {limit}, threshold: {similarity_threshold}"
-    )
     agent_ids = capabilities_index.get(capability_name, set())
     matching_registrations = [
         agent_registrations[agent_id]
@@ -74,15 +69,9 @@ async def find_by_capability_name(
 
             # Return all results from semantic search without filtering
             if semantic_results:
-                logger.debug(
-                    f"No exact matches for '{capability_name}', returning {len(semantic_results)} semantic matches"
-                )
                 return [registration for registration, _ in semantic_results][:limit]
         except Exception as e:
-            logger.warning(f"Error in semantic fallback search: {str(e)}")
-            import traceback
-
-            logger.warning(traceback.format_exc())
+            logger.warning("Error in semantic fallback search: %s", e)
 
     return matching_registrations[:limit]
 
@@ -117,11 +106,6 @@ async def search_with_qdrant(
     Returns:
         List of tuples containing agent registrations and similarity scores
     """
-    logger.debug(
-        f"Searching agents with capability description: {capability_description}, "
-        f"limit: {limit}, threshold: {similarity_threshold}, filters: {filters}"
-    )
-
     try:
         # Generate embedding for the search query
         query_embedding = embeddings_model.embed_query(capability_description)
@@ -181,9 +165,7 @@ async def search_with_qdrant(
                     )
                     filter_conditions.append(should_filter_for_key)
                 else:
-                    logger.warning(
-                        f"Encountered an unknown filter key: {key}. This filter will be ignored."
-                    )
+                    logger.warning("Unknown filter key ignored: %s", key)
                 # Add other filterable fields here if necessary, following the pattern above.
 
         # Create the filter if we have any conditions
@@ -223,16 +205,7 @@ async def search_with_qdrant(
                 registration = agent_registrations[agent_id]
             else:
                 # Skip if we don't have registration info
-                logger.debug(f"No registration found for agent {agent_id}")
                 continue
-
-            # Log the raw Qdrant score
-            logger.debug(
-                f"Qdrant search result for '{capability_description}': "
-                f"Agent={agent_id}, "
-                f"Doc_id={doc_id}, "
-                f"Score={scored_point.score:.3f}"
-            )
 
             # Append result with raw score. Filtering is handled by Qdrant's score_threshold.
             processed_results.append((registration, scored_point.score))
@@ -241,19 +214,11 @@ async def search_with_qdrant(
         # Sort by raw score (highest first)
         processed_results.sort(key=lambda x: x[1], reverse=True)
 
-        logger.debug(
-            f"Qdrant search returned {len(processed_results)} matching agents after initial query"
-        )
         # Limit results after potential deduplication
         return processed_results[:limit]
 
     except Exception as e:
-        logger.warning(
-            f"Error using Qdrant search: {str(e)}. Falling back to simple similarity."
-        )
-        import traceback
-
-        logger.warning(traceback.format_exc())
+        logger.warning("Error using Qdrant search; falling back: %s", e)
 
         # Fall back to basic string similarity if Qdrant search fails
         return await fallback_string_search(
@@ -286,13 +251,6 @@ async def fallback_string_search(
     Returns:
         List of tuples containing agent registrations and similarity scores
     """
-    logger.debug(
-        f"Using fallback string similarity search with Jaccard similarity. Filters: {filters}"
-    )
-    logger.debug(
-        "Note: Fallback search uses similarity metrics (higher scores are better)"
-    )
-
     results = []
 
     # Apply filters first
@@ -359,19 +317,8 @@ async def fallback_string_search(
 
         # Only include results above the threshold
         if highest_similarity >= similarity_threshold:
-            logger.debug(
-                f"Fallback search result for '{capability_description}': Agent={agent_id}, "
-                f"Score={highest_similarity:.3f} (above threshold {similarity_threshold})"
-            )
             results.append((registration, highest_similarity))
-        else:
-            logger.debug(
-                f"Skipping agent {agent_id} with similarity {highest_similarity:.3f} - below threshold {similarity_threshold}"
-            )
 
     # Sort by similarity score (highest first for fallback similarity metrics)
     results.sort(key=lambda x: x[1], reverse=True)
-    logger.debug(
-        f"Fallback string similarity search found {len(results)} matching agents after filtering"
-    )
     return results[:limit]  # Limit the results to the specified limit

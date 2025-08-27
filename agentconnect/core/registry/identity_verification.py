@@ -14,7 +14,7 @@ from agentconnect.core.types import (
 )
 
 # Set up logging
-logger = logging.getLogger("IdentityVerification")
+logger = logging.getLogger(__name__)
 
 
 async def verify_agent_identity(identity: AgentIdentity) -> bool:
@@ -28,11 +28,20 @@ async def verify_agent_identity(identity: AgentIdentity) -> bool:
         True if the identity is verified, False otherwise
     """
     try:
-        logger.debug(f"Verifying agent identity: {identity.did}")
+        # Start verification (avoid logging DID material)
+        method = "unknown"
+        try:
+            if identity.did.startswith("did:"):
+                parts = identity.did.split(":")
+                method = parts[1] if len(parts) > 1 else "unknown"
+        except Exception:
+            method = "unknown"
+
+        logger.debug("Verifying agent identity via method=%s", method)
 
         # Verify DID format
         if not identity.did.startswith(("did:ethr:", "did:key:")):
-            logger.error("Invalid DID format")
+            logger.warning("Invalid DID format")
             return False
 
         # Verify DID resolution
@@ -42,7 +51,7 @@ async def verify_agent_identity(identity: AgentIdentity) -> bool:
             return await verify_key_did(identity)
 
     except Exception as e:
-        logger.exception(f"Error verifying agent identity: {str(e)}")
+        logger.error("Error verifying agent identity: %s", e)
         return False
 
 
@@ -57,19 +66,17 @@ async def verify_ethereum_did(identity: AgentIdentity) -> bool:
         True if the identity is verified, False otherwise
     """
     try:
-        logger.debug("Verifying Ethereum DID")
         eth_address = identity.did.split(":")[-1]
 
         if not eth_address.startswith("0x") or len(eth_address) != 42:
-            logger.error("Invalid Ethereum address format")
+            logger.debug("Ethereum DID validation failed: invalid_format")
             return False
 
         # TODO: Implement full Ethereum DID verification
-        logger.debug("Basic Ethereum DID verification passed")
         return True
 
     except Exception as e:
-        logger.exception(f"Error verifying Ethereum DID: {str(e)}")
+        logger.error("Error verifying Ethereum DID: %s", e)
         return False
 
 
@@ -84,10 +91,8 @@ async def verify_key_did(identity: AgentIdentity) -> bool:
         True if the identity is verified, False otherwise
     """
     try:
-        logger.debug("Verifying key-based DID")
         # TODO: Implement full key-based DID verification
-        logger.debug("Basic key-based DID verification passed")
         return True
     except Exception as e:
-        logger.exception(f"Error verifying key-based DID: {str(e)}")
+        logger.error("Error verifying key-based DID: %s", e)
         return False

@@ -26,8 +26,8 @@ from agentconnect.core.registry.identity_verification import (
 from agentconnect.config import settings as global_settings
 from agentconnect.config.models import VectorSearchSettings
 
-# Set up logging
-logger = logging.getLogger("AgentRegistry")
+# Set up logging (module namespace)
+logger = logging.getLogger(__name__)
 
 
 class AgentRegistry:
@@ -97,7 +97,7 @@ class AgentRegistry:
             asyncio.create_task(self._initialize_vector_search())
         except RuntimeError:
             # No event loop running, initialization will happen on first use
-            logger.debug("No event loop running, vector search initialization deferred")
+            logger.debug("Vector search initialization deferred")
 
     @property
     def vector_search_settings(self) -> VectorSearchSettings:
@@ -115,7 +115,7 @@ class AgentRegistry:
             await self._capability_discovery.initialize_embeddings_model()
             # No need to precompute here, registration handles updates
         except Exception as e:
-            logger.exception(f"Error initializing vector search: {str(e)}")
+            logger.error("Error initializing vector search: %s", e)
         finally:
             # Signal that core initialization is complete (or failed)
             self._initialized_event.set()
@@ -136,19 +136,18 @@ class AgentRegistry:
         """
         await self.ensure_initialized()  # Wait for init before proceeding
         try:
-            logger.info(f"Attempting to register agent: {registration.agent_id}")
+            logger.debug("Attempting to register agent %s", registration.agent_id)
 
             # Check if agent already exists
             if registration.agent_id in self._agents:
-                logger.warning(
-                    f"Agent with ID {registration.agent_id} already registered. Use update_registration to modify."
-                )
+                logger.warning("Agent already registered %s", registration.agent_id)
                 return False
 
             # Verify agent identity
-            logger.debug("Verifying agent identity")
             if not await verify_agent_identity(registration.identity):
-                logger.error("Agent identity verification failed")
+                logger.error(
+                    "Agent identity verification failed %s", registration.agent_id
+                )
                 registration.identity.verification_status = VerificationStatus.FAILED
                 return False
 
@@ -157,17 +156,16 @@ class AgentRegistry:
             self._verified_agents.add(registration.agent_id)
 
             # Update indexes
-            logger.debug("Updating registry indexes")
             await self._update_indexes(registration)
 
-            logger.info(f"Successfully registered agent: {registration.agent_id}")
+            logger.debug("Agent registered %s", registration.agent_id)
 
             # Removed call to save_vector_store
 
             return True
 
         except Exception as e:
-            logger.exception(f"Error registering agent: {str(e)}")
+            logger.error("Failed registering agent %s: %s", registration.agent_id, e)
             return False
 
     async def _update_indexes(self, registration: AgentRegistration) -> None:
@@ -181,8 +179,6 @@ class AgentRegistry:
             Exception: If there is an error updating the indexes
         """
         try:
-            logger.debug(f"Updating indexes for agent: {registration.agent_id}")
-
             # Update capability index
             for capability in registration.capabilities:
                 if capability.name not in self._capabilities_index:
@@ -211,13 +207,8 @@ class AgentRegistry:
             await self._capability_discovery.update_capability_embeddings_cache(
                 registration
             )
-
-            # Removed call to save_vector_store
-
-            logger.debug("Successfully updated all indexes")
-
         except Exception as e:
-            logger.exception(f"Error updating indexes: {str(e)}")
+            logger.error("Error updating indexes: %s", e)
             raise
 
     async def unregister(self, agent_id: str) -> bool:
@@ -231,10 +222,10 @@ class AgentRegistry:
             True if unregistration was successful, False otherwise
         """
         try:
-            logger.debug(f"Attempting to unregister agent: {agent_id}")
+            logger.debug("Attempting to unregister agent %s", agent_id)
 
             if agent_id not in self._agents:
-                logger.error("Agent not found in registry")
+                logger.error("Agent not found in registry %s", agent_id)
                 return False
 
             registration = self._agents[agent_id]
@@ -283,11 +274,9 @@ class AgentRegistry:
             await self._capability_discovery.clear_agent_embeddings_cache(agent_id)
 
             # Removed call to save_vector_store
-
-            logger.info(f"Successfully unregistered agent: {agent_id}")
             return True
         except Exception as e:
-            logger.exception(f"Error unregistering agent: {str(e)}")
+            logger.error("Error unregistering agent %s: %s", agent_id, e)
             return False
 
     async def get_by_capability(
@@ -348,7 +337,6 @@ class AgentRegistry:
         Returns:
             List of all capability names
         """
-        logger.debug("Getting all registered capabilities")
         return list(self._capabilities_index.keys())
 
     async def get_all_agents(self) -> List[AgentRegistration]:
@@ -358,7 +346,6 @@ class AgentRegistry:
         Returns:
             List of all agent registrations
         """
-        logger.debug("Getting all registered agents")
         return list(self._agents.values())
 
     async def get_agent_type(self, agent_id: str) -> AgentType:
@@ -389,11 +376,10 @@ class AgentRegistry:
             List of agent registrations with the specified interaction mode
         """
         try:
-            logger.debug(f"Searching agents with interaction mode: {mode}")
             agent_ids = self._interaction_index[mode]
             return [self._agents[agent_id] for agent_id in agent_ids]
         except Exception as e:
-            logger.exception(f"Error retrieving agents by interaction mode: {str(e)}")
+            logger.error("Error retrieving agents by interaction mode: %s", e)
             return []
 
     async def get_registration(self, agent_id: str) -> Optional[AgentRegistration]:

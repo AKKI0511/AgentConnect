@@ -9,13 +9,14 @@ import logging
 from typing import Dict, Set, Tuple, List
 from langchain_core.embeddings import Embeddings
 from qdrant_client import AsyncQdrantClient
-from agentconnect.core.registry.registration import AgentRegistration
 import uuid
 import hashlib
 import asyncio
 
-# Configure logger
-logger = logging.getLogger("CapabilityDiscovery.Indexing")
+from agentconnect.core.registry.registration import AgentRegistration
+
+# Configure logger (module namespace)
+logger = logging.getLogger(__name__)
 
 
 def _create_profile_text(registration: AgentRegistration) -> str:
@@ -237,10 +238,8 @@ async def precompute_all_capability_embeddings(
         Tuple of (capability_to_agent_map, total_points_indexed)
     """
     if not embeddings_model or not agent_registrations or not async_client:
-        logger.warning("Missing required components for indexing capabilities")
+        logger.warning("Missing required components for indexing")
         return {}, 0
-
-    logger.info("Precomputing embeddings for all existing capabilities...")
 
     # Process all agents to create points for Qdrant
     all_points_to_upsert = []
@@ -266,14 +265,11 @@ async def precompute_all_capability_embeddings(
                     collection_name=collection_name, points=all_points_to_upsert
                 )
                 total_points_indexed += len(all_points_to_upsert)
-                logger.debug(
-                    f"Uploaded batch of {len(all_points_to_upsert)} points to Qdrant"
-                )
                 # Reset batch
                 all_points_to_upsert = []
                 current_batch_size = 0
-            except Exception as batch_error:
-                logger.error(f"Error uploading batch to Qdrant: {str(batch_error)}")
+            except Exception:
+                logger.error("Error uploading batch to Qdrant", exc_info=True)
 
     # Upload any remaining points
     if all_points_to_upsert:
@@ -282,15 +278,9 @@ async def precompute_all_capability_embeddings(
                 collection_name=collection_name, points=all_points_to_upsert
             )
             total_points_indexed += len(all_points_to_upsert)
-            logger.debug(
-                f"Uploaded final batch of {len(all_points_to_upsert)} points to Qdrant"
-            )
-        except Exception as batch_error:
-            logger.error(f"Error uploading final batch to Qdrant: {str(batch_error)}")
+        except Exception:
+            logger.error("Error uploading final batch to Qdrant", exc_info=True)
 
-    logger.info(
-        f"Successfully indexed {total_points_indexed} points in Qdrant collection"
-    )
     return capability_to_agent_map, total_points_indexed
 
 
@@ -316,7 +306,6 @@ async def update_capability_embeddings(
     """
 
     agent_id = registration.agent_id
-    logger.info(f"Updating embeddings for agent: {agent_id}")
 
     # First delete all existing points for this agent
     from agentconnect.core.registry.capability_discovery_impl.qdrant_client import (
@@ -348,14 +337,10 @@ async def update_capability_embeddings(
             await async_client.upsert(
                 collection_name=collection_name, points=new_points
             )
-            logger.info(
-                f"Updated embeddings for agent: {agent_id} with {len(new_points)} points"
+        except Exception:
+            logger.error(
+                "Error uploading points to Qdrant agent_id=%s", agent_id, exc_info=True
             )
-        except Exception as batch_error:
-            logger.error(f"Error uploading points to Qdrant: {str(batch_error)}")
-            import traceback
-
-            logger.error(traceback.format_exc())
 
     return capability_to_agent_map
 

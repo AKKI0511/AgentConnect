@@ -13,8 +13,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from agentconnect.config.models import VectorSearchSettings
 from agentconnect.config import settings
 
-# Configure logger
-logger = logging.getLogger("CapabilityDiscovery.EmbeddingUtils")
+# Configure logger (module namespace)
+logger = logging.getLogger(__name__)
 
 
 def check_semantic_search_requirements() -> Dict[str, bool]:
@@ -38,10 +38,7 @@ def check_semantic_search_requirements() -> Dict[str, bool]:
 
         available_backends["base_requirements"] = True
     except ImportError as e:
-        logger.warning(f"Missing base packages for semantic search: {str(e)}")
-        logger.warning(
-            "To enable semantic search, install required packages: pip install langchain-core numpy"
-        )
+        logger.warning("Missing base packages for semantic search: %s", e)
         return available_backends
 
     # Check for embedding model
@@ -51,10 +48,7 @@ def check_semantic_search_requirements() -> Dict[str, bool]:
 
         available_backends["embedding_model"] = True
     except ImportError as e:
-        logger.warning(f"Missing embedding model: {str(e)}")
-        logger.warning(
-            "To enable semantic search, install required packages: pip install langchain-huggingface sentence-transformers"
-        )
+        logger.warning("Missing embedding model: %s", e)
 
     # Check for Qdrant backend
     try:
@@ -64,10 +58,7 @@ def check_semantic_search_requirements() -> Dict[str, bool]:
 
         available_backends["qdrant"] = True
     except ImportError as e:
-        logger.warning(f"Qdrant vector store not available: {str(e)}")
-        logger.warning(
-            "To enable Qdrant vector search, install: pip install qdrant-client"
-        )
+        logger.warning("Qdrant vector store not available: %s", e)
 
     return available_backends
 
@@ -140,10 +131,6 @@ def create_huggingface_embeddings(
             model_name = config.model_name
             cache_folder = config.cache_folder
 
-        logger.info(
-            f"Initializing embeddings model {model_name} for semantic search..."
-        )
-
         # Create embeddings model with caching
         # Try with explicit model_kwargs and encode_kwargs first
         try:
@@ -153,11 +140,10 @@ def create_huggingface_embeddings(
                 model_kwargs={"device": "cpu", "revision": "main"},
                 encode_kwargs={"normalize_embeddings": True},
             )
-            logger.info("Embeddings model initialized with explicit parameters")
             return embeddings_model
         except Exception as model_error:
             logger.warning(
-                f"First embedding initialization attempt failed: {str(model_error)}"
+                "First embedding initialization attempt failed: %s", model_error
             )
 
             # Try alternative initialization approach
@@ -177,15 +163,11 @@ def create_huggingface_embeddings(
                 embeddings_model = HuggingFaceEmbeddings(
                     model=st_model, encode_kwargs={"normalize_embeddings": True}
                 )
-
-                logger.info(
-                    "Initialized embeddings using pre-loaded sentence transformer model"
-                )
                 return embeddings_model
             except Exception as fallback_error:
                 # If that fails too, try with minimal parameters
                 logger.warning(
-                    f"Fallback embedding initialization failed: {str(fallback_error)}"
+                    "Fallback embedding initialization failed: %s", fallback_error
                 )
 
                 # Last attempt with minimal configuration
@@ -193,19 +175,12 @@ def create_huggingface_embeddings(
                     embeddings_model = HuggingFaceEmbeddings(
                         model_name="all-MiniLM-L6-v2",  # Try with a smaller model
                     )
-
-                    logger.info(
-                        "Initialized embeddings with minimal configuration and smaller model"
-                    )
                     return embeddings_model
-                except Exception as minimal_error:
+                except Exception:
                     logger.error(
-                        f"All embedding initialization attempts failed: {str(minimal_error)}"
+                        "All embedding initialization attempts failed", exc_info=True
                     )
                     return None
-    except Exception as e:
-        logger.error(f"Failed to initialize embeddings model: {str(e)}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+    except Exception:
+        logger.error("Failed to initialize embeddings model", exc_info=True)
         return None

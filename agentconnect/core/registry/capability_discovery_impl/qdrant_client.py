@@ -15,8 +15,8 @@ from qdrant_client.local.async_qdrant_local import AsyncQdrantLocal
 from agentconnect.config.models import VectorSearchSettings
 from agentconnect.config import settings
 
-# Configure logger
-logger = logging.getLogger("CapabilityDiscovery.QdrantClient")
+# Configure logger (module namespace)
+logger = logging.getLogger(__name__)
 
 # Default collection name for agent capabilities
 DEFAULT_COLLECTION_NAME = "agent_capabilities"
@@ -70,13 +70,10 @@ async def initialize_qdrant_clients(
         # Create synchronous client
         sync_client = None
         if mode == "in_memory":
-            logger.info("Initializing in-memory Qdrant client")
             sync_client = QdrantClient(":memory:")
         elif mode == "local_file":
-            logger.info(f"Initializing local Qdrant client at {local_path}")
             sync_client = QdrantClient(path=local_path)
         elif mode == "remote":
-            logger.info(f"Initializing Qdrant client with URL {remote_url}")
             sync_client = QdrantClient(
                 url=remote_url,
                 api_key=remote_api_key,
@@ -88,13 +85,10 @@ async def initialize_qdrant_clients(
         # Create async client with same parameters
         async_client = None
         if mode == "in_memory":
-            logger.info("Initializing in-memory Async Qdrant client")
             async_client = AsyncQdrantClient(":memory:")
         elif mode == "local_file":
-            logger.info(f"Initializing local Async Qdrant client at {local_path}")
             async_client = AsyncQdrantClient(path=local_path)
         elif mode == "remote":
-            logger.info(f"Initializing Async Qdrant client with URL {remote_url}")
             async_client = AsyncQdrantClient(
                 url=remote_url,
                 api_key=remote_api_key,
@@ -103,13 +97,9 @@ async def initialize_qdrant_clients(
                 timeout=timeout,
             )
 
-        logger.info("Qdrant clients initialized successfully")
         return sync_client, async_client
-    except Exception as e:
-        logger.error(f"Failed to initialize Qdrant clients: {str(e)}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+    except Exception:
+        logger.error("Failed to initialize Qdrant clients", exc_info=True)
         return None, None
 
 
@@ -142,47 +132,35 @@ async def init_qdrant_collection(
                 sample_text = "Sample text for embedding dimension detection"
                 sample_embedding = embeddings_model.embed_query(sample_text)
                 expected_vector_size = len(sample_embedding)
-            except Exception as e:
-                logger.error(
-                    f"Failed to determine vector size from embedding model: {e}"
-                )
+            except Exception:
+                logger.error("Failed to determine vector size", exc_info=True)
                 return False
         else:
-            logger.error("Embeddings model not provided, cannot determine vector size.")
+            logger.error("Embeddings model missing; cannot determine vector size")
             return False
 
         if collection_exists:
-            logger.info(
-                f"Collection '{collection_name}' already exists. Verifying dimensions..."
-            )
             try:
                 collection_info = await async_client.get_collection(collection_name)
                 existing_vector_size = collection_info.config.params.vectors.size
 
                 if existing_vector_size != expected_vector_size:
                     logger.warning(
-                        f"Collection '{collection_name}' exists with incorrect vector dimension "
-                        f"(Existing: {existing_vector_size}, Expected: {expected_vector_size}). "
-                        f"Deleting and recreating collection."
+                        "Collection has incorrect vector dimension; recreating"
                     )
                     await async_client.delete_collection(collection_name)
                     collection_exists = False  # Force recreation
                 else:
-                    logger.info(
-                        f"Collection '{collection_name}' dimensions verified ({existing_vector_size})."
-                    )
                     return True  # Dimensions match, no need to recreate
 
-            except Exception as e:
+            except Exception:
                 logger.error(
-                    f"Failed to verify existing collection dimensions: {e}. Attempting to recreate."
+                    "Failed to verify collection dimensions; recreating", exc_info=True
                 )
                 try:
                     await async_client.delete_collection(collection_name)
                 except Exception:
-                    logger.error(
-                        f"Failed to delete existing collection '{collection_name}'."
-                    )
+                    logger.error("Failed to delete existing collection", exc_info=True)
                 collection_exists = False  # Force recreation attempt
 
         # If collection doesn't exist (or was deleted due to dimension mismatch)
@@ -192,10 +170,6 @@ async def init_qdrant_collection(
                     "Cannot create collection without a valid vector size from the embedding model."
                 )
                 return False
-
-            logger.info(
-                f"Creating collection '{collection_name}' with vector size: {expected_vector_size}"
-            )
 
             # Use scalar quantization if enabled in config
             quantization_config = None
@@ -268,27 +242,23 @@ async def init_qdrant_collection(
                     timeout=60,  # Give enough time for collection creation
                 )
 
-                logger.info(f"Created collection {collection_name}")
-
                 # Verify collection was created
                 collection_exists = await async_client.collection_exists(
                     collection_name
                 )
                 if not collection_exists:
-                    logger.error(f"Failed to create collection {collection_name}")
+                    logger.error("Failed to create collection")
                     return False
 
-            except Exception as e:
-                logger.error(f"Error creating collection: {str(e)}")
+            except Exception:
+                logger.error("Error creating collection", exc_info=True)
                 return False
 
             # Create payload indexes for the fields we'll filter on
             try:
                 # Check if this is an in-memory client - payload indexes don't work with local/in-memory Qdrant
                 if isinstance(async_client._client, AsyncQdrantLocal):
-                    logger.info(
-                        "Skipping payload indexes for in-memory/local Qdrant instance"
-                    )
+                    pass
                 else:
                     # Only create payload indexes for remote Qdrant instances
                     payload_indexes = [
@@ -307,31 +277,21 @@ async def init_qdrant_collection(
                                 field_schema=qdrant_models.PayloadSchemaType.KEYWORD,
                                 wait=True,
                             )
-                            logger.info(f"Created payload index for field {field}")
-                        except Exception as field_error:
+                        except Exception:
                             logger.warning(
-                                f"Failed to create payload index for {field}: {str(field_error)}"
+                                "Failed to create payload index", exc_info=True
                             )
                             # Continue with other fields even if one fails
                             continue
 
-            except Exception as index_error:
-                logger.warning(
-                    f"Failed to create some payload indexes: {str(index_error)}"
-                )
+            except Exception:
+                logger.warning("Failed to create some payload indexes", exc_info=True)
                 # Continue even if payload indexes fail - they're not critical
                 # The collection is still usable without them, just less efficient
-
-            logger.info(
-                f"Successfully created collection {collection_name} with optimized configuration"
-            )
             return True
 
-    except Exception as e:
-        logger.error(f"Failed to initialize Qdrant collection: {str(e)}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+    except Exception:
+        logger.error("Failed to initialize Qdrant collection", exc_info=True)
         return False
 
 
@@ -374,7 +334,6 @@ async def delete_points_by_agent_id(
         points = search_result[0]  # First element is the list of points
 
         if not points:
-            logger.debug(f"No points found for agent: {agent_id}")
             return []
 
         # Extract the IDs
@@ -386,12 +345,8 @@ async def delete_points_by_agent_id(
             points_selector=qdrant_models.PointIdsList(points=point_ids),
         )
 
-        logger.info(f"Deleted {len(point_ids)} points for agent: {agent_id}")
         return point_ids
 
-    except Exception as e:
-        logger.error(f"Error deleting points for agent {agent_id}: {str(e)}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+    except Exception:
+        logger.error("Error deleting points for agent %s", agent_id, exc_info=True)
         return []

@@ -371,9 +371,24 @@ All servers provide consistent monitoring capabilities:
 - `GET /health`: Returns 200 if server is running and ready to serve requests
 
 ### Logging
-- Configured at process startup (not import-time) with `AGENTCONNECT_REGISTRY_LOG_LEVEL`.
-- Uvicorn receives the same level for consistent server/client logs.
-- Format: `timestamp | LEVEL | module | message`.
+- Registry lifecycle logs are emitted via `uvicorn.error.agentconnect.registry` so they always flow through Uvicorn’s handlers.
+- Control our registry logger level with `AGENTCONNECT_REGISTRY_LOG_LEVEL` (applied during lifespan startup).
+- Control Uvicorn’s own logs via CLI flags (e.g., `--log-level`) or programmatic `uvicorn.run(..., log_level=...)`.
+
+Examples:
+
+```bash
+# python -m (env controls our logger; uvicorn log level via run)
+python -m agentconnect.servers.registry_api_server
+
+# Windows PowerShell: set our logger level
+$env:AGENTCONNECT_REGISTRY_LOG_LEVEL = "DEBUG"
+python -m agentconnect.servers.registry_api_server
+
+# uvicorn CLI (env still controls our logger in lifespan; CLI controls uvicorn)
+export AGENTCONNECT_REGISTRY_LOG_LEVEL=INFO
+uvicorn agentconnect.servers.registry_api_server:app --log-level warning
+```
 
 ## Troubleshooting
 

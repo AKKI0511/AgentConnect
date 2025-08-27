@@ -22,7 +22,7 @@ from agentconnect.core.registry.search import (
 from agentconnect.core.types import Capability, InteractionMode, AgentType, Skill
 from agentconnect.servers.config import RegistryAPISettings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error.agentconnect.registry")
 
 # Global variable to hold the registry instance, initialized via lifespan
 _agent_registry_instance: Optional[AgentRegistry] = None
@@ -38,25 +38,24 @@ def create_registry_api_app(
     """
 
     resolved_settings = settings or RegistryAPISettings()
+    # Ensure our hierarchical logger level reflects settings early; handlers come from Uvicorn
+    logger.setLevel(getattr(logging, resolved_settings.log_level))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):  # type: ignore[override]
         global _agent_registry_instance
-        # Configure logging levels without altering Uvicorn's handlers
-        level = getattr(logging, resolved_settings.log_level, logging.INFO)
-        logging.getLogger().setLevel(level)
-        # Align Uvicorn loggers as well for consistency when running under Uvicorn
-        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-            logging.getLogger(name).setLevel(level)
         logger.info("Starting AgentConnect Registry API Server...")
 
         # Create vector search settings based on server configuration
         vector_search_settings = resolved_settings.vector_search
 
         logger.debug(
-            f"Using vector search settings: {vector_search_settings.model_name}"
+            "Using vector search settings: %s", vector_search_settings.model_name
         )
-        logger.debug(f"Vector store type: {vector_search_settings.deployment.type}")
+        logger.debug(
+            "Vector store type: %s",
+            vector_search_settings.deployment.type,
+        )
 
         _agent_registry_instance = AgentRegistry(
             vector_search_config=vector_search_settings
@@ -178,7 +177,7 @@ async def get_verified_agents_endpoint() -> List[AgentRegistration]:
     try:
         return await registry.get_verified_agents()
     except Exception as e:
-        logger.error(f"Error getting verified agents: {e}")
+        logger.error("Error getting verified agents", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Error getting verified agents: {str(e)}"
         )
@@ -211,7 +210,11 @@ async def register_agent_endpoint(
                 detail="Agent registration failed for an unknown reason.",
             )
     except Exception as e:
-        logger.error(f"Error registering agent {registration_data.agent_id}: {e}")
+        logger.error(
+            "Error registering agent agent_id=%s",
+            registration_data.agent_id,
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -298,7 +301,7 @@ async def unregister_agent_endpoint(agent_id: str) -> Dict[str, Any]:
                 detail="Agent unregistration failed for an unknown reason.",
             )
     except Exception as e:
-        logger.error(f"Error unregistering agent {agent_id}: {e}")
+        logger.error("Error unregistering agent agent_id=%s", agent_id, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -348,7 +351,7 @@ async def search_agents_semantic_endpoint(
             results=results_items,
         )
     except Exception as e:
-        logger.error(f"Error in semantic search: {e}", exc_info=True)
+        logger.error("Error in semantic search", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Error searching for agents: {str(e)}"
         )
@@ -382,7 +385,11 @@ async def search_agents_by_capability_exact_endpoint(
             similarity_threshold=similarity_threshold,
         )
     except Exception as e:
-        logger.error(f"Error searching by exact capability name {capability_name}: {e}")
+        logger.error(
+            "Error searching by exact capability name capability=%s",
+            capability_name,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500, detail=f"Error searching by exact capability: {str(e)}"
         )
@@ -399,7 +406,7 @@ async def get_all_capabilities_endpoint() -> List[str]:
     try:
         return await registry.get_all_capabilities()
     except Exception as e:
-        logger.error(f"Error getting all capabilities: {e}")
+        logger.error("Error getting all capabilities", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Error getting all capabilities: {str(e)}"
         )
@@ -422,7 +429,9 @@ async def get_agents_by_interaction_mode_endpoint(
     except ValueError:  # If mode string is not a valid InteractionMode
         raise HTTPException(status_code=400, detail=f"Invalid interaction mode: {mode}")
     except Exception as e:
-        logger.error(f"Error getting agents by interaction mode {mode}: {e}")
+        logger.error(
+            "Error getting agents by interaction mode mode=%s", mode, exc_info=True
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Error getting agents by interaction mode: {str(e)}",
@@ -442,7 +451,11 @@ async def get_agents_by_organization_endpoint(
     try:
         return await registry.get_by_organization(organization_name)
     except Exception as e:
-        logger.error(f"Error getting agents by organization {organization_name}: {e}")
+        logger.error(
+            "Error getting agents by organization org=%s",
+            organization_name,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500, detail=f"Error getting agents by organization: {str(e)}"
         )
@@ -469,7 +482,7 @@ async def verify_agent_endpoint(agent_id: str) -> bool:
     except (
         Exception
     ) as e:  # Catch any other unexpected errors from the verification process
-        logger.error(f"Error verifying agent {agent_id}: {e}")
+        logger.error("Error verifying agent agent_id=%s", agent_id, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error verifying agent: {str(e)}")
 
 
@@ -485,7 +498,7 @@ async def get_agents_by_owner_endpoint(owner_id: str) -> List[AgentRegistration]
         # The registry method get_by_owner uses the 'developer' field
         return await registry.get_by_owner(owner_id)
     except Exception as e:
-        logger.error(f"Error getting agents by owner {owner_id}: {e}")
+        logger.error("Error getting agents by owner owner=%s", owner_id, exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Error getting agents by owner: {str(e)}"
         )
@@ -510,7 +523,10 @@ async def verify_agent_owner_endpoint(agent_id: str, owner_id: str) -> bool:
         return await registry.verify_owner(agent_id, owner_id)
     except Exception as e:
         logger.error(
-            f"Error verifying agent owner for agent {agent_id}, owner {owner_id}: {e}"
+            "Error verifying agent owner for agent_id=%s owner=%s",
+            agent_id,
+            owner_id,
+            exc_info=True,
         )
         raise HTTPException(
             status_code=500, detail=f"Error verifying agent owner: {str(e)}"

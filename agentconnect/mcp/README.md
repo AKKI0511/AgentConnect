@@ -42,7 +42,29 @@ poetry run python -m agentconnect.servers.registry_api_server
 curl http://localhost:8000/health
 ```
 
-### 2. Test the MCP Server
+### 2. Use the MCP Factory (recommended)
+
+Create a configured MCP instance in your own host or tests:
+
+```python
+from agentconnect.mcp.registry_mcp_server import create_agent_discovery_mcp
+
+# Default usage (factory owns tools and lifespan)
+mcp = create_agent_discovery_mcp()
+mcp.run()  # Host controls logging; the server does not add handlers
+```
+
+Custom setups:
+
+```python
+from agentconnect.mcp.registry_mcp_server import create_agent_discovery_mcp
+from agentconnect.clients import RegistryAPIClient
+
+custom_client = RegistryAPIClient(base_url="http://localhost:8000")
+mcp = create_agent_discovery_mcp(registry_client=custom_client)
+```
+
+### 3. Test the MCP Server Entrypoint
 
 ```bash
 # Test the MCP server directly
@@ -316,6 +338,12 @@ poetry run mcp dev agentconnect/mcp/registry_mcp_server.py
 # 4. Test direct execution
 poetry run python -m agentconnect.mcp.registry_mcp_server
 ```
+
+### Logging under MCP
+
+- Logging is host-managed. The MCP server does not add logging handlers.
+- Tools use Context logging only (`ctx.info`, `ctx.debug`, `ctx.error`).
+- The SDK does not elevate or change `agentconnect.*` logger levels by default.
 
 ### Adding New Tools
 

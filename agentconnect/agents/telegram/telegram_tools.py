@@ -348,10 +348,9 @@ class TelegramTools:
                 parse_mode=effective_parse_mode,
             )
             return {"success": True, "message_id": message.message_id}
-        except Exception as e:
-            error_msg = f"Error sending message to {chat_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error sending message to chat_id=%s", chat_id, exc_info=True)
+            return {"success": False, "error": "send_failed"}
 
     async def send_photo(
         self,
@@ -389,10 +388,9 @@ class TelegramTools:
                 reply_to_message_id=reply_to_message_id,
             )
             return {"success": True, "message_id": message.message_id}
-        except Exception as e:
-            error_msg = f"Error sending photo to {chat_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error sending photo to chat_id=%s", chat_id, exc_info=True)
+            return {"success": False, "error": "send_photo_failed"}
 
     async def send_document(
         self,
@@ -430,10 +428,9 @@ class TelegramTools:
                 reply_to_message_id=reply_to_message_id,
             )
             return {"success": True, "message_id": message.message_id}
-        except Exception as e:
-            error_msg = f"Error sending document to {chat_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error sending document to chat_id=%s", chat_id, exc_info=True)
+            return {"success": False, "error": "send_document_failed"}
 
     async def send_location(
         self,
@@ -462,10 +459,9 @@ class TelegramTools:
                 reply_to_message_id=reply_to_message_id,
             )
             return {"success": True, "message_id": message.message_id}
-        except Exception as e:
-            error_msg = f"Error sending location to {chat_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error sending location to chat_id=%s", chat_id, exc_info=True)
+            return {"success": False, "error": "send_location_failed"}
 
     async def send_voice(
         self,
@@ -503,10 +499,9 @@ class TelegramTools:
                 reply_to_message_id=reply_to_message_id,
             )
             return {"success": True, "message_id": message.message_id}
-        except Exception as e:
-            error_msg = f"Error sending voice to {chat_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error sending voice to chat_id=%s", chat_id, exc_info=True)
+            return {"success": False, "error": "send_voice_failed"}
 
     async def download_file(self, file_id: str) -> Dict[str, Any]:
         """
@@ -542,10 +537,9 @@ class TelegramTools:
                     file_info.file_size if hasattr(file_info, "file_size") else None
                 ),
             }
-        except Exception as e:
-            error_msg = f"Error downloading file {file_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error downloading file file_id=%s", file_id, exc_info=True)
+            return {"success": False, "error": "download_failed"}
 
     async def edit_message(
         self, chat_id: int, message_id: int, text: str
@@ -566,10 +560,9 @@ class TelegramTools:
                 chat_id=chat_id, message_id=message_id, text=text
             )
             return {"success": True}
-        except Exception as e:
-            error_msg = f"Error editing message in chat {chat_id}: {str(e)}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+        except Exception:
+            logger.error("Error editing message in chat_id=%s", chat_id, exc_info=True)
+            return {"success": False, "error": "edit_failed"}
 
     async def create_announcement(
         self, text: str, photo_url: str = ""
@@ -652,11 +645,12 @@ class TelegramTools:
                         chat_id=group_id, text=f"📢 {announcement['text']}"
                     )
                 sent_to_groups.append(group_id)
-            except Exception as e:
-                error_msg = str(e)
-                failed_groups.append({"group_id": group_id, "error": error_msg})
+            except Exception:
+                failed_groups.append({"group_id": group_id, "error": "send_failed"})
                 logger.error(
-                    f"Failed to send announcement to group {group_id}: {error_msg}"
+                    "Failed to send announcement to group_id=%s",
+                    group_id,
+                    exc_info=True,
                 )
 
         return {

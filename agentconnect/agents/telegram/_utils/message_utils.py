@@ -5,13 +5,10 @@ This module contains helper functions for working with Telegram messages,
 including checking for mentions, extracting content, and managing conversation IDs.
 """
 
-import logging
 from typing import Dict, Any
 
 from aiogram import types
 from aiogram.types import User
-
-logger = logging.getLogger(__name__)
 
 
 def has_mention_entity(message: types.Message, bot_user: User) -> bool:

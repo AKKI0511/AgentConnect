@@ -265,6 +265,7 @@ class TelegramAIAgent(AIAgent):
         self.bot_manager = TelegramBotManager(
             token=self.telegram_token,
             groups_file=self.groups_file,
+            agent_id=agent_id,
         )
 
         # Initialize the bot and tools
@@ -315,11 +316,13 @@ class TelegramAIAgent(AIAgent):
         """Initialize Telegram bot and tools."""
         # Initialize the bot
         if not self.bot_manager.initialize_bot():
-            logger.error("Failed to initialize Telegram bot")
+            logger.error("Failed to initialize Telegram bot agent_id=%s", self.agent_id)
 
         # Initialize the tools
         if not self.bot_manager.initialize_tools():
-            logger.error("Failed to initialize Telegram tools")
+            logger.error(
+                "Failed to initialize Telegram tools agent_id=%s", self.agent_id
+            )
 
         # Register the shutdown handler
         self.bot_manager.register_shutdown_handler(self._on_shutdown)
@@ -353,7 +356,9 @@ class TelegramAIAgent(AIAgent):
             RuntimeError: If the Telegram bot cannot be started
         """
         if not await self.bot_manager.start_polling():
-            logger.error("Failed to start Telegram bot polling")
+            logger.error(
+                "Failed to start Telegram bot polling agent_id=%s", self.agent_id
+            )
             return
 
         # Register all handlers
@@ -371,7 +376,6 @@ class TelegramAIAgent(AIAgent):
         }
 
         await handler_registry.register_all(self.bot_manager.dp, callback_map)
-        logger.info("All handlers registered")
 
     async def stop_telegram_bot(self):
         """
@@ -420,12 +424,19 @@ class TelegramAIAgent(AIAgent):
                         reply_to_message_id=response["reply_to_message_id"],
                     )
                 else:
-                    logger.error("Error processing message: empty response")
+                    logger.error(
+                        "Empty response from message processor agent_id=%s",
+                        self.agent_id,
+                    )
 
                 # Don't return anything since we've handled the response
                 return None
             except Exception as e:
-                logger.exception(f"Error in Telegram message processing: {e}")
+                logger.error(
+                    "Error in Telegram message processing agent_id=%s: %s",
+                    self.agent_id,
+                    e,
+                )
 
                 # Try to send an error message to the user
                 try:
@@ -434,8 +445,12 @@ class TelegramAIAgent(AIAgent):
                         chat_id=telegram_chat_id,
                         text="I'm sorry, I encountered an error while processing your message. Please try again.",
                     )
-                except Exception as e:
-                    logger.exception(f"Error sending error message to user: {e}")
+                except Exception:
+                    logger.error(
+                        "Error sending error message to user agent_id=%s",
+                        self.agent_id,
+                        exc_info=True,
+                    )
                     pass
 
                 # Don't pass to parent class for Telegram messages
@@ -470,7 +485,8 @@ class TelegramAIAgent(AIAgent):
                     return None
                 except ValueError:
                     logger.error(
-                        f"Invalid telegram_chat_id format: {message.metadata.get('telegram_chat_id')}"
+                        "Invalid telegram_chat_id format agent_id=%s",
+                        self.agent_id,
                     )
 
             # Return the original response for non-Telegram-related responses
@@ -499,7 +515,7 @@ class TelegramAIAgent(AIAgent):
         """
         # Mark agent as running
         self.is_running = True
-        logger.info(f"Starting Telegram agent {self.agent_id}")
+        logger.info("Telegram agent starting agent_id=%s", self.agent_id)
 
         try:
             # Start the Telegram bot
@@ -523,14 +539,16 @@ class TelegramAIAgent(AIAgent):
             await asyncio.gather(*pending, return_exceptions=True)
 
         except asyncio.CancelledError:
-            logger.info(f"Agent {self.agent_id} run task was cancelled")
-        except Exception as e:
-            logger.exception(f"Error in Telegram agent run: {str(e)}")
+            pass
+        except Exception:
+            logger.error(
+                "Error in Telegram agent run agent_id=%s", self.agent_id, exc_info=True
+            )
         finally:
             # Clean up
             self.is_running = False
             await self.stop_telegram_bot()
-            logger.info(f"Telegram agent {self.agent_id} stopped")
+            logger.info("Telegram agent stopped agent_id=%s", self.agent_id)
 
     async def _on_shutdown(self):
         """
@@ -559,7 +577,12 @@ class TelegramAIAgent(AIAgent):
                 "✅ Bot added! This group will receive announcements.",
                 reply_markup=GROUP_CHAT_KEYBOARD,
             )
-            logger.info(f"📌 Group added: {message.chat.title} ({message.chat.id})")
+            logger.debug(
+                "Group added agent_id=%s group_title=%s group_id=%s",
+                self.agent_id,
+                message.chat.title,
+                message.chat.id,
+            )
         else:
             # Send welcome message in private chat
             await message.answer(
@@ -638,8 +661,8 @@ class TelegramAIAgent(AIAgent):
             # Process the message through AgentConnect
             if agent_message:
                 await self.receive_message(agent_message)
-        except Exception as e:
-            logger.error(f"Error processing group mention: {str(e)}")
+        except Exception:
+            logger.error("Error processing group mention", exc_info=True)
             # Delete thinking message
             try:
                 if message.chat.id in self.bot_manager.processing_messages:
@@ -672,8 +695,8 @@ class TelegramAIAgent(AIAgent):
             # Process the message through AgentConnect
             if agent_message:
                 await self.receive_message(agent_message)
-        except Exception as e:
-            logger.error(f"Error processing media message: {str(e)}")
+        except Exception:
+            logger.error("Error processing media message", exc_info=True)
             # Delete thinking message
             try:
                 if message.chat.id in self.bot_manager.processing_messages:
@@ -709,8 +732,8 @@ class TelegramAIAgent(AIAgent):
             # Process the message through AgentConnect
             if agent_message:
                 await self.receive_message(agent_message)
-        except Exception as e:
-            logger.error(f"Error processing text message: {str(e)}")
+        except Exception:
+            logger.error("Error processing text message", exc_info=True)
             # Delete thinking message
             try:
                 if message.chat.id in self.bot_manager.processing_messages:
@@ -737,10 +760,6 @@ class TelegramAIAgent(AIAgent):
 
 
 if __name__ == "__main__":
-    # Configure logging
-    from agentconnect.utils.logging_config import setup_logging, LogLevel
-
-    setup_logging(level=LogLevel.INFO)
 
     # Variables to track what needs to be cleaned up
     agent = None
@@ -787,15 +806,15 @@ if __name__ == "__main__":
                     logger.error("Failed to register agent with hub")
                     return
 
-                logger.info(f"Successfully registered agent {agent.agent_id} with hub")
+                logger.info("Successfully registered agent %s with hub", agent.agent_id)
 
                 # Run the agent directly - DON'T create a task that will exit immediately
                 await agent.run()
 
             except asyncio.CancelledError:
                 logger.info("Main task was cancelled")
-            except Exception as e:
-                logger.exception(f"Error in main function: {e}")
+            except Exception:
+                logger.exception("Error in main function")
             finally:
                 # We don't handle final cleanup here - it will be done in the outer try/finally
                 pass
@@ -805,8 +824,8 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         logger.info("Telegram AI Agent stopped by keyboard interrupt.")
-    except Exception as e:
-        logger.error(f"Error running Telegram AI Agent: {e}")
+    except Exception:
+        logger.error("Error running Telegram AI Agent", exc_info=True)
     finally:
         # Clean up resources
         async def cleanup():
@@ -818,17 +837,17 @@ if __name__ == "__main__":
 
                 # Unregister from hub if registered
                 if agent and hub and hasattr(agent, "hub") and agent.hub:
-                    logger.info(f"Unregistering agent {agent.agent_id} from hub...")
+                    logger.info("Unregistering agent %s from hub...", agent.agent_id)
                     await hub.unregister_agent(agent.agent_id)
-                    logger.info(f"Unregistered agent {agent.agent_id} from hub")
+                    logger.info("Unregistered agent %s from hub", agent.agent_id)
 
-            except Exception as e:
-                logger.error(f"Error during cleanup: {e}")
+            except Exception:
+                logger.error("Error during cleanup", exc_info=True)
 
         # Run the cleanup
         try:
             asyncio.run(cleanup())
-        except Exception as e:
-            logger.error(f"Error during final cleanup: {e}")
+        except Exception:
+            logger.error("Error during final cleanup", exc_info=True)
 
         logger.info("Telegram AI Agent shutdown complete.")

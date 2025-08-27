@@ -46,34 +46,108 @@ from typing import List, Optional
 from agentconnect import __version__
 
 # Configure logging
-logger = logging.getLogger("agentconnect.cli")
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(verbose: bool = False) -> None:
     """
-    Configure logging for the CLI.
+    Configure logging for the CLI with colorful output.
 
     Args:
         verbose: Whether to enable verbose (DEBUG) logging
     """
-    log_level = logging.DEBUG if verbose else logging.INFO
+    # Guard against duplicate setup
+    root_logger = logging.getLogger()
+    if getattr(root_logger, "_agentconnect_cli_configured", False):
+        return
+
+    if not verbose:
+        # Ensure warnings/errors print without changing library loggers
+        if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter("%(levelname)s - %(message)s")
+            )
+            root_logger.addHandler(console_handler)
+        # Do not set levels; keep defaults (WARNING and above emitted)
+        root_logger._agentconnect_cli_configured = True  # type: ignore[attr-defined]
+        return
+    try:
+        from colorama import init as colorama_init, Fore, Style
+
+        colorama_init()
+        COLORAMA_AVAILABLE = True
+    except ImportError:
+        COLORAMA_AVAILABLE = False
+
+    class MultiColorFormatter(logging.Formatter):
+        """
+        A formatter that colors the log output based on the log level.
+        """
+
+        # Assign a different color to each log field for maximum clarity
+        FIELD_COLORS = {
+            "asctime": Fore.WHITE + Style.DIM,
+            "name": Fore.MAGENTA,
+        }
+        LEVEL_COLORS = {
+            logging.DEBUG: Fore.CYAN,
+            logging.INFO: Fore.GREEN,
+            logging.WARNING: Fore.YELLOW,
+            logging.ERROR: Fore.RED,
+            logging.CRITICAL: Fore.MAGENTA + Style.BRIGHT,
+        }
+        RESET = Style.RESET_ALL
+
+        def format(self, record):
+            """
+            Format the log record.
+            """
+            # Use the base formatter to get the raw message
+            base_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            msg = logging.Formatter(base_format).format(record)
+            if not COLORAMA_AVAILABLE:
+                return msg
+
+            # Split the formatted message into its fields
+            try:
+                asctime, name, levelname, message = msg.split(" - ", 3)
+            except Exception:
+                # Fallback: color whole line by level if parsing fails
+                color = self.LEVEL_COLORS.get(record.levelno, "")
+                return f"{color}{msg}{self.RESET}"
+
+            # Color each field
+            asctime_col = self.FIELD_COLORS["asctime"] + asctime + self.RESET
+            name_col = self.FIELD_COLORS["name"] + name + self.RESET
+            level_col = self.LEVEL_COLORS[record.levelno] + levelname + self.RESET
+            message_col = message + self.RESET
+
+            return f"{asctime_col} - {name_col} - {level_col} - {message_col}"
+
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
 
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(log_level)
-    console_handler.setFormatter(logging.Formatter(log_format))
+    # Create console handler if not already present
+    console_handler = None
+    for h in root_logger.handlers:
+        if isinstance(h, logging.StreamHandler):
+            console_handler = h
+            break
+    if console_handler is None:
+        console_handler = logging.StreamHandler()
 
-    # Add handlers
-    root_logger.addHandler(console_handler)
+    console_handler.setFormatter(MultiColorFormatter(log_format))
 
-    # Quiet some verbose external loggers
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # Add handler (only once)
+    if console_handler not in root_logger.handlers:
+        root_logger.addHandler(console_handler)
+
+    # Elevate only the CLI module logger when verbose
+    logging.getLogger(__name__).setLevel(logging.DEBUG)
+    root_logger._agentconnect_cli_configured = True  # type: ignore[attr-defined]
 
 
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
@@ -160,9 +234,7 @@ Examples:
         help="Run the demo application (UI compatibility under development)",
     )
 
-    parser.add_argument(
-        "--verbose", action="store_true", help="Enable verbose (DEBUG) logging"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     parser.add_argument(
         "--check-env", action="store_true", help="Check environment configuration"
@@ -179,7 +251,7 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
         example_name: Name of the example to run
         verbose: Whether to enable verbose logging
     """
-    logger.info(f"Running example: {example_name}")
+    logger.info("Running example: %s", example_name)
 
     # Check for research dependencies when running telegram example
     if example_name == "telegram":
@@ -246,14 +318,14 @@ async def run_example(example_name: str, verbose: bool = False) -> None:
 
             await run_workflow_demo(enable_logging=verbose)
         else:
-            logger.error(f"Unknown example: {example_name}")
-    except ImportError as e:
-        logger.error(f"Error importing example: {e}")
+            logger.error("Unknown example: %s", example_name)
+    except ImportError:
+        logger.error("Error importing example", exc_info=True)
         logger.info("Make sure you have installed the required dependencies.")
         logger.info("Try: poetry install --with demo,research")
         sys.exit(1)
-    except Exception as e:
-        logger.exception(f"Error running example {example_name}: {e}")
+    except Exception:
+        logger.exception("Error running example %s", example_name)
         sys.exit(1)
 
 
@@ -271,15 +343,15 @@ def run_demo() -> None:
 
         # from demos.run_demo import main as run_demo_main
         # run_demo_main()
-    except ImportError as e:
-        logger.error(f"Error importing demo: {e}")
+    except ImportError:
+        logger.error("Error importing demo", exc_info=True)
         logger.info("The demo UI is still under development.")
         logger.info("In the meantime, you can try our examples:")
         logger.info("  agentconnect --example chat")
         logger.info("  agentconnect --example multi")
         sys.exit(1)
-    except Exception as e:
-        logger.exception(f"Error running demo: {e}")
+    except Exception:
+        logger.exception("Error running demo")
         logger.info(
             "The demo UI encountered an error. You can try our examples instead:"
         )
@@ -314,16 +386,16 @@ def check_environment() -> None:
         logger.warning("No LLM provider API keys found. At least one is required.")
         logger.info("Set at least one of these environment variables:")
         for env_var, provider_name in llm_api_keys.items():
-            logger.info(f"  - {env_var} (for {provider_name})")
+            logger.info("  - %s (for %s)", env_var, provider_name)
     else:
-        logger.info(f"Available LLM providers: {', '.join(available_providers)}")
+        logger.info("Available LLM providers: %s", ", ".join(available_providers))
 
     # Check for other required environment variables
     other_required_vars = []  # Add any other required env vars here
     if other_required_vars:
         missing_vars = [var for var in other_required_vars if not os.environ.get(var)]
         if missing_vars:
-            logger.warning(f"Missing environment variables: {', '.join(missing_vars)}")
+            logger.warning("Missing environment variables: %s", ", ".join(missing_vars))
             logger.info("Please set these variables in your .env file or environment")
         else:
             logger.info("All required environment variables are set")
@@ -334,7 +406,7 @@ def check_environment() -> None:
 
     if missing_optional:
         logger.info(
-            f"Optional environment variables not set: {', '.join(missing_optional)}"
+            "Optional environment variables not set: %s" % ", ".join(missing_optional)
         )
 
     # Check for research dependencies
@@ -350,8 +422,8 @@ def check_environment() -> None:
             logger.warning("Research dependencies are missing. To install:")
             logger.info("poetry install --with research")
             logger.info("or: pip install arxiv wikipedia")
-    except Exception as e:
-        logger.debug(f"Error checking research dependencies: {e}")
+    except Exception:
+        logger.debug("Error checking research dependencies", exc_info=True)
 
     # Check Python version
     python_version = sys.version_info
@@ -359,12 +431,16 @@ def check_environment() -> None:
         python_version.major == 3 and python_version.minor < 11
     ):
         logger.warning(
-            f"Python version {python_version.major}.{python_version.minor} may not be supported"
+            "Python version %s.%s may not be supported",
+            python_version.major,
+            python_version.minor,
         )
         logger.info("AgentConnect recommends Python 3.11 or newer")
     else:
         logger.info(
-            f"Python version {python_version.major}.{python_version.minor} is supported"
+            "Python version %s.%s is supported",
+            python_version.major,
+            python_version.minor,
         )
 
     # Check for dotenv file
@@ -393,8 +469,8 @@ def handle_config_command(action: str, file_path: Optional[str] = None) -> None:
             validate_config_file,
         )
         import json
-    except ImportError as e:
-        logger.error(f"Failed to import configuration modules: {e}")
+    except ImportError:
+        logger.error("Failed to import configuration modules", exc_info=True)
         sys.exit(1)
 
     if action == "init":
@@ -403,7 +479,7 @@ def handle_config_command(action: str, file_path: Optional[str] = None) -> None:
             output_path = Path.cwd() / "agentconnect.yaml"
             if output_path.exists():
                 response = input(
-                    f"File {output_path} already exists. Overwrite? (y/N): "
+                    "File %s already exists. Overwrite? (y/N): " % output_path
                 )
                 if response.lower() not in ["y", "yes"]:
                     logger.info("Configuration generation cancelled")
@@ -414,8 +490,8 @@ def handle_config_command(action: str, file_path: Optional[str] = None) -> None:
             print("📝 Edit this file to customize your AgentConnect configuration")
             print("🔗 See documentation: agentconnect/config/README.md")
 
-        except Exception as e:
-            logger.error(f"Failed to generate configuration file: {e}")
+        except Exception:
+            logger.error("Failed to generate configuration file", exc_info=True)
             sys.exit(1)
 
     elif action == "show":
@@ -436,8 +512,8 @@ def handle_config_command(action: str, file_path: Optional[str] = None) -> None:
                 # Fallback to JSON if PyYAML not available
                 print(json.dumps(config_dict, indent=2, sort_keys=True))
 
-        except Exception as e:
-            logger.error(f"Failed to show configuration: {e}")
+        except Exception:
+            logger.error("Failed to show configuration", exc_info=True)
             sys.exit(1)
 
     elif action == "validate":
@@ -449,21 +525,21 @@ def handle_config_command(action: str, file_path: Optional[str] = None) -> None:
         try:
             file_path_obj = Path(file_path)
             if not file_path_obj.exists():
-                logger.error(f"Configuration file not found: {file_path}")
+                logger.error("Configuration file not found: %s", file_path)
                 sys.exit(1)
 
             if validate_config_file(file_path_obj):
-                print(f"✅ Configuration file {file_path} is valid")
+                print("✅ Configuration file %s is valid" % file_path)
             else:
-                print(f"❌ Configuration file {file_path} is invalid")
+                print("❌ Configuration file %s is invalid" % file_path)
                 sys.exit(1)
 
-        except Exception as e:
-            logger.error(f"Failed to validate configuration file: {e}")
+        except Exception:
+            logger.error("Failed to validate configuration file", exc_info=True)
             sys.exit(1)
 
     else:
-        logger.error(f"Unknown config action: {action}")
+        logger.error("Unknown config action: %s", action)
         sys.exit(1)
 
 
@@ -478,7 +554,7 @@ def main() -> None:
 
     try:
         if args.version:
-            print(f"AgentConnect v{__version__}")
+            print("AgentConnect v%s" % __version__)
             return
 
         if args.check_env:
@@ -504,8 +580,8 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Operation interrupted by user")
         sys.exit(130)  # Standard exit code for SIGINT
-    except Exception as e:
-        logger.exception(f"Unexpected error: {e}")
+    except Exception:
+        logger.exception("Unexpected error")
         sys.exit(1)
 
     logger.debug("AgentConnect CLI completed successfully")

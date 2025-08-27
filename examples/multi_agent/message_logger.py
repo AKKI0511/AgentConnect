@@ -30,6 +30,7 @@ COLORS = {
     "PDF": Fore.LIGHTRED_EX,
 }
 
+
 def print_colored(message: str, color_type: str = "SYSTEM") -> None:
     """
     Print a message with specified color.
@@ -41,22 +42,26 @@ def print_colored(message: str, color_type: str = "SYSTEM") -> None:
     color = COLORS.get(color_type, Fore.WHITE)
     print(f"{color}{message}{Style.RESET_ALL}")
 
+
 async def agent_message_logger(message: Message) -> None:
     """
     Global message handler for logging agent collaboration flow.
-    
+
     This handler inspects messages routed through the hub and logs specific interactions
     between agents in the system, visualizing how they collaborate.
-    
+
     Args:
         message (Message): The message being routed through the hub
     """
     # Skip logging messages to/from human agents
     if "human" in message.receiver_id.lower() or "human" in message.sender_id.lower():
         return
-    if "content_processing_agent" == message.sender_id or "content_processing_agent" == message.receiver_id:
+    if (
+        "content_processing_agent" == message.sender_id
+        or "content_processing_agent" == message.receiver_id
+    ):
         return
-    
+
     # Determine color based on sender agent
     color_type = "SYSTEM"
     if "telegram" in message.sender_id:
@@ -67,7 +72,12 @@ async def agent_message_logger(message: Message) -> None:
         color_type = "CONTENT"
     elif "data" in message.sender_id:
         color_type = "DATA"
-    
+
     # Log the message flow with truncated content
-    shortened_content = message.content[:50] + ("..." if len(message.content) > 50 else "")
-    print_colored(f"🔄 {message.sender_id} → {message.receiver_id}: {shortened_content}", color_type) 
+    shortened_content = message.content[:50] + (
+        "..." if len(message.content) > 50 else ""
+    )
+    print_colored(
+        f"🔄 {message.sender_id} → {message.receiver_id}: {shortened_content}",
+        color_type,
+    )

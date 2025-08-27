@@ -40,7 +40,6 @@ from agentconnect.core.types import (
     Skill,
 )
 from agentconnect.providers import ProviderFactory
-from agentconnect.utils.logging_config import LogLevel, setup_logging
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -79,25 +78,17 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
     # Load environment variables from .env file
     load_dotenv()
 
-    # Configure logging
+    # Opt-in example logging: adjust a tiny allowlist of logger levels
     if enable_logging:
-        setup_logging(
-            level=LogLevel.DEBUG,
-            module_levels={
-                "AgentRegistry": LogLevel.WARNING,
-                "CommunicationHub": LogLevel.INFO,
-                "SimpleAgentProtocol": LogLevel.DEBUG,
-                "utils.interaction_control": LogLevel.INFO,
-                "agents.ai_agent": LogLevel.INFO,
-                "agents.human_agent": LogLevel.INFO,
-                "core.agent": LogLevel.INFO,
-                "core.message": LogLevel.INFO,
-                "core.registry": LogLevel.INFO,
-                "communication.hub": LogLevel.INFO,
-            },
-        )
-    else:
-        logging.disable(logging.CRITICAL)
+        allowlist = [
+            "agentconnect.communication.hub",
+            "agentconnect.core.agent",
+            "agentconnect.agents.human_agent",
+            "agentconnect.agents.ai_agent",
+            'agentconnect.core.registry.registry_base',
+        ]
+        for name in allowlist:
+            logging.getLogger(name).setLevel(logging.INFO)
 
     # Initialize core components
     registry = AgentRegistry()

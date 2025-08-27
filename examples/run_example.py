@@ -102,7 +102,7 @@ def check_environment(example_name: str = None) -> bool:
         return False
 
     print_colored(f"✅ Found API key(s) for: {', '.join(available_keys)}", Fore.GREEN)
-    
+
     # Check for example-specific requirements
     if example_name == "telegram":
         if not os.getenv("TELEGRAM_BOT_TOKEN"):
@@ -117,7 +117,7 @@ def check_environment(example_name: str = None) -> bool:
             return False
         else:
             print_colored("✅ Found TELEGRAM_BOT_TOKEN", Fore.GREEN)
-    
+
     return True
 
 
@@ -142,7 +142,7 @@ async def run_example(example_name: str, enable_logging: bool = False) -> None:
     if enable_logging:
         print_colored("  --verbose", Fore.CYAN)
     print_colored("", Fore.WHITE)
-    
+
     # Import examples only when needed (lazy loading)
     try:
         if example_name == "chat":
@@ -151,8 +151,7 @@ async def run_example(example_name: str, enable_logging: bool = False) -> None:
             await run_chat_example(enable_logging=enable_logging)
 
         elif example_name == "multi":
-            from examples.example_multi_agent import \
-                run_ecommerce_analysis_demo
+            from examples.example_multi_agent import run_ecommerce_analysis_demo
 
             await run_ecommerce_analysis_demo(enable_logging=enable_logging)
 
@@ -162,13 +161,16 @@ async def run_example(example_name: str, enable_logging: bool = False) -> None:
             await run_research_assistant_demo(enable_logging=enable_logging)
 
         elif example_name == "data":
-            from examples.data_analysis_assistant import \
-                run_data_analysis_assistant_demo
+            from examples.data_analysis_assistant import (
+                run_data_analysis_assistant_demo,
+            )
 
             await run_data_analysis_assistant_demo(enable_logging=enable_logging)
-                
+
         elif example_name == "telegram":
-            from examples.multi_agent.multi_agent_system import run_multi_agent_system as run_telegram_assistant
+            from examples.multi_agent.multi_agent_system import (
+                run_multi_agent_system as run_telegram_assistant,
+            )
 
             await run_telegram_assistant(enable_logging=enable_logging)
 
@@ -203,7 +205,7 @@ def main() -> None:
     )
     print_colored("  agentconnect --example <name> [--verbose]", Fore.CYAN)
     print_colored("", Fore.WHITE)
-    
+
     parser = argparse.ArgumentParser(
         description="Run AgentConnect examples",
         formatter_class=argparse.RawDescriptionHelpFormatter,

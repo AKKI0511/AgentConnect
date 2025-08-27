@@ -28,10 +28,12 @@ from agentconnect.communication import CommunicationHub
 
 # Import for data analysis
 import matplotlib
+
 matplotlib.use("Agg")  # Use non-interactive backend for server environments
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+
 
 # Define schema for data analysis
 class DataAnalysisInput(BaseModel):
@@ -43,29 +45,30 @@ class DataAnalysisInput(BaseModel):
         description="The type of analysis to perform (summary, correlation, visualization).",
     )
 
+
 def create_data_analysis_agent(
-    provider_type: ModelProvider, 
-    model_name: ModelName, 
+    provider_type: ModelProvider,
+    model_name: ModelName,
     api_key: str,
     registry: AgentRegistry,
-    hub: CommunicationHub
+    hub: CommunicationHub,
 ) -> AIAgent:
     """
     Create and configure the Data Analysis agent.
-    
+
     Args:
         provider_type (ModelProvider): The type of LLM provider to use
         model_name (ModelName): The specific model to use
         api_key (str): API key for the LLM provider
         registry (AgentRegistry): The agent registry for tool creation
         hub (CommunicationHub): The communication hub for tool creation
-        
+
     Returns:
         AIAgent: Configured data analysis agent
     """
     # Create data analysis agent with visualization capabilities
     data_analysis_identity = AgentIdentity.create_key_based()
-    
+
     # Define capabilities
     data_analysis_capabilities = [
         Capability(
@@ -81,16 +84,30 @@ def create_data_analysis_agent(
             output_schema={"visualization_path": "string", "description": "string"},
         ),
     ]
-    
+
     # Define skills
     data_analysis_skills = [
-        Skill(name="statistical_analysis", description="Perform statistical analysis on structured data"),
-        Skill(name="data_visualization", description="Create charts and graphs from data"),
-        Skill(name="correlation_analysis", description="Identify relationships between variables in datasets"),
-        Skill(name="trend_identification", description="Recognize patterns and trends in time-series data"),
-        Skill(name="economic_impact_assessment", description="Evaluate potential economic consequences from data"),
+        Skill(
+            name="statistical_analysis",
+            description="Perform statistical analysis on structured data",
+        ),
+        Skill(
+            name="data_visualization", description="Create charts and graphs from data"
+        ),
+        Skill(
+            name="correlation_analysis",
+            description="Identify relationships between variables in datasets",
+        ),
+        Skill(
+            name="trend_identification",
+            description="Recognize patterns and trends in time-series data",
+        ),
+        Skill(
+            name="economic_impact_assessment",
+            description="Evaluate potential economic consequences from data",
+        ),
     ]
-    
+
     # Create agent profile
     data_analysis_profile = AgentProfile(
         agent_id="data_analysis_agent",
@@ -105,8 +122,8 @@ def create_data_analysis_agent(
         examples=[
             "Analyze a CSV dataset and provide summary statistics",
             "Generate correlation analysis between variables in a dataset",
-            "Create visualizations from structured data"
-        ]
+            "Create visualizations from structured data",
+        ],
     )
 
     # Function for data analysis tool
@@ -284,5 +301,5 @@ def create_data_analysis_agent(
         ),
         custom_tools=[data_analysis_tool],
     )
-    
-    return data_analysis_agent 
+
+    return data_analysis_agent

@@ -25,13 +25,11 @@ from agentconnect.core.types import (
 from agentconnect.core.message import Message
 from agentconnect.communication.hub import CommunicationHub
 from agentconnect.agents.ai_agent import AIAgent
-from agentconnect.utils.logging_config import setup_logging, LogLevel
 
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-setup_logging(level=LogLevel.INFO)
+# Logging configured via CLI verbosity
 logger = logging.getLogger("CommunicationExample")
 
 
@@ -126,7 +124,7 @@ async def main():
 
     # Example 4: Specialized agents collaboration
     logger.info("\nExample 4: Specialized agents collaboration")
-    
+
     # Create specialized agents
     research_assistant = AIAgent(
         agent_id="research_assistant",
@@ -159,7 +157,7 @@ async def main():
     # Register specialized agents
     await hub.register_agent(research_assistant)
     await hub.register_agent(data_analyst)
-    
+
     # Send a collaboration request between specialized agents
     logger.info("Sending collaboration request from research_assistant to data_analyst")
     specialized_result = await hub.send_collaboration_request(

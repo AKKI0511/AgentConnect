@@ -81,7 +81,6 @@ Here's a comprehensive example that creates a Telegram bot with multi-agent capa
         ModelProvider,
     )
     from agentconnect.core.registry import AgentRegistry
-    from agentconnect.utils.logging_config import setup_logging, LogLevel
     
     # Import tools
     from langchain_community.tools.tavily_search import TavilySearchResults
@@ -331,9 +330,6 @@ Here's a comprehensive example that creates a Telegram bot with multi-agent capa
     async def main():
         """Main function to run the Telegram bot with multi-agent system."""
         try:
-            # Set up logging
-            setup_logging(level=LogLevel.INFO)
-            
             # Initialize agents
             agents = await setup_agents()
             

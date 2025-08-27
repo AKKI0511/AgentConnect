@@ -103,9 +103,6 @@ class PromptTools:
         # Detect if we're in standalone mode (no registry or hub)
         self._is_standalone_mode = agent_registry is None or communication_hub is None
 
-        if self._is_standalone_mode:
-            logger.info("PromptTools initialized in standalone mode (no registry/hub)")
-
         # Register default tools that don't require an agent ID
         self._register_basic_tools()
 
@@ -151,15 +148,6 @@ class PromptTools:
             collaboration_result_tool = create_check_collaboration_result_tool(
                 self.communication_hub, self.agent_registry, self._current_agent_id
             )
-
-            if self._is_standalone_mode:
-                logger.debug(
-                    f"Registered standalone mode collaboration tools for agent: {self._current_agent_id}"
-                )
-            else:
-                logger.debug(
-                    f"Registered connected mode collaboration tools for agent: {self._current_agent_id}"
-                )
 
             # Register the tools
             self._tool_registry.register_tool(agent_search_tool)
@@ -279,13 +267,6 @@ class PromptTools:
             This method logs whenever the agent context changes to help with debugging
             and tracing agent interactions.
         """
-        if hasattr(self, "_current_agent_id") and self._current_agent_id != agent_id:
-            logger.info(
-                f"AGENT CONTEXT CHANGE: Changing current agent from {self._current_agent_id} to {agent_id}"
-            )
-        else:
-            logger.info(f"AGENT CONTEXT SET: Setting current agent to {agent_id}")
-
         self._current_agent_id = agent_id
 
         # Register agent-specific tools now that we have an agent ID
@@ -313,10 +294,6 @@ class PromptTools:
             The agent_id parameter is used only for logging and doesn't change
             the current agent context.
         """
-        # Log which agent is requesting tools, but don't change the current agent context
-        if agent_id:
-            logger.debug(f"Getting tools for agent: {agent_id}")
-
         if categories:
             tools = []
             for category in categories:

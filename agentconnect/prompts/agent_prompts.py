@@ -293,7 +293,6 @@ class AgentWorkflow:
         # Add custom tools if available
         if self.custom_tools:
             base_tools.extend(self.custom_tools)
-            logger.debug(f"Added {len(self.custom_tools)} custom tools to the workflow")
 
         # Create the ReAct prompt
         react_prompt = self._create_react_prompt()
@@ -335,7 +334,6 @@ class AgentWorkflow:
                 time_gap = current_time - state["last_interaction_time"]
                 if time_gap > 1800:  # 30 minutes in seconds
                     state["context_reset"] = True
-                    logger.info(f"Context reset due to time gap of {time_gap} seconds")
 
             # Update last interaction time
             state["last_interaction_time"] = current_time
@@ -371,18 +369,12 @@ class AgentWorkflow:
                         if messages[i].type == "human":
                             state["messages"] = [messages[i]]
                             break
-                    logger.info(
-                        "Context reset: Keeping only the most recent user message"
-                    )
 
             # If topic has changed, reduce context by removing older messages
             if state.get("topic_changed", False):
                 messages = state.get("messages", [])
                 if len(messages) > 6:  # Keep only the 3 most recent exchanges
                     state["messages"] = messages[-6:]
-                    logger.info(
-                        "Topic changed: Keeping only the 3 most recent exchanges"
-                    )
 
             # Ensure callbacks are passed to the agent
             result = await react_agent.ainvoke(state, config)
@@ -427,7 +419,7 @@ class AgentWorkflow:
                                 # Try to parse if it's a string representation of JSON
                                 agents_found = json.loads(agents_found)
                             except Exception as e:
-                                logger.warning(f"Error parsing agents found: {e}")
+                                logger.warning("Error parsing agents found: %s", e)
                                 # If parsing fails, wrap in a list
                                 agents_found = [
                                     {
@@ -445,7 +437,7 @@ class AgentWorkflow:
                             try:
                                 tool_args = json.loads(tool_args)
                             except Exception as e:
-                                logger.warning(f"Error parsing tool args: {e}")
+                                logger.warning("Error parsing tool args: %s", e)
                                 tool_args = {
                                     "agent_id": "unknown",
                                     "request": tool_args,
@@ -507,11 +499,8 @@ class AgentWorkflow:
                         # If similarity is low, mark as topic change
                         if avg_similarity < 0.3:  # Threshold for topic change
                             state["topic_changed"] = True
-                            logger.info(
-                                f"Topic change detected with similarity score: {avg_similarity}"
-                            )
                 except Exception as e:
-                    logger.warning(f"Error detecting topic change: {str(e)}")
+                    logger.warning("Error detecting topic change: %s", str(e))
 
             return state
 
@@ -541,8 +530,6 @@ class AgentWorkflow:
         memory_saver = MemorySaver()
 
         # Compile the workflow with the memory saver
-        logger.info(f"Compiling workflow for agent {self.agent_id}")
-
         # Use default behavior for callbacks to avoid multiple traces in LangSmith
         return self.workflow.compile(checkpointer=memory_saver)
 
@@ -695,13 +682,6 @@ def create_workflow_for_agent(
 
     # Note: We don't need to set the current agent ID here
     # It's now set in AIAgent._initialize_workflow before this function is called
-    logger.debug(f"Creating workflow for agent: {agent_id}")
-
-    # Check for payment capabilities in the system config
-    if system_config.enable_payments:
-        logger.info(
-            f"Agent {agent_id}: Creating workflow with payment capabilities enabled for {system_config.payment_token_symbol}"
-        )
 
     # Create the appropriate workflow based on agent type
     if agent_type == "ai":

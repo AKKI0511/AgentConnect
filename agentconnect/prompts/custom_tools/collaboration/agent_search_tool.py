@@ -55,7 +55,6 @@ def create_agent_search_tool(
             include_tags: Optional[List[str]] = None,
         ) -> AgentSearchOutput:
             """Standalone implementation that explains limitations."""
-            logger.warning(f"Agent search called in standalone mode for query: {query}")
             return AgentSearchOutput(
                 message=(
                     f"Agent search for query '{query}' is not available in standalone mode. "
@@ -94,11 +93,6 @@ def create_agent_search_tool(
             Returns:
                 AgentSearchOutput containing the search results and a message.
             """
-            logger.debug(
-                f"Searching agents: query='{query}', top_k={top_k}, strictness={strictness}, "
-                f"output_detail='{output_detail}', include_tags={include_tags}"
-            )
-
             agents_to_exclude: List[str] = []
             if current_agent_id:
                 agents_to_exclude.append(current_agent_id)
@@ -117,15 +111,10 @@ def create_agent_search_tool(
                                     list(agent.pending_requests.keys())
                                 )
                             # Simplified recent message exclusion for brevity; could be expanded
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not get active/pending conversations for exclusion: {e}"
-                        )
+                    except Exception:
+                        pass
 
             agents_to_exclude = list(set(agents_to_exclude))
-            logger.debug(
-                f"Excluding {len(agents_to_exclude)} agent IDs: {agents_to_exclude}"
-            )
 
             # Prepare filters for the registry search
             registry_filters: Optional[Dict[str, List[str]]] = None
@@ -146,10 +135,6 @@ def create_agent_search_tool(
                     )
                 )
 
-                logger.debug(
-                    f"Registry returned {len(found_agents_with_scores)} agents before filtering exclusions."
-                )
-
                 processed_results: List[AgentSearchResultItem] = []
                 for reg, score in found_agents_with_scores:
                     if (
@@ -164,8 +149,6 @@ def create_agent_search_tool(
                     if len(processed_results) >= top_k:
                         break
 
-                logger.debug(f"Formatted {len(processed_results)} agents for output.")
-
                 if not processed_results:
                     return AgentSearchOutput(
                         message=f"No agents found matching your query '{query}' with specified criteria (tags: {include_tags}).",
@@ -178,7 +161,7 @@ def create_agent_search_tool(
                 )
 
             except Exception as e:
-                logger.exception(f"Error during agent search: {e}")
+                logger.exception("Error during agent search: %s", e)
                 return AgentSearchOutput(
                     message=f"Error searching for agents: {str(e)}", results=[]
                 )
@@ -218,7 +201,7 @@ def create_agent_search_tool(
                         )
                     )
             except Exception as e:  # Catch errors from async run or threadsafe future
-                logger.error(f"Error in search_agents_sync_impl: {str(e)}")
+                logger.error("Error in search_agents_sync_impl: %s", str(e))
                 return AgentSearchOutput(
                     message=f"Error in search_agents sync wrapper: {str(e)}", results=[]
                 )

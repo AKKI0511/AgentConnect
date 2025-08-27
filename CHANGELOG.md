@@ -37,8 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment example files reorganized for clarity: root `example.env` for SDK-level variables; new `demos/.env.example` for demo-local secrets
 
 ### Deprecated
+- Logging policy finalized: library uses NullHandler only; no handlers are added. MCP logs via Context; registry logs use uvicorn logger; CLI/examples control logging level per run. Experimental logging helpers removed.
 
 ### Removed
+- SDK logging helpers and related config. Library no longer adds handlers or changes third-party loggers.
 - Legacy core configuration module, replaced by centralized settings
 - Temporary payment constants, consolidated into configuration
 

@@ -36,7 +36,9 @@ def test_registry_api_settings_invariants():
     assert isinstance(s.host, str) and s.host
     assert isinstance(s.port, int) and 1 <= s.port <= 65535
     assert s.log_level in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-    assert isinstance(s.allowed_origins, list) and all(isinstance(x, str) for x in s.allowed_origins)
+    assert isinstance(s.allowed_origins, list) and all(
+        isinstance(x, str) for x in s.allowed_origins
+    )
     # vector_search should be a structured object
     assert hasattr(s, "vector_search")
 
@@ -46,12 +48,12 @@ def test_registry_api_settings_invariants():
 # ---------------------------------------------------------------------------
 
 
-def test_precedence_runtime_over_yaml_and_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_precedence_runtime_over_yaml_and_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     # Create temp YAML
     yaml_content = (
-        "clients:\n"
-        "  registry:\n"
-        "    base_url: 'http://from-yaml:8000'\n"
+        "clients:\n" "  registry:\n" "    base_url: 'http://from-yaml:8000'\n"
     )
     (tmp_path / "agentconnect.yaml").write_text(yaml_content, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -66,7 +68,9 @@ def test_precedence_runtime_over_yaml_and_defaults(tmp_path: Path, monkeypatch: 
 
 
 def test_yaml_discovery_in_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    (tmp_path / "agentconnect.yaml").write_text("project_name: 'FromYAML'\n", encoding="utf-8")
+    (tmp_path / "agentconnect.yaml").write_text(
+        "project_name: 'FromYAML'\n", encoding="utf-8"
+    )
     monkeypatch.chdir(tmp_path)
     s = load_settings()
     assert s.project_name == "FromYAML"
@@ -79,7 +83,9 @@ def test_yaml_discovery_in_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def test_env_isolation_general_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     # Pretend someone set an env override – global settings must ignore it
-    monkeypatch.setenv("AGENTCONNECT_CLIENTS__REGISTRY__BASE_URL", "http://env-override")
+    monkeypatch.setenv(
+        "AGENTCONNECT_CLIENTS__REGISTRY__BASE_URL", "http://env-override"
+    )
 
     # YAML defines the value; loader must honor YAML, not env
     (tmp_path / "agentconnect.yaml").write_text(
@@ -152,19 +158,27 @@ def test_payments_symbol_normalization():
 
 def test_registry_api_settings_allowed_origins_parsing(monkeypatch: pytest.MonkeyPatch):
     # JSON string
-    monkeypatch.setenv("AGENTCONNECT_REGISTRY_ALLOWED_ORIGINS", "[\"https://a.com\", \"https://b.com\"]")
+    monkeypatch.setenv(
+        "AGENTCONNECT_REGISTRY_ALLOWED_ORIGINS", '["https://a.com", "https://b.com"]'
+    )
     s_json = RegistryAPISettings()
     assert s_json.allowed_origins == ["https://a.com", "https://b.com"]
 
     # CSV string
-    monkeypatch.setenv("AGENTCONNECT_REGISTRY_ALLOWED_ORIGINS", "https://a.com,https://b.com")
+    monkeypatch.setenv(
+        "AGENTCONNECT_REGISTRY_ALLOWED_ORIGINS", "https://a.com,https://b.com"
+    )
     s_csv = RegistryAPISettings()
     assert s_csv.allowed_origins == ["https://a.com", "https://b.com"]
 
 
-def test_registry_api_settings_vector_search_json_precedence(monkeypatch: pytest.MonkeyPatch):
+def test_registry_api_settings_vector_search_json_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+):
     # Nested keys suggest in_memory, but JSON override sets remote
-    monkeypatch.setenv("AGENTCONNECT_REGISTRY_VECTOR_SEARCH__DEPLOYMENT__TYPE", "in_memory")
+    monkeypatch.setenv(
+        "AGENTCONNECT_REGISTRY_VECTOR_SEARCH__DEPLOYMENT__TYPE", "in_memory"
+    )
     monkeypatch.setenv(
         "AGENTCONNECT_REGISTRY_VECTOR_SEARCH_JSON",
         json.dumps({"deployment": {"type": "remote", "url": "https://remote.example"}}),
@@ -193,8 +207,14 @@ def test_mcp_runtime_overrides_apply():
         }
     )
     assert s.mcp.agent_discovery.enabled is False
-    assert isinstance(s.mcp.agent_discovery.top_k, int) and s.mcp.agent_discovery.top_k == 7
-    assert isinstance(s.mcp.agent_discovery.strictness, float) and s.mcp.agent_discovery.strictness == 0.4
+    assert (
+        isinstance(s.mcp.agent_discovery.top_k, int)
+        and s.mcp.agent_discovery.top_k == 7
+    )
+    assert (
+        isinstance(s.mcp.agent_discovery.strictness, float)
+        and s.mcp.agent_discovery.strictness == 0.4
+    )
     assert s.mcp.agent_discovery.output_detail == "capabilities"
 
 

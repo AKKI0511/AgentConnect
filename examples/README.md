@@ -40,7 +40,14 @@ Replace `<example_name>` with one of the following:
 *   `telegram`: A multi-agent system integrated with a Telegram bot interface. (Advanced)
 *   `agent_economy`: Autonomous workflow showcasing agent-to-agent payments. (Advanced)
 
-Use the `--verbose` flag for detailed logging output.
+Verbosity:
+
+- `--verbose` enables example-only logging by elevating a tiny allowlist of internal loggers to INFO:
+  - `agentconnect.communication.hub`
+  - `agentconnect.core.agent`
+  - `agentconnect.agents.human_agent`
+  - `agentconnect.agents.ai_agent`
+  No handlers are added and third-party loggers remain unchanged. Default runs use print() for UX and are otherwise quiet.
 
 ## Example Details
 

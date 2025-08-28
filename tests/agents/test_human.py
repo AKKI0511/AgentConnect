@@ -11,8 +11,9 @@ from agentconnect.core.types import (
     InteractionMode,
     ModelName,
     ModelProvider,
-    MessageType
+    MessageType,
 )
+
 
 async def main():
     # Load environment variables
@@ -28,10 +29,7 @@ async def main():
 
     # Create a human agent
     human = HumanAgent(
-        agent_id="human1",
-        name="User",
-        identity=human_identity,
-        organization="org1"
+        agent_id="human1", name="User", identity=human_identity, organization="org1"
     )
 
     # Create an AI agent
@@ -42,13 +40,18 @@ async def main():
         model_name=ModelName.GPT4O,
         api_key=os.getenv("OPENAI_API_KEY"),
         identity=ai_identity,
-        capabilities=[Capability(
-            name="data_analysis",
-            description="Analyze data and provide insights",
-            input_schema={"data": "string"},
-            output_schema={"analysis": "string"},
-        )],
-        interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT],
+        capabilities=[
+            Capability(
+                name="data_analysis",
+                description="Analyze data and provide insights",
+                input_schema={"data": "string"},
+                output_schema={"analysis": "string"},
+            )
+        ],
+        interaction_modes=[
+            InteractionMode.HUMAN_TO_AGENT,
+            InteractionMode.AGENT_TO_AGENT,
+        ],
         personality="professional and thorough",
     )
 
@@ -65,14 +68,16 @@ async def main():
         print("AI agent performing analysis...")
         await asyncio.sleep(2)  # Simulate work
 
-        analysis_result = "Based on the data, I recommend Strategy A with 78% confidence."
+        analysis_result = (
+            "Based on the data, I recommend Strategy A with 78% confidence."
+        )
 
         # AI sends results to human for approval
         print("AI agent requesting human approval...")
         await ai_assistant.send_message(
             receiver_id=human.agent_id,
             content=f"I've completed my analysis:\n\n{analysis_result}\n\nDo you approve this recommendation? (Type 'approve' or 'reject')",
-            message_type=MessageType.TEXT
+            message_type=MessageType.TEXT,
         )
 
         # At this point, the human will see the message in their terminal
@@ -90,6 +95,7 @@ async def main():
         await hub.unregister_agent(human.agent_id)
         await hub.unregister_agent(ai_assistant.agent_id)
         print("Done.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

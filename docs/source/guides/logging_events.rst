@@ -12,52 +12,22 @@ AgentConnect provides multiple approaches to monitor your applications:
 2. **Callback Handlers**: For reacting to agent lifecycle events
 3. **LangSmith Tracing**: For comprehensive workflow visualization (covered in :doc:`event_monitoring`)
 
-Using AgentConnect's Logging Configuration
------------------------------------------
+Logging policy
+--------------
 
-AgentConnect includes a built-in logging configuration module:
+AgentConnect is a library and never configures logging. Applications (servers, CLI, MCP hosts) own logging configuration. Use standard Python logging (``logging.getLogger(__name__)``) directly in your code.
 
-.. code-block:: python
+Guidance:
 
-    from agentconnect.utils.logging_config import setup_logging, LogLevel
+- Servers: rely on Uvicorn's logging configuration and your process-level settings. Registry logs use a hierarchical logger that flows through Uvicorn handlers.
+- MCP: hosts own logging; MCP tools use Context logging (``ctx.info``, ``ctx.debug``, ``ctx.error``).
 
-    # Quick setup with default INFO level
-    setup_logging()
-    
-    # More granular control
-    setup_logging(
-        level=LogLevel.DEBUG,  # Global level
-        module_levels={  # Component-specific levels
-            "agentconnect.agents": LogLevel.DEBUG,
-            "agentconnect.core": LogLevel.INFO,
-            "langchain": LogLevel.WARNING,
-        }
-    )
-
-This automatically configures colorized console output and proper formatting.
-
-For development environments, use recommended debug levels:
-
-.. code-block:: python
-
-    from agentconnect.utils.logging_config import setup_logging, get_module_levels_for_development
-    
-    # Set up development-friendly logging levels
-    setup_logging(
-        level=LogLevel.INFO,
-        module_levels=get_module_levels_for_development()
-    )
-
-Adding Logging to Your Components
---------------------------------
-
-After configuring logging, use standard Python logging in your code:
+Example
+-------
 
 .. code-block:: python
 
     import logging
-    
-    # Create a logger for your module
     logger = logging.getLogger(__name__)
     
     def my_function():
@@ -65,30 +35,10 @@ After configuring logging, use standard Python logging in your code:
         # Function logic here
         logger.info("Operation completed")
 
-Using Environment Variables
--------------------------
+Using Environment Variables (servers)
+------------------------------------
 
-Configure logging levels via environment variables:
-
-.. code-block:: python
-    
-    # .env file
-    LOG_LEVEL=DEBUG
-    
-    # In your code
-    import os
-    from agentconnect.utils.logging_config import setup_logging, LogLevel
-
-    # Map string to enum
-    level_map = {
-        "DEBUG": LogLevel.DEBUG,
-        "INFO": LogLevel.INFO,
-        "WARNING": LogLevel.WARNING,
-        "ERROR": LogLevel.ERROR,
-    }
-    
-    log_level = level_map.get(os.getenv("LOG_LEVEL", "INFO").upper(), LogLevel.INFO)
-    setup_logging(level=log_level)
+Servers are configured via environment variables but logging is handled by Uvicorn or your process manager. The SDK does not provide or require server logging helpers.
 
 Handling Agent Events with Callbacks
 ----------------------------------
@@ -99,7 +49,7 @@ Track and react to agent events using LangChain's callback system:
 
     from typing import Dict, Any
     from langchain_core.callbacks import BaseCallbackHandler
-    
+
     class ToolUsageTracker(BaseCallbackHandler):
         def __init__(self):
             super().__init__()

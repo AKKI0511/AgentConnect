@@ -31,7 +31,7 @@ class TelegramBotManager:
     and provides methods for interacting with the bot.
     """
 
-    def __init__(self, token: str, groups_file: str):
+    def __init__(self, token: str, groups_file: str, agent_id: Optional[str] = None):
         """
         Initialize the bot manager.
 
@@ -41,6 +41,7 @@ class TelegramBotManager:
         """
         self.token = token
         self.groups_file = groups_file
+        self.agent_id = agent_id
         self.group_ids: Set[int] = load_group_ids(groups_file)
 
         # Telegram components
@@ -66,19 +67,21 @@ class TelegramBotManager:
                 token=self.token,
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
-            logger.debug("Bot instance created")
 
             # Initialize dispatcher with FSM storage
             storage = MemoryStorage()
             self.dp = Dispatcher(storage=storage)
-            logger.debug("Dispatcher initialized with memory storage")
 
             # Set default me value (will be updated later when bot starts)
             self.me = None
 
             return True
-        except Exception as e:
-            logger.exception(f"Error initializing Telegram bot: {e}")
+        except Exception:
+            logger.error(
+                "Error initializing Telegram bot agent_id=%s",
+                self.agent_id,
+                exc_info=True,
+            )
             self.bot = None
             self.dp = None
             return False
@@ -97,13 +100,19 @@ class TelegramBotManager:
                     group_ids=self.group_ids,
                     groups_file=self.groups_file,
                 )
-                logger.debug("Telegram tools initialized")
                 return True
-            except Exception as e:
-                logger.exception(f"Error initializing Telegram tools: {e}")
+            except Exception:
+                logger.error(
+                    "Error initializing Telegram tools agent_id=%s",
+                    self.agent_id,
+                    exc_info=True,
+                )
                 return False
         else:
-            logger.warning("Cannot initialize Telegram tools - bot not initialized")
+            logger.warning(
+                "Cannot initialize Telegram tools - bot not initialized agent_id=%s",
+                self.agent_id,
+            )
             return False
 
     def register_shutdown_handler(self, callback: Callable) -> None:
@@ -115,10 +124,10 @@ class TelegramBotManager:
         """
         if self.dp:
             self.dp.shutdown.register(callback)
-            logger.debug("Shutdown handler registered")
         else:
             logger.warning(
-                "Cannot register shutdown handler - dispatcher not initialized"
+                "Cannot register shutdown handler - dispatcher not initialized agent_id=%s",
+                self.agent_id,
             )
 
     async def start_polling(self) -> bool:
@@ -129,7 +138,10 @@ class TelegramBotManager:
             True if polling started successfully, False otherwise
         """
         if not self.bot or not self.dp:
-            logger.error("Cannot start polling - bot or dispatcher not initialized")
+            logger.error(
+                "Cannot start polling - bot or dispatcher not initialized agent_id=%s",
+                self.agent_id,
+            )
             return False
 
         try:
@@ -140,31 +152,31 @@ class TelegramBotManager:
             self.me = await self.bot.get_me()
             if not self.me or not self.me.username:
                 logger.error(
-                    "Failed to get bot username! Mention detection won't work properly."
+                    "Failed to get bot username; mention detection will not work agent_id=%s",
+                    self.agent_id,
                 )
                 return False
             else:
-                logger.info(
-                    f"Retrieved bot info: @{self.me.username} (ID: {self.me.id})"
-                )
-                logger.info(
-                    f"🤖 Bot is ready! You can mention me in groups as @{self.me.username}"
-                )
+                logger.info("Telegram bot ready agent_id=%s", self.agent_id)
 
             # Start polling
-            logger.info("Starting Telegram bot polling...")
+            logger.info("Starting Telegram bot polling agent_id=%s", self.agent_id)
             self.telegram_polling_task = asyncio.create_task(
                 self.dp.start_polling(self.bot)
             )
             return True
-        except Exception as e:
-            logger.exception(f"Error starting Telegram bot polling: {e}")
+        except Exception:
+            logger.error(
+                "Error starting Telegram bot polling agent_id=%s",
+                self.agent_id,
+                exc_info=True,
+            )
             return False
 
     async def stop_polling(self) -> None:
         """Stop the bot polling and clean up resources."""
         if self.telegram_polling_task:
-            logger.info("Stopping Telegram bot polling...")
+            logger.info("Stopping Telegram bot polling agent_id=%s", self.agent_id)
             self.telegram_polling_task.cancel()
             try:
                 await self.telegram_polling_task
@@ -180,7 +192,7 @@ class TelegramBotManager:
                     self.bot = None
                 self.dp = None
                 self.telegram_polling_task = None
-                logger.info("Telegram bot polling stopped.")
+                logger.info("Telegram bot polling stopped agent_id=%s", self.agent_id)
 
     async def send_message(
         self, chat_id: int, text: str, reply_to_message_id: Optional[int] = None
@@ -197,7 +209,10 @@ class TelegramBotManager:
             Dict with success status and message ID or error
         """
         if not self.bot:
-            logger.error("Cannot send message - bot not initialized")
+            logger.error(
+                "Cannot send message - bot not initialized agent_id=%s",
+                self.agent_id,
+            )
             return {"success": False, "error": "Bot not initialized"}
 
         # First, delete the "thinking" message if it exists
@@ -207,12 +222,16 @@ class TelegramBotManager:
                     await self.bot.delete_message(
                         chat_id=chat_id, message_id=self.processing_messages[chat_id]
                     )
-                except Exception as e:
-                    logger.error(f"Error deleting thinking message: {e}")
+                except Exception:
+                    logger.error(
+                        "Error deleting thinking message agent_id=%s",
+                        self.agent_id,
+                        exc_info=True,
+                    )
                 # Always remove from dictionary even if deletion failed
                 del self.processing_messages[chat_id]
-        except Exception as e:
-            logger.error(f"Error handling processing messages cleanup: {e}")
+        except Exception:
+            logger.error("Error handling processing messages cleanup", exc_info=True)
 
         # Handle large messages (Telegram limit is 4096 characters)
         try:
@@ -250,16 +269,21 @@ class TelegramBotManager:
                 )
                 return {"success": True, "message_id": message.message_id}
 
-        except Exception as e:
-            logger.error(f"Error sending message to Telegram: {e}")
+        except Exception:
+            logger.error(
+                "Error sending message to Telegram agent_id=%s",
+                self.agent_id,
+                exc_info=True,
+            )
 
             # Fall back to sending without reply_to_message_id if that's the issue
             try:
                 message = await self.bot.send_message(chat_id=chat_id, text=text)
-                logger.info(
-                    f"Sent response without reply_to_message_id to chat {chat_id}"
-                )
                 return {"success": True, "message_id": message.message_id}
-            except Exception as e2:
-                logger.error(f"Failed to send message to chat {chat_id}: {e2}")
-                return {"success": False, "error": str(e2)}
+            except Exception:
+                logger.error(
+                    "Failed to send message to chat agent_id=%s",
+                    self.agent_id,
+                    exc_info=True,
+                )
+                return {"success": False, "error": "send_failed"}

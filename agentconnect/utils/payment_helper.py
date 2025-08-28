@@ -35,8 +35,6 @@ def verify_payment_environment() -> bool:
         logger.error("CDP_API_KEY_PRIVATE_KEY environment variable is not set")
         return False
 
-    network_id = os.getenv("CDP_NETWORK_ID", "base-sepolia")
-    logger.info(f"Payment environment verified: Using network {network_id}")
     return True
 
 
@@ -83,8 +81,8 @@ def validate_cdp_environment() -> Tuple[bool, str]:
             )
 
         return True, "CDP environment is properly configured"
-    except Exception as e:
-        return False, f"Unexpected error validating CDP environment: {e}"
+    except Exception as exc:
+        return False, f"Unexpected error validating CDP environment: {exc}"
 
 
 def get_wallet_metadata(
@@ -101,13 +99,12 @@ def get_wallet_metadata(
         Dictionary with wallet metadata if it exists, None otherwise
     """
     if not wallet_manager.wallet_exists(agent_id, wallet_data_dir):
-        logger.debug(f"No wallet metadata found for agent {agent_id}")
         return None
 
     try:
         wallet_json = wallet_manager.load_wallet_data(agent_id, wallet_data_dir)
         if not wallet_json:
-            logger.warning(f"Invalid wallet data found for agent {agent_id}")
+            logger.warning("Invalid wallet data found for agent %s", agent_id)
             return None
 
         # Parse the JSON into a dictionary
@@ -121,10 +118,11 @@ def get_wallet_metadata(
         }
 
         # Don't include sensitive data like seed
-        logger.debug(f"Retrieved wallet metadata for agent {agent_id}")
         return metadata
-    except Exception as e:
-        logger.error(f"Error retrieving wallet metadata for agent {agent_id}: {e}")
+    except Exception:
+        logger.error(
+            "Error retrieving wallet metadata for agent %s", agent_id, exc_info=True
+        )
         return None
 
 
@@ -146,7 +144,7 @@ def backup_wallet_data(
         Path to the backup file if successful, None otherwise
     """
     if not wallet_manager.wallet_exists(agent_id, data_dir):
-        logger.warning(f"No wallet data found for agent {agent_id} to backup")
+        logger.warning("No wallet data found for agent %s to backup", agent_id)
         return None
 
     try:
@@ -175,10 +173,11 @@ def backup_wallet_data(
         with open(backup_file, "w") as f:
             f.write(wallet_data)
 
-        logger.info(f"Backed up wallet data for agent {agent_id} to {backup_file}")
         return str(backup_file)
-    except Exception as e:
-        logger.error(f"Error backing up wallet data for agent {agent_id}: {e}")
+    except Exception:
+        logger.error(
+            "Error backing up wallet data for agent %s", agent_id, exc_info=True
+        )
         return None
 
 
@@ -213,6 +212,4 @@ def check_agent_payment_readiness(agent) -> Dict[str, Any]:
         and status["agent_kit_available"]
         and status["payment_address"] is not None
     )
-
-    logger.info(f"Agent payment readiness check: {json.dumps(status)}")
     return status

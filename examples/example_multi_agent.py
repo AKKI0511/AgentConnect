@@ -39,11 +39,6 @@ from agentconnect.core.types import (
     ModelName,
     ModelProvider,
 )
-from agentconnect.utils.logging_config import (
-    LogLevel,
-    disable_all_logging,
-    setup_logging,
-)
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -278,11 +273,17 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = False) -> None:
         provider_type = ModelProvider.GOOGLE
         model_name = ModelName.GEMINI2_FLASH
 
-    # Configure logging
+    # Opt-in example logging: elevate a small allowlist to INFO
     if enable_logging:
-        setup_logging(level=LogLevel.INFO)
-    else:
-        disable_all_logging()
+        import logging as _pylog
+        for name in [
+            "agentconnect.communication.hub",
+            "agentconnect.core.agent",
+            "agentconnect.agents.human_agent",
+            "agentconnect.agents.ai_agent",
+            'agentconnect.core.registry.registry_base',
+        ]:
+            _pylog.getLogger(name).setLevel(_pylog.INFO)
 
     # Initialize core components
     registry = AgentRegistry()

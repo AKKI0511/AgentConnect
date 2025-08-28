@@ -5,39 +5,29 @@ This module provides the main interface for searching and discovering agent capa
 including semantic search using embeddings and simpler string matching methods.
 """
 
+from __future__ import annotations
+
 # Standard library imports
 import logging
+import time
 import asyncio
-from typing import Dict, List, Set, Tuple, Any, Optional, Union
+from typing import Dict, List, Set, Tuple, Any, Optional, Union, TYPE_CHECKING, cast
 
-# Import from implementation modules
-from agentconnect.core.registry.capability_discovery_impl.embedding_utils import (
-    check_semantic_search_requirements,
-    create_huggingface_embeddings,
-)
-from agentconnect.core.registry.capability_discovery_impl.qdrant_client import (
-    DEFAULT_COLLECTION_NAME,
-    initialize_qdrant_clients,
-    init_qdrant_collection,
-    delete_points_by_agent_id,
-)
-from agentconnect.core.registry.capability_discovery_impl.search import (
-    find_by_capability_name,
-    search_with_qdrant,
-    fallback_string_search,
-)
-from agentconnect.core.registry.capability_discovery_impl.indexing import (
-    precompute_all_capability_embeddings,
-    update_capability_embeddings,
-)
+# Avoid importing implementation modules at top-level to prevent optional deps from loading
 
 # Absolute imports from agentconnect package
 from agentconnect.core.registry.registration import AgentRegistration
 from agentconnect.config.models import VectorSearchSettings
 from agentconnect.config import settings as global_settings
 
+# Type-only imports for IDEs and static analysis (no runtime import)
+if TYPE_CHECKING:
+    from langchain_core.embeddings import Embeddings as _Embeddings
+    from qdrant_client import QdrantClient as _QdrantClient
+    from qdrant_client import AsyncQdrantClient as _AsyncQdrantClient
+
 # Set up logging
-logger = logging.getLogger("CapabilityDiscovery")
+logger = logging.getLogger(__name__)
 
 
 class CapabilityDiscoveryService:
@@ -49,7 +39,8 @@ class CapabilityDiscoveryService:
     """
 
     # Collection name for agent profiles and capabilities
-    COLLECTION_NAME = DEFAULT_COLLECTION_NAME
+    # Keep local constant to avoid importing qdrant submodule on import
+    COLLECTION_NAME = "agent_capabilities"
 
     def __init__(
         self,
@@ -63,9 +54,11 @@ class CapabilityDiscoveryService:
         Args:
             vector_search_config: Optional vector search configuration. Accepts either a `VectorSearchSettings` instance or a `dict` shaped like the Pydantic model (with `deployment` and `advanced` nested objects).
         """
-        self._embeddings_model = None
-        self._qdrant_client = None  # Synchronous Qdrant client
-        self._async_qdrant_client = None  # Asynchronous Qdrant client
+        self._embeddings_model: Optional[_Embeddings] = None
+        self._qdrant_client: Optional[_QdrantClient] = None  # Synchronous Qdrant client
+        self._async_qdrant_client: Optional[_AsyncQdrantClient] = (
+            None  # Asynchronous Qdrant client
+        )
         self._capability_to_agent_map: Dict[str, AgentRegistration] = {}
         if vector_search_config is None:
             self._vector_store_config = global_settings.registry.vector_search
@@ -97,25 +90,28 @@ class CapabilityDiscoveryService:
         This should be called after agents have been registered to
         precompute embeddings for all existing capabilities.
         """
+        start_ts = time.time()
         try:
             # Check which backends are available
+            from agentconnect.core.registry.capability_discovery_impl.embedding_utils import (
+                check_semantic_search_requirements,
+                create_huggingface_embeddings,
+            )
+
             self._available_backends = check_semantic_search_requirements()
 
             if not self._available_backends["embedding_model"]:
-                logger.warning(
-                    "Embedding model not available, semantic search will be limited"
-                )
+                logger.warning("Embedding model not available")
                 return
 
             if not self._available_backends["qdrant"]:
-                logger.warning(
-                    "Qdrant not available, semantic search will fall back to basic similarity"
-                )
+                logger.warning("Qdrant unavailable; falling back to string search")
                 return
 
             # Initialize embeddings model
-            self._embeddings_model = create_huggingface_embeddings(
-                self._vector_store_config
+            self._embeddings_model = cast(
+                "Optional[_Embeddings]",
+                create_huggingface_embeddings(self._vector_store_config),
             )
             if not self._embeddings_model:
                 logger.warning("Failed to initialize embeddings model")
@@ -125,8 +121,14 @@ class CapabilityDiscoveryService:
             self._capability_to_agent_map = {}
 
             # Initialize Qdrant clients
-            self._qdrant_client, self._async_qdrant_client = (
-                await initialize_qdrant_clients(self._vector_store_config)
+            from agentconnect.core.registry.capability_discovery_impl.qdrant_client import (
+                initialize_qdrant_clients,
+                init_qdrant_collection,
+            )
+
+            self._qdrant_client, self._async_qdrant_client = cast(
+                "Tuple[Optional[_QdrantClient], Optional[_AsyncQdrantClient]]",
+                await initialize_qdrant_clients(self._vector_store_config),
             )
 
             if not self._qdrant_client or not self._async_qdrant_client:
@@ -145,12 +147,14 @@ class CapabilityDiscoveryService:
                 logger.warning("Failed to initialize Qdrant collection")
                 return
 
-            logger.info("Embeddings model and Qdrant clients initialized successfully")
+            duration_s = time.time() - start_ts
+            logger.info(
+                "Vector components initialized model=%s duration=%.3fs",
+                self._vector_store_config.model_name,
+                duration_s,
+            )
         except Exception as e:
-            logger.error(f"Failed to initialize: {str(e)}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+            logger.error("Failed to initialize vector components: %s", e)
 
     async def update_capability_embeddings_cache(
         self, registration: AgentRegistration
@@ -161,13 +165,21 @@ class CapabilityDiscoveryService:
         Args:
             registration: Registration information for the agent
         """
+        start_ts = time.time()
         try:
             # Skip if embeddings model or clients not initialized
             if not self._embeddings_model or not self._async_qdrant_client:
-                logger.warning("Embeddings model or Qdrant client not initialized")
+                logger.warning(
+                    "Embeddings model or client not initialized agent_id=%s",
+                    registration.agent_id,
+                )
                 return
 
             # Update the capability map
+            from agentconnect.core.registry.capability_discovery_impl.indexing import (
+                update_capability_embeddings,
+            )
+
             self._capability_to_agent_map = await update_capability_embeddings(
                 self._async_qdrant_client,
                 self.COLLECTION_NAME,
@@ -175,12 +187,18 @@ class CapabilityDiscoveryService:
                 registration,
                 self._capability_to_agent_map,
             )
-
+            duration_ms = int((time.time() - start_ts) * 1000.0)
+            logger.debug(
+                "Updated capability embeddings cache agent_id=%s duration=%dms",
+                registration.agent_id,
+                duration_ms,
+            )
         except Exception as e:
-            logger.error(f"Error updating capability embeddings: {str(e)}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+            logger.error(
+                "Error updating capability embeddings cache agent_id=%s: %s",
+                registration.agent_id,
+                e,
+            )
 
     async def clear_agent_embeddings_cache(self, agent_id: str) -> None:
         """
@@ -190,11 +208,18 @@ class CapabilityDiscoveryService:
             agent_id: ID of the agent to clear cache for
         """
         if not self._async_qdrant_client or not self._collection_initialized:
-            logger.warning("Qdrant client not initialized, skipping clear operation")
+            logger.warning(
+                "Qdrant not initialized; skipping clear agent_id=%s", agent_id
+            )
             return
 
+        start_ts = time.time()
         try:
             # Delete points from Qdrant
+            from agentconnect.core.registry.capability_discovery_impl.qdrant_client import (
+                delete_points_by_agent_id,
+            )
+
             await delete_points_by_agent_id(
                 self._async_qdrant_client, self.COLLECTION_NAME, agent_id
             )
@@ -210,13 +235,15 @@ class CapabilityDiscoveryService:
             for doc_id in doc_ids_to_remove:
                 del self._capability_to_agent_map[doc_id]
 
-            logger.info(f"Cleared embeddings for agent: {agent_id}")
+            duration_ms = int((time.time() - start_ts) * 1000.0)
+            logger.debug(
+                "Cleared agent embeddings agent_id=%s duration=%dms",
+                agent_id,
+                duration_ms,
+            )
 
         except Exception as e:
-            logger.error(f"Error clearing agent embeddings: {str(e)}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+            logger.error("Error clearing agent embeddings agent_id=%s: %s", agent_id, e)
 
     async def precompute_all_capability_embeddings(
         self, agent_registrations: Dict[str, AgentRegistration]
@@ -227,18 +254,23 @@ class CapabilityDiscoveryService:
         Args:
             agent_registrations: Dictionary of agent registrations
         """
+        start_ts = time.time()
         try:
             if (
                 not self._embeddings_model
                 or not agent_registrations
                 or not self._async_qdrant_client
             ):
-                logger.warning("Missing required components for indexing capabilities")
+                logger.warning("Missing components for indexing")
                 self._vector_store_initialized.set()  # Signal that initialization is complete (with no data)
                 return
 
             # Make sure collection is initialized
             if not self._collection_initialized:
+                from agentconnect.core.registry.capability_discovery_impl.qdrant_client import (
+                    init_qdrant_collection,
+                )
+
                 self._collection_initialized = await init_qdrant_collection(
                     self._async_qdrant_client,
                     self._embeddings_model,
@@ -252,8 +284,12 @@ class CapabilityDiscoveryService:
                     return
 
             # Compute embeddings and store in Qdrant
+            from agentconnect.core.registry.capability_discovery_impl.indexing import (
+                precompute_all_capability_embeddings as _precompute_all_capability_embeddings,
+            )
+
             capability_to_agent_map, total_points = (
-                await precompute_all_capability_embeddings(
+                await _precompute_all_capability_embeddings(
                     self._async_qdrant_client,
                     self.COLLECTION_NAME,
                     self._embeddings_model,
@@ -267,12 +303,15 @@ class CapabilityDiscoveryService:
 
             # Signal that vector store initialization is complete
             self._vector_store_initialized.set()
+            duration_ms = int((time.time() - start_ts) * 1000.0)
+            logger.debug(
+                "Precomputed capability embeddings duration=%dms points_indexed=%d",
+                duration_ms,
+                total_points,
+            )
 
         except Exception as e:
-            logger.error(f"Error precomputing capability embeddings: {str(e)}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+            logger.error("Error precomputing capability embeddings: %s", e)
             # Make sure to set the event even if initialization fails
             self._vector_store_initialized.set()
 
@@ -306,8 +345,12 @@ class CapabilityDiscoveryService:
         ):
             semantic_search_func = self.find_by_capability_semantic
 
-        # Call the implementation function
-        return await find_by_capability_name(
+        # Call the implementation function (boundary logged at service level)
+        from agentconnect.core.registry.capability_discovery_impl.search import (
+            find_by_capability_name as _find_by_capability_name,
+        )
+
+        return await _find_by_capability_name(
             capability_name,
             agent_registrations,
             capabilities_index,
@@ -345,7 +388,12 @@ class CapabilityDiscoveryService:
             and self._embeddings_model
             and self._collection_initialized
         ):
-            return await search_with_qdrant(
+            start_ts = time.time()
+            from agentconnect.core.registry.capability_discovery_impl.search import (
+                search_with_qdrant as _search_with_qdrant,
+            )
+
+            results = await _search_with_qdrant(
                 self._async_qdrant_client,
                 self.COLLECTION_NAME,
                 capability_description,
@@ -356,9 +404,21 @@ class CapabilityDiscoveryService:
                 similarity_threshold,
                 filters=filters,
             )
+            duration_ms = int((time.time() - start_ts) * 1000.0)
+            logger.debug(
+                "Vector search completed duration=%dms results=%d",
+                duration_ms,
+                len(results),
+            )
+            return results
         else:
             # Fall back to basic string similarity if Qdrant search not available
-            return await fallback_string_search(
+            from agentconnect.core.registry.capability_discovery_impl.search import (
+                fallback_string_search as _fallback_string_search,
+            )
+
+            logger.warning("Falling back to string search")
+            return await _fallback_string_search(
                 capability_description,
                 agent_registrations,
                 limit,

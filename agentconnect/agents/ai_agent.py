@@ -156,16 +156,13 @@ class AIAgent(BaseAgent):
             is_valid, message = validate_cdp_environment()
             if not is_valid:
                 logger.warning(
-                    f"Payment capabilities requested for agent {agent_id} but environment validation failed: {message}"
-                )
-                logger.warning(
-                    f"Payment capabilities will be disabled for agent {agent_id}"
+                    "Payment capabilities disabled due to invalid CDP environment agent_id=%s",
+                    agent_id,
                 )
                 actual_enable_payments = False
             else:
-                logger.info(
-                    f"CDP environment validation passed for agent {agent_id}: {message}"
-                )
+                # Keep payments success silent to avoid hot-path noise
+                pass
 
         # Store the model config before initializing LLM
         self.model_config = model_config or {}
@@ -232,10 +229,6 @@ class AIAgent(BaseAgent):
 
         # Initialize the LLM
         self.llm = self._initialize_llm()
-        logger.debug(f"Initialized LLM for AI Agent {self.agent_id}: {self.llm}")
-        logger.info(
-            f"AI Agent {self.agent_id} initialized with {len(self.profile.capabilities)} capabilities"
-        )
 
     @property
     def hub(self):
@@ -278,18 +271,14 @@ class AIAgent(BaseAgent):
             and self._registry is not None
             and self.workflow is None
         ):
-            logger.debug(
-                f"AI Agent {self.agent_id}: Registry and hub are set, initializing workflow"
-            )
+            logger.debug("Initializing workflow agent_id=%s", self.agent_id)
             self.workflow = self._initialize_workflow()
-            logger.debug(f"AI Agent {self.agent_id}: Workflow initialized")
 
     def _initialize_llm(self):
         """Initialize the LLM based on the provider type and model name."""
         from agentconnect.providers import ProviderFactory
 
         provider = ProviderFactory.create_provider(self.provider_type, self.api_key)
-        logger.debug(f"AI Agent {self.agent_id}: LLM provider created: {provider}")
         return provider.get_langchain_llm(
             model_name=self.model_name, **self.model_config or {}
         )
@@ -309,9 +298,7 @@ class AIAgent(BaseAgent):
             self._prompt_tools = PromptTools(
                 agent_registry=self._registry, communication_hub=self._hub, llm=self.llm
             )
-            logger.debug(
-                f"AI Agent {self.agent_id}: Created {'standalone' if is_standalone else 'connected'} PromptTools instance."
-            )
+            # Keep init logs minimal; no extra start here
 
         # Set the current agent context for the tools
         self._prompt_tools.set_current_agent(self.agent_id)
@@ -345,37 +332,27 @@ class AIAgent(BaseAgent):
 
                 agentkit_tools = get_langchain_tools(self.agent_kit)
                 custom_tools_list.extend(agentkit_tools)
-
-                tool_names = [tool.name for tool in agentkit_tools]
-                logger.info(
-                    f"AI Agent {self.agent_id}: Added {len(agentkit_tools)} AgentKit payment tools: {tool_names}"
-                )
                 configured_symbol = global_settings.payments.default_token_symbol
-                payment_tool = (
-                    "native_transfer"
-                    if configured_symbol == "ETH"
-                    else "erc20_transfer"
-                )
-                logger.info(
-                    f"AI Agent {self.agent_id}: Will use {payment_tool} for payments with {configured_symbol} token"
-                )
+                # Do not emit extra ok lines; keep workflow.init minimal
 
                 # Enable payment capabilities in the system prompt config
                 self.system_config.enable_payments = True
                 self.system_config.payment_token_symbol = configured_symbol
-                logger.info(
-                    f"AI Agent {self.agent_id}: Enabled payment capabilities in system prompt"
-                )
             except ImportError as e:
                 logger.warning(
-                    f"AI Agent {self.agent_id}: Could not import AgentKit LangChain tools: {e}"
+                    "Could not import AgentKit LangChain tools agent_id=%s: %s",
+                    self.agent_id,
+                    e,
                 )
                 logger.warning(
-                    "To use payment capabilities, install with: pip install coinbase-agentkit-langchain"
+                    "Payment capabilities require coinbase-agentkit-langchain agent_id=%s",
+                    self.agent_id,
                 )
             except Exception as e:
                 logger.error(
-                    f"AI Agent {self.agent_id}: Error initializing AgentKit tools: {e}"
+                    "Error initializing AgentKit tools agent_id=%s: %s",
+                    self.agent_id,
+                    e,
                 )
 
         # Create the workflow with all components
@@ -443,9 +420,6 @@ class AIAgent(BaseAgent):
         # Call the superclass method to handle common message processing logic
         response = await super().process_message(message)
         if response:
-            logger.info(
-                f"AI Agent {self.agent_id} returning response from super().process_message: {response.content[:50]}..."
-            )
             return response
 
         try:
@@ -457,13 +431,11 @@ class AIAgent(BaseAgent):
                     and hasattr(self, "_registry")
                     and self._registry is not None
                 ):
-                    logger.info(
-                        f"AI Agent {self.agent_id}: Initializing workflow on first message"
-                    )
                     self.workflow = self._initialize_workflow()
                 else:
                     logger.error(
-                        f"AI Agent {self.agent_id}: Cannot initialize workflow, registry or hub not set"
+                        "Cannot initialize workflow: registry or hub not set agent_id=%s",
+                        self.agent_id,
                     )
                     return self._create_error_response(
                         message,
@@ -475,7 +447,8 @@ class AIAgent(BaseAgent):
             # If workflow is still None, return an error
             if self.workflow is None:
                 logger.error(
-                    f"AI Agent {self.agent_id}: Cannot process message, workflow not initialized"
+                    "Cannot process message: workflow not initialized agent_id=%s",
+                    self.agent_id,
                 )
                 return self._create_error_response(
                     message,
@@ -487,7 +460,10 @@ class AIAgent(BaseAgent):
             # Check if this is an error message that needs special handling
             if message.message_type == MessageType.ERROR:
                 logger.warning(
-                    f"AI Agent {self.agent_id} received error message: {message.content[:100]}..."
+                    "Received error message agent_id=%s sender_id=%s type=%s",
+                    self.agent_id,
+                    message.sender_id,
+                    message.message_type.value,
                 )
 
                 # If this is from a collaboration, we should handle it gracefully
@@ -574,30 +550,55 @@ class AIAgent(BaseAgent):
                 "callbacks": callbacks,
             }
 
-            logger.debug(
-                f"AI Agent {self.agent_id} invoking workflow with conversation ID: {conversation_id}"
-            )
-
+            invoke_start = asyncio.get_event_loop().time()
             # Invoke the workflow with a timeout
             try:
                 response_state = await asyncio.wait_for(
                     self.workflow.ainvoke(initial_state, config),
                     timeout=180.0,  # 3 minute timeout
                 )
-                logger.debug(f"AI Agent {self.agent_id} workflow invocation complete.")
+                logger.debug(
+                    "Workflow invoke ok agent_id=%s request_id=%s type=%s duration=%dms",
+                    self.agent_id,
+                    (message.metadata or {}).get("request_id"),
+                    message.message_type.value,
+                    int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
+                )
             except asyncio.TimeoutError:
-                logger.error(f"AI Agent {self.agent_id} workflow execution timed out")
+                logger.warning(
+                    "Workflow execution timed out agent_id=%s request_id=%s type=%s duration=%dms",
+                    self.agent_id,
+                    (message.metadata or {}).get("request_id"),
+                    message.message_type.value,
+                    int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
+                )
                 return self._create_error_response(
                     message,
                     "I'm sorry, but this request is taking too long to process. Please try again with a simpler request or break it down into smaller parts.",
                     "workflow_timeout",
                     is_collaboration_request,
                 )
+            except Exception:
+                logger.error(
+                    "Workflow invoke failed agent_id=%s request_id=%s type=%s duration=%dms",
+                    self.agent_id,
+                    (message.metadata or {}).get("request_id"),
+                    message.message_type.value,
+                    int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
+                    exc_info=True,
+                )
+                return self._create_error_response(
+                    message,
+                    "Internal error while invoking workflow.",
+                    "workflow_invoke_error",
+                    is_collaboration_request,
+                )
 
             # Extract the last message from the workflow response state
             if "messages" not in response_state or not response_state["messages"]:
                 logger.error(
-                    f"AI Agent {self.agent_id}: Workflow returned empty or invalid messages state."
+                    "Workflow returned empty or invalid messages agent_id=%s",
+                    self.agent_id,
                 )
                 return self._create_error_response(
                     message,
@@ -620,8 +621,10 @@ class AIAgent(BaseAgent):
 
             # Handle different interaction states
             if state == InteractionState.STOP:
-                logger.info(
-                    f"AI Agent {self.agent_id} reached maximum turns with {message.sender_id}. Ending conversation."
+                logger.warning(
+                    "Maximum turns reached; ending conversation agent_id=%s receiver_id=%s",
+                    self.agent_id,
+                    message.sender_id,
                 )
                 self.end_conversation(message.sender_id)
                 last_message.content = f"{last_message.content}\n\nWe've reached the maximum number of turns for this conversation. If you need further assistance, please start a new conversation."
@@ -669,14 +672,16 @@ class AIAgent(BaseAgent):
                 message_type=response_message_type,
                 metadata=response_metadata,
             )
-            logger.info(
-                f"AI Agent {self.agent_id} sending response to {message.sender_id}: {response_message.content[:50]}..."
-            )
+            # Do not log response content; BaseAgent logs process ok
             return response_message
 
         except Exception as e:
-            logger.exception(
-                f"AI Agent {self.agent_id} error processing message: {str(e)}"
+            logger.error(
+                "Error processing message agent_id=%s sender_id=%s type=%s",
+                self.agent_id,
+                message.sender_id,
+                message.message_type.value,
+                exc_info=True,
             )
             return self._create_error_response(
                 message,
@@ -689,16 +694,11 @@ class AIAgent(BaseAgent):
         """Set a cooldown period for the agent."""
         # Call the parent class method to set the cooldown
         super().set_cooldown(duration)
-        logger.warning(
-            f"AI Agent {self.agent_id} entered cooldown for {duration} seconds due to rate limiting."
-        )
 
         # UI notification if in UI mode
         if self.is_ui_mode:
             # TODO: This would be implemented by a UI notification system
-            logger.info(
-                f"UI notification: Agent {self.agent_id} is in cooldown for {duration} seconds."
-            )
+            pass
 
     def reset_interaction_state(self) -> None:
         """
@@ -710,7 +710,7 @@ class AIAgent(BaseAgent):
         # Reset the turn counter in the interaction control
         if hasattr(self, "interaction_control"):
             self.interaction_control.reset_turn_counter()
-            logger.info(f"AI Agent {self.agent_id} interaction state reset.")
+            logger.debug("Interaction state reset agent_id=%s", self.agent_id)
 
         # Log conversation statistics
         if hasattr(self, "interaction_control") and hasattr(
@@ -718,12 +718,13 @@ class AIAgent(BaseAgent):
         ):
             stats = self.interaction_control.get_conversation_stats()
             if stats:
-                logger.info(
-                    f"AI Agent {self.agent_id} conversation statistics: {len(stats)} conversations tracked."
-                )
                 for conv_id, conv_stats in stats.items():
-                    logger.info(
-                        f"Conversation {conv_id}: {conv_stats['total_tokens']} tokens, {conv_stats['turn_count']} turns"
+                    logger.debug(
+                        "Conversation stats agent_id=%s conversation_id=%s total_tokens=%s turn_count=%s",
+                        self.agent_id,
+                        conv_id,
+                        conv_stats.get("total_tokens"),
+                        conv_stats.get("turn_count"),
                     )
 
     async def chat(
@@ -752,9 +753,7 @@ class AIAgent(BaseAgent):
             RuntimeError: If the workflow cannot be initialized or fails unexpectedly.
             asyncio.TimeoutError: If the workflow execution times out.
         """
-        logger.info(
-            f"AI Agent {self.agent_id} received direct chat query: {query[:50]}..."
-        )
+        # Minimal: do not log chat request content or start marker
 
         # Initialize workflow if not already done
         if self.workflow is None:
@@ -772,9 +771,7 @@ class AIAgent(BaseAgent):
                         communication_hub=None,
                         llm=self._initialize_llm(),
                     )
-                    logger.info(
-                        f"AI Agent {self.agent_id}: Created standalone PromptTools instance."
-                    )
+                    # Keep minimal; no extra init log here
 
                 # Set current agent context
                 self._prompt_tools.set_current_agent(self.agent_id)
@@ -799,12 +796,12 @@ class AIAgent(BaseAgent):
                 if self.workflow is None:
                     raise RuntimeError("Workflow initialization failed.")
 
-                logger.info(
-                    f"AI Agent {self.agent_id}: Workflow initialized for standalone chat."
-                )
+                # Minimal: no extra init ok here; init boundaries already covered
             except Exception as e:
-                logger.exception(
-                    f"AI Agent {self.agent_id}: Failed to initialize workflow for chat: {e}"
+                logger.error(
+                    "Failed to initialize workflow for chat agent_id=%s: %s",
+                    self.agent_id,
+                    e,
                 )
                 raise RuntimeError(f"Failed to initialize agent workflow: {e}") from e
 
@@ -842,32 +839,37 @@ class AIAgent(BaseAgent):
             self._prompt_tools.set_current_agent(self.agent_id)
 
         # Invoke workflow
+        invoke_start = asyncio.get_event_loop().time()
         try:
-            logger.debug(
-                f"AI Agent {self.agent_id} invoking workflow for chat with conversation ID: {conversation_id}"
-            )
             response_state = await asyncio.wait_for(
                 self.workflow.ainvoke(initial_state, config),
                 timeout=180.0,
             )
             logger.debug(
-                f"AI Agent {self.agent_id}: Chat workflow invocation complete."
+                "Chat workflow invoke ok agent_id=%s duration=%dms",
+                self.agent_id,
+                int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
             )
         except asyncio.TimeoutError as e:
-            logger.error(
-                f"AI Agent {self.agent_id}: Chat workflow execution timed out."
+            logger.warning(
+                "Chat workflow execution timed out agent_id=%s duration=%dms",
+                self.agent_id,
+                int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
             )
             raise e
         except Exception as e:
-            logger.exception(
-                f"AI Agent {self.agent_id}: Error during chat workflow invocation: {e}"
+            logger.error(
+                "Error during chat workflow invocation agent_id=%s: %s",
+                self.agent_id,
+                e,
             )
             raise RuntimeError(f"Agent workflow failed during chat: {e}") from e
 
         # Extract response
         if "messages" not in response_state or not response_state["messages"]:
             logger.error(
-                f"AI Agent {self.agent_id}: Chat workflow returned empty or invalid messages state."
+                "Chat workflow returned empty or invalid messages agent_id=%s",
+                self.agent_id,
             )
             raise RuntimeError("Agent workflow returned no response message.")
 
@@ -877,7 +879,8 @@ class AIAgent(BaseAgent):
             response_content = last_message.content
         else:
             logger.error(
-                f"AI Agent {self.agent_id}: Last message in chat response has no content: {last_message}"
+                "Last message in chat response has no content agent_id=%s",
+                self.agent_id,
             )
             raise RuntimeError("Agent workflow returned unexpected message format.")
 
@@ -890,7 +893,5 @@ class AIAgent(BaseAgent):
             token_count=total_tokens, conversation_id=conversation_id
         )
 
-        logger.info(
-            f"AI Agent {self.agent_id} generated chat response: {response_content[:50]}..."
-        )
+        # Do not log response content; prior invoke ok already emitted
         return response_content

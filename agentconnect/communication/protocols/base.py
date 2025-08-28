@@ -6,8 +6,6 @@ and validation across different communication patterns, enabling consistent
 peer-to-peer agent interactions and collaboration.
 """
 
-import logging
-
 # Standard library imports
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
@@ -16,9 +14,6 @@ from agentconnect.core.message import Message
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import AgentIdentity, MessageType, ProtocolVersion
-
-# Configure logging
-logger = logging.getLogger("Protocol")
 
 
 class BaseProtocol(ABC):

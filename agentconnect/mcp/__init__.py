@@ -14,13 +14,6 @@ These servers expose AgentConnect registry functionality as MCP tools that can b
 """
 
 # Note: We don't import the actual server instances here since they are meant to be run standalone
-# Import only the modules for programmatic access if needed
-
-# Export module references for advanced usage
-__all__ = [
-    # Module names - users can import the modules directly if needed
-    "registry_mcp_server",
-]
 
 # Version and metadata
 __description__ = "AgentConnect MCP server implementations"

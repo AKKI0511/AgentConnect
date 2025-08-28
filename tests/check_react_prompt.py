@@ -2,10 +2,8 @@
 Tests for React prompts with payment capabilities.
 """
 
-from agentconnect.prompts.templates.prompt_templates import (
-    ReactConfig,
-    PromptTemplates
-)
+from agentconnect.prompts.templates.prompt_templates import ReactConfig, PromptTemplates
+
 
 def test_react_prompt_with_payments():
     """Test that React prompt works with payment capabilities enabled."""
@@ -14,24 +12,25 @@ def test_react_prompt_with_payments():
         name="Payment Agent",
         capabilities=[
             {"name": "Conversation", "description": "general assistance"},
-            {"name": "Payments", "description": "can pay for services"}
+            {"name": "Payments", "description": "can pay for services"},
         ],
         personality="helpful and professional",
         mode="system_prompt",
         additional_context={"custom_field": "custom value"},
         enable_payments=True,
         payment_token_symbol="ETH",
-        role="payment assistant"
+        role="payment assistant",
     )
-    
+
     # Create prompt
     prompt_templates = PromptTemplates()
     prompt = prompt_templates.get_react_prompt(react_config)
-    
+
     # Get the template string
     template_string = prompt.prompt.template
-        
+
     return template_string
+
 
 if __name__ == "__main__":
     # Run the test and print the template
@@ -40,4 +39,4 @@ if __name__ == "__main__":
     print("=" * 80)
     print(template)
     print("=" * 80)
-    print("...") 
+    print("...")

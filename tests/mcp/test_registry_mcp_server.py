@@ -12,198 +12,93 @@ Focus areas:
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
+from types import SimpleNamespace
+from contextlib import asynccontextmanager
 
 from agentconnect.mcp.registry_mcp_server import (
-    search_for_agents_tool,
-    check_registry_api_health,
+    create_agent_discovery_mcp,
+    _check_registry_api_health,
 )
-from mcp.server.fastmcp import Context
-
-
-@pytest.fixture
-def mock_context():
-    """Create a mock MCP Context."""
-    context = Mock(spec=Context)
-    context.debug = AsyncMock()
-    context.error = AsyncMock()
-    
-    # Mock the nested attribute access for lifespan_context
-    app_context_mock = Mock()
-    app_context_mock.is_healthy = True
-    context.request_context.lifespan_context = app_context_mock
-    
-    return context
-
-
-@pytest.fixture
-def mock_successful_setup():
-    """Create mocks for successful MCP operation."""
-    with patch('agentconnect.mcp.registry_mcp_server.check_registry_api_health') as mock_health, \
-         patch('agentconnect.mcp.registry_mcp_server.RegistryAPIClient') as mock_client_class:
-        
-        # Setup successful health check
-        mock_health.return_value = True
-        
-        # Setup successful client
-        mock_client = AsyncMock()
-        mock_client_class.return_value = mock_client
-        mock_client.get_by_capability_semantic.return_value = []
-        
-        yield mock_health, mock_client_class, mock_client
-
-
-class TestMCPToolInterface:
-    """Test that MCP tool interface works and complies with protocol."""
-
-    @pytest.mark.asyncio
-    async def test_mcp_tool_returns_correct_format(self, mock_context, mock_successful_setup):
-        """Test that MCP tool returns the expected response format."""
-        _, _, _ = mock_successful_setup
-        
-        result = await search_for_agents_tool(
-            ctx=mock_context,
-            query="test query"
-        )
-        
-        # Verify MCP protocol compliance
-        assert isinstance(result, dict), "MCP tool must return dict"
-        assert "message" in result, "Response must have 'message' field"
-        assert "results" in result, "Response must have 'results' field"
-        assert isinstance(result["results"], list), "Results must be a list"
-
-    @pytest.mark.asyncio
-    async def test_parameter_validation(self, mock_context):
-        """Test that invalid parameters are handled appropriately."""
-        # Test invalid output_detail parameter
-        result = await search_for_agents_tool(
-            ctx=mock_context,
-            query="test query",
-            output_detail="invalid_level"
-        )
-        
-        # Should return error in MCP format
-        assert isinstance(result, dict)
-        assert "Invalid output_detail" in result["message"]
-        assert result["results"] == []
 
 
 class TestIntegrationLayer:
     """Test that MCP server integrates properly with underlying services."""
 
     @pytest.mark.asyncio
+    async def test_factory_without_client_creates_client_and_lifespan_works(self):
+        """Factory should work without DI and create a client inside lifespan."""
+        captured = {}
+
+        class DummyMCP:
+            def __init__(self, *args, **kwargs):
+                captured["lifespan"] = kwargs.get("lifespan")
+            def add_tool(self, *_, **__):
+                return None
+
+        with patch("agentconnect.mcp.registry_mcp_server.FastMCP", new=DummyMCP), patch(
+            "agentconnect.mcp.registry_mcp_server._check_registry_api_health",
+            new=AsyncMock(return_value=True),
+        ):
+            _ = create_agent_discovery_mcp()
+
+        lifespan = captured["lifespan"]
+        assert lifespan is not None
+
+        # Enter lifespan and verify registry_client exists on context
+        @asynccontextmanager
+        async def _use_lifespan():
+            async with lifespan(SimpleNamespace()) as ctx:
+                yield ctx
+
+        async with _use_lifespan() as ctx:
+            assert hasattr(ctx, "registry_client")
+            assert isinstance(ctx.is_healthy, bool)
+
+    @pytest.mark.asyncio
+    async def test_factory_with_injected_client_uses_it(self):
+        """Factory should use the provided registry_client in lifespan."""
+        captured = {}
+
+        class DummyMCP:
+            def __init__(self, *args, **kwargs):
+                captured["lifespan"] = kwargs.get("lifespan")
+            def add_tool(self, *_, **__):
+                return None
+
+        injected_client = AsyncMock()
+
+        with patch("agentconnect.mcp.registry_mcp_server.FastMCP", new=DummyMCP), patch(
+            "agentconnect.mcp.registry_mcp_server._check_registry_api_health",
+            new=AsyncMock(return_value=True),
+        ):
+            _ = create_agent_discovery_mcp(registry_client=injected_client)
+
+        lifespan = captured["lifespan"]
+        assert lifespan is not None
+
+        @asynccontextmanager
+        async def _use_lifespan():
+            async with lifespan(SimpleNamespace()) as ctx:
+                yield ctx
+
+        async with _use_lifespan() as ctx:
+            # Same instance should be present
+            assert getattr(ctx, "registry_client") is injected_client
+            assert isinstance(ctx.is_healthy, bool)
+
+    @pytest.mark.asyncio
     async def test_health_check_integration_works(self):
         """Test that health check function works as expected."""
-        with patch('agentconnect.mcp.registry_mcp_server.agentconnect_settings') as mock_settings, \
-             patch('httpx.AsyncClient') as mock_client_class:
-            
-            # Setup mocks
-            mock_settings.clients.registry.base_url = "http://localhost:8000"
-            
+        with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            
-            mock_response = Mock()
+
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"status": "healthy"}
             mock_client.get.return_value = mock_response
-            
-            result = await check_registry_api_health()
-            
-            # Should return success
+
+            result = await _check_registry_api_health("http://localhost:8000", 5.0)
+
             assert result is True
-
-    @pytest.mark.asyncio
-    async def test_registry_client_integration_works(self, mock_context, mock_successful_setup):
-        """Test that registry client integration works properly."""
-        mock_health, _, mock_client = mock_successful_setup
-        
-        # Since the client is part of the lifespan, we need to mock it on the app context
-        mock_context.request_context.lifespan_context.registry_client = mock_client
-        
-        await search_for_agents_tool(
-            ctx=mock_context,
-            query="test query"
-        )
-        
-        # Verify integration points
-        mock_client.get_by_capability_semantic.assert_called_once()  # Client method called
-
-
-class TestErrorHandling:
-    """Test that MCP layer handles error scenarios gracefully."""
-
-    @pytest.mark.asyncio
-    async def test_service_unavailable_handling(self, mock_context):
-        """Test that service unavailable is handled gracefully."""
-        # Unset the healthy flag on the mock context
-        mock_context.request_context.lifespan_context.is_healthy = False
-        
-        with patch('agentconnect.mcp.registry_mcp_server.check_registry_api_health') as mock_health:
-            
-            # Health check fails on re-check
-            mock_health.return_value = False
-            
-            result = await search_for_agents_tool(
-                ctx=mock_context,
-                query="test query"
-            )
-            
-            # Should return appropriate error without crashing
-            assert isinstance(result, dict)
-            assert "Registry API server is not running" in result["message"]
-            assert result["results"] == []
-            
-            # Check that health check was re-attempted
-            mock_health.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_client_error_handling(self, mock_context):
-        """Test that client errors are handled gracefully."""
-        with patch('agentconnect.mcp.registry_mcp_server.check_registry_api_health') as mock_health, \
-             patch('agentconnect.mcp.registry_mcp_server.RegistryAPIClient') as mock_client_class:
-            
-            mock_health.return_value = True
-            mock_client = AsyncMock()
-            mock_client_class.return_value = mock_client
-            mock_client.get_by_capability_semantic.side_effect = Exception("Client error")
-            
-            # Since the client is part of the lifespan, we need to mock it on the app context
-            mock_context.request_context.lifespan_context.registry_client = mock_client
-            
-            result = await search_for_agents_tool(
-                ctx=mock_context,
-                query="test query"
-            )
-            
-            # Should handle error gracefully
-            assert isinstance(result, dict)
-            assert "Error searching for agents" in result["message"]
-            assert result["results"] == []
-
-
-class TestBasicWorkflow:
-    """Test that basic MCP workflow patterns work as expected."""
-
-    @pytest.mark.asyncio
-    async def test_successful_search_workflow(self, mock_context, mock_successful_setup):
-        """Test that a successful search workflow completes properly."""
-        _, _, mock_client = mock_successful_setup
-        
-        # Since the client is part of the lifespan, we need to mock it on the app context
-        mock_context.request_context.lifespan_context.registry_client = mock_client
-        
-        # Should complete without exceptions
-        result = await search_for_agents_tool(
-            ctx=mock_context,
-            query="data analysis",
-            top_k=3,
-            strictness=0.3,
-            output_detail="summary"
-        )
-        
-        # Should return valid result
-        assert isinstance(result, dict)
-        assert "message" in result
-        assert "results" in result
-        assert isinstance(result["results"], list)

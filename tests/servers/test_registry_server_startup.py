@@ -27,7 +27,9 @@ def _monkeypatch_fast_registry_init(monkeypatch: pytest.MonkeyPatch) -> None:
         return
 
     # Avoid model downloads / network
-    monkeypatch.setattr(AgentRegistry, "_initialize_vector_search", _fast_init, raising=True)
+    monkeypatch.setattr(
+        AgentRegistry, "_initialize_vector_search", _fast_init, raising=True
+    )
     monkeypatch.setattr(AgentRegistry, "ensure_initialized", _noop, raising=False)
 
 

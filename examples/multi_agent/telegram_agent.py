@@ -19,15 +19,18 @@ from agentconnect.core.types import (
     Skill,
 )
 
-def create_telegram_agent(provider_type: ModelProvider, model_name: ModelName, api_key: str) -> TelegramAIAgent:
+
+def create_telegram_agent(
+    provider_type: ModelProvider, model_name: ModelName, api_key: str
+) -> TelegramAIAgent:
     """
     Create and configure the Telegram agent.
-    
+
     Args:
         provider_type (ModelProvider): The type of LLM provider to use
         model_name (ModelName): The specific model to use
         api_key (str): API key for the LLM provider
-        
+
     Returns:
         TelegramAIAgent: Configured telegram agent
     """
@@ -37,10 +40,10 @@ def create_telegram_agent(provider_type: ModelProvider, model_name: ModelName, a
         raise RuntimeError(
             "TELEGRAM_BOT_TOKEN not found. Please set it in your environment or .env file."
         )
-    
+
     # Create Telegram agent identity
     telegram_identity = AgentIdentity.create_key_based()
-    
+
     # Define capabilities
     telegram_capabilities = [
         Capability(
@@ -52,26 +55,46 @@ def create_telegram_agent(provider_type: ModelProvider, model_name: ModelName, a
         Capability(
             name="document_handling",
             description="Processes documents uploaded by users including PDF files",
-            input_schema={"file_id": "string", "file_type": "string", "chat_id": "string"},
+            input_schema={
+                "file_id": "string",
+                "file_type": "string",
+                "chat_id": "string",
+            },
             output_schema={"processed_content": "string", "success": "boolean"},
         ),
         Capability(
             name="pdf_processing",
             description="Extracts and analyzes content from PDF files uploaded by users",
             input_schema={"file_path": "string"},
-            output_schema={"text": "string", "summary": "string", "num_pages": "integer"},
+            output_schema={
+                "text": "string",
+                "summary": "string",
+                "num_pages": "integer",
+            },
         ),
     ]
-    
+
     # Define skills
     telegram_skills = [
-        Skill(name="message_handling", description="Process and respond to user messages on Telegram"),
+        Skill(
+            name="message_handling",
+            description="Process and respond to user messages on Telegram",
+        ),
         Skill(name="command_processing", description="Handle Telegram bot commands"),
-        Skill(name="document_processing", description="Process documents uploaded by users"),
-        Skill(name="pdf_extraction", description="Extract text and information from PDF files"),
-        Skill(name="multi_agent_coordination", description="Coordinate with other agents to solve complex problems"),
+        Skill(
+            name="document_processing",
+            description="Process documents uploaded by users",
+        ),
+        Skill(
+            name="pdf_extraction",
+            description="Extract text and information from PDF files",
+        ),
+        Skill(
+            name="multi_agent_coordination",
+            description="Coordinate with other agents to solve complex problems",
+        ),
     ]
-    
+
     # Create agent profile
     telegram_profile = AgentProfile(
         agent_id="telegram_agent",
@@ -86,8 +109,8 @@ def create_telegram_agent(provider_type: ModelProvider, model_name: ModelName, a
         examples=[
             "Answer user questions on Telegram",
             "Process PDF documents uploaded by users",
-            "Execute commands from Telegram users"
-        ]
+            "Execute commands from Telegram users",
+        ],
     )
 
     # Create and return the telegram agent
@@ -99,7 +122,7 @@ def create_telegram_agent(provider_type: ModelProvider, model_name: ModelName, a
         api_key=api_key,
         profile=telegram_profile,
         personality="I am a helpful and friendly Telegram assistant. I can answer questions, provide information, and collaborate with other specialized agents to solve complex problems. I can also process PDF documents that you upload, including files from local paths like 'examples/data.pdf' or absolute paths.",
-        telegram_token=telegram_token
+        telegram_token=telegram_token,
     )
-    
-    return telegram_agent 
+
+    return telegram_agent

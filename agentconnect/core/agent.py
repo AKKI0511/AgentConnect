@@ -5,26 +5,17 @@ This module provides the abstract base class for all agents in the system,
 defining the core functionality for agent identity, messaging, and interaction.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 
 # Standard library imports
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 from pathlib import Path
 from dotenv import load_dotenv
-
-# Import wallet and payment dependencies
-from coinbase_agentkit import (
-    AgentKit,
-    AgentKitConfig,
-    CdpWalletProvider,
-    CdpWalletProviderConfig,
-    wallet_action_provider,
-    erc20_action_provider,
-    cdp_api_action_provider,
-)
 
 # Absolute imports from agentconnect package
 from agentconnect.utils import wallet_manager
@@ -43,6 +34,10 @@ from agentconnect.core.types import (
 if TYPE_CHECKING:
     from agentconnect.communication.hub import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
+
+    # Optional payment types (for static typing and IDEs only)
+    from coinbase_agentkit import AgentKit as _AgentKit
+    from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -101,6 +96,9 @@ class BaseAgent(ABC):
         # Ensure self.capabilities points to the profile's capabilities
         self.capabilities = self.profile.capabilities
 
+        # Track whether we've emitted a one-time verified INFO log
+        self._verified_logged_once: bool = False
+
         self.message_queue = asyncio.Queue()
         self.message_history: List[Message] = []
         self.is_running = False
@@ -110,10 +108,10 @@ class BaseAgent(ABC):
         self.cooldown_until = 0
         self.pending_requests: Dict[str, Dict[str, Any]] = {}
 
-        # Initialize payment capabilities
+        # Initialize payment capabilities (avoid optional type names at import time)
         self.enable_payments = enable_payments
-        self.wallet_provider: Optional[CdpWalletProvider] = None
-        self.agent_kit: Optional[AgentKit] = None
+        self.wallet_provider: Optional[_CdpWalletProvider] = None
+        self.agent_kit: Optional[_AgentKit] = None
 
         # Initialize wallet if payments are enabled
         if self.enable_payments:
@@ -126,12 +124,16 @@ class BaseAgent(ABC):
                     self.agent_id, wallet_data_dir
                 )
 
-                if wallet_data:
-                    logger.debug(f"Agent {self.agent_id}: Using existing wallet data")
-                else:
-                    logger.debug(
-                        f"Agent {self.agent_id}: No existing wallet data found, creating new wallet"
-                    )
+                # Import optional dependencies lazily to avoid hard import requirements
+                from coinbase_agentkit import (
+                    AgentKit,
+                    AgentKitConfig,
+                    CdpWalletProvider,
+                    CdpWalletProviderConfig,
+                    wallet_action_provider,
+                    erc20_action_provider,
+                    cdp_api_action_provider,
+                )
 
                 # Initialize wallet provider via coinbase CDP-SDK
                 cdp_config = (
@@ -139,7 +141,9 @@ class BaseAgent(ABC):
                     if wallet_data
                     else None
                 )
-                self.wallet_provider = CdpWalletProvider(cdp_config)
+                self.wallet_provider = cast(
+                    "_CdpWalletProvider", CdpWalletProvider(cdp_config)
+                )
 
                 # Prepare action providers based on the token symbol
                 action_providers = [wallet_action_provider(), cdp_api_action_provider()]
@@ -148,16 +152,13 @@ class BaseAgent(ABC):
                 payment_symbol = global_settings.payments.default_token_symbol
                 if payment_symbol != "ETH":
                     action_providers.append(erc20_action_provider())
-                    logger.debug(
-                        f"Agent {self.agent_id}: Added ERC20 action provider for {payment_symbol}"
-                    )
 
                 # Initialize coinbase AgentKit with wallet provider and action providers
                 agent_kit_config = AgentKitConfig(
                     wallet_provider=self.wallet_provider,
                     action_providers=action_providers,
                 )
-                self.agent_kit = AgentKit(agent_kit_config)
+                self.agent_kit = cast("_AgentKit", AgentKit(agent_kit_config))
 
                 # Save wallet data if it's a new wallet
                 if not wallet_data:
@@ -166,10 +167,11 @@ class BaseAgent(ABC):
                         wallet_manager.save_wallet_data(
                             self.agent_id, new_wallet_data, wallet_data_dir
                         )
-                        logger.debug(f"Agent {self.agent_id}: Saved new wallet data")
                     except Exception as e:
                         logger.warning(
-                            f"Agent {self.agent_id}: Error saving new wallet data: {e}"
+                            "Failed to persist new wallet data agent_id=%s: %s",
+                            self.agent_id,
+                            e,
                         )
 
                 # Get wallet address and add to agent profile
@@ -178,32 +180,28 @@ class BaseAgent(ABC):
                     wallet_address = self.wallet_provider.get_address()
                     if wallet_address:
                         self.profile.payment_address = wallet_address
-                        logger.info(
-                            f"Agent {self.agent_id}: Set payment address in profile to {wallet_address}"
-                        )
                     else:
                         logger.warning(
-                            f"Agent {self.agent_id}: Could not retrieve wallet address"
+                            "Wallet address unavailable agent_id=%s", self.agent_id
                         )
                 except Exception as e:
                     logger.error(
-                        f"Agent {self.agent_id}: Error getting wallet address: {e}"
+                        "Error retrieving wallet address agent_id=%s: %s",
+                        self.agent_id,
+                        e,
                     )
-
-                logger.info(
-                    f"Agent {self.agent_id}: Payment capabilities initialized successfully"
-                )
             except Exception as e:
                 logger.error(
-                    f"Agent {self.agent_id}: Error initializing payment capabilities: {e}"
+                    "Error initializing payment capabilities agent_id=%s: %s",
+                    self.agent_id,
+                    e,
                 )
                 self.wallet_provider = None
                 self.agent_kit = None
                 logger.warning(
-                    f"Agent {self.agent_id}: Payment capabilities disabled due to initialization error"
+                    "Payment capabilities disabled agent_id=%s", self.agent_id
                 )
-
-        logger.info(f"Agent {self.agent_id} ({self.profile.agent_type}) initialized.")
+        # Minimal: no DEBUG agent.init ok on construction
 
     @property
     def payments_enabled(self) -> bool:
@@ -250,7 +248,6 @@ class BaseAgent(ABC):
         Returns:
             True if the DID is valid, False otherwise
         """
-        logger.debug(f"Agent {self.agent_id}: Verifying Ethereum DID.")
         try:
             # Here you would typically:
             # 1. Resolve the DID document from Ethereum
@@ -259,13 +256,10 @@ class BaseAgent(ABC):
 
             # For MVP, we'll do basic format verification
             # TODO: Implement full Ethereum DID verification
-            logger.debug(
-                f"Agent {self.agent_id}: Basic Ethereum DID verification passed (placeholder)."
-            )
             return True
         except Exception as e:
             logger.error(
-                f"Agent {self.agent_id}: Error verifying Ethereum DID: {str(e)}"
+                "Error verifying Ethereum DID agent_id=%s: %s", self.agent_id, e
             )
             return False
 
@@ -278,7 +272,6 @@ class BaseAgent(ABC):
         Returns:
             True if the DID is valid, False otherwise
         """
-        logger.debug(f"Agent {self.agent_id}: Verifying key-based DID.")
         try:
             # Here you would typically:
             # 1. Decode the multibase-encoded public key
@@ -287,13 +280,10 @@ class BaseAgent(ABC):
 
             # For MVP, we'll do basic format verification
             # TODO: Implement full key-based DID verification
-            logger.debug(
-                f"Agent {self.agent_id}: Basic key-based DID verification passed (placeholder)."
-            )
             return True
         except Exception as e:
             logger.error(
-                f"Agent {self.agent_id}: Error verifying key-based DID: {str(e)}"
+                "Error verifying key-based DID agent_id=%s: %s", self.agent_id, e
             )
             return False
 
@@ -310,7 +300,9 @@ class BaseAgent(ABC):
         Raises:
             SecurityError: If identity verification fails
         """
-        logger.debug(f"Agent {self.agent_id}: Verifying identity.")
+        # Skip re-verification noise when already VERIFIED; allow explicit re-verify at DEBUG only
+        if self.identity.verification_status == VerificationStatus.VERIFIED:
+            return True
         try:
             # Verify DID using did:ethr or did:key
             if self.identity.did.startswith("did:ethr:"):
@@ -318,22 +310,19 @@ class BaseAgent(ABC):
             elif self.identity.did.startswith("did:key:"):
                 verified = await self._verify_key_did()
             else:
-                error_msg = f"Unsupported DID method: {self.identity.did}"
-                logger.error(f"Agent {self.agent_id}: {error_msg}")
-                raise ValueError(error_msg)
+                raise ValueError("Unsupported DID method")
 
             self.identity.verification_status = (
                 VerificationStatus.VERIFIED if verified else VerificationStatus.FAILED
             )
-            logger.info(
-                f"Agent {self.agent_id}: Identity verification status: {self.identity.verification_status}"
-            )
+            if verified:
+                if not self._verified_logged_once:
+                    logger.info("Identity verified agent_id=%s", self.agent_id)
+                    self._verified_logged_once = True
             return verified
-        except Exception as e:
+        except Exception:  # pylint: disable=broad-exception-raised
             self.identity.verification_status = VerificationStatus.FAILED
-            error_msg = f"Identity verification failed: {e}"
-            logger.error(f"Agent {self.agent_id}: {error_msg}")
-            raise SecurityError(error_msg)
+            raise SecurityError("Identity verification failed")
 
     async def send_message(
         self,
@@ -358,13 +347,21 @@ class BaseAgent(ABC):
             RuntimeError: If the agent is not registered with a hub
             ValueError: If the message cannot be routed
         """
-        logger.info(
-            f"Agent {self.agent_id} sending message to {receiver_id}: {content[:50]}..."
-        )
+        request_id = None
+        start_ts = time.time()
+        if metadata:
+            request_id = metadata.get("request_id")
+
         if not self.hub:
-            error_msg = "Agent not registered with hub"
-            logger.error(f"Agent {self.agent_id}: {error_msg}")
-            raise RuntimeError(error_msg)
+            # Log sending failure succinctly
+            logger.error(
+                "Cannot send: not registered with hub agent_id=%s receiver_id=%s type=%s request_id=%s",
+                self.agent_id,
+                receiver_id,
+                message_type.value,
+                request_id,
+            )
+            raise RuntimeError("Agent not registered with hub")
 
         # Check if this is a response to a pending request
         if not metadata:
@@ -378,9 +375,8 @@ class BaseAgent(ABC):
                 metadata["response_to"] = request_data["request_id"]
                 # Clean up the pending request
                 del self.pending_requests[receiver_id]
-                logger.debug(
-                    f"Agent {self.agent_id}: Added response correlation to message. Request ID: {request_data['request_id']}"
-                )
+                # Include correlation id for logging purposes
+                request_id = request_data.get("request_id", request_id)
 
         # Create the message
         message = Message.create(
@@ -391,16 +387,34 @@ class BaseAgent(ABC):
             message_type=message_type,
             metadata=metadata,
         )
-        logger.debug(f"Agent {self.agent_id}: Message created.")
 
         # Send through hub instead of directly to receiver
-        if not await self.hub.route_message(message):
-            error_msg = "Failed to route message"
-            logger.error(f"Agent {self.agent_id}: {error_msg}")
-            raise ValueError(error_msg)
+        try:
+            success = await self.hub.route_message(message)
+        except Exception as e:
+            logger.error(
+                "Route error agent_id=%s receiver_id=%s type=%s request_id=%s duration=%dms: %s",
+                self.agent_id,
+                receiver_id,
+                message_type.value,
+                request_id,
+                int((time.time() - start_ts) * 1000.0),
+                e,
+            )
+            raise
+
+        if not success:
+            logger.error(
+                "Failed to route message agent_id=%s receiver_id=%s type=%s request_id=%s",
+                self.agent_id,
+                receiver_id,
+                message_type.value,
+                request_id,
+            )
+            raise ValueError("Failed to route message")
 
         self.message_history.append(message)
-        logger.debug(f"Agent {self.agent_id}: Message sent and added to history.")
+        # Do not log BaseAgent send ok; hub emits hub.delivery ok
         return message
 
     async def receive_message(self, message: Message):
@@ -410,15 +424,9 @@ class BaseAgent(ABC):
         Args:
             message: The message to receive
         """
-        logger.info(
-            f"Agent {self.agent_id} received message from {message.sender_id}: {message.content[:50]}..."
-        )
-        # Add the message to the queue and history
+        # Queue inbound message and record history; no noisy success logs
         await self.message_queue.put(message)
         self.message_history.append(message)
-        logger.debug(
-            f"Agent {self.agent_id}: Message received and added to queue and history."
-        )
 
     @abstractmethod
     async def process_message(self, message: Message) -> Optional[Message]:
@@ -435,9 +443,6 @@ class BaseAgent(ABC):
         Returns:
             Optional response message
         """
-        logger.info(
-            f"Agent {self.agent_id} processing message from {message.sender_id}: {message.content[:50]}..."
-        )
 
         # Check if this is a collaboration request
         is_collaboration_request = (
@@ -447,7 +452,14 @@ class BaseAgent(ABC):
         # Verify message signature
         if not message.verify(self.identity):
             error_msg = "Message verification failed"
-            logger.error(f"Agent {self.agent_id}: {error_msg}")
+            logger.error(
+                "%s agent_id=%s sender_id=%s type=%s request_id=%s",
+                error_msg,
+                self.agent_id,
+                message.sender_id,
+                message.message_type.value,
+                (message.metadata or {}).get("request_id"),
+            )
 
             # Determine the appropriate message type based on the request type
             message_type = (
@@ -474,16 +486,18 @@ class BaseAgent(ABC):
 
         # Check if agent can receive the message
         if not await self.can_receive_message(message.sender_id):
+            # Compute remaining seconds for concise warning
+            cooldown_duration = self.cooldown_until - time.time()
             logger.warning(
-                f"Agent {self.agent_id} is in cooldown. Deferring message from {message.sender_id}."
+                "Cooldown active; deferring receive; %ds remaining agent_id=%s sender_id=%s",
+                int(max(cooldown_duration, 0)),
+                self.agent_id,
+                message.sender_id,
             )
             # Send cooldown message back to the sender
-            cooldown_duration = self.cooldown_until - time.time()
             if cooldown_duration > 0:
                 cooldown_msg = f"I am in cooldown for {int(cooldown_duration)} seconds. Please try again later."
-                logger.info(
-                    f"Agent {self.agent_id} sending cooldown message to {message.sender_id}: {cooldown_msg[:50]}..."
-                )
+                # No BaseAgent send-ok/start logging; hub will emit delivery success
 
                 # Determine the appropriate message type based on the request type
                 message_type = (
@@ -509,7 +523,12 @@ class BaseAgent(ABC):
                 )
             else:
                 error_msg = "Cannot receive messages from this sender"
-                logger.warning(f"Agent {self.agent_id}: {error_msg}")
+                logger.warning(
+                    "%s agent_id=%s sender_id=%s",
+                    error_msg,
+                    self.agent_id,
+                    message.sender_id,
+                )
 
                 # Determine the appropriate message type based on the request type
                 message_type = (
@@ -541,9 +560,6 @@ class BaseAgent(ABC):
             and conversation_data.get("message_count", 0)
             >= self.interaction_control.max_turns
         ):
-            logger.info(
-                f"Agent {self.agent_id} ending conversation with {message.sender_id} due to max turns reached."
-            )
             self.end_conversation(message.sender_id)
             stop_msg = "Maximum conversation turns reached. Ending conversation."
 
@@ -571,9 +587,6 @@ class BaseAgent(ABC):
             )
 
         if message.message_type == MessageType.STOP or "__EXIT__" in message.content:
-            logger.info(
-                f"Agent {self.agent_id} ending conversation with {message.sender_id} due to STOP message or exit command."
-            )
             self.end_conversation(message.sender_id)
 
             return Message.create(
@@ -590,9 +603,6 @@ class BaseAgent(ABC):
         # Check if the message is a cooldown notification
         if message.message_type == MessageType.COOLDOWN:
             cooldown_duration = message.metadata.get("cooldown_remaining", 0)
-            logger.info(
-                f"Agent {self.agent_id} received cooldown message from {message.sender_id}. Cooldown duration: {cooldown_duration} seconds."
-            )
 
             return Message.create(
                 sender_id=self.agent_id,
@@ -612,14 +622,8 @@ class BaseAgent(ABC):
             if not hasattr(self, "pending_requests"):
                 self.pending_requests = {}
             self.pending_requests[message.sender_id] = {"request_id": request_id}
-            logger.debug(
-                f"Agent {self.agent_id}: Stored request ID for correlation: {request_id}"
-            )
 
         # If we get here, it's a regular message that should be processed by the subclass
-        logger.debug(
-            f"Agent {self.agent_id}: Passing message to subclass for processing."
-        )
         return None
 
     async def run(self):
@@ -630,7 +634,7 @@ class BaseAgent(ABC):
         processes messages from the message queue until the agent is stopped.
         """
         self.is_running = True
-        logger.info(f"Agent {self.agent_id} started processing loop")
+        logger.info("Run loop start agent_id=%s", self.agent_id)
         try:
             while self.is_running:
                 try:
@@ -641,15 +645,9 @@ class BaseAgent(ABC):
                         message: Message = await asyncio.wait_for(
                             self.message_queue.get(), timeout=0.1  # 100ms timeout
                         )
-                        logger.debug(
-                            f"Agent {self.agent_id}: Got message from queue: {message.content[:50]}..."
-                        )
 
-                        # Skip processing if the agent is stopping
+                        # Skip processing if the agent is stopping; avoid per-iteration noise
                         if not self.is_running:
-                            logger.info(
-                                f"Agent {self.agent_id}: Skipping message processing as agent is stopping"
-                            )
                             self.message_queue.task_done()
                             continue
 
@@ -662,27 +660,27 @@ class BaseAgent(ABC):
                         continue
 
                 except asyncio.CancelledError:
-                    logger.info(
-                        f"Agent {self.agent_id}: Message processing loop cancelled"
-                    )
                     break
                 except Exception as e:
-                    logger.exception(
-                        f"Agent {self.agent_id}: Unexpected error in message processing loop: {str(e)}"
+                    logger.error(
+                        "Unexpected error in message processing loop agent_id=%s: %s",
+                        self.agent_id,
+                        e,
                     )
                     # Continue processing other messages
                     if "message" in locals() and message:
                         self.message_queue.task_done()
 
         except asyncio.CancelledError:
-            logger.info(f"Agent {self.agent_id}: Run loop cancelled")
+            raise
         except Exception as e:
-            logger.exception(
-                f"Agent {self.agent_id}: Unexpected error in run loop: {str(e)}"
+            logger.error(
+                "Unexpected error in run loop agent_id=%s: %s", self.agent_id, e
             )
         finally:
+            # TODO: Stop agent directly when refactoring `BaseAgent`
             self.is_running = False
-            logger.info(f"Agent {self.agent_id} stopped processing loop")
+            logger.info("Run loop stop agent_id=%s", self.agent_id)
 
     async def _process_message_and_respond(self, message: Message):
         """
@@ -691,23 +689,43 @@ class BaseAgent(ABC):
         Args:
             message: The message to process
         """
+        start_ts = time.time()
         try:
             # Normal message processing
             response = await self.process_message(message)
 
             # If we got a response, send it back
+            response_sent = False
             if response and response.message_type != MessageType.IGNORE:
-                logger.debug(
-                    f"Agent {self.agent_id}: Sending response to {message.sender_id}"
-                )
                 await self.send_message(
                     receiver_id=response.receiver_id,
                     content=response.content,
                     message_type=response.message_type,
                     metadata=response.metadata,
                 )
+                response_sent = True
+            # Emit a single DEBUG success for inbound processing, including request and response types
+            response_type = response.message_type.value if response else None
+            logger.debug(
+                "Message processed agent_id=%s sender_id=%s request_type=%s response_type=%s request_id=%s duration=%dms response_sent=%s",
+                self.agent_id,
+                message.sender_id,
+                message.message_type.value,
+                response_type,
+                (message.metadata or {}).get("request_id"),
+                int((time.time() - start_ts) * 1000.0),
+                "yes" if response_sent else "no",
+            )
         except Exception as e:
-            logger.error(f"Agent {self.agent_id}: Error processing message: {str(e)}")
+            logger.error(
+                "Error processing message agent_id=%s sender_id=%s type=%s request_id=%s duration=%dms",
+                self.agent_id,
+                message.sender_id,
+                message.message_type.value,
+                (message.metadata or {}).get("request_id"),
+                int((time.time() - start_ts) * 1000.0),
+                exc_info=True,
+            )
 
             # Find the original human sender in the conversation chain
             human_sender = await self._find_human_in_conversation_chain(
@@ -722,9 +740,6 @@ class BaseAgent(ABC):
                     content=error_message,
                     message_type=MessageType.ERROR,
                     metadata={"error_type": "processing_error"},
-                )
-                logger.info(
-                    f"Agent {self.agent_id}: Sent error message to human {human_sender}"
                 )
 
         # Mark the message as done
@@ -753,7 +768,11 @@ class BaseAgent(ABC):
             # If no human found in direct conversations, return None
             return None
         except Exception as e:
-            logger.error(f"Error finding human in conversation chain: {str(e)}")
+            logger.error(
+                "Error finding human in conversation chain agent_id=%s: %s",
+                self.agent_id,
+                e,
+            )
             return None
 
     async def join_network(self, network):
@@ -770,12 +789,10 @@ class BaseAgent(ABC):
         Returns:
             True if successfully joined, False otherwise
         """
-        logger.info(f"Agent {self.agent_id} joining network.")
         self.network = network
         await network.register_agent(self)
         # Broadcast availability with capabilities
         await network.broadcast_availability(self.agent_id, self.profile.capabilities)
-        logger.info(f"Agent {self.agent_id} broadcasted availability.")
 
     def set_cooldown(self, duration: int) -> None:
         """
@@ -785,7 +802,7 @@ class BaseAgent(ABC):
             duration: Cooldown duration in seconds
         """
         self.cooldown_until = time.time() + duration
-        logger.info(f"Agent {self.agent_id} set cooldown for {duration} seconds.")
+        logger.debug("Cooldown set; %ds remaining agent_id=%s", duration, self.agent_id)
 
     def is_in_cooldown(self) -> bool:
         """
@@ -795,7 +812,6 @@ class BaseAgent(ABC):
             True if the agent is in cooldown, False otherwise
         """
         cooldown_status = time.time() < self.cooldown_until
-        logger.debug(f"Agent {self.agent_id} cooldown status: {cooldown_status}")
         return cooldown_status
 
     def end_conversation(self, other_agent_id: str) -> None:
@@ -811,16 +827,24 @@ class BaseAgent(ABC):
             conversation_duration = time.time() - conversation_data.get("start_time", 0)
             message_count = conversation_data.get("message_count", 0)
 
-            logger.info(
-                f"Ending conversation between {self.agent_id} and {other_agent_id}. "
-                f"Duration: {int(conversation_duration)}s, Messages: {message_count}"
+            # Log duration in seconds, minutes, or hours for clarity
+            if conversation_duration < 60:
+                duration_str = f"{conversation_duration:.2f}s"
+            elif conversation_duration < 3600:
+                duration_str = f"{conversation_duration/60:.2f}min"
+            else:
+                duration_str = f"{conversation_duration/3600:.2f}h"
+
+            logger.debug(
+                "Conversation ended agent_id=%s receiver_id=%s messages=%d duration=%s",
+                self.agent_id,
+                other_agent_id,
+                message_count,
+                duration_str,
             )
 
             # Clean up conversation data
             del self.active_conversations[other_agent_id]
-            logger.debug(
-                f"Agent {self.agent_id}: Ended conversation with {other_agent_id}."
-            )
 
     async def can_send_message(self, receiver_id: str) -> bool:
         """
@@ -833,8 +857,10 @@ class BaseAgent(ABC):
             True if the agent can send a message, False otherwise
         """
         if self.is_in_cooldown():
-            logger.debug(
-                f"Agent {self.agent_id} cannot send message to {receiver_id}: in cooldown."
+            logger.warning(
+                "Cannot send: cooldown active agent_id=%s receiver_id=%s",
+                self.agent_id,
+                receiver_id,
             )
             return False
         if receiver_id not in self.active_conversations:
@@ -842,10 +868,6 @@ class BaseAgent(ABC):
                 "start_time": time.time(),
                 "message_count": 0,
             }
-            logger.debug(
-                f"Agent {self.agent_id}: Started new conversation with {receiver_id}."
-            )
-        logger.debug(f"Agent {self.agent_id} can send message to {receiver_id}.")
         return True
 
     async def can_receive_message(self, sender_id: str) -> bool:
@@ -861,16 +883,15 @@ class BaseAgent(ABC):
         if self.is_in_cooldown():
             cooldown_remaining = self.cooldown_until - time.time()
             logger.warning(
-                f"Agent {self.agent_id} cannot receive message from {sender_id}: in cooldown for {int(cooldown_remaining)} more seconds."
+                "Cannot receive: cooldown active; %ds remaining agent_id=%s sender_id=%s",
+                int(max(cooldown_remaining, 0)),
+                self.agent_id,
+                sender_id,
             )
             return False
         if sender_id not in self.active_conversations:
-            logger.debug(
-                f"Agent {self.agent_id}: New conversation detected with {sender_id}."
-            )
             return True
         # Add any other conditions as needed
-        logger.debug(f"Agent {self.agent_id} can receive message from {sender_id}.")
         return True
 
     async def stop(self) -> None:
@@ -883,8 +904,6 @@ class BaseAgent(ABC):
         Returns:
             None
         """
-        logger.info(f"Agent {self.agent_id}: Stopping agent...")
-
         # Mark agent as not running to stop the message processing loop
         self.is_running = False
 
@@ -899,10 +918,11 @@ class BaseAgent(ABC):
                 # Note: Additional cleanup may be needed depending on wallet implementation
                 self.wallet_provider = None
                 self.agent_kit = None
-                logger.debug(f"Agent {self.agent_id}: Cleaned up wallet provider")
             except Exception as e:
                 logger.error(
-                    f"Agent {self.agent_id}: Error cleaning up wallet provider: {e}"
+                    "Error cleaning up wallet provider agent_id=%s: %s",
+                    self.agent_id,
+                    e,
                 )
 
         # Clear message queue to prevent processing any more messages
@@ -910,17 +930,16 @@ class BaseAgent(ABC):
             while not self.message_queue.empty():
                 self.message_queue.get_nowait()
                 self.message_queue.task_done()
-            logger.debug(f"Agent {self.agent_id}: Cleared message queue")
         except Exception as e:
-            logger.error(f"Agent {self.agent_id}: Error clearing message queue: {e}")
+            logger.error(
+                "Error clearing message queue agent_id=%s: %s", self.agent_id, e
+            )
 
         # Reset cooldown
         self.reset_cooldown()
 
         # Clear pending requests
         self.pending_requests.clear()
-
-        logger.info(f"Agent {self.agent_id}: Agent stopped successfully")
 
     def reset_cooldown(self) -> None:
         """
@@ -929,13 +948,8 @@ class BaseAgent(ABC):
         This method resets the agent's cooldown state, allowing it to
         send and receive messages immediately.
         """
-        previous_cooldown = (
-            self.cooldown_until - time.time() if self.is_in_cooldown() else 0
-        )
+        # Track previous cooldown internally if needed in the future
         self.cooldown_until = 0
-        logger.info(
-            f"Agent {self.agent_id} cooldown reset. Previous remaining cooldown: {int(previous_cooldown)} seconds."
-        )
 
     def _get_conversation_id(self, participant_id: str) -> str:
         """
@@ -950,5 +964,4 @@ class BaseAgent(ABC):
         # Create a directed conversation ID to ensure unique conversations
         # This ensures that A->B and B->A are different conversations
         conversation_id = f"conversation_{self.agent_id}_to_{participant_id}"
-        logger.debug(f"Generated conversation ID: {conversation_id}")
         return conversation_id

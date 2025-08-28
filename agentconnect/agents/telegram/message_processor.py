@@ -55,20 +55,12 @@ class TelegramMessageProcessor:
         Args:
             message: Telegram message
         """
-        # Log the incoming message
-        logger.info(
-            f"Handling group mention from {message.from_user.first_name} in chat {message.chat.title}"
-        )
-
         # Add group to registered list if needed
         if message.chat.id not in self.bot_manager.group_ids:
             self.bot_manager.group_ids.add(message.chat.id)
             if self.bot_manager.telegram_tools:
                 self.bot_manager.telegram_tools.group_ids = self.bot_manager.group_ids
                 self.bot_manager.telegram_tools._save_group_ids()
-            logger.info(
-                f"📌 Group added through mention: {message.chat.title} ({message.chat.id})"
-            )
 
         # Send a "thinking" message as a reply to the original message
         thinking_message = await message.reply("🤔 Thinking...")
@@ -123,7 +115,6 @@ class TelegramMessageProcessor:
         """
         # Skip messages without user
         if not message.from_user:
-            logger.info(f"Skipping message without user: {message}")
             return None
 
         # Send "thinking" message to indicate we're processing
@@ -249,12 +240,10 @@ class TelegramMessageProcessor:
         """
         # Skip messages without user
         if not message.from_user:
-            logger.info(f"Skipping message without user: {message}")
             return None
 
         # Only proceed for text messages (media is handled separately)
         if not message.text and not hasattr(message, "media_group_id"):
-            logger.debug(f"Skipping non-text message that isn't media group: {message}")
             return None
 
         # Send "thinking" message to indicate we're processing
@@ -368,10 +357,6 @@ class TelegramMessageProcessor:
                 "callbacks": interaction_control.get_callback_handlers(),
             }
 
-            logger.debug(
-                f"Processing Telegram message with conversation ID: {conversation_id}"
-            )
-
             # Process with our workflow (which includes Telegram tools)
             response = await workflow.ainvoke(initial_state, config)
 
@@ -390,6 +375,10 @@ class TelegramMessageProcessor:
                 "reply_to_message_id": reply_to_message_id,
             }
 
-        except Exception as e:
-            logger.exception(f"Error processing message: {e}")
+        except Exception:
+            logger.error(
+                "Error processing Telegram message agent_id=%s",
+                self.agent_id,
+                exc_info=True,
+            )
             return None

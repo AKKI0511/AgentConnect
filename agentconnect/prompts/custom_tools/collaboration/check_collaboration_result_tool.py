@@ -115,7 +115,6 @@ def create_check_collaboration_result_tool(
             hasattr(communication_hub, "late_responses")
             and request_id in communication_hub.late_responses
         ):
-            logger.debug(f"Found late response for request {request_id}")
             # Assuming late_responses stores the actual response content or a message object with content
             response_obj = communication_hub.late_responses.pop(
                 request_id
@@ -136,9 +135,6 @@ def create_check_collaboration_result_tool(
             if future.done():
                 # Check if it was a timeout previously marked
                 if hasattr(future, "_timed_out") and future._timed_out:
-                    logger.debug(
-                        f"Request {request_id} previously timed out and is still pending final result."
-                    )
                     # It's done but was a timeout, so it might not have a "real" result yet for this check.
                     # Or, if it completed *after* timeout but *before* late_responses check, it might be here.
                     # For simplicity, if it timed out, we expect it via late_responses primarily.
@@ -152,9 +148,7 @@ def create_check_collaboration_result_tool(
                         response_content = getattr(
                             response_obj, "content", str(response_obj)
                         )
-                        logger.debug(
-                            f"Found completed (previously timed out) response for request {request_id}"
-                        )
+
                         # Once retrieved, remove from pending_responses to avoid re-processing.
                         del communication_hub.pending_responses[request_id]
                         return CheckCollaborationResultOutput(
@@ -170,7 +164,9 @@ def create_check_collaboration_result_tool(
                         )
                     except Exception as e:  # Other errors getting result
                         logger.error(
-                            f"Error getting result from future for {request_id} (previously timed_out): {str(e)}"
+                            "Error getting result from future for %s (previously timed_out): %s",
+                            request_id,
+                            str(e),
                         )
                         del communication_hub.pending_responses[request_id]
                         return CheckCollaborationResultOutput(
@@ -180,9 +176,6 @@ def create_check_collaboration_result_tool(
                         )
                 else:  # Not marked as timed_out and is done
                     try:
-                        logger.debug(
-                            f"Found completed (non-timeout) response for request {request_id}"
-                        )
                         response_obj = future.result(
                             timeout=0
                         )  # Non-blocking get result
@@ -200,7 +193,8 @@ def create_check_collaboration_result_tool(
                         asyncio.TimeoutError
                     ):  # Should not happen if future.done() is true and not timed_out
                         logger.warning(
-                            f"Future for {request_id} was done but result call timed out. Treating as pending."
+                            "Future for %s was done but result call timed out. Treating as pending.",
+                            request_id,
                         )
                         return CheckCollaborationResultOutput(
                             success=False,
@@ -209,7 +203,9 @@ def create_check_collaboration_result_tool(
                         )
                     except Exception as e:
                         logger.error(
-                            f"Error getting result from future for {request_id}: {str(e)}"
+                            "Error getting result from future for %s: %s",
+                            request_id,
+                            str(e),
                         )
                         if (
                             request_id in communication_hub.pending_responses
@@ -229,9 +225,6 @@ def create_check_collaboration_result_tool(
                 )
 
         # Request ID not found in late_responses or pending_responses
-        logger.warning(
-            f"No result or pending task found for request ID: {request_id}. It might have completed and been cleared, never existed, or an issue occurred."
-        )
         return CheckCollaborationResultOutput(
             success=False,
             status="not_found",
@@ -251,7 +244,8 @@ def create_check_collaboration_result_tool(
                 return asyncio.run(check_result_async(request_id))
         except RuntimeError:
             logger.error(
-                f"RuntimeError in check_result sync wrapper for {request_id}. Attempting new loop."
+                "RuntimeError in check_result sync wrapper for %s. Attempting new loop.",
+                request_id,
             )
             loop = asyncio.new_event_loop()
             try:
@@ -262,7 +256,9 @@ def create_check_collaboration_result_tool(
                 asyncio.set_event_loop(None)
         except Exception as e:
             logger.error(
-                f"Error in check_result sync wrapper for {request_id}: {str(e)}"
+                "Error in check_result sync wrapper for %s: %s",
+                request_id,
+                str(e),
             )
             return CheckCollaborationResultOutput(
                 success=False,

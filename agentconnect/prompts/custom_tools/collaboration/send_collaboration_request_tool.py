@@ -120,7 +120,6 @@ def create_send_collaboration_request_tool(
     # Connected mode implementation
     # Store the agent ID at creation time
     creator_agent_id = current_agent_id
-    logger.debug(f"Creating collaboration request tool for agent: {creator_agent_id}")
 
     async def send_request_async(
         target_agent_id: str, task: str, timeout: int = 120, **kwargs: Any
@@ -218,9 +217,6 @@ def create_send_collaboration_request_tool(
             metadata["request_id"] = request_id
 
             # Send the request and wait for response
-            logger.debug(
-                f"Sending collaboration from {sender_id} to {target_agent_id} with request_id: {request_id}"
-            )
             response_content = await communication_hub.send_collaboration_request(
                 sender_id=sender_id,
                 receiver_id=target_agent_id,
@@ -237,25 +233,11 @@ def create_send_collaboration_request_tool(
                     and len(response_content) == 1
                     and isinstance(response_content[0], str)
                 ):
-                    # Handle the specific case of ['string']
-                    logger.warning(
-                        f"Received list-wrapped response from {target_agent_id} for request {request_id}, extracting string."
-                    )
                     cleaned_response_content = response_content[0]
                 else:
-                    # For any other non-string type (dict, multi-list, int, etc.), convert to JSON string
                     try:
-                        logger.warning(
-                            f"Received non-string response type {type(response_content).__name__} from {target_agent_id} for request {request_id}, converting to JSON string."
-                        )
-                        cleaned_response_content = json.dumps(
-                            response_content
-                        )  # Attempt JSON conversion
-                    except TypeError as e:
-                        # Fallback if JSON conversion fails (e.g., complex object)
-                        logger.error(
-                            f"Could not JSON serialize response type {type(response_content).__name__} for request {request_id}: {e}. Using str() representation."
-                        )
+                        cleaned_response_content = json.dumps(response_content)
+                    except TypeError:
                         cleaned_response_content = str(response_content)
             # --- Handle potential non-string/list response from LLM --- END
 
@@ -265,7 +247,9 @@ def create_send_collaboration_request_tool(
                 and "No immediate response received"
                 in cleaned_response_content  # Specific check for timeout from hub
             ):
-                logger.warning(f"Timeout on request {request_id} to {target_agent_id}")
+                logger.warning(
+                    "Timeout on request %s to %s", request_id, target_agent_id
+                )
                 return SendCollaborationRequestOutput(
                     success=False,  # Technically request was sent, but no immediate reply implies a form of failure for this sync-feeling call
                     response=f"No immediate response from {target_agent_id} within {adjusted_timeout} seconds. "
@@ -276,16 +260,17 @@ def create_send_collaboration_request_tool(
                 )
 
             # Handle success case
-            logger.debug(
-                f"Got response from {target_agent_id} for request {request_id}"
-            )
             return SendCollaborationRequestOutput(
                 success=True, response=cleaned_response_content, request_id=request_id
             )
 
         except Exception as e:
             logger.exception(
-                f"Error sending collaboration request {request_id} from {sender_id} to {target_agent_id}: {str(e)}"
+                "Error sending collaboration request %s from %s to %s: %s",
+                request_id,
+                sender_id,
+                target_agent_id,
+                str(e),
             )
             # Attempt to generate a request_id if not already set for error reporting
             final_request_id = metadata.get("request_id") if metadata else None
@@ -325,7 +310,9 @@ def create_send_collaboration_request_tool(
             # Handle cases where asyncio.run might fail if called from a running loop
             # or if a new loop can't be started.
             logger.error(
-                f"RuntimeError in send_request sync wrapper: {str(e)}. Attempting new loop."
+                "RuntimeError in send_request sync wrapper to %s: %s. Attempting new loop.",
+                target_agent_id,
+                str(e),
             )
             loop = asyncio.new_event_loop()
             try:
@@ -337,7 +324,11 @@ def create_send_collaboration_request_tool(
                 loop.close()
                 asyncio.set_event_loop(None)  # Clean up loop association
         except Exception as e:
-            logger.error(f"Error in send_request sync wrapper: {str(e)}")
+            logger.error(
+                "Error in send_request sync wrapper to %s: %s",
+                target_agent_id,
+                str(e),
+            )
             return SendCollaborationRequestOutput(
                 success=False,
                 response=f"Error sending collaboration request via sync wrapper: {str(e)}",

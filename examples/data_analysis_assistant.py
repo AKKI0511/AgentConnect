@@ -41,11 +41,6 @@ from agentconnect.core.agent import AgentIdentity
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import Capability, ModelName, ModelProvider
 from agentconnect.prompts.tools import PromptTools
-from agentconnect.utils.logging_config import (
-    LogLevel,
-    disable_all_logging,
-    setup_logging,
-)
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -605,6 +600,21 @@ async def setup_agents():
     }
 
 
+def _enable_example_logging(verbose: bool) -> None:
+    if not verbose:
+        return
+    import logging as _pylog
+
+    for name in [
+        "agentconnect.communication.hub",
+        "agentconnect.core.agent",
+        "agentconnect.agents.human_agent",
+        "agentconnect.agents.ai_agent",
+        "agentconnect.core.registry.registry_base",
+    ]:
+        _pylog.getLogger(name).setLevel(_pylog.INFO)
+
+
 async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None:
     """
     Run the data analysis assistant demo with multiple specialized agents.
@@ -649,21 +659,8 @@ async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None
             print_colored(f"  - {var}: {optional_env_vars[var]}", "INFO")
         print_colored("These are not required but may enhance functionality.", "INFO")
 
-    if enable_logging:
-        setup_logging(
-            level=LogLevel.WARNING,
-            module_levels={
-                "AgentRegistry": LogLevel.WARNING,
-                "CommunicationHub": LogLevel.DEBUG,
-                "src.agents.ai_agent": LogLevel.INFO,
-                "src.agents.human_agent": LogLevel.WARNING,
-                "src.core.agent": LogLevel.INFO,
-                "src.prompts.tools": LogLevel.INFO,
-            },
-        )
-    else:
-        # Disable all logging when not in debug mode
-        disable_all_logging()
+    # Opt-in example logging
+    _enable_example_logging(enable_logging)
 
     print_colored("=== Advanced Multi-Agent Data Analysis System Demo ===", "SYSTEM")
     print_colored(

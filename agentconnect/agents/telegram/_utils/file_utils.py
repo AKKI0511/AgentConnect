@@ -55,7 +55,9 @@ def load_group_ids(groups_file: str) -> Set[int]:
     except FileNotFoundError:
         return set()
     except ValueError:
-        logger.error("Error parsing group IDs from groups.txt. File may be corrupted.")
+        logger.error(
+            "Error parsing group IDs from %s; file may be corrupted.", groups_file
+        )
         return set()
 
 
@@ -75,6 +77,6 @@ def save_group_ids(groups_file: str, group_ids: Set[int]) -> bool:
             for gid in group_ids:
                 file.write(f"{gid}\n")
         return True
-    except IOError as e:
-        logger.error(f"Error saving group IDs to {groups_file}: {e}")
+    except IOError:
+        logger.error("Error saving group IDs to %s", groups_file, exc_info=True)
         return False

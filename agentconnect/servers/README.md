@@ -52,11 +52,10 @@ All AgentConnect servers follow consistent patterns:
 
 ```bash
 # Run with default settings (development)
-python -m agentconnect.servers.registry_api_server
-
-# Or using uvicorn directly
-uvicorn agentconnect.servers.registry_api_server:app --host 0.0.0.0 --port 8000
+agentconnect serve registry
 ```
+
+Developer note (for contributors): You can also run via uvicorn or module path: `uvicorn agentconnect.servers.registry_api_server:app` or `python -m agentconnect.servers.registry_api_server`.
 
 The server will be available at `http://localhost:8000` with interactive API documentation at `/docs`.
 
@@ -83,10 +82,10 @@ if __name__ == "__main__":
     uvicorn.run(app, host=custom.host, port=custom.port, log_level=custom.log_level.lower())
 ```
 
-Canonical CLI run remains:
+Preferred CLI:
 
 ```bash
-uvicorn agentconnect.servers.registry_api_server:app
+agentconnect serve registry
 ```
 
 ### .env quickstart
@@ -107,7 +106,7 @@ Copy-Item 'agentconnect/servers/.env.example' '.env'
 Then run:
 
 ```bash
-uvicorn agentconnect.servers.registry_api_server:app
+agentconnect serve registry
 ```
 
 ## Configuration Reference
@@ -158,14 +157,14 @@ All servers auto-load a `.env` in the working directory via Pydantic BaseSetting
 
   ```bash
   cp agentconnect/servers/.env.example .env
-  uvicorn agentconnect.servers.registry_api_server:app
+  agentconnect serve registry
   ```
 
   PowerShell:
 
   ```powershell
   Copy-Item 'agentconnect/servers/.env.example' '.env'
-  uvicorn agentconnect.servers.registry_api_server:app
+  agentconnect serve registry
   ```
 
 - Docker: pass the same file with `--env-file` (works on Windows/macOS/Linux; `.env` must exist on host):
@@ -378,16 +377,12 @@ All servers provide consistent monitoring capabilities:
 Examples:
 
 ```bash
-# python -m (env controls our logger; uvicorn log level via run)
-python -m agentconnect.servers.registry_api_server
+# CLI (env controls our logger; uvicorn log level via run)
+agentconnect serve registry
 
 # Windows PowerShell: set our logger level
 $env:AGENTCONNECT_REGISTRY_LOG_LEVEL = "DEBUG"
-python -m agentconnect.servers.registry_api_server
-
-# uvicorn CLI (env still controls our logger in lifespan; CLI controls uvicorn)
-export AGENTCONNECT_REGISTRY_LOG_LEVEL=INFO
-uvicorn agentconnect.servers.registry_api_server:app --log-level warning
+agentconnect serve registry
 ```
 
 ## Troubleshooting

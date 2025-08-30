@@ -150,6 +150,8 @@ agentconnect config show
 agentconnect config validate agentconnect.yaml
 ```
 
+Note: CLI commands re-read configuration fresh each run using `load_settings()` to reflect the latest `agentconnect.yaml`. Library code commonly imports a process-level snapshot via `from agentconnect.config import settings` for convenience.
+
 ## Dependencies
 
 - `pydantic` (required)

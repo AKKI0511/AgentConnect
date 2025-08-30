@@ -36,10 +36,10 @@ The MCP server requires the Registry API server to be running:
 
 ```bash
 # Start the Registry API server (required dependency)
-poetry run python -m agentconnect.servers.registry_api_server
+agentconnect serve registry
 
 # Verify it's running
-curl http://localhost:8000/health
+agentconnect registry ping
 ```
 
 ### 2. Use the MCP Factory (recommended)
@@ -68,11 +68,12 @@ mcp = create_agent_discovery_mcp(registry_client=custom_client)
 
 ```bash
 # Test the MCP server directly
-poetry run python -m agentconnect.mcp.registry_mcp_server
-
-# Or use the MCP Inspector for interactive testing
-poetry run mcp dev agentconnect/mcp/registry_mcp_server.py
+agentconnect mcp start agent-discovery
 ```
+
+Development / Debugging:
+
+- MCP Inspector (interactive testing): `mcp dev agentconnect/mcp/registry_mcp_server.py`
 
 ### 3. Configure MCP Clients
 
@@ -87,9 +88,10 @@ Add to your `.cursor/mcp.json`:
             "command": "poetry",
             "args": [
                 "run",
-                "python",
-                "-m",
-                "agentconnect.mcp.registry_mcp_server"
+                "agentconnect",
+                "mcp",
+                "start",
+                "agent-discovery"
             ]
         }
     }
@@ -110,9 +112,10 @@ Add to your Claude Desktop configuration. **Important:** Use the `--directory` f
                 "--directory",
                 "/path/to/your/AgentConnect",
                 "run",
-                "python",
-                "-m",
-                "agentconnect.mcp.registry_mcp_server"
+                "agentconnect",
+                "mcp",
+                "start",
+                "agent-discovery"
             ]
         }
     }
@@ -129,7 +132,10 @@ Add to your Claude Desktop configuration. **Important:** Use the `--directory` f
                 "--directory",
                 "/path/to/your/AgentConnect",
                 "run",
-                "agentconnect/mcp/registry_mcp_server.py"
+                "agentconnect",
+                "mcp",
+                "start",
+                "agent-discovery"
             ]
         }
     }
@@ -146,7 +152,10 @@ Add to your Claude Desktop configuration. **Important:** Use the `--directory` f
                 "--directory",
                 "C:\\Users\\yourusername\\Desktop\\github-repos\\AgentConnect",
                 "run",
-                "agentconnect/mcp/registry_mcp_server.py"
+                "agentconnect",
+                "mcp",
+                "start",
+                "agent-discovery"
             ]
         }
     }
@@ -251,10 +260,11 @@ async def find_agents_example():
     server_params = StdioServerParameters(
         command="poetry",
         args=[
-            "run", 
-            "python", 
-            "-m", 
-            "agentconnect.mcp.registry_mcp_server"
+            "run",
+            "agentconnect",
+            "mcp",
+            "start",
+            "agent-discovery"
         ],
         cwd="/path/to/your/AgentConnect"
     )
@@ -327,16 +337,13 @@ mcp:
 
 ```bash
 # 1. Start Registry API server first
-poetry run python -m agentconnect.servers.registry_api_server
+agentconnect serve registry
 
-# 2. Test MCP server import
-poetry run python -c "import agentconnect.mcp.registry_mcp_server; print('Import successful')"
+# 2. Test with MCP Inspector (interactive debugging)
+mcp dev agentconnect/mcp/registry_mcp_server.py
 
-# 3. Test with MCP Inspector (interactive debugging)
-poetry run mcp dev agentconnect/mcp/registry_mcp_server.py
-
-# 4. Test direct execution
-poetry run python -m agentconnect.mcp.registry_mcp_server
+# 3. Test direct execution
+agentconnect mcp start agent-discovery
 ```
 
 ### Logging under MCP
@@ -421,7 +428,7 @@ If you see a red signal for the MCP server:
 
 2. **Verify the MCP server can start:**
    ```bash
-   poetry run python -m agentconnect.mcp.registry_mcp_server
+   poetry run agentconnect mcp start agent-discovery
     # Should show: "Starting AgentConnect agent discovery MCP tools..."
    ```
 
@@ -439,7 +446,7 @@ If you see a red signal for the MCP server:
 ### Common Issues
 
 **"Registry API server is not available"**
-- Start the Registry API server first: `poetry run python -m agentconnect.servers.registry_api_server`
+- Start the Registry API server first: `poetry run agentconnect serve registry`
 - Check if port 8000 is already in use: `netstat -an | grep 8000`
 - Verify network connectivity: `curl http://localhost:8000/health`
 

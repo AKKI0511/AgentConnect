@@ -25,6 +25,19 @@ OPENAI_API_KEY=your_openai_api_key
 GROQ_API_KEY=your_groq_api_key
 ```
 
+### Use the CLI
+
+```bash
+# Initialize SDK config (creates agentconnect.yaml)
+agentconnect config init
+
+# Start the Registry API server
+agentconnect serve registry
+
+# Verify Registry API health
+agentconnect registry ping
+```
+
 ### Minimal Example: Human-AI Chat
 
 This example shows a simple interactive conversation between a human user and an AI assistant.

@@ -189,6 +189,19 @@ AgentConnect can be installed by cloning the repository and using Poetry to inst
 
 For detailed installation instructions including environment setup and API configuration, see the :doc:`installation` guide.
 
+Use the CLI:
+
+.. code-block:: bash
+
+    # Initialize SDK config (creates agentconnect.yaml)
+    agentconnect config init
+
+    # Start the Registry API server
+    agentconnect serve registry
+
+    # Check Registry API health
+    agentconnect registry ping
+
 .. _quick-start:
 
 Quick Start

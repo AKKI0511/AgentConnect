@@ -67,6 +67,7 @@ class TestIntegrationLayer:
                 return None
 
         injected_client = AsyncMock()
+        injected_client.base_url = "http://localhost:8000"
 
         with patch("agentconnect.mcp.registry_mcp_server.FastMCP", new=DummyMCP), patch(
             "agentconnect.mcp.registry_mcp_server._check_registry_api_health",

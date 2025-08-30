@@ -60,7 +60,7 @@ from examples.multi_agent.message_logger import print_colored, agent_message_log
 init()
 
 
-async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
+async def setup_agents() -> Dict[str, Any]:
     """
     Set up the registry, hub, and agents.
 
@@ -72,19 +72,6 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
     """
     # Load environment variables
     load_dotenv()
-
-    # Opt-in example logging: elevate a small allowlist to INFO
-    if enable_logging:
-        import logging as _pylog
-
-        for name in [
-            "agentconnect.communication.hub",
-            "agentconnect.core.agent",
-            "agentconnect.agents.human_agent",
-            "agentconnect.agents.ai_agent",
-            "agentconnect.core.registry.registry_base",
-        ]:
-            _pylog.getLogger(name).setLevel(_pylog.INFO)
 
     # Check for required API keys
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -189,7 +176,7 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to set up agents: {e}")
 
 
-async def run_multi_agent_system(enable_logging: bool = False) -> None:
+async def run_multi_agent_system() -> None:
     """
     Main function to run the multi-agent system.
 
@@ -236,7 +223,7 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
                 pass
 
         # Set up agents
-        agents = await setup_agents(enable_logging)
+        agents = await setup_agents()
 
         print_colored("Agents are ready! System is now running.", "SYSTEM")
 
@@ -283,10 +270,6 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
         print_colored(f"\nCritical error: {e}", "ERROR")
     except Exception as e:
         print_colored(f"\nUnexpected error: {e}", "ERROR")
-        if enable_logging:
-            import traceback
-
-            traceback.print_exc()
     finally:
         # Clean up
         if agents:
@@ -345,11 +328,7 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
 
 if __name__ == "__main__":
     try:
-        # Add --logging flag for detailed logging
-        if "--logging" in sys.argv:
-            asyncio.run(run_multi_agent_system(enable_logging=True))
-        else:
-            asyncio.run(run_multi_agent_system())
+        asyncio.run(run_multi_agent_system())
     except KeyboardInterrupt:
         print_colored("\nAll agents terminated by user", "WARNING")
     except Exception as e:

@@ -26,6 +26,7 @@ from agentconnect.agents import AIAgent, HumanAgent, TelegramAIAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core import (
     BaseAgent,
+    AgentRegistry,
     AgentIdentity,
     Capability,
     ModelProvider,
@@ -34,7 +35,6 @@ from agentconnect.core import (
     AgentType,
     Skill,
 )
-from agentconnect.clients import RegistryAPIClient
 from agentconnect.utils import ToolTracerCallbackHandler
 
 # Initialize colorama for cross-platform colored output
@@ -287,22 +287,7 @@ Your fee is 2 USDC (Base Sepolia). When responding, state your fee.""",
     return user_proxy_agent, research_agent, telegram_broadcaster, human_agent
 
 
-def _enable_example_logging(verbose: bool) -> None:
-    if not verbose:
-        return
-    import logging as _pylog
-
-    for name in [
-        "agentconnect.communication.hub",
-        "agentconnect.core.agent",
-        "agentconnect.agents.human_agent",
-        "agentconnect.agents.ai_agent",
-        "agentconnect.core.registry.registry_base",
-    ]:
-        _pylog.getLogger(name).setLevel(_pylog.INFO)
-
-
-async def main(enable_logging: bool = False):
+async def main():
     """
     Main execution flow for the autonomous workflow demo.
 
@@ -312,9 +297,6 @@ async def main(enable_logging: bool = False):
     Args:
         enable_logging: Whether to enable verbose logging
     """
-
-    # Opt-in example logging
-    _enable_example_logging(enable_logging)
 
     try:
         print_colored("\nSetting up agents...", "SYSTEM")
@@ -330,7 +312,7 @@ async def main(enable_logging: bool = False):
         ]
 
         # Create registry and communication hub
-        registry = RegistryAPIClient()
+        registry = AgentRegistry()
         hub = CommunicationHub(registry)
 
         print_colored("Registering agents with Communication Hub...", "SYSTEM")

@@ -118,12 +118,10 @@ def create_agent_discovery_mcp(
     from agentconnect.config import settings as agentconnect_settings  # local import
 
     discovery_cfg = agentconnect_settings.mcp.agent_discovery
-    client_cfg = agentconnect_settings.clients.registry
 
     default_top_k = discovery_cfg.top_k
     default_strictness = discovery_cfg.strictness
     default_output_detail = discovery_cfg.output_detail
-    base_url = client_cfg.base_url
 
     # Application context is local to the factory
     @dataclass
@@ -141,7 +139,9 @@ def create_agent_discovery_mcp(
         client = registry_client or RegistryAPIClient()
 
         # Health check on startup using provided/derived base_url
-        is_healthy = await _check_registry_api_health(base_url, _HEALTH_TIMEOUT_SECONDS)
+        is_healthy = await _check_registry_api_health(
+            client.base_url, _HEALTH_TIMEOUT_SECONDS
+        )
 
         context = AppContext(registry_client=client, is_healthy=is_healthy)
         try:
@@ -190,7 +190,7 @@ def create_agent_discovery_mcp(
         if not app_ctx.is_healthy:
             # Re-check health in case it recovered
             app_ctx.is_healthy = await _check_registry_api_health(
-                base_url, _HEALTH_TIMEOUT_SECONDS
+                app_ctx.registry_client.base_url, _HEALTH_TIMEOUT_SECONDS
             )
 
             if not app_ctx.is_healthy:

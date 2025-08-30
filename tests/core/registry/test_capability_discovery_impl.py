@@ -6,7 +6,6 @@ capability discovery system, including embedding utils, indexing, and Qdrant cli
 """
 
 import pytest
-import logging
 import numpy as np
 from tests.core.utils import (
     print_header,

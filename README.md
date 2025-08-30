@@ -161,8 +161,18 @@ For detailed installation instructions and configuration options, see the [Quick
 
 For detailed instructions on using AgentConnect, including the command-line interface, running examples, and building your own agents, see the [full documentation](https://AKKI0511.github.io/AgentConnect/).
 
+Quick CLI examples:
+
+```bash
+agentconnect config init
+agentconnect serve registry
+agentconnect registry ping
+agentconnect mcp start agent-discovery
+```
+
 *   [Running Examples](examples/README.md)
-*   [Using the CLI](docs/source/usage.md)  *(To be created)*
+*   [Demo Application UI](demos/README.md)
+*   [Using the CLI](agentconnect/cli/README.md)
 *   [Building Custom Agents](docs/source/building_agents.md) *(To be created)*
 
 ## 💻 Examples
@@ -184,7 +194,7 @@ A full-featured demo application is included to showcase the framework's capabil
 
 ```bash
 # Start the backend server
-agentconnect --demo --backend-only
+poetry run python demos/run_demo.py --backend-only
 
 # Start the frontend (in a separate terminal)
 cd demos/ui/frontend
@@ -249,7 +259,7 @@ For developers who want to contribute to AgentConnect, please refer to our [Deve
 AgentConnect/
 ├── agentconnect/           # Core framework
 │   ├── __init__.py        # Package initialization with public API
-│   ├── cli.py             # Command-line interface
+│   ├── cli/               # Command-line interface
 │   ├── agents/            # Agent implementations
 │   ├── communication/     # Communication protocols
 │   ├── core/              # Core components

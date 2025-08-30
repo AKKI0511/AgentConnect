@@ -10,7 +10,6 @@ This example shows:
 """
 
 import asyncio
-import logging
 import os
 from dotenv import load_dotenv
 
@@ -29,13 +28,9 @@ from agentconnect.agents.ai_agent import AIAgent
 # Load environment variables
 load_dotenv()
 
-# Logging configured via CLI verbosity
-logger = logging.getLogger("CommunicationExample")
-
-
 async def message_handler(message: Message) -> None:
-    """Example message handler that logs received messages"""
-    logger.info(f"Received message: {message.content[:50]}...")
+    """Example message handler that prints received messages"""
+    print(f"Received message: {message.content[:50]}...")
 
 
 async def main():
@@ -81,7 +76,7 @@ async def main():
     hub.add_message_handler("agent2", message_handler)
 
     # Example 1: Simple message sending
-    logger.info("Example 1: Simple message sending")
+    print("Example 1: Simple message sending")
     message = Message.create(
         sender_id="agent1",
         receiver_id="agent2",
@@ -91,13 +86,13 @@ async def main():
     )
 
     success = await hub.route_message(message)
-    logger.info(f"Message routing success: {success}")
+    print(f"Message routing success: {success}")
 
     # Wait a moment for the message to be processed
     await asyncio.sleep(1)
 
     # Example 2: Request-response pattern
-    logger.info("\nExample 2: Request-response pattern")
+    print("\nExample 2: Request-response pattern")
     response = await hub.send_message_and_wait_response(
         sender_id="agent1",
         receiver_id="agent2",
@@ -107,12 +102,12 @@ async def main():
     )
 
     if response:
-        logger.info(f"Received response: {response.content[:50]}...")
+        print(f"Received response: {response.content[:50]}...")
     else:
-        logger.warning("No response received within timeout")
+        print("No response received within timeout")
 
     # Example 3: Collaboration request
-    logger.info("\nExample 3: Collaboration request")
+    print("\nExample 3: Collaboration request")
     result = await hub.send_collaboration_request(
         sender_id="agent1",
         receiver_id="agent2",
@@ -120,10 +115,10 @@ async def main():
         timeout=20,
     )
 
-    logger.info(f"Collaboration result: {result[:50]}...")
+    print(f"Collaboration result: {result[:50]}...")
 
     # Example 4: Specialized agents collaboration
-    logger.info("\nExample 4: Specialized agents collaboration")
+    print("\nExample 4: Specialized agents collaboration")
 
     # Create specialized agents
     research_assistant = AIAgent(
@@ -159,7 +154,7 @@ async def main():
     await hub.register_agent(data_analyst)
 
     # Send a collaboration request between specialized agents
-    logger.info("Sending collaboration request from research_assistant to data_analyst")
+    print("Sending collaboration request from research_assistant to data_analyst")
     specialized_result = await hub.send_collaboration_request(
         sender_id="research_assistant",
         receiver_id="data_analyst",
@@ -167,7 +162,7 @@ async def main():
         timeout=30,
     )
 
-    logger.info(f"Specialized collaboration result: {specialized_result[:100]}...")
+    print(f"Specialized collaboration result: {specialized_result[:100]}...")
 
     # Clean up all agents
     await hub.unregister_agent("agent1")
@@ -175,7 +170,7 @@ async def main():
     await hub.unregister_agent("research_assistant")
     await hub.unregister_agent("data_analyst")
 
-    logger.info("Example completed successfully")
+    print("Example completed successfully")
 
 
 if __name__ == "__main__":

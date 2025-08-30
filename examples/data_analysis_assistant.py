@@ -600,22 +600,7 @@ async def setup_agents():
     }
 
 
-def _enable_example_logging(verbose: bool) -> None:
-    if not verbose:
-        return
-    import logging as _pylog
-
-    for name in [
-        "agentconnect.communication.hub",
-        "agentconnect.core.agent",
-        "agentconnect.agents.human_agent",
-        "agentconnect.agents.ai_agent",
-        "agentconnect.core.registry.registry_base",
-    ]:
-        _pylog.getLogger(name).setLevel(_pylog.INFO)
-
-
-async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None:
+async def run_data_analysis_assistant_demo() -> None:
     """
     Run the data analysis assistant demo with multiple specialized agents.
 
@@ -658,9 +643,6 @@ async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None
         for var in missing_optional_vars:
             print_colored(f"  - {var}: {optional_env_vars[var]}", "INFO")
         print_colored("These are not required but may enhance functionality.", "INFO")
-
-    # Opt-in example logging
-    _enable_example_logging(enable_logging)
 
     print_colored("=== Advanced Multi-Agent Data Analysis System Demo ===", "SYSTEM")
     print_colored(

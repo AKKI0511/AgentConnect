@@ -44,7 +44,6 @@ from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 
 # Note: logging is configured by the CLI. Examples should not override it.
 from agentconnect.prompts.tools import PromptTools
-from agentconnect.clients import RegistryAPIClient
 
 # Add imports for real-world tools
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -170,7 +169,7 @@ async def setup_agents() -> Dict[str, Any]:
         )
 
     # Create registry and hub
-    registry = RegistryAPIClient()
+    registry = AgentRegistry()
     hub = CommunicationHub(registry)
 
     # Register message logger
@@ -393,29 +392,7 @@ async def setup_agents() -> Dict[str, Any]:
     }
 
 
-def _enable_example_logging(verbose: bool) -> None:
-    """Elevate selected example-relevant loggers when verbose is True.
-
-    - No handlers are added; only logger levels are adjusted
-    - Allowlist elevated to INFO: communication hub and core agent internals
-    - All other libraries remain at their defaults
-    """
-    if not verbose:
-        return
-    import logging as _pylog
-
-    allowlist = [
-        "agentconnect.communication.hub",
-        "agentconnect.core.agent",
-        "agentconnect.agents.human_agent",
-        "agentconnect.agents.ai_agent",
-        "agentconnect.core.registry.registry_base",
-    ]
-    for name in allowlist:
-        _pylog.getLogger(name).setLevel(_pylog.INFO)
-
-
-async def run_research_assistant_demo(enable_logging: bool = False) -> None:
+async def run_research_assistant_demo() -> None:
     """
     Run the research assistant demo with multiple specialized agents.
 
@@ -423,9 +400,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
         enable_logging (bool): Enable detailed logging for debugging. Defaults to False.
     """
     load_dotenv()
-
-    # Opt-in example logging (levels only; no handlers)
-    _enable_example_logging(enable_logging)
 
     print_colored("=== Advanced Multi-Agent System Demo ===", "SYSTEM")
     print_colored(
@@ -452,8 +426,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
     print_colored("\nSetting up agents...", "SYSTEM")
 
     agents = None
-    # message_logger_registered = enable_logging
-
     try:
         # Set up agents with logging flag
         agents = await setup_agents()
@@ -478,10 +450,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
         print_colored(f"\nCritical error: {e}", "ERROR")
     except Exception as e:
         print_colored(f"\nUnexpected error: {e}", "ERROR")
-        if enable_logging:
-            import traceback
-
-            traceback.print_exc()
     finally:
         # Clean up
         if agents:
@@ -523,30 +491,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
                             pass
 
         print_colored("Demo completed successfully!", "SYSTEM")
-
-
-# Define the global message logger function
-# async def demo_message_logger(message: Message) -> None:
-#     """
-#     Global message handler for logging agent collaboration flow.
-
-#     This handler inspects messages routed through the hub and logs specific events
-#     in the research assistant demo to visualize agent collaboration.
-
-#     Args:
-#         message (Message): The message being routed through the hub
-#     """
-#     if message.receiver_id == "human_user" or message.sender_id == "human_user":
-#         return
-#     color_type = "SYSTEM"
-#     if message.sender_id == "core_agent":
-#         color_type = "CORE"
-#     elif message.sender_id == "research_agent":
-#         color_type = "RESEARCH"
-#     elif message.sender_id == "markdown_agent":
-#         color_type = "MARKDOWN"
-
-#     print_colored(f"{message.sender_id} -> {message.receiver_id}: {message.content[:50]}...", color_type)
 
 
 if __name__ == "__main__":

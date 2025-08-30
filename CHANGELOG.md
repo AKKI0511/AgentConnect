@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite for clients, servers, config, and MCP integration
 
 ### Changed
+- refactor(cli): new CLI with config, serve, mcp, ping, and doctor commands. Legacy `agentconnect/cli.py` removed; CLI now lives under `agentconnect/cli/` and console script remains `agentconnect`.
 - Simplified constructor for `BaseAgent` with focus on profile-based configuration
 - Updated `AIAgent`, `HumanAgent`, `TelegramAgent` constructor to support both profile-based and parameter-based initialization
 - Enhanced `AgentRegistration` class with additional fields for advanced searches

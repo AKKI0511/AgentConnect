@@ -42,6 +42,15 @@ def test_app_starts_with_defaults(monkeypatch: pytest.MonkeyPatch):
 
     # Enter lifespan without errors
     with TestClient(app) as client:
+        # App exposes resolved settings for host environments
+        assert hasattr(app.state, "registry_settings")
+
+        # OpenAPI should be available for FastAPI apps
+        openapi_res = client.get("/openapi.json")
+        assert openapi_res.status_code == 200
+        openapi = openapi_res.json()
+        assert isinstance(openapi, dict) and "paths" in openapi
+
         # Health may exist; if so, should return 200
         resp = client.get("/health")
         if resp.status_code == 200:

@@ -38,12 +38,12 @@ def create_registry_api_app(
     """
 
     resolved_settings = settings or RegistryAPISettings()
-    # Ensure our hierarchical logger level reflects settings early; handlers come from Uvicorn
-    logger.setLevel(getattr(logging, resolved_settings.log_level))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):  # type: ignore[override]
         global _agent_registry_instance
+        # Apply our logger level at lifespan start so it reflects runtime settings
+        logger.setLevel(getattr(logging, resolved_settings.log_level))
         logger.info("Starting AgentConnect Registry API Server...")
 
         # Create vector search settings based on server configuration

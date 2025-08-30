@@ -30,7 +30,7 @@ format:
 	poetry run black agentconnect/ demos/
 
 test:
-	poetry run pytest tests/ -v
+	poetry run pytest tests/ -q
 
 docs:
 	$(MAKE) -C docs html

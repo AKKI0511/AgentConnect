@@ -11,7 +11,6 @@ This example shows:
 import asyncio
 import os
 from dotenv import load_dotenv
-import logging
 
 from agentconnect.agents.ai_agent import AIAgent
 from agentconnect.core.types import (
@@ -27,12 +26,10 @@ from agentconnect.core.types import (
 # Load environment variables
 load_dotenv()
 
-logger = logging.getLogger("AgentExample")
-
 
 async def simple_chat_example():
     """Example of using the chat() method for direct interaction with an AI agent"""
-    logger.info("=== Simple Chat Example ===")
+    print("=== Simple Chat Example ===")
 
     # Create an AI agent
     ai_agent = AIAgent(
@@ -46,27 +43,27 @@ async def simple_chat_example():
     )
 
     # Use the chat() method for direct interaction
-    logger.info("Sending query to AI agent using chat() method")
+    print("Sending query to AI agent using chat() method")
     response = await ai_agent.chat(
         query="What are the benefits of using a multi-agent system?",
         conversation_id="simple_chat_example",
     )
 
-    logger.info(f"Received response: {response}")
+    print(f"Received response: {response}")
 
     # You can continue the same conversation
-    logger.info("Sending follow-up query")
+    print("Sending follow-up query")
     follow_up_response = await ai_agent.chat(
         query="Can you give me a specific example of agents collaborating?",
         conversation_id="simple_chat_example",  # Same conversation ID to maintain context
     )
 
-    logger.info(f"Received follow-up response: {follow_up_response}")
+    print(f"Received follow-up response: {follow_up_response}")
 
 
 async def multi_conversation_example():
     """Example showing how to maintain multiple conversations with a single agent"""
-    logger.info("\n=== Multiple Conversations Example ===")
+    print("\n=== Multiple Conversations Example ===")
 
     # Create an AI agent with AgentProfile
     agent_profile = AgentProfile(
@@ -112,43 +109,43 @@ async def multi_conversation_example():
     )
 
     # Start conversation 1
-    logger.info("Starting conversation 1 about programming")
+    print("Starting conversation 1 about programming")
     response1 = await ai_agent.chat(
         query="What are the key principles of object-oriented programming?",
         conversation_id="programming_conversation",
     )
-    logger.info(f"Conversation 1 response: {response1[:100]}...")
+    print(f"Conversation 1 response: {response1[:100]}...")
 
     # Start conversation 2 (different topic, different conversation ID)
-    logger.info("Starting conversation 2 about cooking")
+    print("Starting conversation 2 about cooking")
     response2 = await ai_agent.chat(
         query="What are some easy recipes for beginners?",
         conversation_id="cooking_conversation",
     )
-    logger.info(f"Conversation 2 response: {response2[:100]}...")
+    print(f"Conversation 2 response: {response2[:100]}...")
 
     # Continue conversation 1
-    logger.info("Continuing conversation 1 about programming")
+    print("Continuing conversation 1 about programming")
     follow_up1 = await ai_agent.chat(
         query="Can you give an example of polymorphism?",
         conversation_id="programming_conversation",  # Same as first query
     )
-    logger.info(f"Conversation 1 follow-up: {follow_up1[:100]}...")
+    print(f"Conversation 1 follow-up: {follow_up1[:100]}...")
 
     # Continue conversation 2
-    logger.info("Continuing conversation 2 about cooking")
+    print("Continuing conversation 2 about cooking")
     follow_up2 = await ai_agent.chat(
         query="How do I know when pasta is cooked properly?",
         conversation_id="cooking_conversation",  # Same as second query
     )
-    logger.info(f"Conversation 2 follow-up: {follow_up2[:100]}...")
+    print(f"Conversation 2 follow-up: {follow_up2[:100]}...")
 
-    logger.info("Both conversations maintained separate context successfully")
+    print("Both conversations maintained separate context successfully")
 
 
 async def ai_agent_configuration_example():
     """Example showing different ways to configure an AI agent"""
-    logger.info("\n=== AI Agent Configuration Example ===")
+    print("\n=== AI Agent Configuration Example ===")
 
     # Basic configuration with AgentProfile
     basic_profile = AgentProfile(
@@ -168,7 +165,7 @@ async def ai_agent_configuration_example():
         api_key=os.getenv("GOOGLE_API_KEY"),
         profile=basic_profile,
     )
-    logger.info("Created basic agent with minimal configuration")
+    print("Created basic agent with minimal configuration")
 
     # Advanced configuration with custom model parameters
     advanced_profile = AgentProfile(
@@ -208,19 +205,19 @@ async def ai_agent_configuration_example():
         max_tokens_per_hour=100000,
         verbose=True,
     )
-    logger.info("Created advanced agent with custom model parameters")
+    print("Created advanced agent with custom model parameters")
 
     # Test the advanced agent with a simple query
     response = await advanced_agent.chat(
         query="Explain how temperature affects AI text generation",
         conversation_id="config_example",
     )
-    logger.info(f"Advanced agent response: {response[:100]}...")
+    print(f"Advanced agent response: {response[:100]}...")
 
 
 async def agent_lifecycle_example():
     """Example showing how to properly start and stop an agent"""
-    logger.info("\n=== Agent Lifecycle Example ===")
+    print("\n=== Agent Lifecycle Example ===")
 
     # Create an AI agent with AgentProfile
     lifecycle_profile = AgentProfile(
@@ -243,22 +240,22 @@ async def agent_lifecycle_example():
     )
 
     # Start the agent's processing loop
-    logger.info("Starting agent processing loop")
+    print("Starting agent processing loop")
     agent_task = asyncio.create_task(ai_agent.run())
 
     # Allow some time for the agent to initialize
     await asyncio.sleep(1)
 
     # Send a query while the agent is running
-    logger.info("Sending query to running agent")
+    print("Sending query to running agent")
     response = await ai_agent.chat(
         query="What's the advantage of properly starting and stopping an agent?",
         conversation_id="lifecycle_example",
     )
-    logger.info(f"Response from running agent: {response[:100]}...")
+    print(f"Response from running agent: {response[:100]}...")
 
     # Properly stop the agent
-    logger.info("Stopping the agent")
+    print("Stopping the agent")
     await ai_agent.stop()
 
     # Cancel the agent task
@@ -266,9 +263,9 @@ async def agent_lifecycle_example():
     try:
         await agent_task
     except asyncio.CancelledError:
-        logger.info("Agent task cancelled successfully")
+        print("Agent task cancelled successfully")
 
-    logger.info("Agent lifecycle example completed")
+    print("Agent lifecycle example completed")
 
 
 async def main():
@@ -285,9 +282,9 @@ async def main():
         # Run the agent lifecycle example
         await agent_lifecycle_example()
 
-        logger.info("Examples completed successfully")
+        print("Examples completed successfully")
     except Exception as e:
-        logger.exception(f"Error in examples: {str(e)}")
+        print(f"Error in examples: {str(e)}")
 
 
 if __name__ == "__main__":

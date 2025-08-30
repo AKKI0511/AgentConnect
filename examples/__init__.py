@@ -10,14 +10,16 @@ Available examples:
 - Research Assistant: Multi-agent system for research tasks
 - Data Analysis: Specialized agents for data analysis and visualization
 
-To run these examples, use the AgentConnect CLI:
-    agentconnect --example chat
-    agentconnect --example multi-agent
-    agentconnect --example research
-    agentconnect --example data
+Run these examples directly via Python scripts from the project root, for example:
+    python examples/example_usage.py
+    python examples/example_multi_agent.py
+    python examples/research_assistant.py
+    python examples/data_analysis_assistant.py
+    python examples/multi_agent/multi_agent_system.py
 
-Or use the run_example.py script directly:
-    python examples/run_example.py
+If an example requires the Registry API server, start and verify it first:
+    agentconnect serve registry
+    agentconnect registry ping
 """
 
 from examples.data_analysis_assistant import run_data_analysis_assistant_demo

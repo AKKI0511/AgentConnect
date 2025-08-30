@@ -10,7 +10,6 @@ import shutil
 import tempfile
 from typing import Dict, List, Set
 from datetime import datetime
-import pytest_asyncio
 from tests.core.utils import print_header, print_step, print_success, print_result
 
 # Core imports
@@ -20,7 +19,6 @@ from agentconnect.core.types import (
     Capability,
     InteractionMode,
     Skill,
-    VerificationStatus,
 )
 from agentconnect.core.registry.registration import AgentRegistration
 from agentconnect.core.registry.capability_discovery import CapabilityDiscoveryService
@@ -174,37 +172,6 @@ def extract_capabilities_index(
             capabilities_index[capability.name].add(agent_id)
 
     return capabilities_index
-
-
-# Main test fixtures
-@pytest_asyncio.fixture
-async def discovery_service():
-    """Create a capability discovery service for testing."""
-    # Create with in-memory Qdrant
-    service = CapabilityDiscoveryService(
-        {
-            "in_memory": True,
-            "use_quantization": False,  # Disable for faster tests
-            "model_name": "all-MiniLM-L6-v2",  # Use small model for faster tests
-        }
-    )
-
-    # Initialize embeddings model
-    await service.initialize_embeddings_model()
-
-    yield service
-
-
-@pytest.fixture
-def test_registrations():
-    """Create test agent registrations."""
-    return create_test_registrations()
-
-
-@pytest.fixture
-def capabilities_index(test_registrations):
-    """Create capabilities index from test registrations."""
-    return extract_capabilities_index(test_registrations)
 
 
 @pytest.fixture
@@ -478,9 +445,6 @@ class TestCapabilityDiscoveryE2E:
         print_step("Creating discovery service with embeddings disabled")
         # Create with minimal config to simulate missing embeddings
         service = CapabilityDiscoveryService({"in_memory": True})
-
-        test_registrations = create_test_registrations()
-        capabilities_index = extract_capabilities_index(test_registrations)
 
         print_step("Searching for weather agents using basic similarity")
         results = await service.find_by_capability_name(

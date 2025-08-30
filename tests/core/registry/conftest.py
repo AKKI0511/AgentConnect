@@ -5,6 +5,7 @@ This module provides shared fixtures for the capability discovery tests.
 """
 
 import pytest
+import pytest_asyncio
 import tempfile
 import shutil
 from datetime import datetime
@@ -196,7 +197,7 @@ def temp_dir():
     shutil.rmtree(temp_dir)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def embeddings_model():
     """Provide an embeddings model for testing."""
     if not check_semantic_search_requirements()["embedding_model"]:
@@ -207,7 +208,7 @@ async def embeddings_model():
     return create_huggingface_embeddings(vs)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def qdrant_clients():
     """Provide Qdrant clients for testing."""
     if not check_semantic_search_requirements()["qdrant"]:
@@ -218,7 +219,7 @@ async def qdrant_clients():
     return await initialize_qdrant_clients(vs)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def discovery_service():
     """Provide a discovery service for testing."""
     # Create with in-memory Qdrant

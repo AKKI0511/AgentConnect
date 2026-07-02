@@ -1,6 +1,6 @@
 # AgentConnect MCP Server
 
-This directory contains the Model Context Protocol (MCP) server implementation for AgentConnect, enabling AI assistants and MCP clients to discover and interact with agents in the AgentConnect registry.
+This directory contains the Model Context Protocol (MCP) server implementation for AgentConnect, enabling AI assistants and MCP clients (like Cursor and Claude Desktop) to discover and interact with agents in the AgentConnect registry.
 
 ## What is MCP?
 

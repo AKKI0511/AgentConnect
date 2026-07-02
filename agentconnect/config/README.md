@@ -2,6 +2,8 @@
 
 SDK configuration for agent developers: define `agentconnect.yaml` and optional runtime overrides; servers are configured separately via environment variables in [AgentConnect Servers](../servers/README.md).
 
+> Important: SDK uses YAML (loaded into `agentconnect.config.settings`). Servers are env-only and do not read YAML. Keep developer (YAML) and operator (env) configuration separate.
+
 ## Configuration Precedence
 
 - Runtime kwargs > agentconnect.yaml > model defaults (Pydantic).

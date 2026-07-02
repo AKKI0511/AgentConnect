@@ -101,7 +101,6 @@ html_title = 'AgentConnect Documentation'
 # Intersphinx settings
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
-    'langchain': ('https://api.python.langchain.com/en/latest/', None),
 }
 
 # MyST Markdown parser settings (from LangChain)
@@ -172,7 +171,6 @@ html_theme_options = {
     "navbar_persistent": ["search-button"],
     # Make the primary sidebar collapsible and persistent
     "primary_sidebar_end": ["sidebar-ethical-ads"],
-    "collapse_navigation": False,
     "navigation_depth": 4,
     # Show previous/next buttons
     "show_prev_next": True,
@@ -182,7 +180,7 @@ html_theme_options = {
     # Theme toggle settings
     "footer_start": ["copyright"],
     # Sidebar collapsing behavior
-    "collapse_navigation": True,  # Allow sections to be collapsed
+    "collapse_navigation": False,  # Allow sections to be collapsed
     "navigation_with_keys": True, # Allow keyboard navigation
     # Add sidebar collapse button by default
     "header_links_before_dropdown": 6,

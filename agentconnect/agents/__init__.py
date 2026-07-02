@@ -17,8 +17,8 @@ Each agent operates autonomously and can discover and communicate with other age
 capabilities rather than pre-defined connections, enabling a truly decentralized architecture.
 """
 
-from agentconnect.agents.ai_agent import AIAgent, MemoryType
-from agentconnect.agents.human_agent import HumanAgent
-from agentconnect.agents.telegram import TelegramAIAgent
+from .ai_agent import AIAgent, MemoryType
+from .human_agent import HumanAgent
+from .telegram import TelegramAIAgent
 
 __all__ = ["AIAgent", "HumanAgent", "TelegramAIAgent", "MemoryType"]

@@ -328,7 +328,7 @@ class AIAgent(BaseAgent):
         # Add payment tools if enabled
         if self.enable_payments and self.agent_kit is not None:
             try:
-                from coinbase_agentkit_langchain import get_langchain_tools
+                from coinbase_agentkit_langchain import get_langchain_tools # type: ignore
 
                 agentkit_tools = get_langchain_tools(self.agent_kit)
                 custom_tools_list.extend(agentkit_tools)
@@ -689,16 +689,6 @@ class AIAgent(BaseAgent):
                 "processing_error",
                 is_collaboration_request,
             )
-
-    def set_cooldown(self, duration: int) -> None:
-        """Set a cooldown period for the agent."""
-        # Call the parent class method to set the cooldown
-        super().set_cooldown(duration)
-
-        # UI notification if in UI mode
-        if self.is_ui_mode:
-            # TODO: This would be implemented by a UI notification system
-            pass
 
     def reset_interaction_state(self) -> None:
         """

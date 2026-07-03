@@ -328,7 +328,7 @@ class AIAgent(BaseAgent):
         # Add payment tools if enabled
         if self.enable_payments and self.agent_kit is not None:
             try:
-                from coinbase_agentkit_langchain import get_langchain_tools # type: ignore
+                from coinbase_agentkit_langchain import get_langchain_tools  # type: ignore
 
                 agentkit_tools = get_langchain_tools(self.agent_kit)
                 custom_tools_list.extend(agentkit_tools)

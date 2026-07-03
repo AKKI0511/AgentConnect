@@ -62,7 +62,9 @@ class HumanAgent(BaseAgent):
 
         # For HumanAgent distinction, the agent_id must start with 'human_'
         if not agent_id.startswith("human_"):
-            raise ValueError("The agent_id for HumanAgent must start with 'human_' prefix for distinction.")
+            raise ValueError(
+                "The agent_id for HumanAgent must start with 'human_' prefix for distinction."
+            )
 
         # Create Capability objects for human capabilities
         capabilities = [
@@ -172,7 +174,9 @@ class HumanAgent(BaseAgent):
                             print(f"{Fore.BLUE}⚙️ {response.content}{Style.RESET_ALL}")
                         else:
                             print("-" * 40)
-                            print(f"{Fore.CYAN}{target_agent.profile.name or target_agent.agent_id}:{Style.RESET_ALL}")
+                            print(
+                                f"{Fore.CYAN}{target_agent.profile.name or target_agent.agent_id}:{Style.RESET_ALL}"
+                            )
                             print(f"{response.content}")
                             print("-" * 40)
                     else:

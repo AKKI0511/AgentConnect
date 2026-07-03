@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     from agentconnect.core.registry import AgentRegistry
 
     # Optional payment types (for static typing and IDEs only)
-    from coinbase_agentkit import AgentKit as _AgentKit # type: ignore
-    from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider # type: ignore
+    from coinbase_agentkit import AgentKit as _AgentKit  # type: ignore
+    from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider  # type: ignore
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -125,7 +125,7 @@ class BaseAgent(ABC):
                 )
 
                 # Import optional dependencies lazily to avoid hard import requirements
-                from coinbase_agentkit import ( # type: ignore
+                from coinbase_agentkit import (  # type: ignore
                     AgentKit,
                     AgentKitConfig,
                     CdpWalletProvider,

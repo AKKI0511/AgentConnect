@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Protocol adapters: Google A2A, IBM ACP, Google AP2 (outbound adapters and inbound gateways).
 - Composite runtime (single ASGI) and improved CLI UX (serve runtime, human chat/send, register/unregister).
 
+## [0.4.0] - 2026-07-02
+
 ### Added
 - New `AgentProfile`, `Skill` classes in `types.py` for comprehensive agent configuration
 - Enhanced capability discovery service using Qdrant vector database
@@ -60,8 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registry index management for capabilities and organizations
 - Agent registration update process to handle all fields correctly
 - Updated Google provider and types to reflect Gemini model changes
-
-### Security
 
 ### Known Limitations
 - Identity verification and registration flows are not yet unified; registry-verified connect (DID-JWT/challenge) and route grants will land post-0.4.0.
@@ -186,7 +186,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Set up environment variable handling
 - Added input validation for all API endpoints
 
-[Unreleased]: https://github.com/AKKI0511/AgentConnect/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/AKKI0511/AgentConnect/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AKKI0511/AgentConnect/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AKKI0511/AgentConnect/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AKKI0511/AgentConnect/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AKKI0511/AgentConnect/releases/tag/v0.1.0

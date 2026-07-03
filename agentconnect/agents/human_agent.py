@@ -60,10 +60,10 @@ class HumanAgent(BaseAgent):
             response_callbacks: Optional list of callbacks to be called when human responds
         """
 
-        # For HumanAgent distinction, the agent_id must start with 'human_'
-        if not agent_id.startswith("human_"):
+        # For HumanAgent distinction, the agent_id must start with 'human'
+        if not agent_id.startswith("human"):
             raise ValueError(
-                "The agent_id for HumanAgent must start with 'human_' prefix for distinction."
+                "The agent_id for HumanAgent must start with 'human' prefix for distinction."
             )
 
         # Create Capability objects for human capabilities

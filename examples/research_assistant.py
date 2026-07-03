@@ -41,11 +41,8 @@ from agentconnect.core.types import (
 )
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.utils.callbacks import ToolTracerCallbackHandler
-from agentconnect.utils.logging_config import (
-    setup_logging,
-    LogLevel,
-    disable_all_logging,
-)
+
+# Note: logging is configured by the CLI. Examples should not override it.
 from agentconnect.prompts.tools import PromptTools
 
 # Add imports for real-world tools
@@ -54,6 +51,7 @@ from langchain.schema import Document
 from langchain_community.document_transformers.markdownify import MarkdownifyTransformer
 from langchain_community.tools.requests.tool import RequestsGetTool
 from langchain_community.utilities import TextRequestsWrapper
+
 # Initialize colorama for cross-platform colored output
 init()
 
@@ -115,10 +113,10 @@ class MarkdownFormatOutput(BaseModel):
 async def setup_agents() -> Dict[str, Any]:
     """
     Set up the registry, hub, and agents.
-    
+
     Args:
         enable_logging (bool): Whether to enable detailed message flow logging
-    
+
     Returns:
         Dict[str, Any]: Dictionary containing registry, hub, and agents
 
@@ -127,14 +125,14 @@ async def setup_agents() -> Dict[str, Any]:
     """
     # Load environment variables
     load_dotenv()
-    
+
     # Check for required API keys
     api_key = os.getenv("GOOGLE_API_KEY")
     tavily_api_key = os.getenv("TAVILY_API_KEY")
 
     # Fall back to other API keys if Google's isn't available
     provider_type = ModelProvider.GOOGLE
-    model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
+    model_name = ModelName.GEMINI2_FLASH_THINKING_EXP
 
     if not api_key:
         print_colored("GOOGLE_API_KEY not found. Checking for alternatives...", "INFO")
@@ -173,7 +171,7 @@ async def setup_agents() -> Dict[str, Any]:
     # Create registry and hub
     registry = AgentRegistry()
     hub = CommunicationHub(registry)
-    
+
     # Register message logger
     # hub.add_global_handler(demo_message_logger)
     # print_colored("Registered message flow logger to visualize agent collaboration", "INFO")
@@ -258,7 +256,11 @@ async def setup_agents() -> Dict[str, Any]:
         except Exception as e:
             print_colored(f"Error initializing Tavily search: {e}", "ERROR")
     requests_wrapper = TextRequestsWrapper()
-    custom_tools.append(RequestsGetTool(requests_wrapper=requests_wrapper, allow_dangerous_requests=True))
+    custom_tools.append(
+        RequestsGetTool(
+            requests_wrapper=requests_wrapper, allow_dangerous_requests=True
+        )
+    )
 
     research_agent = AIAgent(
         agent_id="research_agent",
@@ -309,20 +311,20 @@ async def setup_agents() -> Dict[str, Any]:
                 heading_style="ATX",  # Use # style headings
                 bullets="-",  # Use - for bullet points
             )
-            
+
             # Create a document from the HTML content
             docs = [Document(page_content=html_content)]
-            
+
             # Convert HTML to markdown
             converted_docs = markdown_transformer.transform_documents(docs)
-            
+
             # Ensure the response is a single string, not a list of fragments
             markdown_content = converted_docs[0].page_content
-            
+
             # Additional processing to ensure it's a single coherent document
             if isinstance(markdown_content, list):
                 markdown_content = "\n\n".join(markdown_content)
-            
+
             # Return the consolidated markdown content
             return {
                 "markdown_content": markdown_content,
@@ -390,7 +392,7 @@ async def setup_agents() -> Dict[str, Any]:
     }
 
 
-async def run_research_assistant_demo(enable_logging: bool = False) -> None:
+async def run_research_assistant_demo() -> None:
     """
     Run the research assistant demo with multiple specialized agents.
 
@@ -398,25 +400,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
         enable_logging (bool): Enable detailed logging for debugging. Defaults to False.
     """
     load_dotenv()
-
-    # Configure logging
-    if enable_logging:
-        setup_logging(
-            level=LogLevel.INFO,
-            module_levels={
-                "AgentRegistry": LogLevel.WARNING,
-                "CommunicationHub": LogLevel.WARNING,
-                "agentconnect.agents.ai_agent": LogLevel.WARNING,
-                "agentconnect.agents.human_agent": LogLevel.WARNING,
-                "agentconnect.core.agent": LogLevel.WARNING,
-                "agentconnect.prompts.tools": LogLevel.WARNING,
-                "CapabilityDiscovery": LogLevel.WARNING,
-                "agentconnect.prompts.custom_tools.collaboration_tools": LogLevel.WARNING,
-            },
-        )
-    else:
-        # Disable all logging when not in debug mode
-        disable_all_logging()
 
     print_colored("=== Advanced Multi-Agent System Demo ===", "SYSTEM")
     print_colored(
@@ -443,8 +426,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
     print_colored("\nSetting up agents...", "SYSTEM")
 
     agents = None
-    # message_logger_registered = enable_logging
-
     try:
         # Set up agents with logging flag
         agents = await setup_agents()
@@ -469,10 +450,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
         print_colored(f"\nCritical error: {e}", "ERROR")
     except Exception as e:
         print_colored(f"\nUnexpected error: {e}", "ERROR")
-        if enable_logging:
-            import traceback
-
-            traceback.print_exc()
     finally:
         # Clean up
         if agents:
@@ -495,7 +472,12 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
                         await agents["hub"].unregister_agent(agents[agent_id].agent_id)
                         print_colored(f"Stopped and unregistered {agent_id}", "SYSTEM")
                     except Exception as e:
-                        print_colored(f"Error stopping/unregistering {agent_id}: {e}", "ERROR")
+                        print_colored(
+                            f"Error stopping/unregistering {agent_id}: {e}", "ERROR"
+                        )
+
+            # Unregister human agent
+            await agents["hub"].unregister_agent(agents["human_agent"].agent_id)
 
             # Cancel any remaining tasks
             if "agent_tasks" in agents:
@@ -510,30 +492,6 @@ async def run_research_assistant_demo(enable_logging: bool = False) -> None:
 
         print_colored("Demo completed successfully!", "SYSTEM")
 
-
-# Define the global message logger function
-# async def demo_message_logger(message: Message) -> None:
-#     """
-#     Global message handler for logging agent collaboration flow.
-    
-#     This handler inspects messages routed through the hub and logs specific events
-#     in the research assistant demo to visualize agent collaboration.
-    
-#     Args:
-#         message (Message): The message being routed through the hub
-#     """
-#     if message.receiver_id == "human_user" or message.sender_id == "human_user":
-#         return
-#     color_type = "SYSTEM"
-#     if message.sender_id == "core_agent":
-#         color_type = "CORE"
-#     elif message.sender_id == "research_agent":
-#         color_type = "RESEARCH"
-#     elif message.sender_id == "markdown_agent":
-#         color_type = "MARKDOWN"
-
-#     print_colored(f"{message.sender_id} -> {message.receiver_id}: {message.content[:50]}...", color_type)
-        
 
 if __name__ == "__main__":
     try:

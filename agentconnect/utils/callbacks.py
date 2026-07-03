@@ -63,13 +63,6 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
         self.print_tool_activity = print_tool_activity
         self.print_reasoning_steps = print_reasoning_steps
 
-        # Initial message is logged only once
-        init_msg = (
-            f"AgentActivityMonitor initialized for Agent ID: {self.agent_id} "
-            f"(Tools: {print_tool_activity}, Reasoning Text: {print_reasoning_steps}, "
-        )
-        logger.info(init_msg)
-
     def _format_details(self, details: Any, max_length: int) -> str:
         """Formats details for logging, handling different types and truncating."""
         if isinstance(details, dict):
@@ -120,11 +113,6 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
 
         tool_name = serialized.get("name", "UnknownTool")
         input_details_raw = inputs if inputs is not None else input_str
-        input_details_formatted = self._format_details(
-            input_details_raw, MAX_INPUT_DETAIL_LENGTH
-        )
-        log_message = f"[TOOL START] Agent: {self.agent_id} | Tool: {tool_name} | Input: {input_details_formatted}"
-        logger.info(log_message)
 
         if self.print_tool_activity:
             print_msg = ""
@@ -132,8 +120,11 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
             safe_inputs = inputs if isinstance(inputs, dict) else {}
 
             if tool_name == "search_for_agents":
-                capability = safe_inputs.get("capability_name", "unknown capability")
-                print_msg = f"{TOOL_COLOR}🔎 Searching for agents with capability: {capability}...{Style.RESET_ALL}"
+                search_query = safe_inputs.get("query", "unknown query")
+                output_detail = safe_inputs.get("output_detail", "default detail")
+                tags_filter = safe_inputs.get("include_tags")
+                tags_msg = f" with tags: {tags_filter}" if tags_filter else ""
+                print_msg = f"{TOOL_COLOR}🔎 Searching agents for: '{search_query}' (detail: {output_detail}{tags_msg})...{Style.RESET_ALL}"
             elif tool_name == "send_collaboration_request":
                 target_agent = safe_inputs.get("target_agent_id", "unknown agent")
                 task_snippet = self._get_short_snippet(
@@ -219,9 +210,6 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
 
         tool_name = kwargs.get("name", name)
         output_type = type(output).__name__
-        output_preview = self._format_details(output, MAX_OUTPUT_PREVIEW_LENGTH)
-        log_message = f"[TOOL END] Agent: {self.agent_id} | Tool: {tool_name} | Status: Success | Output Type: {output_type} | Preview: {output_preview}"
-        logger.debug(log_message)
 
         if self.print_tool_activity:
             print_msg = ""
@@ -241,32 +229,31 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
                             json_data = json.loads(content_str)
                         except json.JSONDecodeError as e:
                             logger.warning(
-                                f"ToolMessage content is not valid JSON for {tool_name}: {content_str[:100]}... Error: {e}"
+                                "ToolMessage content is not valid JSON for %s: %s... Error: %s",
+                                tool_name,
+                                content_str[:100],
+                                e,
                             )
                             status = "returned unparsable content."
                             response_snippet = f" Raw content: {self._get_short_snippet(content_str, 60)}..."
                     else:
                         logger.warning(
-                            f"ToolMessage content is not a string for {tool_name}: {type(content_str)}"
+                            "ToolMessage content is not a string for %s: %s",
+                            tool_name,
+                            type(content_str),
                         )
                         status = "returned non-string content."
                         response_snippet = f" Content: {self._get_short_snippet(str(content_str), 60)}..."
 
                 # Fallback 1: Attempt to parse JSON from string representation
                 elif isinstance(output, str):
-                    logger.debug(
-                        f"Fallback: {tool_name} output is a string, attempting parse."
-                    )
                     # Try to find JSON within content='...' or content="..."
                     match = re.search(r'content=(["\'])(.*?)\1', output, re.DOTALL)
                     if match:
                         json_str = match.group(2)
                         try:
                             json_data = json.loads(json_str)
-                        except json.JSONDecodeError as e:
-                            logger.debug(
-                                f"Failed to parse JSON from content in string: {e}"
-                            )
+                        except json.JSONDecodeError:
                             status = "returned unparsable content string."
                             response_snippet = (
                                 f" Raw output: {self._get_short_snippet(output, 60)}..."
@@ -276,9 +263,6 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
                         try:
                             json_data = json.loads(output)
                         except json.JSONDecodeError:
-                            logger.debug(
-                                f"Output string is not valid JSON: {output_str[:100]}..."
-                            )
                             status = "completed with non-JSON string output."
                             response_snippet = (
                                 f" Output: {self._get_short_snippet(output, 60)}..."
@@ -286,7 +270,6 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
 
                 # Fallback 2: Handle dictionary output directly
                 elif isinstance(output, dict):
-                    logger.debug(f"Fallback: {tool_name} output is a dict.")
                     json_data = output
 
                 # Process extracted/provided JSON data (if successfully parsed)
@@ -307,7 +290,10 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
                     status = "completed with unexpected output type."
                     response_snippet = f" Type: {output_type}, Output: {self._get_short_snippet(output_str, 60)}..."
                     logger.warning(
-                        f"Unexpected output type {output_type} for {tool_name}. Output: {output_str[:100]}..."
+                        "Unexpected output type %s for %s. Output: %s...",
+                        output_type,
+                        tool_name,
+                        output_str[:100],
                     )
 
                 # Determine color based on final success status
@@ -348,8 +334,13 @@ class ToolTracerCallbackHandler(BaseCallbackHandler):
         error_message_formatted_log = self._format_details(
             error_message_raw, MAX_ERROR_MESSAGE_LENGTH
         )
-        log_message = f"[TOOL ERROR] Agent: {self.agent_id} | Tool: {tool_name} | Status: Failed | Error: {error_type} - {error_message_formatted_log}"
-        logger.error(log_message)
+        logger.error(
+            "[TOOL ERROR] Agent: %s | Tool: %s | Status: Failed | Error: %s - %s",
+            self.agent_id,
+            tool_name,
+            error_type,
+            error_message_formatted_log,
+        )
 
         # --- Commented out console printing for tool error ---
         # if self.print_tool_activity:

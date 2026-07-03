@@ -28,7 +28,7 @@
 
 Move beyond traditional, centrally controlled systems and embrace an ecosystem where independent agents can:
 
-*   **Discover peers on-demand:** Locate partners via **capability broadcasts** instead of hard-wired endpoints.
+*   **Discover peers on-demand:** Locate partners by searching rich **Agent Profiles** instead of hard-wired endpoints.
 *   **Interact Securely (A2A):** Leverage built-in cryptographic verification for **trustworthy Agent-to-Agent** communication.
 *   **Execute Complex Workflows:** Request services, exchange value, and achieve goals collectively.
 *   **Autonomous Operation:** Each agent hosts its own logic—no central brain required.
@@ -55,7 +55,7 @@ AgentConnect delivers unique advantages over classic multi-agent approaches:
     <td width="33%">
       <h3>🤖 Dynamic Agent Discovery</h3>
       <ul>
-        <li>Capability-Based lookup</li>
+        <li>Profile-Based Lookup</li>
         <li>Decentralized Registry</li>
         <li>Zero static links</li>
       </ul>
@@ -113,9 +113,9 @@ AgentConnect delivers unique advantages over classic multi-agent approaches:
       </ul>
     </td>
     <td>
-      <h3>🌐 Dynamic Capability Advertising</h3>
+      <h3>🌐 Agent Profile Advertising</h3>
       <ul>
-        <li>Agent Skill Broadcasting</li>
+        <li>Publish Comprehensive Agent Details</li>
         <li>Market-Driven Discovery</li>
         <li>On-the-Fly Collaboration</li>
       </ul>
@@ -161,8 +161,18 @@ For detailed installation instructions and configuration options, see the [Quick
 
 For detailed instructions on using AgentConnect, including the command-line interface, running examples, and building your own agents, see the [full documentation](https://AKKI0511.github.io/AgentConnect/).
 
+Quick CLI examples:
+
+```bash
+agentconnect config init
+agentconnect serve registry
+agentconnect registry ping
+agentconnect mcp start agent-discovery
+```
+
 *   [Running Examples](examples/README.md)
-*   [Using the CLI](docs/source/usage.md)  *(To be created)*
+*   [Demo Application UI](demos/README.md)
+*   [Using the CLI](agentconnect/cli/README.md)
 *   [Building Custom Agents](docs/source/building_agents.md) *(To be created)*
 
 ## 💻 Examples
@@ -175,7 +185,7 @@ AgentConnect includes several example applications to demonstrate different feat
 - **Telegram Assistant**: Telegram AI agent with multi-agent collaboration
 - **Agent Economy**: Autonomous workflow with automatic cryptocurrency payments between agents
 
-For code examples and detailed descriptions, see the [Examples Directory](examples/README.md).
+For code examples and detailed descriptions, see the [Examples Directory](examples/README.md) or browse the [Examples docs](https://AKKI0511.github.io/AgentConnect/examples/).
 
 ## 🚀 Demo Application
 A full-featured demo application is included to showcase the framework's capabilities:
@@ -184,7 +194,7 @@ A full-featured demo application is included to showcase the framework's capabil
 
 ```bash
 # Start the backend server
-agentconnect --demo --backend-only
+poetry run python demos/run_demo.py --backend-only
 
 # Start the frontend (in a separate terminal)
 cd demos/ui/frontend
@@ -197,7 +207,7 @@ For more information about the demo application, see the [Demo Documentation](de
 
 AgentConnect is built on three core pillars that enable decentralized agent collaboration:
 
-1.  **Decentralized Agent Registry:**  A registry that allows agents to publish their capabilities and discover other agents.  This is *not* a central controller, but rather a directory service.  Agents can query the registry to find other agents that meet their needs.
+1.  **Decentralized Agent Registry:**  A registry that allows agents to publish their detailed characteristics and service offerings and discover other agents.  This is *not* a central controller, but rather a directory service.  Agents can query the registry to find other agents that meet their needs.
 2.  **Communication Hub:**  A message routing system that facilitates secure communication between agents.  The hub ensures reliable message delivery, but does *not* dictate agent behavior or control the network.
 3.  **Independent Agent Systems:**  Each agent is a self-contained unit, built using the tools and frameworks of the developer's choice (LangGraph, custom logic, etc.).  Agents interact with the network through standardized protocols, but their internal workings are independent.
 
@@ -237,10 +247,11 @@ For developers who want to contribute to AgentConnect, please refer to our [Deve
 ## 📚 Documentation
 
 - [Online Documentation](https://AKKI0511.github.io/AgentConnect/) - Full documentation hosted on GitHub Pages
-- [QuickStart Guide](docs/source/quickstart.md) - Get started quickly with basic concepts
+- [QuickStart Guide](https://AKKI0511.github.io/AgentConnect/quickstart) - Get started quickly with basic concepts
 - [Examples](examples/README.md) - Sample code and use cases
-- [API Reference](docs/source/api/index.rst) - Detailed API documentation
+- [API Reference](https://AKKI0511.github.io/AgentConnect/api/) - Detailed API documentation
 - [Development Guidelines](docs/DEVELOPER_GUIDELINES.md) - Guidelines for contributors
+- [SDK Configuration](agentconnect/config/README.md) - Configure agents via agentconnect.yaml and CLI
 
 ## 📋 Project Structure
 
@@ -248,12 +259,16 @@ For developers who want to contribute to AgentConnect, please refer to our [Deve
 AgentConnect/
 ├── agentconnect/           # Core framework
 │   ├── __init__.py        # Package initialization with public API
-│   ├── cli.py             # Command-line interface
+│   ├── cli/               # Command-line interface
 │   ├── agents/            # Agent implementations
 │   ├── communication/     # Communication protocols
 │   ├── core/              # Core components
+│   ├── clients/           # SDK API clients (e.g., Registry client)
+│   ├── config/            # SDK configuration system (agentconnect.yaml)
+│   ├── mcp/               # MCP server and tools
 │   ├── prompts/           # Prompt templates
 │   ├── providers/         # AI provider integrations
+│   ├── servers/           # Server runtimes and configuration
 │   └── utils/             # Utilities
 ├── demos/                 # Demo applications
 │   ├── api/              # FastAPI backend
@@ -269,10 +284,10 @@ AgentConnect/
 - ✅ **Autonomous communication between agents**  
 - ✅ **Capability-based agent discovery**
 - ✅ **Coinbase AgentKit Payment Integration**
+- ⬜ **MCP Integration**
 - ⬜ **Agent Identity & Reputation System**
 - ⬜ **Asynchronous Agent Collaboration System**
 - ⬜ **Marketplace-Style Agent Discovery**
-- ⬜ **MCP Integration**
 - ⬜ **Structured Parameters SDK**
 - ⬜ **Secure data exchange protocols**
 - ⬜ **Additional AI provider integrations**

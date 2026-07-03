@@ -24,23 +24,18 @@ Key differentiators:
 For detailed usage examples, see the README.md or visit the documentation.
 """
 
-__version__ = "0.3.0"
+from importlib import metadata
 
-# Import subpackages to make them available to users
-from agentconnect import agents
-from agentconnect import communication
-from agentconnect import core
-from agentconnect import providers
-from agentconnect import prompts
-from agentconnect import utils
+try:
+    __version__ = metadata.version(__package__)
+except metadata.PackageNotFoundError:  # running from source without install
+    __version__ = "0"
 
-# Define public API - specify what should be exposed when a user does "from agentconnect import *"
-__all__ = [
-    "agents",
-    "communication",
-    "core",
-    "providers",
-    "prompts",
-    "utils",
-    "__version__",
-]
+# Only the version is exported by default
+__all__ = ["__version__"]
+
+import logging
+
+# Attach a NullHandler to the package logger to avoid "No handler" warnings
+# and ensure the library never emits logs unless the application configures logging.
+logging.getLogger("agentconnect").addHandler(logging.NullHandler())

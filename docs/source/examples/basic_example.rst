@@ -33,7 +33,6 @@ Here's how to create a simple AI agent:
        api_key=os.getenv("GOOGLE_API_KEY"),
        identity=AgentIdentity.create_key_based(),
        personality="helpful and friendly assistant",
-       organization_id="example_org",
        interaction_modes=[
            InteractionMode.HUMAN_TO_AGENT,
            InteractionMode.AGENT_TO_AGENT,
@@ -56,7 +55,7 @@ Once you have created an agent, you can send messages to it:
        agent_id="user",
        name="Example User",
        identity=AgentIdentity.create_key_based(),
-       organization_id="example_org",
+       organization="example_org",
    )
 
    # Create a message from human to AI
@@ -99,7 +98,6 @@ AgentConnect provides a communication hub for agent interaction:
        api_key=os.getenv("GOOGLE_API_KEY"),
        identity=AgentIdentity.create_key_based(),
        personality="knowledgeable research assistant",
-       organization_id="example_org",
        interaction_modes=[InteractionMode.AGENT_TO_AGENT],
    )
 
@@ -111,7 +109,6 @@ AgentConnect provides a communication hub for agent interaction:
        api_key=os.getenv("GOOGLE_API_KEY"),
        identity=AgentIdentity.create_key_based(),
        personality="precise and analytical data specialist",
-       organization_id="example_org",
        interaction_modes=[InteractionMode.AGENT_TO_AGENT],
    )
 
@@ -167,7 +164,6 @@ Here's a complete example that puts everything together:
            api_key=os.getenv("GOOGLE_API_KEY"),
            identity=AgentIdentity.create_key_based(),
            personality="helpful and friendly assistant",
-           organization_id="example_org",
            interaction_modes=[
                InteractionMode.HUMAN_TO_AGENT,
                InteractionMode.AGENT_TO_AGENT,
@@ -185,7 +181,7 @@ Here's a complete example that puts everything together:
            agent_id="human_user",
            name="Human User",
            identity=AgentIdentity.create_key_based(),
-           organization_id="example_org",
+           organization="example_org",
        )
        
        # Register human with hub

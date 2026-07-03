@@ -22,8 +22,11 @@ from agentconnect.core.types import (
     InteractionMode,
     ModelProvider,
     ModelName,
+    AgentProfile,
+    Skill,
 )
 from agentconnect.core.registry import AgentRegistry
+from agentconnect.core.agent import BaseAgent
 
 # Define public API
 __all__ = [
@@ -36,6 +39,10 @@ __all__ = [
     "InteractionMode",
     "ModelProvider",
     "ModelName",
+    "AgentProfile",
+    "Skill",
     # Registry
     "AgentRegistry",
+    # Agent
+    "BaseAgent",
 ]

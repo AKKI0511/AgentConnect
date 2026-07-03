@@ -8,14 +8,15 @@ interact with an AI agent through Telegram.
 import asyncio
 import logging
 import os
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Union
+from pathlib import Path
 
 from dotenv import load_dotenv
 from aiogram import types
 from langchain.tools import BaseTool
 from langchain_core.callbacks import BaseCallbackHandler
 
-from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.agents.ai_agent import AIAgent, MemoryType
 from agentconnect.agents.telegram.bot_manager import TelegramBotManager
 from agentconnect.agents.telegram.message_processor import TelegramMessageProcessor
 from agentconnect.agents.telegram.keyboards import (
@@ -32,9 +33,12 @@ from agentconnect.core.types import (
     MessageType,
     ModelName,
     ModelProvider,
+    AgentProfile,
 )
 from agentconnect.communication.hub import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
+from agentconnect.prompts.tools import PromptTools
+from agentconnect.prompts.templates.prompt_templates import PromptTemplates
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +66,24 @@ class TelegramAIAgent(AIAgent):
         model_name (ModelName): Specific LLM to use (e.g., GEMINI2_FLASH, GPT4)
         api_key (str): API key for the LLM provider
         identity (AgentIdentity): Identity information for the agent
+        profile (Optional[AgentProfile], optional): Comprehensive agent profile. If provided, other individual parameters like name, capabilities, description might be overridden or supplemented by the profile's content.
+        model_config (Optional[Dict[str, Any]], optional): Optional dict of default model parameters (e.g., temperature, max_tokens).
         capabilities (List[Capability], optional): Additional capabilities beyond Telegram-specific ones
         personality (str, optional): Description of the agent's personality
-        organization_id (str, optional): ID of the organization the agent belongs to
         interaction_modes (List[InteractionMode], optional): Supported interaction modes
-        groups_file (str, optional): File path to store registered group IDs
         max_tokens_per_minute (int, optional): Rate limiting for token usage per minute
         max_tokens_per_hour (int, optional): Rate limiting for token usage per hour
+        max_turns (int, optional): Maximum number of turns in a conversation.
+        is_ui_mode (bool, optional): Whether the agent is running in UI mode.
+        memory_type (MemoryType, optional): Type of memory storage to use.
+        prompt_tools (Optional[PromptTools], optional): Optional tools for the agent.
+        prompt_templates (Optional[PromptTemplates], optional): Optional prompt templates for the agent.
+        agent_type (str, optional): Type of agent workflow to create (e.g., "ai", "structured_chat").
+        enable_payments (bool, optional): Whether to enable payments
+        verbose (bool, optional): Whether to enable verbose logging
+        wallet_data_dir (Optional[Union[str, Path]], optional): Directory to store wallet data. Can be a string path or a Path object.
+        external_callbacks (Optional[List[BaseCallbackHandler]], optional): List of external callbacks to use
+        groups_file (str, optional): File path to store registered group IDs
         telegram_token (str, optional): Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
 
     Note:
@@ -115,50 +130,69 @@ class TelegramAIAgent(AIAgent):
 
     def __init__(
         self,
+        # Required parameters from BaseAgent
         agent_id: str,
-        name: str,
+        identity: AgentIdentity,
+        # Required AIAgent parameters
         provider_type: ModelProvider,
         model_name: ModelName,
         api_key: str,
-        identity: AgentIdentity,
+        # AIAgent-specific parameters
+        profile: Optional[AgentProfile] = None,
+        name: Optional[str] = None,
         capabilities: List[Capability] = None,
         personality: str = "helpful and friendly",
-        organization_id: Optional[str] = None,
         interaction_modes: List[InteractionMode] = [
             InteractionMode.HUMAN_TO_AGENT,
             InteractionMode.AGENT_TO_AGENT,
         ],
-        groups_file: str = "groups.txt",
+        memory_type: MemoryType = MemoryType.BUFFER,
+        prompt_tools: Optional[PromptTools] = None,
+        prompt_templates: Optional[PromptTemplates] = None,
+        agent_type: str = "ai",
+        model_config: Optional[Dict[str, Any]] = None,
+        # Extra configuration parameters
         max_tokens_per_minute: int = 5500,
         max_tokens_per_hour: int = 100000,
-        telegram_token: Optional[str] = None,
+        max_turns: int = 20,
+        is_ui_mode: bool = False,
         enable_payments: bool = False,
         verbose: bool = False,
-        wallet_data_dir: Optional[str] = None,
+        wallet_data_dir: Optional[Union[str, Path]] = None,
         external_callbacks: Optional[List[BaseCallbackHandler]] = None,
+        # TelegramAIAgent-specific parameters
+        groups_file: str = "groups.txt",
+        telegram_token: Optional[str] = None,
     ):
         """
         Initialize a Telegram AI Agent.
 
         Args:
             agent_id: Unique identifier for the agent
-            name: Human-readable name for the agent (appears in Telegram)
-            provider_type: Type of LLM provider (e.g., GOOGLE, OPENAI)
-            model_name: Specific LLM to use (e.g., GEMINI2_FLASH, GPT4)
-            api_key: API key for the LLM provider
             identity: Identity information for the agent
-            capabilities: Additional capabilities beyond Telegram-specific ones
+            provider_type: Type of LLM provider (e.g., OpenAI, Anthropic)
+            model_name: Name of the model to use
+            api_key: API key for the model provider
+            profile: Comprehensive agent profile (recommended approach)
+            name: Human-readable name for the agent (appears in Telegram)
+            capabilities: List of agent capabilities
             personality: Description of the agent's personality
-            organization_id: ID of the organization the agent belongs to
-            interaction_modes: Supported interaction modes
-            groups_file: File path to store registered group IDs
-            max_tokens_per_minute: Rate limiting for token usage per minute
-            max_tokens_per_hour: Rate limiting for token usage per hour
-            telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
-            enable_payments: Whether to enable payments
+            interaction_modes: List of supported interaction modes
+            memory_type: Type of memory storage to use
+            prompt_tools: Optional tools for the agent
+            prompt_templates: Optional prompt templates for the agent
+            agent_type: Type of agent workflow to create
+            model_config: Optional dict of default model parameters (e.g., temperature, max_tokens)
+            max_tokens_per_minute: Maximum tokens per minute for rate limiting
+            max_tokens_per_hour: Maximum tokens per hour for rate limiting
+            max_turns: Maximum number of terms in a conversation
+            is_ui_mode: Whether the agent is running in UI mode
+            enable_payments: Whether to enable payment capabilities
             verbose: Whether to enable verbose logging
-            wallet_data_dir: Directory to store wallet data
-            external_callbacks: List of external callbacks to use
+            wallet_data_dir: Optional custom directory for wallet data storage
+            external_callbacks: Optional list of external callback handlers to include
+            groups_file: File path to store registered group IDs
+            telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
         """
         # Define Telegram-specific capabilities
         telegram_capabilities = [
@@ -211,6 +245,12 @@ class TelegramAIAgent(AIAgent):
             ),
         ]
 
+        if profile:
+            if profile.capabilities:
+                profile.capabilities += telegram_capabilities
+            else:
+                profile.capabilities = telegram_capabilities
+
         # Combine provided capabilities with Telegram-specific ones
         all_capabilities = (capabilities or []) + telegram_capabilities
 
@@ -225,6 +265,7 @@ class TelegramAIAgent(AIAgent):
         self.bot_manager = TelegramBotManager(
             token=self.telegram_token,
             groups_file=self.groups_file,
+            agent_id=agent_id,
         )
 
         # Initialize the bot and tools
@@ -246,18 +287,25 @@ class TelegramAIAgent(AIAgent):
         # Initialize the AIAgent with all capabilities and custom tools
         super().__init__(
             agent_id=agent_id,
-            name=name,
+            identity=identity,
             provider_type=provider_type,
             model_name=model_name,
             api_key=api_key,
-            identity=identity,
+            profile=profile,
+            name=name,
             capabilities=all_capabilities,
             personality=personality,
-            organization_id=organization_id,
             interaction_modes=interaction_modes,
+            memory_type=memory_type,
+            prompt_tools=prompt_tools,
+            prompt_templates=prompt_templates,
+            custom_tools=self._get_custom_tools(),
+            agent_type=agent_type,
+            model_config=model_config,
             max_tokens_per_minute=max_tokens_per_minute,
             max_tokens_per_hour=max_tokens_per_hour,
-            custom_tools=self._get_custom_tools(),  # Pass the custom tools to AIAgent
+            max_turns=max_turns,
+            is_ui_mode=is_ui_mode,
             enable_payments=enable_payments,
             verbose=verbose,
             wallet_data_dir=wallet_data_dir,
@@ -268,11 +316,13 @@ class TelegramAIAgent(AIAgent):
         """Initialize Telegram bot and tools."""
         # Initialize the bot
         if not self.bot_manager.initialize_bot():
-            logger.error("Failed to initialize Telegram bot")
+            logger.error("Failed to initialize Telegram bot agent_id=%s", self.agent_id)
 
         # Initialize the tools
         if not self.bot_manager.initialize_tools():
-            logger.error("Failed to initialize Telegram tools")
+            logger.error(
+                "Failed to initialize Telegram tools agent_id=%s", self.agent_id
+            )
 
         # Register the shutdown handler
         self.bot_manager.register_shutdown_handler(self._on_shutdown)
@@ -306,7 +356,9 @@ class TelegramAIAgent(AIAgent):
             RuntimeError: If the Telegram bot cannot be started
         """
         if not await self.bot_manager.start_polling():
-            logger.error("Failed to start Telegram bot polling")
+            logger.error(
+                "Failed to start Telegram bot polling agent_id=%s", self.agent_id
+            )
             return
 
         # Register all handlers
@@ -324,7 +376,6 @@ class TelegramAIAgent(AIAgent):
         }
 
         await handler_registry.register_all(self.bot_manager.dp, callback_map)
-        logger.info("All handlers registered")
 
     async def stop_telegram_bot(self):
         """
@@ -373,12 +424,19 @@ class TelegramAIAgent(AIAgent):
                         reply_to_message_id=response["reply_to_message_id"],
                     )
                 else:
-                    logger.error("Error processing message: empty response")
+                    logger.error(
+                        "Empty response from message processor agent_id=%s",
+                        self.agent_id,
+                    )
 
                 # Don't return anything since we've handled the response
                 return None
             except Exception as e:
-                logger.exception(f"Error in Telegram message processing: {e}")
+                logger.error(
+                    "Error in Telegram message processing agent_id=%s: %s",
+                    self.agent_id,
+                    e,
+                )
 
                 # Try to send an error message to the user
                 try:
@@ -387,8 +445,12 @@ class TelegramAIAgent(AIAgent):
                         chat_id=telegram_chat_id,
                         text="I'm sorry, I encountered an error while processing your message. Please try again.",
                     )
-                except Exception as e:
-                    logger.exception(f"Error sending error message to user: {e}")
+                except Exception:
+                    logger.error(
+                        "Error sending error message to user agent_id=%s",
+                        self.agent_id,
+                        exc_info=True,
+                    )
                     pass
 
                 # Don't pass to parent class for Telegram messages
@@ -423,7 +485,8 @@ class TelegramAIAgent(AIAgent):
                     return None
                 except ValueError:
                     logger.error(
-                        f"Invalid telegram_chat_id format: {message.metadata.get('telegram_chat_id')}"
+                        "Invalid telegram_chat_id format agent_id=%s",
+                        self.agent_id,
                     )
 
             # Return the original response for non-Telegram-related responses
@@ -452,7 +515,7 @@ class TelegramAIAgent(AIAgent):
         """
         # Mark agent as running
         self.is_running = True
-        logger.info(f"Starting Telegram agent {self.agent_id}")
+        logger.info("Telegram agent starting agent_id=%s", self.agent_id)
 
         try:
             # Start the Telegram bot
@@ -476,14 +539,16 @@ class TelegramAIAgent(AIAgent):
             await asyncio.gather(*pending, return_exceptions=True)
 
         except asyncio.CancelledError:
-            logger.info(f"Agent {self.agent_id} run task was cancelled")
-        except Exception as e:
-            logger.exception(f"Error in Telegram agent run: {str(e)}")
+            pass
+        except Exception:
+            logger.error(
+                "Error in Telegram agent run agent_id=%s", self.agent_id, exc_info=True
+            )
         finally:
             # Clean up
             self.is_running = False
             await self.stop_telegram_bot()
-            logger.info(f"Telegram agent {self.agent_id} stopped")
+            logger.info("Telegram agent stopped agent_id=%s", self.agent_id)
 
     async def _on_shutdown(self):
         """
@@ -512,7 +577,12 @@ class TelegramAIAgent(AIAgent):
                 "✅ Bot added! This group will receive announcements.",
                 reply_markup=GROUP_CHAT_KEYBOARD,
             )
-            logger.info(f"📌 Group added: {message.chat.title} ({message.chat.id})")
+            logger.debug(
+                "Group added agent_id=%s group_title=%s group_id=%s",
+                self.agent_id,
+                message.chat.title,
+                message.chat.id,
+            )
         else:
             # Send welcome message in private chat
             await message.answer(
@@ -591,8 +661,8 @@ class TelegramAIAgent(AIAgent):
             # Process the message through AgentConnect
             if agent_message:
                 await self.receive_message(agent_message)
-        except Exception as e:
-            logger.error(f"Error processing group mention: {str(e)}")
+        except Exception:
+            logger.error("Error processing group mention", exc_info=True)
             # Delete thinking message
             try:
                 if message.chat.id in self.bot_manager.processing_messages:
@@ -625,8 +695,8 @@ class TelegramAIAgent(AIAgent):
             # Process the message through AgentConnect
             if agent_message:
                 await self.receive_message(agent_message)
-        except Exception as e:
-            logger.error(f"Error processing media message: {str(e)}")
+        except Exception:
+            logger.error("Error processing media message", exc_info=True)
             # Delete thinking message
             try:
                 if message.chat.id in self.bot_manager.processing_messages:
@@ -662,8 +732,8 @@ class TelegramAIAgent(AIAgent):
             # Process the message through AgentConnect
             if agent_message:
                 await self.receive_message(agent_message)
-        except Exception as e:
-            logger.error(f"Error processing text message: {str(e)}")
+        except Exception:
+            logger.error("Error processing text message", exc_info=True)
             # Delete thinking message
             try:
                 if message.chat.id in self.bot_manager.processing_messages:
@@ -690,10 +760,6 @@ class TelegramAIAgent(AIAgent):
 
 
 if __name__ == "__main__":
-    # Configure logging
-    from agentconnect.utils.logging_config import setup_logging, LogLevel
-
-    setup_logging(level=LogLevel.INFO)
 
     # Variables to track what needs to be cleaned up
     agent = None
@@ -740,15 +806,15 @@ if __name__ == "__main__":
                     logger.error("Failed to register agent with hub")
                     return
 
-                logger.info(f"Successfully registered agent {agent.agent_id} with hub")
+                logger.info("Successfully registered agent %s with hub", agent.agent_id)
 
                 # Run the agent directly - DON'T create a task that will exit immediately
                 await agent.run()
 
             except asyncio.CancelledError:
                 logger.info("Main task was cancelled")
-            except Exception as e:
-                logger.exception(f"Error in main function: {e}")
+            except Exception:
+                logger.exception("Error in main function")
             finally:
                 # We don't handle final cleanup here - it will be done in the outer try/finally
                 pass
@@ -758,8 +824,8 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         logger.info("Telegram AI Agent stopped by keyboard interrupt.")
-    except Exception as e:
-        logger.error(f"Error running Telegram AI Agent: {e}")
+    except Exception:
+        logger.error("Error running Telegram AI Agent", exc_info=True)
     finally:
         # Clean up resources
         async def cleanup():
@@ -771,17 +837,17 @@ if __name__ == "__main__":
 
                 # Unregister from hub if registered
                 if agent and hub and hasattr(agent, "hub") and agent.hub:
-                    logger.info(f"Unregistering agent {agent.agent_id} from hub...")
+                    logger.info("Unregistering agent %s from hub...", agent.agent_id)
                     await hub.unregister_agent(agent.agent_id)
-                    logger.info(f"Unregistered agent {agent.agent_id} from hub")
+                    logger.info("Unregistered agent %s from hub", agent.agent_id)
 
-            except Exception as e:
-                logger.error(f"Error during cleanup: {e}")
+            except Exception:
+                logger.error("Error during cleanup", exc_info=True)
 
         # Run the cleanup
         try:
             asyncio.run(cleanup())
-        except Exception as e:
-            logger.error(f"Error during final cleanup: {e}")
+        except Exception:
+            logger.error("Error during final cleanup", exc_info=True)
 
         logger.info("Telegram AI Agent shutdown complete.")

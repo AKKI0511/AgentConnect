@@ -38,6 +38,6 @@ Example:
         await agent.run()
 """
 
-from agentconnect.agents.telegram.telegram_agent import TelegramAIAgent
+from .telegram_agent import TelegramAIAgent
 
 __all__ = ["TelegramAIAgent"]

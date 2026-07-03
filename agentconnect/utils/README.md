@@ -1,6 +1,6 @@
 # Utils Module
 
-The utils module provides utility functions and classes used throughout the AgentConnect framework, including interaction control for rate limiting, token usage tracking, and logging configuration.
+The utils module provides utility functions and classes used throughout the AgentConnect framework, including interaction control for rate limiting, token usage tracking, and wallet/payment helpers.
 
 ## Structure
 
@@ -8,7 +8,6 @@ The utils module provides utility functions and classes used throughout the Agen
 utils/
 ├── __init__.py           # Package initialization and API exports
 ├── interaction_control.py # Rate limiting and interaction tracking
-├── logging_config.py     # Logging configuration
 ├── payment_helper.py     # Payment utilities for CDP validation and agent payment readiness
 ├── wallet_manager.py     # Agent wallet persistence utilities
 └── README.md             # This file
@@ -32,21 +31,9 @@ Key classes:
 - `InteractionState`: Enum for interaction states (CONTINUE, STOP, WAIT)
 - `RateLimitingCallbackHandler`: LangChain callback handler for rate limiting
 
-### Logging Configuration (`logging_config.py`)
+### Logging
 
-The logging configuration system provides a consistent logging setup across the framework:
-
-- **Colored Output**: Different colors for different log levels
-- **Module-specific Levels**: Configure log levels for specific modules
-- **LangGraph Integration**: Special setup for LangGraph components
-
-Key classes and functions:
-- `setup_logging()`: Configure logging with colors and per-module settings
-- `LogLevel`: Enum for log levels (DEBUG, INFO, WARNING, ERROR)
-- `ColoredFormatter`: Custom formatter with colors for log messages
-- `disable_all_logging()`: Disable all logging output
-- `get_module_levels_for_development()`: Get recommended log levels for development
-- `setup_langgraph_logging()`: Configure logging specifically for LangGraph components
+AgentConnect is a library and never configures logging. Applications (servers/CLI/examples) own logging configuration. Examples may optionally elevate a tiny allowlist of internal loggers to INFO when a `--verbose` flag is passed; no handlers are added by the SDK.
 
 ### Payment Helper (`payment_helper.py`)
 
@@ -67,14 +54,11 @@ Key functions:
 
 The wallet manager provides wallet data persistence for agents:
 
-- **Wallet Data Storage**: Save and load wallet data securely
 - **Wallet Existence Checking**: Check if wallet data exists
 - **Wallet Data Management**: Delete and backup wallet data
 - **Configuration Management**: Set custom data directories
 
 Key functions:
-- `save_wallet_data()`: Persist wallet data for an agent
-- `load_wallet_data()`: Load wallet data for an agent
 - `wallet_exists()`: Check if wallet data exists
 - `get_all_wallets()`: List all wallet files
 - `delete_wallet_data()`: Delete wallet data

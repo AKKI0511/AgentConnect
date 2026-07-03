@@ -81,7 +81,6 @@ Here's a comprehensive example that creates a Telegram bot with multi-agent capa
         ModelProvider,
     )
     from agentconnect.core.registry import AgentRegistry
-    from agentconnect.utils.logging_config import setup_logging, LogLevel
     
     # Import tools
     from langchain_community.tools.tavily_search import TavilySearchResults
@@ -331,9 +330,6 @@ Here's a comprehensive example that creates a Telegram bot with multi-agent capa
     async def main():
         """Main function to run the Telegram bot with multi-agent system."""
         try:
-            # Set up logging
-            setup_logging(level=LogLevel.INFO)
-            
             # Initialize agents
             agents = await setup_agents()
             
@@ -700,4 +696,4 @@ Conclusion
 
 This example demonstrates how to build a sophisticated Telegram bot with the AgentConnect framework. By leveraging the TelegramAIAgent and integrating it with specialized agents, you can create powerful applications that provide valuable services to users through the familiar Telegram interface.
 
-For more information on the Telegram agent and its capabilities, see the :doc:`Telegram Integration Guide </guides/telegram_integration>`. 
+For more information on the Telegram agent and its capabilities, see the :doc:`Telegram Integration Guide </guides/integrations/telegram_integration>`. 

@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
     branches:
       - main
+      - develop
   workflow_dispatch:
 
 jobs:
@@ -74,7 +76,7 @@ jobs:
       - name: Run tests
         if: hashFiles('tests/**/*.py') != ''
         run: |
-          poetry run pytest tests/ -v
+          poetry run pytest tests/ -q
 
       - name: Skip tests
         if: hashFiles('tests/**/*.py') == ''

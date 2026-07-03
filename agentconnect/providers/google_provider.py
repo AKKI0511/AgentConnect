@@ -37,7 +37,7 @@ class GoogleProvider(BaseProvider):
     async def generate_response(
         self,
         messages: List[Dict[str, str]],
-        model: ModelName = ModelName.GEMINI1_5_FLASH,
+        model: ModelName = ModelName.GEMINI2_FLASH,
         **kwargs,
     ) -> str:
         """
@@ -69,12 +69,8 @@ class GoogleProvider(BaseProvider):
             List of available Gemini model names
         """
         return [
-            ModelName.GEMINI2_5_PRO_PREVIEW,
-            ModelName.GEMINI2_5_PRO_EXP,
             ModelName.GEMINI2_FLASH,
             ModelName.GEMINI2_FLASH_LITE,
-            ModelName.GEMINI1_5_FLASH,
-            ModelName.GEMINI1_5_PRO,
             ModelName.GEMINI2_FLASH_THINKING_EXP,
             ModelName.GEMINI2_PRO_EXP,
         ]

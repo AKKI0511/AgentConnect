@@ -1,47 +1,76 @@
-# Multi-Agent Examples
+# Multi-Agent System Examples
 
-This directory contains examples demonstrating how to create and use multi-agent systems in the AgentConnect framework.
+This directory contains examples demonstrating how to create and use multi-agent systems with the AgentConnect framework.
 
-## Available Examples
+## Available Agents
 
-### Modular Multi-Agent System
+- **Telegram Agent** (`telegram_agent.py`): Handles Telegram messaging platform interactions
+- **Research Agent** (`research_agent.py`): Performs web searches and information retrieval
+- **Content Processing Agent** (`content_processing_agent.py`): Handles document processing and format conversion
+- **Data Analysis Agent** (`data_analysis_agent.py`): Analyzes data and creates visualizations
 
-A complete example of a modular multi-agent system with:
-- Separate agent implementations in individual files
-- Inter-agent communication and collaboration
-- CLI interface for direct interaction with agents
-- Telegram bot integration
+## Key Implementation Patterns
 
-The system includes these specialized agents:
-1. **Telegram Agent** (`telegram_agent.py`): Handles Telegram messaging platform interactions
-2. **Research Agent** (`research_agent.py`): Performs web searches and information retrieval
-3. **Content Processing Agent** (`content_processing_agent.py`): Handles document processing and format conversion
-4. **Data Analysis Agent** (`data_analysis_agent.py`): Analyzes data and creates visualizations
+- **Modular design**: Each agent is defined in its own file with a factory function
+- **AgentProfile-based**: All agents use the recommended AgentProfile approach
+- **Factory functions**: Each agent is created through a factory function
+- **Message-based communication**: Agents communicate through the hub
+- **Proper lifecycle management**: Agents implement run() and stop() methods
 
-## Architecture
+### Agent Creation Pattern
 
-The multi-agent system architecture follows these principles:
-- **Modular design**: Each agent is implemented in its own file for clean separation of concerns
-- **Factory pattern**: Agents are created through factory functions for easy configuration
-- **Dependency injection**: Resources like the registry and hub are injected where needed
-- **Message flow visualization**: Agent interactions are visualized in the terminal
-- **CLI interface**: Direct interaction with agents through a command-line interface
+Each agent follows this implementation pattern:
+
+```python
+def create_agent_name(provider_type: ModelProvider, model_name: ModelName, api_key: str) -> AIAgent:
+    # 1. Create identity
+    agent_identity = AgentIdentity.create_key_based()
+    
+    # 2. Define capabilities and skills
+    agent_capabilities = [...]
+    agent_skills = [...]
+    
+    # 3. Create agent profile
+    agent_profile = AgentProfile(
+        agent_id="agent_id",
+        agent_type=AgentType.AI,
+        name="Agent Name",
+        summary="Brief description",
+        description="Detailed description",
+        capabilities=agent_capabilities,
+        skills=agent_skills,
+        # Other profile fields...
+    )
+    
+    # 4. Define custom tools (if needed)
+    agent_tools = [...]
+    
+    # 5. Create and return agent instance
+    agent = AIAgent(
+        agent_id="agent_id",
+        identity=agent_identity,
+        provider_type=provider_type,
+        model_name=model_name,
+        api_key=api_key,
+        profile=agent_profile,
+        personality="Agent's personality used in system prompt",
+        custom_tools=agent_tools,
+    )
+    
+    return agent
+```
+
 
 ## Running Examples
 
-To run the multi-agent system:
-
 ```bash
-# Install core dependencies
-poetry install
-
-# Install research dependencies (required for Research Agent)
+# Install core + research dependencies
 poetry install --with research
 
 # Run the multi-agent system
 python examples/multi_agent/multi_agent_system.py
 
-# Run with detailed logging enabled
+# Run with detailed logging
 python examples/multi_agent/multi_agent_system.py --logging
 ```
 
@@ -64,33 +93,14 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TAVILY_API_KEY=your_tavily_api_key
 ```
 
-## Required Packages
+## Best Practices
 
-The multi-agent system requires specific packages for each agent to function properly:
+1. **Separate description from personality**: 
+   - `description` in AgentProfile is discoverable by other agents
+   - `personality` is used in system prompts
 
-```bash
-# Research Agent dependencies
-poetry install --with research    # Installs arxiv and wikipedia packages
+2. **Implement with AgentProfile**: Use the AgentProfile pattern for consistent initialization
 
-# Data Analysis Agent dependencies are included in the main dependencies
+3. **Implement proper lifecycle management**: Use run() and stop() methods
 
-# Content Processing Agent dependencies are included in the main dependencies
-
-# Telegram Agent dependencies are included with the main or demo dependencies
-```
-
-You can also install all dependencies for development and examples in one command:
-
-```bash
-# Install everything needed for development and all examples
-poetry install --with demo,research,dev
-```
-
-## Creating Your Own Multi-Agent Examples
-
-When creating your own multi-agent examples, consider:
-
-1. **Agent Roles**: Define clear roles and responsibilities for each agent
-2. **Coordination Mechanisms**: Implement mechanisms for agent coordination
-3. **Task Decomposition**: Show how to break down complex tasks
-4. **Conflict Resolution**: Demonstrate how to handle conflicting agent goals or actions
+For detailed implementation guides, best practices, and advanced topics, see the [AgentConnect Documentation](https://akki0511.github.io/AgentConnect/guides/index.html).

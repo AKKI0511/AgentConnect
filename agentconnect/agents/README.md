@@ -144,7 +144,6 @@ agent = AIAgent(
     identity=AgentIdentity.create_key_based(),  # Independent cryptographic identity
     personality="helpful and knowledgeable research assistant",
     capabilities=capabilities,  # Advertised capabilities for discovery
-    organization_id="org123",
     interaction_modes=[InteractionMode.HUMAN_TO_AGENT, InteractionMode.AGENT_TO_AGENT]
 )
 ```
@@ -160,7 +159,7 @@ human = HumanAgent(
     agent_id="user123",
     name="John Doe",
     identity=AgentIdentity.create_key_based(),  # Cryptographic identity
-    organization_id="org123"
+    organization="org123"
 )
 
 # Start interaction with any AI agent in the network

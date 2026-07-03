@@ -3,13 +3,13 @@ name: Build and Deploy Documentation
 on:
   # Runs on pushes targeting the default branch and specific paths
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
       - 'agentconnect/**'
       - 'docs/**'
       - '.github/workflows/docs.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
       - 'agentconnect/**'
       - 'docs/**'

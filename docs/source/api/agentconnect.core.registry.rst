@@ -6,6 +6,14 @@ agentconnect.core.registry package
    :show-inheritance:
    :undoc-members:
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   agentconnect.core.registry.search
+
 Submodules
 ----------
 

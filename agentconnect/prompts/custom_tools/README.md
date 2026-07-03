@@ -6,8 +6,8 @@ This directory contains modular implementations of tools used by agents in the A
 
 ```
 custom_tools/
+├── collaboration/             # Agent search and collaboration tools
 ├── registry.py                # Tool registry for managing available tools
-├── collaboration_tools.py     # Agent search and collaboration request tools
 ├── task_tools.py              # Task decomposition and management tools
 └── README.md                  # This documentation file
 ```

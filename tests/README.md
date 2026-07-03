@@ -1,22 +1,20 @@
 # AgentConnect Tests
 
-Tests have been temporarily disabled while the codebase is being actively developed.
-
-This directory is kept for future test implementation and to maintain compatibility with CI pipelines.
-
 ## Running Tests
 
-The `make test` command will succeed but not run any tests, as they have been disabled.
+Use `make test` to run all tests.
 
 ## Adding Tests
 
-When adding tests in the future, place them in this directory with the following structure:
+When adding tests, place them in this directory with the following structure:
 
 ```
 tests/
   test_*.py        # Test files (match test_*.py)
 ```
 
-## CI Pipeline
+## Tests available
 
-The CI pipeline is configured to skip test execution if no test files are present.
+- Refer to [Registry Tests](./core/registry/README.md) for tests related to the registry and Qdrant vector database.
+- To understand the system prompt for an `AIAgent`, run `python tests/check_react_prompt.py`
+- To test the `HumanAgent` and `AIAgent` usage, run tests from `tests/agents/`

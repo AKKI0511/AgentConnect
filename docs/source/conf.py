@@ -5,6 +5,7 @@
 
 import os
 import sys
+import importlib.metadata
 # Add the project root directory to the Python path so that autodoc can find the modules
 sys.path.insert(0, os.path.abspath('../..'))
 
@@ -28,8 +29,8 @@ project = 'AgentConnect'
 copyright = '2025, Akshat Joshi'
 author = 'Akshat Joshi'
 
-version = '0.3.0'
-release = '0.3.0'
+version = importlib.metadata.version("agentconnect")
+release = version
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -100,7 +101,6 @@ html_title = 'AgentConnect Documentation'
 # Intersphinx settings
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
-    'langchain': ('https://api.python.langchain.com/en/latest/', None),
 }
 
 # MyST Markdown parser settings (from LangChain)
@@ -171,7 +171,6 @@ html_theme_options = {
     "navbar_persistent": ["search-button"],
     # Make the primary sidebar collapsible and persistent
     "primary_sidebar_end": ["sidebar-ethical-ads"],
-    "collapse_navigation": False,
     "navigation_depth": 4,
     # Show previous/next buttons
     "show_prev_next": True,
@@ -181,7 +180,7 @@ html_theme_options = {
     # Theme toggle settings
     "footer_start": ["copyright"],
     # Sidebar collapsing behavior
-    "collapse_navigation": True,  # Allow sections to be collapsed
+    "collapse_navigation": False,  # Allow sections to be collapsed
     "navigation_with_keys": True, # Allow keyboard navigation
     # Add sidebar collapse button by default
     "header_links_before_dropdown": 6,

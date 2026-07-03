@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, TypeVar
 
-from langchain.tools import StructuredTool
+from langchain_core.tools.structured import StructuredTool
 from langchain.llms.base import BaseLLM
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
@@ -161,7 +161,7 @@ def create_task_decomposition_tool(llm: Optional[BaseLLM] = None) -> StructuredT
             finally:
                 loop.close()
         except Exception as e:
-            logger.error(f"Error in decompose_task: {str(e)}")
+            logger.error("Error in decompose_task: %s", str(e))
             return {
                 "subtasks": [],
                 "message": f"Error: Task decomposition failed - {str(e)}",
@@ -219,7 +219,7 @@ Each subtask needs: ID, title, description.
                     result = parser.parse(response.content)
                     return result
                 except Exception as e:
-                    logger.warning(f"Failed to parse LLM response as JSON: {str(e)}")
+                    logger.warning("Failed to parse LLM response as JSON: %s", str(e))
                     # Fall back to manual parsing if JSON parsing fails
                     return await _fallback_task_decomposition(
                         task_description, max_subtasks, response.content
@@ -230,7 +230,7 @@ Each subtask needs: ID, title, description.
                     task_description, max_subtasks
                 )
         except Exception as e:
-            logger.error(f"Error in decompose_task_async: {str(e)}")
+            logger.error("Error in decompose_task_async: %s", str(e))
             # Return a simple fallback decomposition on error
             return {
                 "error": str(e),

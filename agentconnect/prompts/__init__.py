@@ -21,9 +21,6 @@ from agentconnect.prompts.agent_prompts import (
     create_workflow_for_agent,
 )
 
-# Re-export only the chain factory function that most users will need
-from agentconnect.prompts.chain_factory import create_agent_workflow
-
 # Re-export only the top-level prompt management class
 from agentconnect.prompts.templates.prompt_templates import PromptTemplates
 
@@ -37,5 +34,4 @@ __all__ = [
     "create_workflow_for_agent",
     "PromptTemplates",
     "PromptTools",
-    "create_agent_workflow",
 ]

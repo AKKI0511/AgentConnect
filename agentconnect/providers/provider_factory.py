@@ -80,7 +80,7 @@ class ProviderFactory:
                 }
             except Exception as e:
                 # Skip providers that fail to initialize
-                logger.error(f"Failed to initialize provider: {provider_type}")
-                logger.error(f"Error: {e}")
+                logger.error("Failed to initialize provider: %s", provider_type)
+                logger.error("Error: %s", e)
                 continue
         return providers

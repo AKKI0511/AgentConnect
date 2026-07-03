@@ -41,11 +41,6 @@ from agentconnect.core.agent import AgentIdentity
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import Capability, ModelName, ModelProvider
 from agentconnect.prompts.tools import PromptTools
-from agentconnect.utils.logging_config import (
-    LogLevel,
-    disable_all_logging,
-    setup_logging,
-)
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -605,7 +600,7 @@ async def setup_agents():
     }
 
 
-async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None:
+async def run_data_analysis_assistant_demo() -> None:
     """
     Run the data analysis assistant demo with multiple specialized agents.
 
@@ -648,22 +643,6 @@ async def run_data_analysis_assistant_demo(enable_logging: bool = False) -> None
         for var in missing_optional_vars:
             print_colored(f"  - {var}: {optional_env_vars[var]}", "INFO")
         print_colored("These are not required but may enhance functionality.", "INFO")
-
-    if enable_logging:
-        setup_logging(
-            level=LogLevel.WARNING,
-            module_levels={
-                "AgentRegistry": LogLevel.WARNING,
-                "CommunicationHub": LogLevel.DEBUG,
-                "src.agents.ai_agent": LogLevel.INFO,
-                "src.agents.human_agent": LogLevel.WARNING,
-                "src.core.agent": LogLevel.INFO,
-                "src.prompts.tools": LogLevel.INFO,
-            },
-        )
-    else:
-        # Disable all logging when not in debug mode
-        disable_all_logging()
 
     print_colored("=== Advanced Multi-Agent Data Analysis System Demo ===", "SYSTEM")
     print_colored(

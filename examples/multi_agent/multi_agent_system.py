@@ -20,7 +20,7 @@ Components:
 5. HumanAgent - Provides CLI interface for direct agent interaction
 
 Required Environment Variables:
-- TELEGRAM_BOT_TOKEN: API token for your Telegram bot (get from @BotFather) 
+- TELEGRAM_BOT_TOKEN: API token for your Telegram bot (get from @BotFather)
 - An LLM provider API key (one of the following):
   - GOOGLE_API_KEY
   - OPENAI_API_KEY
@@ -35,6 +35,7 @@ Usage:
 import asyncio
 import os
 import sys
+import signal
 from typing import Dict, Any
 from dotenv import load_dotenv
 from colorama import init
@@ -43,48 +44,34 @@ from colorama import init
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.types import ModelProvider, ModelName
-from agentconnect.utils.logging_config import setup_logging, LogLevel, disable_all_logging
 from agentconnect.agents import HumanAgent
 from agentconnect.core.types import AgentIdentity
 
 # Import agent creators from their respective modules
 from examples.multi_agent.telegram_agent import create_telegram_agent
 from examples.multi_agent.research_agent import create_research_agent
-from examples.multi_agent.content_processing_agent import create_content_processing_agent 
+from examples.multi_agent.content_processing_agent import (
+    create_content_processing_agent,
+)
 from examples.multi_agent.data_analysis_agent import create_data_analysis_agent
 from examples.multi_agent.message_logger import print_colored, agent_message_logger
 
 # Initialize colorama
 init()
 
-async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
+
+async def setup_agents() -> Dict[str, Any]:
     """
     Set up the registry, hub, and agents.
-    
+
     Args:
         enable_logging (bool): Whether to enable detailed logging
-        
+
     Returns:
         Dict[str, Any]: Dictionary containing registry, hub, agents, and tasks
     """
     # Load environment variables
     load_dotenv()
-    
-    # Configure logging
-    if enable_logging:
-        setup_logging(
-            level=LogLevel.WARNING,
-            module_levels={
-                "AgentRegistry": LogLevel.WARNING,
-                "CommunicationHub": LogLevel.DEBUG,
-                "agentconnect.agents.ai_agent": LogLevel.INFO,
-                "agentconnect.agents.telegram.telegram_agent": LogLevel.DEBUG,
-                "agentconnect.core.agent": LogLevel.INFO,
-                "agentconnect.prompts.tools": LogLevel.INFO,
-            },
-        )
-    else:
-        disable_all_logging()
 
     # Check for required API keys
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -92,7 +79,7 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
 
     # Fall back to other API keys if Google's isn't available
     provider_type = ModelProvider.GOOGLE
-    model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
+    model_name = ModelName.GEMINI2_FLASH
 
     if not api_key:
         print_colored("GOOGLE_API_KEY not found. Checking for alternatives...", "INFO")
@@ -123,8 +110,8 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
 
     if not telegram_token:
         print_colored(
-            "Warning: TELEGRAM_BOT_TOKEN not found. Telegram agent functionality will be limited.", 
-            "WARNING"
+            "Warning: TELEGRAM_BOT_TOKEN not found. Telegram agent functionality will be limited.",
+            "WARNING",
         )
 
     # Create registry and hub
@@ -133,8 +120,10 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
 
     # Register message logger to visualize agent collaboration
     hub.add_global_handler(agent_message_logger)
-    print_colored("Registered agent message flow logger to visualize collaboration", "INFO")
-    
+    print_colored(
+        "Registered agent message flow logger to visualize collaboration", "INFO"
+    )
+
     # Create human agent for CLI interaction
     human_identity = AgentIdentity.create_key_based()
     human_agent = HumanAgent(
@@ -148,25 +137,29 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
         # Create agents using the factory functions from their respective modules
         telegram_agent = create_telegram_agent(provider_type, model_name, api_key)
         research_agent = create_research_agent(provider_type, model_name, api_key)
-        content_processing_agent = create_content_processing_agent(provider_type, model_name, api_key)
-        data_analysis_agent = create_data_analysis_agent(provider_type, model_name, api_key, registry, hub)
-        
+        content_processing_agent = create_content_processing_agent(
+            provider_type, model_name, api_key
+        )
+        data_analysis_agent = create_data_analysis_agent(
+            provider_type, model_name, api_key, registry, hub
+        )
+
         # Register all agents with the hub
         await hub.register_agent(telegram_agent)
         await hub.register_agent(research_agent)
         await hub.register_agent(content_processing_agent)
         await hub.register_agent(data_analysis_agent)
         await hub.register_agent(human_agent)
-        
+
         print_colored("All agents registered successfully!", "INFO")
-        
+
         # Start the agent processing loops
         agent_tasks = []
         agent_tasks.append(asyncio.create_task(telegram_agent.run()))
         agent_tasks.append(asyncio.create_task(research_agent.run()))
         agent_tasks.append(asyncio.create_task(content_processing_agent.run()))
         agent_tasks.append(asyncio.create_task(data_analysis_agent.run()))
-        
+
         return {
             "registry": registry,
             "hub": hub,
@@ -177,75 +170,106 @@ async def setup_agents(enable_logging: bool = False) -> Dict[str, Any]:
             "data_analysis_agent": data_analysis_agent,
             "agent_tasks": agent_tasks,
         }
-        
+
     except Exception as e:
         print_colored(f"Error setting up agents: {e}", "ERROR")
         raise RuntimeError(f"Failed to set up agents: {e}")
 
 
-async def run_multi_agent_system(enable_logging: bool = False) -> None:
+async def run_multi_agent_system() -> None:
     """
     Main function to run the multi-agent system.
-    
+
     Args:
         enable_logging (bool): Whether to enable detailed logging
     """
     print_colored("=== AgentConnect Multi-Agent System ===", "SYSTEM")
     print_colored(
-        "This example demonstrates a modular multi-agent system with separate agent implementations.", 
-        "SYSTEM"
+        "This example demonstrates a modular multi-agent system with separate agent implementations.",
+        "SYSTEM",
     )
     print_colored("Available specialized agents:", "SYSTEM")
     print_colored("1. Telegram Agent - Handles Telegram user interactions", "TELEGRAM")
     print_colored(
-        "2. Research Agent - Performs web searches and creates research reports", "RESEARCH"
+        "2. Research Agent - Performs web searches and creates research reports",
+        "RESEARCH",
     )
     print_colored(
-        "3. Content Processing Agent - Processes and transforms content between formats", "CONTENT"
+        "3. Content Processing Agent - Processes and transforms content between formats",
+        "CONTENT",
     )
-    print_colored("4. Data Analysis Agent - Analyzes data and creates visualizations", "DATA")
+    print_colored(
+        "4. Data Analysis Agent - Analyzes data and creates visualizations", "DATA"
+    )
     print_colored("\nSetting up agents...", "SYSTEM")
 
     agents = None
+    shutdown_event = asyncio.Event()
+
+    # Set up signal handlers for graceful shutdown
+    def signal_handler():
+        print_colored("\nShutdown signal received, cleaning up...", "SYSTEM")
+        shutdown_event.set()
 
     try:
+        # Register signal handlers if supported by the platform
+        loop = asyncio.get_running_loop()
+        for sig_name in ("SIGINT", "SIGTERM"):
+            try:
+                sig = getattr(signal, sig_name)
+                loop.add_signal_handler(sig, signal_handler)
+            except (NotImplementedError, AttributeError):
+                # Windows doesn't support POSIX signals with asyncio
+                pass
+
         # Set up agents
-        agents = await setup_agents(enable_logging)
+        agents = await setup_agents()
 
         print_colored("Agents are ready! System is now running.", "SYSTEM")
-        
+
         if os.getenv("TELEGRAM_BOT_TOKEN"):
-            print_colored("Telegram bot is active. Open your Telegram app and start chatting with your bot.", "TELEGRAM")
-        
+            print_colored(
+                "Telegram bot is active. Open your Telegram app and start chatting with your bot.",
+                "TELEGRAM",
+            )
+
         # Start CLI interaction with the content processing agent
-        print_colored("\n=== CLI Interface with Content Processing Agent ===", "CONTENT")
-        print_colored("You can directly interact with the Content Processing Agent through this CLI.", "CONTENT")
-        print_colored("Type your messages and press Enter to send. Type 'exit' to end the session.", "CONTENT")
-        print_colored("Agent interactions will be displayed in the terminal.", "CONTENT")
-        
+        print_colored(
+            "\n=== CLI Interface with Content Processing Agent ===", "CONTENT"
+        )
+        print_colored(
+            "You can directly interact with the Content Processing Agent through this CLI.",
+            "CONTENT",
+        )
+        print_colored(
+            "Type your messages and press Enter to send. Type 'exit' to end the session.",
+            "CONTENT",
+        )
+        print_colored(
+            "Agent interactions will be displayed in the terminal.", "CONTENT"
+        )
+
         # Start interaction between human agent and content processing agent
         human_interaction_task = asyncio.create_task(
             agents["human_agent"].start_interaction(agents["content_processing_agent"])
         )
-        
+
         # Add the human interaction task to the list of tasks
         agents["agent_tasks"].append(human_interaction_task)
-        
+
         print_colored("Press Ctrl+C to stop all agents and exit.", "SYSTEM")
 
-        # Keep the main task running until interrupted
-        while True:
-            await asyncio.sleep(1)
+        # Wait for shutdown signal instead of using sleep loop
+        await shutdown_event.wait()
 
     except KeyboardInterrupt:
         print_colored("\nOperation interrupted by user", "WARNING")
+        # Ensure shutdown event is set
+        shutdown_event.set()
     except RuntimeError as e:
         print_colored(f"\nCritical error: {e}", "ERROR")
     except Exception as e:
         print_colored(f"\nUnexpected error: {e}", "ERROR")
-        if enable_logging:
-            import traceback
-            traceback.print_exc()
     finally:
         # Clean up
         if agents:
@@ -304,13 +328,9 @@ async def run_multi_agent_system(enable_logging: bool = False) -> None:
 
 if __name__ == "__main__":
     try:
-        # Add --logging flag for detailed logging
-        if "--logging" in sys.argv:
-            asyncio.run(run_multi_agent_system(enable_logging=True))
-        else:
-            asyncio.run(run_multi_agent_system())
+        asyncio.run(run_multi_agent_system())
     except KeyboardInterrupt:
         print_colored("\nAll agents terminated by user", "WARNING")
     except Exception as e:
         print_colored(f"Fatal error: {e}", "ERROR")
-        sys.exit(1) 
+        sys.exit(1)

@@ -274,6 +274,7 @@ Example PR description:
 Community
 --------
 
+- Follow us on `LinkedIn <https://www.linkedin.com/company/agentconnect-ai/>`_
 - Join our `Discord server <https://discord.gg/agentconnect>`_
 - Follow us on `Twitter <https://twitter.com/agentconnect>`_
 - Subscribe to our `newsletter <https://agentconnect.dev/newsletter>`_

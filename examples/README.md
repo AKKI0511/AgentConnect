@@ -11,11 +11,8 @@ This directory contains examples demonstrating various features and use cases of
     ```
 2.  **Install Dependencies:** Use Poetry to install base dependencies plus optional extras needed for specific examples (like demo, research, telegram).
     ```bash
-    # Install core + demo dependencies (recommended for most examples)
-    poetry install --with demo
-
-    # Or install specific groups as needed
-    # poetry install --with research
+    # Install core + research dependencies (recommended for most examples)
+    poetry install --with research
     ```
 3.  **Set Up Environment Variables:** Copy the example environment file and fill in your API keys.
     ```bash
@@ -26,57 +23,71 @@ This directory contains examples demonstrating various features and use cases of
     ```
     Edit the `.env` file with your credentials. You need **at least one** LLM provider key (OpenAI, Google, Anthropic, Groq). See specific example requirements below for other keys (Telegram, Tavily, CDP).
 
-## Running Examples (CLI Recommended)
+## Running Examples
 
-The easiest way to run examples is using the `agentconnect` CLI tool:
+Run examples by invoking the scripts directly from the project root. If an example depends on the Registry API server, start it first and verify health.
+
+Server prerequisites (if required by the example):
 
 ```bash
-agentconnect --example <example_name> [--verbose]
+agentconnect serve registry
+agentconnect registry ping
 ```
 
-Replace `<example_name>` with one of the following:
+Canonical invocations:
 
-*   `chat`: Simple interactive chat between a human and an AI agent.
-*   `multi`: Demonstrates a multi-agent system for e-commerce analysis.
-*   `research`: Research assistant workflow involving multiple agents.
-*   `data`: Data analysis assistant performing analysis and visualization tasks.
-*   `telegram`: A multi-agent system integrated with a Telegram bot interface.
-*   `agent_economy`: Autonomous workflow showcasing agent-to-agent payments.
+```bash
+# Basic chat
+python examples/example_usage.py
 
-Use the `--verbose` flag for detailed logging output.
+# Multi-agent e-commerce analysis
+python examples/example_multi_agent.py
+
+# Research assistant (requires research extras)
+python examples/research_assistant.py
+
+# Data analysis assistant
+python examples/data_analysis_assistant.py
+
+# Telegram multi-agent system (requires TELEGRAM_BOT_TOKEN)
+python examples/multi_agent/multi_agent_system.py
+
+# Autonomous Workflow with Agent Economy (requires CDP keys)
+python examples/autonomous_workflow/run_workflow_demo.py
+```
 
 ## Example Details
 
-### Basic Chat (`chat`)
+### Basic Chat
 
 *   **Source:** `examples/example_usage.py`
 *   **Description:** Demonstrates fundamental AgentConnect concepts: creating human and AI agents, establishing secure communication, and basic interaction.
 *   **Optional:** Can be run with payment capabilities enabled (see `example_usage.py` comments and requires CDP keys in `.env`).
 
-### E-commerce Analysis (`multi`)
+### E-commerce Analysis
 
 *   **Source:** `examples/example_multi_agent.py`
 *   **Description:** Showcases a collaborative workflow where multiple agents analyze e-commerce data.
 
-### Research Assistant (`research`)
+### Research Assistant
 
 *   **Source:** `examples/research_assistant.py`
 *   **Description:** An example of agents collaborating to perform research tasks, potentially involving web searches (requires `Tavily` key and `research` extras).
 *   **Requires:** `poetry install --with research`, `TAVILY_API_KEY` in `.env`.
 
-### Data Analysis Assistant (`data`)
+### Data Analysis Assistant
 
 *   **Source:** `examples/data_analysis_assistant.py`
 *   **Description:** Agents work together to analyze data and generate visualizations.
 
-### Telegram Assistant (`telegram`)
+### Telegram Assistant
 
 *   **Source:** `examples/multi_agent/multi_agent_system.py`
 *   **Description:** Integrates a multi-agent backend (similar to research/content processing agents) with a Telegram bot front-end.
 *   **Requires:** `TELEGRAM_BOT_TOKEN` in `.env`. 
     *   To get a token, talk to the [BotFather](https://t.me/botfather) on Telegram and follow the instructions to create a new bot.
 
-### Autonomous Workflow with Agent Economy (`agent_economy`)
+### Autonomous Workflow with Agent Economy
 
 *   **Source:** `examples/autonomous_workflow/`
 *   **Description:** Demonstrates a complete autonomous workflow featuring:
@@ -108,7 +119,6 @@ All examples are configured to integrate with LangSmith for tracing and debuggin
 ## Troubleshooting
 
 *   Ensure you run commands from the project root directory.
-*   Verify all required dependencies for the chosen example are installed (e.g., `poetry install --with demo`).
+*   Verify all required dependencies for the chosen example are installed (e.g., `poetry install --with research`).
 *   Double-check that all necessary API keys and tokens are correctly set in your `.env` file.
-*   Use the `--verbose` flag when running via CLI for detailed logs.
 *   Check LangSmith traces for deeper insights into execution flow and errors.

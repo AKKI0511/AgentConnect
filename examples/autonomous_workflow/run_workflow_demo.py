@@ -22,24 +22,20 @@ from langchain_community.tools.requests.tool import RequestsGetTool
 from langchain_community.utilities import TextRequestsWrapper
 from colorama import init, Fore, Style
 
-from agentconnect.agents.ai_agent import AIAgent
-from agentconnect.agents.human_agent import HumanAgent
-from agentconnect.agents.telegram.telegram_agent import TelegramAIAgent
-from agentconnect.communication.hub import CommunicationHub
-from agentconnect.core.agent import BaseAgent
-from agentconnect.core.types import (
+from agentconnect.agents import AIAgent, HumanAgent, TelegramAIAgent
+from agentconnect.communication import CommunicationHub
+from agentconnect.core import (
+    BaseAgent,
+    AgentRegistry,
     AgentIdentity,
     Capability,
     ModelProvider,
     ModelName,
+    AgentProfile,
+    AgentType,
+    Skill,
 )
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.utils.logging_config import (
-    setup_logging,
-    LogLevel,
-    disable_all_logging,
-)
-from agentconnect.utils.callbacks import ToolTracerCallbackHandler
+from agentconnect.utils import ToolTracerCallbackHandler
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -55,10 +51,12 @@ COLORS = {
     "INFO": Fore.WHITE,
 }
 
+
 def print_colored(message: str, color_type: str = "SYSTEM") -> None:
     """Print a message with specified color"""
     color = COLORS.get(color_type.upper(), Fore.WHITE)
     print(f"{color}{message}{Style.RESET_ALL}")
+
 
 # Define Base Sepolia USDC Contract Address
 BASE_SEPOLIA_USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
@@ -112,7 +110,7 @@ async def setup_agents() -> Tuple[AIAgent, AIAgent, TelegramAIAgent, HumanAgent]
     # Determine which LLM to use based on available API keys
     if google_api_key:
         provider_type = ModelProvider.GOOGLE
-        model_name = ModelName.GEMINI2_5_FLASH_PREVIEW
+        model_name = ModelName.GEMINI2_5_FLASH
         api_key = google_api_key
     else:
         provider_type = ModelProvider.OPENAI
@@ -124,35 +122,103 @@ async def setup_agents() -> Tuple[AIAgent, AIAgent, TelegramAIAgent, HumanAgent]
     # Configure Callback Handler
     monitor_callback = ToolTracerCallbackHandler(agent_id="user_proxy_agent")
 
+    # Define Agent IDs
+    USER_PROXY_AGENT_ID = "user_proxy_agent"
+    RESEARCH_AGENT_ID = "research_agent"
+    TELEGRAM_AGENT_ID = "telegram_broadcaster_agent"
+
     # Create User Proxy Agent (Workflow Orchestrator)
-    user_proxy_agent = AIAgent(
-        agent_id="user_proxy_agent",
+    user_proxy_skills = [
+        Skill(
+            name="workflow_orchestration",
+            description="Coordinates tasks across multiple agents.",
+        ),
+        Skill(
+            name="service_discovery",
+            description="Finds and utilizes other agents' capabilities.",
+        ),
+        Skill(
+            name="payment_management",
+            description="Handles payments for agent services.",
+        ),
+    ]
+    user_proxy_profile = AgentProfile(
+        agent_id=USER_PROXY_AGENT_ID,
+        agent_type=AgentType.AI,
         name="Workflow Orchestrator",
+        summary="Manages and orchestrates multi-agent workflows, including service discovery and payments.",
+        description="An AI agent responsible for understanding user requests, breaking them down into tasks, finding suitable agents for those tasks, coordinating their execution, and managing payments.",
+        version="1.0.0",
+        capabilities=[],  # Orchestrator itself doesn't offer direct capabilities but uses others
+        skills=user_proxy_skills,
+        tags=["orchestration", "workflow", "multi-agent", "payments", "coordination"],
+    )
+    user_proxy_agent = AIAgent(
+        agent_id=USER_PROXY_AGENT_ID,
+        profile=user_proxy_profile,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
         identity=AgentIdentity.create_key_based(),
-        capabilities=[],  # No specific capabilities - it orchestrates
         enable_payments=True,
         external_callbacks=[monitor_callback],
-        personality =f"""You are a workflow orchestrator. You interact with other agents to complete tasks. You are responsible for managing payments and returning results.
+        personality=f"""You are a workflow orchestrator. You interact with other agents to complete tasks. You are responsible for managing payments and returning results.
         If a payment is made, provide the amount and the transaction hash in your response.
 
         **Payment Details (USDC on Base Sepolia):**
         - Contract: {BASE_SEPOLIA_USDC_ADDRESS}
         - Amount: 6 decimals. 1 USDC = '1000000'.
-        """
+        """,
     )
 
     # Create Research Agent
-    research_agent = AIAgent(
-        agent_id="research_agent",
+    research_agent_skills = [
+        Skill(
+            name="web_search",
+            description="Performs targeted web searches using tools like Tavily.",
+        ),
+        Skill(
+            name="information_extraction",
+            description="Extracts relevant information from web pages and documents.",
+        ),
+        Skill(
+            name="report_generation",
+            description="Compiles research findings into structured reports.",
+        ),
+        Skill(
+            name="source_evaluation",
+            description="Assesses the reliability of information sources.",
+        ),
+    ]
+    research_agent_profile = AgentProfile(
+        agent_id=RESEARCH_AGENT_ID,
+        agent_type=AgentType.AI,
         name="Research Specialist",
+        summary="Provides detailed research reports on various topics using web search tools.",
+        description="An AI agent specialized in conducting in-depth research on companies, projects, topics, or URLs. It uses web search tools to gather information and presents it in a well-structured report, including sources.",
+        version="1.0.0",
+        capabilities=[GENERAL_RESEARCH],
+        skills=research_agent_skills,
+        tags=[
+            "research",
+            "web_search",
+            "analysis",
+            "reporting",
+            "information_retrieval",
+        ],
+        examples=[
+            "Research the company 'OpenAI'.",
+            "What are the latest advancements in quantum computing?",
+            "Provide a report on the Uniswap protocol.",
+        ],
+    )
+    research_agent = AIAgent(
+        agent_id=RESEARCH_AGENT_ID,
+        profile=research_agent_profile,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
         identity=AgentIdentity.create_key_based(),
-        capabilities=[GENERAL_RESEARCH],
         enable_payments=True,
         personality="""You are a Research Specialist. You provide detailed, well-structured reports on any given topic, project, or URL using web search tools.
 
@@ -171,14 +237,39 @@ Your fee is 2 USDC (Base Sepolia). When responding, state your fee.""",
     )
 
     # Create Telegram Broadcast Agent
-    telegram_broadcaster = TelegramAIAgent(
-        agent_id="telegram_broadcaster_agent",
+    telegram_broadcaster_skills = [
+        Skill(
+            name="message_formatting",
+            description="Formats messages appropriately for Telegram.",
+        ),
+        Skill(
+            name="telegram_api_interaction",
+            description="Uses Telegram Bot API to send messages.",
+        ),
+        Skill(
+            name="group_broadcasting",
+            description="Sends messages to multiple pre-configured Telegram groups.",
+        ),
+    ]
+    telegram_broadcaster_profile = AgentProfile(
+        agent_id=TELEGRAM_AGENT_ID,
+        agent_type=AgentType.AI,
         name="Telegram Broadcaster",
+        summary="Broadcasts messages to configured Telegram groups.",
+        description="An AI agent that specializes in broadcasting messages to one or more Telegram groups. It takes a message summary and ensures its delivery.",
+        version="1.0.0",
+        capabilities=[TELEGRAM_BROADCAST],
+        skills=telegram_broadcaster_skills,
+        tags=["telegram", "broadcast", "messaging", "notifications"],
+        examples=["Broadcast: 'Project Alpha update now available.'"],
+    )
+    telegram_broadcaster = TelegramAIAgent(
+        agent_id=TELEGRAM_AGENT_ID,
+        profile=telegram_broadcaster_profile,
         provider_type=provider_type,
         model_name=model_name,
         api_key=api_key,
         identity=AgentIdentity.create_key_based(),
-        capabilities=[TELEGRAM_BROADCAST],
         enable_payments=True,
         personality="""You are a Telegram Broadcast Specialist. You broadcast messages to all regestered Telegram groups. \
             Your fee is 1 USDC (Base Sepolia). After broadcasting, state your fee in your response.""",
@@ -190,13 +281,13 @@ Your fee is 2 USDC (Base Sepolia). When responding, state your fee.""",
         agent_id="human_user",
         name="Human User",
         identity=AgentIdentity.create_key_based(),
-        organization_id="demo_org",
+        organization="demo_org",
     )
 
     return user_proxy_agent, research_agent, telegram_broadcaster, human_agent
 
 
-async def main(enable_logging: bool = False):
+async def main():
     """
     Main execution flow for the autonomous workflow demo.
 
@@ -206,12 +297,6 @@ async def main(enable_logging: bool = False):
     Args:
         enable_logging: Whether to enable verbose logging
     """
-
-    if not enable_logging:
-        disable_all_logging()
-    else:
-        # Keep logging setup simple if enabled, main feedback via print_colored
-        setup_logging(level=LogLevel.WARNING)
 
     try:
         print_colored("\nSetting up agents...", "SYSTEM")
@@ -242,12 +327,18 @@ async def main(enable_logging: bool = False):
             if hasattr(agent, "metadata") and hasattr(
                 agent.metadata, "payment_address"
             ):
-                if agent.metadata.payment_address: # Check if address is not None or empty
+                if (
+                    agent.metadata.payment_address
+                ):  # Check if address is not None or empty
                     print_colored(
-                        f"    Payment Address ({agent.name}): {agent.metadata.payment_address}", "INFO"
+                        f"    Payment Address ({agent.name}): {agent.metadata.payment_address}",
+                        "INFO",
                     )
                 else:
-                     print_colored(f"    Payment address pending initialization for {agent.name}...", "INFO")
+                    print_colored(
+                        f"    Payment address pending initialization for {agent.name}...",
+                        "INFO",
+                    )
 
         print_colored("All agents registered. Waiting for initialization...", "SYSTEM")
 
@@ -277,7 +368,9 @@ async def main(enable_logging: bool = False):
             print_colored("Available agents:", "INFO")
             print_colored("  - User Proxy (Orchestrator)", "USER_PROXY")
             print_colored("  - Research Agent (2 USDC per request)", "RESEARCH")
-            print_colored("  - Telegram Broadcaster (1.0 USDC per broadcast)", "TELEGRAM")
+            print_colored(
+                "  - Telegram Broadcaster (1.0 USDC per broadcast)", "TELEGRAM"
+            )
             print_colored("\nExample commands:", "INFO")
             print_colored("  - Research X and broadcast the summary", "INFO")
             print_colored(
@@ -287,7 +380,10 @@ async def main(enable_logging: bool = False):
 
             # Start human interaction with the user proxy agent
             # HumanAgent will handle its own colored printing for the chat
-            print_colored("\n▶️ Starting interactive session with Workflow Orchestrator...", "SYSTEM")
+            print_colored(
+                "\n▶️ Starting interactive session with Workflow Orchestrator...",
+                "SYSTEM",
+            )
             await human_agent.start_interaction(user_proxy_agent)
 
         except asyncio.CancelledError:
@@ -327,7 +423,9 @@ async def main(enable_logging: bool = False):
                     await hub.unregister_agent(agent.agent_id)
                     print_colored(f"  ✓ Unregistered {agent.agent_id}", "INFO")
                 except Exception as e:
-                    print_colored(f"  ✗ Error unregistering {agent.agent_id}: {e}", "ERROR")
+                    print_colored(
+                        f"  ✗ Error unregistering {agent.agent_id}: {e}", "ERROR"
+                    )
 
     except ValueError as e:
         print_colored(f"Setup error: {e}", "ERROR")

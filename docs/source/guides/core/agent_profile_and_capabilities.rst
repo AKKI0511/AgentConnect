@@ -408,7 +408,7 @@ Register your agent with the hub so it is indexed for discovery:
     registry = AgentRegistry()
     hub = CommunicationHub(registry)
 
-    await hub.register(agent)
+    await hub.register_agent(agent)
 
 Once registered, two paths exist for discovering your agent:
 
@@ -561,13 +561,13 @@ Profiles are indexed at registration time. Re-registration with the same ``agent
 .. code-block:: python
 
     # 1. Unregister
-    await hub.unregister(agent)
+    await hub.unregister_agent(agent.agent_id)
 
     # 2. Update the profile
     # ...
 
     # 3. Re-register
-    await hub.register(agent)
+    await hub.register_agent(agent)
 
 .. admonition:: Note
    :class: note

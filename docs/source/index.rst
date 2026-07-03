@@ -189,73 +189,84 @@ AgentConnect can be installed by cloning the repository and using Poetry to inst
 
 For detailed installation instructions including environment setup and API configuration, see the :doc:`installation` guide.
 
-Use the CLI:
-
-.. code-block:: bash
-
-    # Initialize SDK config (creates agentconnect.yaml)
-    agentconnect config init
-
-    # Start the Registry API server
-    agentconnect serve registry
-
-    # Check Registry API health
-    agentconnect registry ping
-
 .. _quick-start:
 
 Quick Start
 =============
 
-Here's a minimal example of creating and connecting a human user with an AI assistant:
+Here's a minimal example showcasing **Agent Discovery** and **Agent-to-Agent (A2A) Communication** using ``AIAgent.chat()``:
 
 .. code-block:: python
 
-    import asyncio
-    import os
-    from agentconnect.agents import AIAgent, HumanAgent
-    from agentconnect.core.registry import AgentRegistry
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity, InteractionMode
+  import asyncio
+  import os
+  from dotenv import load_dotenv
+  from agentconnect.agents import AIAgent
+  from agentconnect.communication import CommunicationHub
+  from agentconnect.core.registry import AgentRegistry
+  from agentconnect.core.types import (
+      AgentIdentity,
+      AgentProfile,
+      AgentType,
+      Capability,
+      ModelProvider,
+      ModelName,
+  )
 
-    async def main():
-        # Create registry and hub
-        registry = AgentRegistry()
-        hub = CommunicationHub(registry)
-        
-        # Create and register an AI agent
-        ai_agent = AIAgent(
-            agent_id="assistant",
-            name="AI Assistant",
-            provider_type=ModelProvider.OPENAI,
-            model_name=ModelName.GPT4O,
-            api_key=os.getenv("OPENAI_API_KEY"),
-            identity=AgentIdentity.create_key_based(),
-            interaction_modes=[InteractionMode.HUMAN_TO_AGENT]
-        )
-        await hub.register_agent(ai_agent)
-        
-        # Create and register a human agent
-        human = HumanAgent(
-            agent_id="human-user",
-            name="Human User",
-            identity=AgentIdentity.create_key_based()
-        )
-        await hub.register_agent(human)
+  async def main():
+      load_dotenv()
+      registry = AgentRegistry()
+      hub = CommunicationHub(registry)
 
-        # Start AI processing loop
-        asyncio.create_task(ai_agent.run())
-        
-        # Start interaction between human and AI
-        await human.start_interaction(ai_agent)
+      # Create a research agent
+      research = AIAgent(
+          agent_id="researcher_1",
+          identity=AgentIdentity.create_key_based(),
+          provider_type=ModelProvider.OPENAI,
+          model_name=ModelName.GPT4O_MINI,
+          api_key=os.getenv("OPENAI_API_KEY"),
+          profile=AgentProfile(
+              agent_id="researcher_1",
+              agent_type=AgentType.AI,
+              name="Researcher",
+              summary="Finds and summarizes sources",
+              capabilities=[Capability(name="research", description="Research topics")],
+          ),
+      )
+      
+      # Create an assistant agent
+      assistant = AIAgent(
+          agent_id="assistant_1",
+          identity=AgentIdentity.create_key_based(),
+          provider_type=ModelProvider.OPENAI,
+          model_name=ModelName.GPT4O,
+          api_key=os.getenv("OPENAI_API_KEY"),
+          profile=AgentProfile(
+              agent_id="assistant_1",
+              agent_type=AgentType.AI,
+              name="Assistant",
+              summary="General helper that can collaborate",
+              capabilities=[Capability(name="conversation", description="General conversation")],
+          ),
+      )
 
-    if __name__ == "__main__":
-        asyncio.run(main())
+      # Register agents to enable discovery
+      await hub.register_agent(research)
+      await hub.register_agent(assistant)
 
-For more detailed examples and step-by-step instructions, see the :doc:`quickstart` guide.
+      # Agent Discovery: assistant finds the research agent
+      print(await assistant.chat("Find a research agent and show the agent's profile."))
+
+  if __name__ == "__main__":
+      asyncio.run(main())
+
+.. note::
+   **Connect before first chat** to enable Agent Discovery and A2A tools. For A2A delegation (sending tasks to other agents), start their ``run()`` loops. See the :doc:`quickstart` for delegation examples.
+
+For more detailed examples and step-by-step instructions, see the :doc:`quickstart`, :doc:`examples/index` and the :doc:`guides/index`.
 
 .. _examples:
-
+ 
 Documentation
 =============
 

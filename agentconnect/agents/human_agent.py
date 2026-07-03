@@ -59,6 +59,13 @@ class HumanAgent(BaseAgent):
             organization: Organization or entity providing the agent
             response_callbacks: Optional list of callbacks to be called when human responds
         """
+
+        # For HumanAgent distinction, the agent_id must start with 'human'
+        if not agent_id.startswith("human"):
+            raise ValueError(
+                "The agent_id for HumanAgent must start with 'human' prefix for distinction."
+            )
+
         # Create Capability objects for human capabilities
         capabilities = [
             Capability(
@@ -96,22 +103,6 @@ class HumanAgent(BaseAgent):
         self.response_callbacks = response_callbacks or []
         self.last_response_data = {}
         logger.debug("Human agent initialized agent_id=%s", self.agent_id)
-
-    def _initialize_llm(self):
-        """
-        Human agents don't use an LLM.
-        """
-        logger.debug("_initialize_llm called (no LLM) agent_id=%s", self.agent_id)
-        return None
-
-    def _initialize_workflow(self):
-        """
-        Human agents don't use a workflow.
-        """
-        logger.debug(
-            "_initialize_workflow called (no workflow) agent_id=%s", self.agent_id
-        )
-        return None
 
     async def start_interaction(self, target_agent: BaseAgent) -> None:
         """Start an interactive session with an AI agent"""
@@ -183,7 +174,9 @@ class HumanAgent(BaseAgent):
                             print(f"{Fore.BLUE}⚙️ {response.content}{Style.RESET_ALL}")
                         else:
                             print("-" * 40)
-                            print(f"{Fore.CYAN}{target_agent.name}:{Style.RESET_ALL}")
+                            print(
+                                f"{Fore.CYAN}{target_agent.profile.name or target_agent.agent_id}:{Style.RESET_ALL}"
+                            )
                             print(f"{response.content}")
                             print("-" * 40)
                     else:

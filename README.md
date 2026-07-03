@@ -185,7 +185,7 @@ AgentConnect includes several example applications to demonstrate different feat
 - **Telegram Assistant**: Telegram AI agent with multi-agent collaboration
 - **Agent Economy**: Autonomous workflow with automatic cryptocurrency payments between agents
 
-For code examples and detailed descriptions, see the [Examples Directory](examples/README.md).
+For code examples and detailed descriptions, see the [Examples Directory](examples/README.md) or browse the [Examples docs](https://AKKI0511.github.io/AgentConnect/examples/).
 
 ## 🚀 Demo Application
 A full-featured demo application is included to showcase the framework's capabilities:
@@ -247,11 +247,11 @@ For developers who want to contribute to AgentConnect, please refer to our [Deve
 ## 📚 Documentation
 
 - [Online Documentation](https://AKKI0511.github.io/AgentConnect/) - Full documentation hosted on GitHub Pages
-- [QuickStart Guide](docs/source/quickstart.md) - Get started quickly with basic concepts
+- [QuickStart Guide](https://AKKI0511.github.io/AgentConnect/quickstart) - Get started quickly with basic concepts
 - [Examples](examples/README.md) - Sample code and use cases
-- [API Reference](docs/source/api/index.rst) - Detailed API documentation
+- [API Reference](https://AKKI0511.github.io/AgentConnect/api/) - Detailed API documentation
 - [Development Guidelines](docs/DEVELOPER_GUIDELINES.md) - Guidelines for contributors
- - [SDK Configuration](agentconnect/config/README.md) - Configure agents via agentconnect.yaml and CLI
+- [SDK Configuration](agentconnect/config/README.md) - Configure agents via agentconnect.yaml and CLI
 
 ## 📋 Project Structure
 

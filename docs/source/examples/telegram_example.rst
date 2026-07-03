@@ -696,4 +696,4 @@ Conclusion
 
 This example demonstrates how to build a sophisticated Telegram bot with the AgentConnect framework. By leveraging the TelegramAIAgent and integrating it with specialized agents, you can create powerful applications that provide valuable services to users through the familiar Telegram interface.
 
-For more information on the Telegram agent and its capabilities, see the :doc:`Telegram Integration Guide </guides/telegram_integration>`. 
+For more information on the Telegram agent and its capabilities, see the :doc:`Telegram Integration Guide </guides/integrations/telegram_integration>`. 

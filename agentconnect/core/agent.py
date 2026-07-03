@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     from agentconnect.core.registry import AgentRegistry
 
     # Optional payment types (for static typing and IDEs only)
-    from coinbase_agentkit import AgentKit as _AgentKit
-    from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider
+    from coinbase_agentkit import AgentKit as _AgentKit  # type: ignore
+    from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider  # type: ignore
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -125,7 +125,7 @@ class BaseAgent(ABC):
                 )
 
                 # Import optional dependencies lazily to avoid hard import requirements
-                from coinbase_agentkit import (
+                from coinbase_agentkit import (  # type: ignore
                     AgentKit,
                     AgentKitConfig,
                     CdpWalletProvider,
@@ -212,32 +212,6 @@ class BaseAgent(ABC):
             True if payment capabilities are enabled and available, False otherwise
         """
         return self.enable_payments and self.wallet_provider is not None
-
-    @abstractmethod
-    def _initialize_llm(self):
-        """
-        Initialize the language model for the agent.
-
-        This method must be implemented by subclasses to initialize
-        the language model used by the agent.
-
-        Returns:
-            The initialized language model
-        """
-        pass
-
-    @abstractmethod
-    def _initialize_workflow(self):
-        """
-        Initialize the workflow for the agent.
-
-        This method must be implemented by subclasses to initialize
-        the workflow used by the agent for processing messages.
-
-        Returns:
-            The initialized workflow
-        """
-        pass
 
     async def _verify_ethereum_did(self) -> bool:
         """

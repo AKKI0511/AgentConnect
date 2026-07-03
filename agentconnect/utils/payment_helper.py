@@ -198,8 +198,8 @@ def check_agent_payment_readiness(agent) -> Dict[str, Any]:
         "agent_kit_available": hasattr(agent, "agent_kit")
         and agent.agent_kit is not None,
         "payment_address": (
-            getattr(agent.metadata, "payment_address", None)
-            if hasattr(agent, "metadata")
+            getattr(agent.profile, "payment_address", None)
+            if hasattr(agent, "profile")
             else None
         ),
         "ready": False,

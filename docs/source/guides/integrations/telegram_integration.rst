@@ -1,6 +1,8 @@
 Telegram Integration
 ===================
 
+.. _telegram_integration:
+
 This guide walks you through setting up and using the Telegram agent in your AgentConnect applications.
 The Telegram agent allows users to interact with your AI system through the Telegram messaging platform,
 providing both direct chat interfaces and group chat capabilities.
@@ -176,7 +178,7 @@ One of the most powerful features of the TelegramAIAgent is its ability to colla
    We recomend using the :class:`AgentProfile <agentconnect.core.types.AgentProfile>` to define agents for enhanced discovery.
    For simple use cases, you can pass individual parameters like ``capabilities``, ``name`` etc.
 
-   For more details on how to define agents, please refer to the :doc:`/guides/agent_configuration` guide.
+   For more details on how to define agents, please refer to the :doc:`../configuration/sdk_configuration` guide.
 
 .. code-block:: python
 
@@ -382,7 +384,7 @@ Customizing the Telegram Agent
 -----------------------------
 
 .. note::
-   A detailed guide on customizing and extending the TelegramAIAgent is coming soon in the :doc:`/guides/advanced/index` section. This will include advanced configuration options, custom message handling, and integration patterns.
+   A detailed guide on customizing and extending the TelegramAIAgent is coming soon in the :doc:`../advanced/index` section. This will include advanced configuration options, custom message handling, and integration patterns.
 
 Extending Message Handlers
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -441,4 +443,4 @@ Now that you've set up your Telegram agent, consider:
 - Creating a web dashboard to monitor your bot's activity
 - Exploring conversation memory and context management for improved interactions
 
-For a complete working example, see our :doc:`Telegram Agent Example </examples/telegram_example>`. 
+For a complete working example, see our :doc:`Telegram Agent Example </examples/telegram_example>`.

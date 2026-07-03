@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- A2A communication hardening: ResponseTracker, HTTP transport SPI, Inbox server, metrics, remote A2A support.
+- Unified AgentIdentity with registry-verified connect flows (DID-JWT/challenge) and route grants.
+- Message v2 (payload, correlation_id, conversation_id), reply()/ignore() helpers.
+- Hub-owned queue service and agent pull workers.
+- Per-hub MCP communication server and hub-owned auth.
+- Protocol adapters: Google A2A, IBM ACP, Google AP2 (outbound adapters and inbound gateways).
+- Composite runtime (single ASGI) and improved CLI UX (serve runtime, human chat/send, register/unregister).
+
 ### Added
 - New `AgentProfile`, `Skill` classes in `types.py` for comprehensive agent configuration
 - Enhanced capability discovery service using Qdrant vector database
@@ -53,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated Google provider and types to reflect Gemini model changes
 
 ### Security
+
+### Known Limitations
+- Identity verification and registration flows are not yet unified; registry-verified connect (DID-JWT/challenge) and route grants will land post-0.4.0.
+- Message correlation remains metadata-based and will move to a first-class `correlation_id` in Message v2.
+- Current `hub.register(agent)` API will be replaced by `agent.register(hub)` with hub-owned queues and agent pull workers.
+- Registry registration currently accepts full identity payloads; future versions will only accept a public view plus proof and will return a short-lived route grant.
+- Only Discovery MCP is available in 0.4.0 (search/browse). Communication MCP (send/check) arrives in a later 0.x release.
+- Concurrency/backpressure in the hub is basic; ResponseTracker and queue backends arrive later.
+- Only local A2A is supported; remote A2A transport and inbox arrive later.
+- `agentconnect.yaml` exists but will be hardened and expanded in upcoming releases.
 
 ## [0.3.0] - 2025-05-02
 

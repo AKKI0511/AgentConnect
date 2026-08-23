@@ -15,7 +15,6 @@ from asyncio import Future
 from typing import Awaitable, Callable, Dict, List, Optional
 from datetime import datetime
 
-from agentconnect.communication.protocols.agent import SimpleAgentProtocol
 from agentconnect.clients.registry_client import RegistryAPIClient
 
 # Absolute imports from agentconnect package
@@ -27,12 +26,49 @@ from agentconnect.core.types import (
     AgentType,
     InteractionMode,
     MessageType,
+    ProtocolVersion,
     VerificationStatus,
 )
 from agentconnect.config import settings
 
 # Set up logging (application should configure logging globally)
 logger = logging.getLogger(__name__)
+
+# Message types accepted for agent-to-agent routing.
+_AGENT_MESSAGE_TYPES = frozenset(
+    {
+        MessageType.TEXT,
+        MessageType.COMMAND,
+        MessageType.RESPONSE,
+        MessageType.VERIFICATION,
+        MessageType.SYSTEM,
+        MessageType.ERROR,
+        MessageType.REQUEST_COLLABORATION,
+        MessageType.COLLABORATION_RESPONSE,
+        MessageType.COLLABORATION_ERROR,
+        MessageType.CAPABILITY,
+        MessageType.PROTOCOL,
+    }
+)
+
+
+def _is_supported_agent_message(message: Message) -> bool:
+    """Return True when an agent-to-agent message uses a supported type and version."""
+    if message.protocol_version != ProtocolVersion.V1_0:
+        logger.error(
+            "Protocol version mismatch expected=%s got=%s",
+            ProtocolVersion.V1_0.value,
+            getattr(message.protocol_version, "value", str(message.protocol_version)),
+        )
+        return False
+    if message.message_type not in _AGENT_MESSAGE_TYPES:
+        logger.error(
+            "Unsupported message type: %s",
+            getattr(message.message_type, "value", str(message.message_type)),
+        )
+        return False
+    return True
+
 
 # TODO (Next Release): Implement robust concurrency and parallelism handling
 # ====================================================================
@@ -78,8 +114,7 @@ class CommunicationHub:
     1. Routes messages between independent agents
     2. Facilitates agent discovery through registration
     3. Ensures secure message delivery without dictating responses
-    4. Manages communication protocols for consistent messaging
-    5. Tracks message history for auditability
+    4. Tracks message history for auditability
 
     Each agent connected to the hub maintains its autonomy and decision-making capability.
     The hub simply enables discovery and communication without controlling behavior.
@@ -100,7 +135,6 @@ class CommunicationHub:
             [] if settings.communication.enable_message_history else None
         )
 
-        self.agent_protocol = SimpleAgentProtocol()
         self._message_handlers: Dict[
             str, List[Callable[[Message], Awaitable[None]]]
         ] = {}
@@ -493,7 +527,7 @@ class CommunicationHub:
                 InteractionMode.AGENT_TO_AGENT in sender_modes
                 and InteractionMode.AGENT_TO_AGENT in receiver_modes
             ):
-                if not await self.agent_protocol.validate_message(message):
+                if not _is_supported_agent_message(message):
                     return False
 
             # Special handling for collaboration requests and responses

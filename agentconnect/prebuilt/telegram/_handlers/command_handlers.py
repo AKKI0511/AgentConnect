@@ -9,8 +9,8 @@ from typing import Dict, Callable
 from aiogram import Dispatcher, F, types
 from aiogram.filters import CommandStart, Command
 
-from agentconnect.agents.telegram._handlers.base_handler import BaseHandler
-from agentconnect.agents.telegram.keyboards import (
+from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram.keyboards import (
     PRIVATE_CHAT_KEYBOARD,
     GROUP_CHAT_KEYBOARD,
 )

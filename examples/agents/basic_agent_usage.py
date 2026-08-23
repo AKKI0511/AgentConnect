@@ -12,7 +12,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.prebuilt.ai_agent import AIAgent
 from agentconnect.core.types import (
     ModelProvider,
     ModelName,

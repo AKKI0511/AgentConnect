@@ -69,7 +69,7 @@ The minimum to get two agents talking:
     import os
     from dotenv import load_dotenv
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.core.types import AgentIdentity, ModelName, ModelProvider

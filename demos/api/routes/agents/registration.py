@@ -3,7 +3,7 @@ from typing import Dict
 from datetime import datetime
 import asyncio
 
-from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.prebuilt.ai_agent import AIAgent
 from agentconnect.core.agent import BaseAgent
 from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 from demos.utils.demo_logger import get_logger

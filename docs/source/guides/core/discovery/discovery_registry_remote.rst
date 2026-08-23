@@ -441,7 +441,7 @@ Using with CommunicationHub
     import os
     from dotenv import load_dotenv
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.clients import RegistryAPIClient
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.types import (
@@ -669,7 +669,7 @@ Any MCP-compatible client (Cursor, Claude Desktop, Google ADK, LangGraph, the Op
        import os
        from dotenv import load_dotenv
 
-       from agentconnect.agents import AIAgent
+       from agentconnect.prebuilt import AIAgent
        from agentconnect.clients import RegistryAPIClient
        from agentconnect.communication import CommunicationHub
        from agentconnect.core.types import (
@@ -766,7 +766,7 @@ Any MCP-compatible client (Cursor, Claude Desktop, Google ADK, LangGraph, the Op
        import os
        from dotenv import load_dotenv
 
-       from agentconnect.agents import AIAgent
+       from agentconnect.prebuilt import AIAgent
        from agentconnect.clients import RegistryAPIClient
        from agentconnect.communication import CommunicationHub
        from agentconnect.core.types import (

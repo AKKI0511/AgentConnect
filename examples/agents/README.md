@@ -41,7 +41,7 @@ import logging
 import os
 from dotenv import load_dotenv
 
-from src.agents.ai_agent import AIAgent
+from agentconnect.prebuilt.ai_agent import AIAgent
 from src.core.types import ModelProvider, ModelName, AgentIdentity
 
 # Load environment variables

@@ -17,8 +17,8 @@ from agentconnect.core.types import (
     ModelName,
     ModelProvider,
 )
-from agentconnect.agents.ai_agent import AIAgent
-from agentconnect.agents.human_agent import HumanAgent
+from agentconnect.prebuilt.ai_agent import AIAgent
+from agentconnect.prebuilt.human_agent import HumanAgent
 from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.utils.shared import shared

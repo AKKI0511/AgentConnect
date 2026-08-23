@@ -12,7 +12,7 @@ This directory contains examples demonstrating various features and use cases of
 2.  **Install Dependencies:** Use Poetry to install base dependencies plus optional extras needed for specific examples (like demo, research, telegram).
     ```bash
     # Install core + research dependencies (recommended for most examples)
-    poetry install --with research
+    poetry install --with research --extras "cli telegram payments"
     ```
 3.  **Set Up Environment Variables:** Copy the example environment file and fill in your API keys.
     ```bash

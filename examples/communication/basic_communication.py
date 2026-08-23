@@ -23,7 +23,7 @@ from agentconnect.core.types import (
 )
 from agentconnect.core.message import Message
 from agentconnect.communication.hub import CommunicationHub
-from agentconnect.agents.ai_agent import AIAgent
+from agentconnect.prebuilt.ai_agent import AIAgent
 
 # Load environment variables
 load_dotenv()

@@ -14,11 +14,11 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from agentconnect.agents.telegram._utils.file_utils import (
+from agentconnect.prebuilt.telegram._utils.file_utils import (
     load_group_ids,
     save_group_ids,
 )
-from agentconnect.agents.telegram.telegram_tools import TelegramTools
+from agentconnect.prebuilt.telegram.telegram_tools import TelegramTools
 
 logger = logging.getLogger(__name__)
 

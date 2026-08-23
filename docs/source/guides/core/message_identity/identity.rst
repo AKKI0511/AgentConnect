@@ -40,7 +40,7 @@ How It Integrates
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 
     agent = AIAgent(

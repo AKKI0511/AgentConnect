@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 # Import directly from the agentconnect package (using the public API)
-from agentconnect.agents import (
+from agentconnect.prebuilt import (
     AIAgent,
     HumanAgent,
 )

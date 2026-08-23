@@ -22,7 +22,7 @@ from langchain_community.tools.requests.tool import RequestsGetTool
 from langchain_community.utilities import TextRequestsWrapper
 from colorama import init, Fore, Style
 
-from agentconnect.agents import AIAgent, HumanAgent, TelegramAIAgent
+from agentconnect.prebuilt import AIAgent, HumanAgent, TelegramAIAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core import (
     BaseAgent,

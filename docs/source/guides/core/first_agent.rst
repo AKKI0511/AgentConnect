@@ -21,7 +21,7 @@ First, let's create a new Python file (e.g., ``my_first_agent.py``) and add the 
     import os
     from dotenv import load_dotenv
     
-    from agentconnect.agents import AIAgent, HumanAgent
+    from agentconnect.prebuilt import AIAgent, HumanAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.core.types import (
@@ -200,7 +200,7 @@ Complete Example
        import os
        from dotenv import load_dotenv
        
-       from agentconnect.agents import AIAgent, HumanAgent
+       from agentconnect.prebuilt import AIAgent, HumanAgent
        from agentconnect.communication import CommunicationHub
        from agentconnect.core.registry import AgentRegistry
        from agentconnect.core.types import (

@@ -144,7 +144,7 @@ tools automatically. Provide a profile and it's ready to join the network:
 .. code-block:: python
 
    import os
-   from agentconnect.agents import AIAgent
+   from agentconnect.prebuilt import AIAgent
    from agentconnect.core.types import InteractionMode, ModelName, ModelProvider
 
    # Bring a Tavily search tool for the researcher
@@ -283,7 +283,7 @@ Via HumanAgent (interactive CLI)
 
 .. code-block:: python
 
-   from agentconnect.agents import HumanAgent
+   from agentconnect.prebuilt import HumanAgent
 
    human = HumanAgent(
        agent_id="human_operator",   # must start with "human_"
@@ -356,7 +356,7 @@ Two AI agents and one human operator, fully wired:
    import os
    from dotenv import load_dotenv
 
-   from agentconnect.agents import AIAgent, HumanAgent
+   from agentconnect.prebuilt import AIAgent, HumanAgent
    from agentconnect.communication import CommunicationHub
    from agentconnect.core.registry import AgentRegistry
    from agentconnect.core.types import (

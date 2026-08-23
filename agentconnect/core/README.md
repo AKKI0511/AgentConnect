@@ -162,7 +162,7 @@ The core module integrates with the Coinbase Developer Platform (CDP) for paymen
 - **Payment Constants**: Default token symbol and amounts defined in `payment_constants.py`
 - **Capability Discovery**: Payment addresses are included in agent search results
 
-For details on how agents use payment capabilities, see `agentconnect/agents/README.md`.
+For details on how agents use payment capabilities, see `agentconnect/prebuilt/README.md`.
 
 ### Exceptions (`exceptions.py`)
 

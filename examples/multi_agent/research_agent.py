@@ -8,7 +8,7 @@ It handles web searches, retrieves information, and creates comprehensive report
 
 import os
 
-from agentconnect.agents import AIAgent
+from agentconnect.prebuilt import AIAgent
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,

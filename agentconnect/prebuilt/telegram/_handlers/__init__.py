@@ -8,11 +8,11 @@ from typing import Dict, Callable, List
 
 from aiogram import Dispatcher
 
-from agentconnect.agents.telegram._handlers.base_handler import BaseHandler
-from agentconnect.agents.telegram._handlers.command_handlers import CommandHandler
-from agentconnect.agents.telegram._handlers.group_handlers import GroupHandler
-from agentconnect.agents.telegram._handlers.media_handlers import MediaHandler
-from agentconnect.agents.telegram._handlers.text_handlers import TextHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.command_handlers import CommandHandler
+from agentconnect.prebuilt.telegram._handlers.group_handlers import GroupHandler
+from agentconnect.prebuilt.telegram._handlers.media_handlers import MediaHandler
+from agentconnect.prebuilt.telegram._handlers.text_handlers import TextHandler
 
 
 class HandlerRegistry:

@@ -1,15 +1,15 @@
-# Agents Module
+# Prebuilt agents
 
-The agents module provides independent agent implementations for the AgentConnect framework. Unlike traditional multi-agent systems that operate in a hierarchy, AgentConnect agents function as autonomous peers in a decentralized network, capable of discovering and collaborating with each other based on capabilities rather than pre-defined connections.
+Ready-made agent implementations for the AgentConnect framework. Unlike traditional multi-agent systems that operate in a hierarchy, these agents function as autonomous peers, capable of discovering and collaborating with each other based on capabilities rather than pre-defined connections.
 
 ## Structure
 
 ```
-agents/
+prebuilt/
 ├── __init__.py         # Package initialization and API exports
 ├── ai_agent.py         # AI agent implementation
-├── human_agent.py      # Human agent implementation
-├── telegram/           # Telegram agent implementation (see telegram/README.md)
+├── human_agent.py      # Human agent implementation (requires the cli extra)
+├── telegram/           # Telegram agent implementation (requires the telegram extra)
 └── README.md           # This file
 ```
 
@@ -115,7 +115,7 @@ AI agents include built-in rate limiting to prevent excessive API usage:
 ### Creating an Independent AI Agent
 
 ```python
-from agentconnect.agents import AIAgent
+from agentconnect.prebuilt import AIAgent
 from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity, InteractionMode, Capability
 
 # Define agent capabilities - these will be discoverable by other agents
@@ -151,7 +151,7 @@ agent = AIAgent(
 ### Creating a Human Agent
 
 ```python
-from agentconnect.agents import HumanAgent
+from agentconnect.prebuilt import HumanAgent
 from agentconnect.core.types import AgentIdentity
 
 # Create a human agent with identity

@@ -18,7 +18,7 @@ What Is BaseAgent
 
 :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` is the abstract foundation for all agents in AgentConnect. It defines the core functionality every agent must implement: identity management, message handling, lifecycle control, and secure communication.
 
-All agents—whether AI-powered (:class:`AIAgent <agentconnect.agents.AIAgent>`), human-driven (:class:`HumanAgent <agentconnect.agents.HumanAgent>`), or custom implementations—inherit from ``BaseAgent`` and override its abstract methods to provide specialized behavior.
+All agents—whether AI-powered (:class:`AIAgent <agentconnect.prebuilt.AIAgent>`), human-driven (:class:`HumanAgent <agentconnect.prebuilt.HumanAgent>`), or custom implementations—inherit from ``BaseAgent`` and override its abstract methods to provide specialized behavior.
 
 .. admonition:: At a glance
    :class: tip

@@ -12,7 +12,7 @@ Prerequisites
 
 Before you begin integrating the Telegram agent, ensure you have:
 
-1. Installed AgentConnect with the required dependencies
+1. Installed AgentConnect with the telegram extra (``pip install 'agentconnect[telegram]'`` or ``poetry install --extras telegram``)
 2. A Telegram account
 3. API keys for your preferred LLM provider (Google, OpenAI, Anthropic, or Groq)
 
@@ -45,7 +45,7 @@ The simplest way to set up a Telegram agent is as follows:
     import asyncio
     from dotenv import load_dotenv
     
-    from agentconnect.agents.telegram import TelegramAIAgent
+    from agentconnect.prebuilt.telegram import TelegramAIAgent
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication.hub import CommunicationHub
@@ -116,7 +116,7 @@ The TelegramAIAgent supports various configuration options:
         )
     )
 
-You can check all the available options in the :class:`TelegramAIAgent <agentconnect.agents.TelegramAIAgent>` class.
+You can check all the available options in the :class:`TelegramAIAgent <agentconnect.prebuilt.TelegramAIAgent>` class.
 
 Interacting with Your Telegram Agent
 ------------------------------------
@@ -393,7 +393,7 @@ You can customize how your bot handles messages by creating custom handlers:
 
 .. code-block:: python
 
-    from agentconnect.agents.telegram._handlers.base_handler import BaseHandler
+    from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
     
     class CustomHandler(BaseHandler):
         async def handle_custom_message(self, message):

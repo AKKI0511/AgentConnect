@@ -56,7 +56,7 @@ The Telegram Agent implementation follows a modular architecture with clear sepa
 ### Basic Setup
 
 ```python
-from agentconnect.agents.telegram import TelegramAIAgent
+from agentconnect.prebuilt.telegram import TelegramAIAgent
 from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 
 # Create the agent

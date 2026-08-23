@@ -1,14 +1,17 @@
 import asyncio
 import os
 import sys
+
+import pytest
 from dotenv import load_dotenv
 
-from agentconnect.agents import AIAgent, HumanAgent
+pytest.importorskip("aioconsole")
+
+from agentconnect.prebuilt import AIAgent, HumanAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
-    Capability,
     InteractionMode,
     ModelName,
     ModelProvider,

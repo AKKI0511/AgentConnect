@@ -206,7 +206,7 @@ The system uses LangGraph's prebuilt ReAct agent, which follows the Reasoning an
 
 ## Integration with AIAgent
 
-The `AIAgent` class in `agentconnect/agents/ai_agent.py` uses the workflow system to process messages:
+The `AIAgent` class in `agentconnect/prebuilt/ai_agent.py` uses the workflow system to process messages:
 
 1. The agent initializes a workflow based on its type (AI, task decomposition, or collaboration request).
 2. When a message is received, the agent creates an initial state with the message and invokes the workflow.

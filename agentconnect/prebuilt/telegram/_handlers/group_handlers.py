@@ -9,7 +9,7 @@ from typing import Dict, Callable
 
 from aiogram import Dispatcher, F, types
 
-from agentconnect.agents.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
 
 
 class GroupHandler(BaseHandler):

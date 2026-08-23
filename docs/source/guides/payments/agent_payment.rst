@@ -25,7 +25,7 @@ AgentKit packages:
 
 .. code-block:: bash
 
-    pip install coinbase-agentkit coinbase-agentkit-langchain cdp-sdk
+    pip install 'agentconnect[payments]' coinbase-agentkit coinbase-agentkit-langchain
 
 Add credentials to your ``.env`` file:
 
@@ -44,7 +44,7 @@ Enabling Payments
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity
 
     agent = AIAgent(
@@ -272,8 +272,7 @@ Troubleshooting
       if not is_valid:
           print(message)
 
-- **Missing packages**: install ``cdp-sdk``, ``coinbase-agentkit``, and
-  ``coinbase-agentkit-langchain`` together; a partial install is the most common cause of
+- **Missing packages**: install with ``pip install 'agentconnect[payments]' coinbase-agentkit coinbase-agentkit-langchain``; a partial install is the most common cause of
   import errors.
 - **Corrupted wallet data**: delete it with ``wallet_manager.delete_wallet_data(agent_id)``
   and restart; a fresh wallet is created automatically.

@@ -139,7 +139,7 @@ git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
 
 # Install dependencies
-poetry install --with demo,dev
+poetry install --with demo,dev --extras "telegram payments cli"
 
 # Set up environment
 copy example.env .env  # Windows
@@ -260,7 +260,7 @@ AgentConnect/
 ├── agentconnect/           # Core framework
 │   ├── __init__.py        # Package initialization with public API
 │   ├── cli/               # Command-line interface
-│   ├── agents/            # Agent implementations
+│   ├── prebuilt/          # Ready-made agents (AIAgent, HumanAgent, Telegram)
 │   ├── communication/     # Communication protocols
 │   ├── core/              # Core components
 │   ├── clients/           # SDK API clients (e.g., Registry client)

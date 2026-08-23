@@ -13,7 +13,7 @@ AgentConnect lets you build, discover, and connect independent AI agents that ca
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-poetry install --with demo,dev
+poetry install --with demo,dev --extras "telegram payments cli"
 copy example.env .env  # Windows
 cp example.env .env    # Linux/Mac
 ```
@@ -37,7 +37,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from agentconnect.agents import AIAgent
+from agentconnect.prebuilt import AIAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import (
@@ -152,7 +152,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from agentconnect.agents import AIAgent, HumanAgent
+from agentconnect.prebuilt import AIAgent, HumanAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import (

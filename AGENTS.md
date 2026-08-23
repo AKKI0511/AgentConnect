@@ -1,13 +1,13 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Source: `agentconnect/` with subpackages `agents/`, `clients/`, `communication/`, `config/`, `core/`, `mcp/`, `providers/`, `servers/`, `utils/`. CLI lives in `agentconnect/cli.py` and exposes the `agentconnect` entrypoint.
+- Source: `agentconnect/` with subpackages `prebuilt/`, `clients/`, `communication/`, `config/`, `core/`, `mcp/`, `providers/`, `servers/`, `utils/`. CLI lives in `agentconnect/cli.py` and exposes the `agentconnect` entrypoint.
 - Tests: `tests/` mirrors packages (e.g., `tests/core/`); configuration in `tests/pytest.ini`.
 - Docs & examples: `docs/`, `demos/`, `examples/`. Data/scratch: `data/`, `downloads/`.
 - Packaging/build: `pyproject.toml` (Poetry), targets in `Makefile`.
 
 ## Build, Test, and Development Commands
-- Install: `make install-dev` (or `poetry install --with dev`); all extras: `make install-all`.
+- Install: `make install-dev` (or `poetry install --with dev --extras "telegram payments cli"`); all extras: `make install-all`.
 - Lint/format: `make lint` (Flake8) and `make format` (Black). Hooks: `make install-hooks` then `make hooks`.
 - Test: `make test` (runs `pytest -v`); include slow tests: `poetry run pytest -m slow`.
 - Docs: `make docs` (HTML build); clean with `make docs-clean`.

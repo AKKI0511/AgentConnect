@@ -338,7 +338,7 @@ The recommended way to create an ``AIAgent`` is to build the profile first and p
     import os
     from dotenv import load_dotenv
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.types import (
         AgentIdentity,
         AgentProfile,

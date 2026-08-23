@@ -11,7 +11,7 @@ Before you start, complete the :doc:`../../../installation` setup. If you're new
 What Is AIAgent
 ---------------
 
-:class:`AIAgent <agentconnect.agents.AIAgent>` is a ready-to-use AI-powered agent that extends :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` with language model capabilities. It provides intelligent message processing using LLMs from providers like OpenAI, Anthropic, Google, and Groq, and includes built-in collaboration tools for agent discovery and agent-to-agent (A2A) communication.
+:class:`AIAgent <agentconnect.prebuilt.AIAgent>` is a ready-to-use AI-powered agent that extends :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` with language model capabilities. It provides intelligent message processing using LLMs from providers like OpenAI, Anthropic, Google, and Groq, and includes built-in collaboration tools for agent discovery and agent-to-agent (A2A) communication.
 
 ``AIAgent`` is the recommended choice when you need an autonomous agent that generates intelligent responses, collaborates with other agents, and integrates seamlessly with the AgentConnect ecosystem—without building your own orchestration logic.
 
@@ -54,7 +54,7 @@ The ``.chat()`` method provides a simple interface for interacting with the agen
     import asyncio
     import os
     from dotenv import load_dotenv
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
@@ -100,7 +100,7 @@ For custom message handling and multi-agent coordination, use ``send_message()``
 .. code-block:: python
 
     import asyncio
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.core.message import Message
@@ -140,12 +140,12 @@ For custom message handling and multi-agent coordination, use ``send_message()``
 Interactive CLI
 ^^^^^^^^^^^^^^^
 
-For direct interaction, use :class:`HumanAgent <agentconnect.agents.HumanAgent>` to chat with your ``AIAgent`` via a terminal CLI:
+For direct interaction, use :class:`HumanAgent <agentconnect.prebuilt.HumanAgent>` to chat with your ``AIAgent`` via a terminal CLI:
 
 .. code-block:: python
 
     import asyncio
-    from agentconnect.agents import AIAgent, HumanAgent
+    from agentconnect.prebuilt import AIAgent, HumanAgent
     
     # Create AIAgent
     ai_agent = AIAgent(...)
@@ -190,7 +190,7 @@ Think of each ``AIAgent`` as a **specialist** with unique skills, capabilities, 
 .. code-block:: python
 
     from langchain_core.tools import tool
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.types import (
         AgentIdentity, AgentProfile, AgentType,
         Capability, Skill, ModelProvider, ModelName
@@ -227,7 +227,7 @@ For multi-agent system patterns and specialist collaboration strategies, see :do
 Parameters & Configuration
 ---------------------------
 
-**Full API:** :class:`AIAgent <agentconnect.agents.ai_agent.AIAgent>`
+**Full API:** :class:`AIAgent <agentconnect.prebuilt.ai_agent.AIAgent>`
 
 Required Parameters
 ^^^^^^^^^^^^^^^^^^^
@@ -331,7 +331,7 @@ Call ``super().process_message()`` to get both BaseAgent validation (signature v
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.message import Message
     
     class CustomAIAgent(AIAgent):
@@ -351,7 +351,7 @@ Call ``BaseAgent.process_message()`` directly to get validation but skip AIAgent
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.message import Message
 
     class CustomAIAgent(AIAgent):
@@ -380,7 +380,7 @@ Don't call ``super()`` at all—handle everything yourself:
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.message import Message
     
     class CustomAIAgent(AIAgent):
@@ -429,7 +429,7 @@ When adding custom tools, follow LangChain conventions:
 
     from langchain_core.tools import tool
     from pydantic import BaseModel, Field
-    from agentconnect.agents input AIAgent
+    from agentconnect.prebuilt input AIAgent
     
     class AnalysisInput(BaseModel):
         code: str = Field(description="Code to analyze")
@@ -461,7 +461,7 @@ AgentConnect provides built-in callbacks for monitoring agent activity. Use :cla
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.utils.callbacks import ToolTracerCallbackHandler
     
     tracer = ToolTracerCallbackHandler(

@@ -17,7 +17,7 @@ Setting Up Multiple Agents
     import asyncio
     from dotenv import load_dotenv
     
-    from agentconnect.agents.ai_agent import AIAgent
+    from agentconnect.prebuilt.ai_agent import AIAgent
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication.hub import CommunicationHub
     from agentconnect.core.types import (
@@ -292,8 +292,8 @@ Here's a complete example that ties everything together:
     import json
     from dotenv import load_dotenv
     
-    from agentconnect.agents.ai_agent import AIAgent
-    from agentconnect.agents.human_agent import HumanAgent
+    from agentconnect.prebuilt.ai_agent import AIAgent
+    from agentconnect.prebuilt.human_agent import HumanAgent
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication.hub import CommunicationHub
     from agentconnect.core.types import (

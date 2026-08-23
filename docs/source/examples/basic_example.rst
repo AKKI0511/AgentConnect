@@ -15,7 +15,7 @@ Here's how to create a simple AI agent:
 
 .. code-block:: python
 
-   from agentconnect.agents.ai_agent import AIAgent
+   from agentconnect.prebuilt.ai_agent import AIAgent
    from agentconnect.core.types import (
        ModelProvider,
        ModelName,
@@ -46,7 +46,7 @@ Once you have created an agent, you can send messages to it:
 
 .. code-block:: python
 
-   from agentconnect.agents.human_agent import HumanAgent
+   from agentconnect.prebuilt.human_agent import HumanAgent
    from agentconnect.core.message import Message
    from agentconnect.core.types import MessageType
 
@@ -134,8 +134,8 @@ Here's a complete example that puts everything together:
    import os
    from dotenv import load_dotenv
    
-   from agentconnect.agents.ai_agent import AIAgent
-   from agentconnect.agents.human_agent import HumanAgent
+   from agentconnect.prebuilt.ai_agent import AIAgent
+   from agentconnect.prebuilt.human_agent import HumanAgent
    from agentconnect.core.message import Message
    from agentconnect.core.registry import AgentRegistry
    from agentconnect.communication.hub import CommunicationHub

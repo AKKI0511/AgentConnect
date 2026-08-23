@@ -44,7 +44,7 @@ from colorama import init
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.types import ModelProvider, ModelName
-from agentconnect.agents import HumanAgent
+from agentconnect.prebuilt import HumanAgent
 from agentconnect.core.types import AgentIdentity
 
 # Import agent creators from their respective modules

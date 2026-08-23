@@ -11,7 +11,7 @@ Before you start, complete the :doc:`../../../installation` setup. If you're new
 What Is HumanAgent
 ------------------
 
-:class:`HumanAgent <agentconnect.agents.HumanAgent>` is a ready-to-use, terminal-based agent that extends :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` to bring humans into agent workflows. It provides a simple CLI for real-time input/output and behaves as a first-class agent in the ecosystem (registration, routing, verification).
+:class:`HumanAgent <agentconnect.prebuilt.HumanAgent>` is a ready-to-use, terminal-based agent that extends :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` to bring humans into agent workflows. It provides a simple CLI for real-time input/output and behaves as a first-class agent in the ecosystem (registration, routing, verification).
 
 .. admonition:: At a glance
    :class: tip
@@ -45,7 +45,7 @@ Start a dedicated, interactive terminal session between a human and an AI agent:
 
     import asyncio, os
     from dotenv import load_dotenv
-    from agentconnect.agents import AIAgent, HumanAgent
+    from agentconnect.prebuilt import AIAgent, HumanAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
@@ -274,7 +274,7 @@ Keep the standard terminal I/O but add logic before or after it:
 
 .. code-block:: python
 
-    from agentconnect.agents import HumanAgent
+    from agentconnect.prebuilt import HumanAgent
     from agentconnect.core.message import Message
     from typing import Optional
 
@@ -292,7 +292,7 @@ Call ``super(HumanAgent, self)`` to jump directly to ``BaseAgent`` validation (s
 
 .. code-block:: python
 
-    from agentconnect.agents import HumanAgent
+    from agentconnect.prebuilt import HumanAgent
     from agentconnect.core.message import Message
     from agentconnect.core.types import MessageType
     from typing import Optional
@@ -341,7 +341,7 @@ Example: Web-Based Approval Agent
 
        import asyncio
        from typing import Optional
-       from agentconnect.agents import HumanAgent
+       from agentconnect.prebuilt import HumanAgent
        from agentconnect.core.message import Message
        from agentconnect.core.types import AgentIdentity, MessageType
 

@@ -84,7 +84,7 @@ Once you've implemented your custom provider, you can use it with agents:
 
 .. code-block:: python
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity, InteractionMode
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry

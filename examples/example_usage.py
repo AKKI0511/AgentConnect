@@ -26,7 +26,7 @@ from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Import directly from the agentconnect package (using the public API)
-from agentconnect.agents import AIAgent, HumanAgent
+from agentconnect.prebuilt import AIAgent, HumanAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.registry import AgentRegistry
 from agentconnect.core.types import (
@@ -83,8 +83,8 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
         allowlist = [
             "agentconnect.communication.hub",
             "agentconnect.core.agent",
-            "agentconnect.agents.human_agent",
-            "agentconnect.agents.ai_agent",
+            "agentconnect.prebuilt.human_agent",
+            "agentconnect.prebuilt.ai_agent",
             'agentconnect.core.registry.registry_base',
         ]
         for name in allowlist:

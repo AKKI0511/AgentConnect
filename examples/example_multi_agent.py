@@ -27,7 +27,7 @@ from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Import directly from the agentconnect package (using the public API)
-from agentconnect.agents import AIAgent
+from agentconnect.prebuilt import AIAgent
 from agentconnect.communication import CommunicationHub
 from agentconnect.core.message import Message
 from agentconnect.core.registry import AgentRegistry
@@ -279,8 +279,8 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = False) -> None:
         for name in [
             "agentconnect.communication.hub",
             "agentconnect.core.agent",
-            "agentconnect.agents.human_agent",
-            "agentconnect.agents.ai_agent",
+            "agentconnect.prebuilt.human_agent",
+            "agentconnect.prebuilt.ai_agent",
             'agentconnect.core.registry.registry_base',
         ]:
             _pylog.getLogger(name).setLevel(_pylog.INFO)

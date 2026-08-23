@@ -39,7 +39,7 @@ Pass your agent to ``hub.register_agent()``. The hub reads the agent's profile (
     import os
     from dotenv import load_dotenv
 
-    from agentconnect.agents import AIAgent
+    from agentconnect.prebuilt import AIAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.core.types import (

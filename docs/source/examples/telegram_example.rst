@@ -71,8 +71,8 @@ Here's a comprehensive example that creates a Telegram bot with multi-agent capa
     import json
     
     # Import AgentConnect components
-    from agentconnect.agents import AIAgent
-    from agentconnect.agents.telegram import TelegramAIAgent
+    from agentconnect.prebuilt import AIAgent
+    from agentconnect.prebuilt.telegram import TelegramAIAgent
     from agentconnect.communication import CommunicationHub
     from agentconnect.core.types import (
         AgentIdentity,

@@ -10,7 +10,7 @@ import os
 import re
 from typing import Dict, Any, Union
 
-from agentconnect.agents import AIAgent
+from agentconnect.prebuilt import AIAgent
 from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 from agentconnect.core.types import (
     AgentIdentity,

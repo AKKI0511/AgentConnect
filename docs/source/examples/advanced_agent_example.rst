@@ -22,7 +22,7 @@ AgentConnect allows you to extend agent capabilities with custom tools:
     from langchain_core.tools import BaseTool, StructuredTool
     from pydantic import BaseModel, Field
     
-    from agentconnect.agents.ai_agent import AIAgent
+    from agentconnect.prebuilt.ai_agent import AIAgent
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication.hub import CommunicationHub
     from agentconnect.core.types import (
@@ -260,8 +260,8 @@ Here's a complete example that combines custom tools with task decomposition:
     from langchain_core.tools import BaseTool
     from typing import Dict, Any, List, Optional
     
-    from agentconnect.agents.ai_agent import AIAgent
-    from agentconnect.agents.human_agent import HumanAgent
+    from agentconnect.prebuilt.ai_agent import AIAgent
+    from agentconnect.prebuilt.human_agent import HumanAgent
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication.hub import CommunicationHub
     from agentconnect.core.types import (
@@ -504,7 +504,7 @@ AgentConnect offers full compatibility with LangChain v0.3.x and LangGraph, allo
     from langgraph.checkpoint.memory import MemorySaver
     
     # AgentConnect imports
-    from agentconnect.agents.ai_agent import AIAgent
+    from agentconnect.prebuilt.ai_agent import AIAgent
     from agentconnect.core.registry import AgentRegistry
     from agentconnect.communication.hub import CommunicationHub
     from agentconnect.core.types import (

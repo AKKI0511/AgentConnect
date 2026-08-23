@@ -16,15 +16,15 @@ from aiogram import types
 from langchain.tools import BaseTool
 from langchain_core.callbacks import BaseCallbackHandler
 
-from agentconnect.agents.ai_agent import AIAgent, MemoryType
-from agentconnect.agents.telegram.bot_manager import TelegramBotManager
-from agentconnect.agents.telegram.message_processor import TelegramMessageProcessor
-from agentconnect.agents.telegram.keyboards import (
+from agentconnect.prebuilt.ai_agent import AIAgent, MemoryType
+from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
+from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
+from agentconnect.prebuilt.telegram.keyboards import (
     PRIVATE_CHAT_KEYBOARD,
     GROUP_CHAT_KEYBOARD,
 )
-from agentconnect.agents.telegram._handlers import HandlerRegistry
-from agentconnect.agents.telegram._utils.file_utils import ensure_download_directory
+from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
+from agentconnect.prebuilt.telegram._utils.file_utils import ensure_download_directory
 from agentconnect.core.message import Message
 from agentconnect.core.types import (
     AgentIdentity,
@@ -94,7 +94,7 @@ class TelegramAIAgent(AIAgent):
     Example:
         .. code-block:: python
 
-            from agentconnect.agents.telegram import TelegramAIAgent
+            from agentconnect.prebuilt.telegram import TelegramAIAgent
             from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 
             # Initialize the agent

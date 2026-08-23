@@ -34,8 +34,8 @@ from colorama import Fore, Style, init
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from agentconnect.agents.ai_agent import AIAgent
-from agentconnect.agents.human_agent import HumanAgent
+from agentconnect.prebuilt.ai_agent import AIAgent
+from agentconnect.prebuilt.human_agent import HumanAgent
 from agentconnect.communication.hub import CommunicationHub
 from agentconnect.core.agent import AgentIdentity
 from agentconnect.core.registry import AgentRegistry

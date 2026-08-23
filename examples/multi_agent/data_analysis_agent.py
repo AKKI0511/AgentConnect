@@ -12,7 +12,7 @@ import json
 from typing import Dict
 from pydantic import BaseModel, Field
 
-from agentconnect.agents import AIAgent
+from agentconnect.prebuilt import AIAgent
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,

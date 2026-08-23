@@ -38,9 +38,9 @@ When creating your own communication examples, consider:
 ```python
 import asyncio
 import logging
-from src.core.registry import AgentRegistry
-from src.communication.hub import CommunicationHub
-from src.agents.ai_agent import AIAgent
+from agentconnect.core.registry import AgentRegistry
+from agentconnect.communication.hub import CommunicationHub
+from agentconnect.prebuilt.ai_agent import AIAgent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

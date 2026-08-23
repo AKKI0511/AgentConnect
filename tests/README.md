@@ -17,4 +17,4 @@ tests/
 
 - Refer to [Registry Tests](./core/registry/README.md) for tests related to the registry and Qdrant vector database.
 - To understand the system prompt for an `AIAgent`, run `python tests/check_react_prompt.py`
-- To test the `HumanAgent` and `AIAgent` usage, run tests from `tests/agents/`
+- To test the `HumanAgent` and `AIAgent` usage, run tests from `tests/prebuilt/`

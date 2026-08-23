@@ -201,7 +201,7 @@ Here's a minimal example showcasing **Agent Discovery** and **Agent-to-Agent (A2
   import asyncio
   import os
   from dotenv import load_dotenv
-  from agentconnect.agents import AIAgent
+  from agentconnect.prebuilt import AIAgent
   from agentconnect.communication import CommunicationHub
   from agentconnect.core.registry import AgentRegistry
   from agentconnect.core.types import (

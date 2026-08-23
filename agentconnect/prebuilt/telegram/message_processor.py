@@ -13,11 +13,11 @@ from langchain_core.messages import HumanMessage
 
 from agentconnect.core.message import Message
 from agentconnect.core.types import AgentIdentity, MessageType
-from agentconnect.agents.telegram._utils.message_utils import (
+from agentconnect.prebuilt.telegram._utils.message_utils import (
     get_telegram_conversation_id,
     remove_bot_mention_from_text,
 )
-from agentconnect.agents.telegram.bot_manager import TelegramBotManager
+from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
 from agentconnect.utils.interaction_control import InteractionControl
 from langchain_core.runnables import Runnable
 

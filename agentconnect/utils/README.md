@@ -126,7 +126,7 @@ setup_logging(level=LogLevel.INFO)
 setup_logging(
     level=LogLevel.INFO,
     module_levels={
-        "agentconnect.agents.ai_agent": LogLevel.DEBUG,
+        "agentconnect.prebuilt.ai_agent": LogLevel.DEBUG,
         "langchain": LogLevel.WARNING
     }
 )

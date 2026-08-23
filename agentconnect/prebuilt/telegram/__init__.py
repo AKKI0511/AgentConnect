@@ -20,7 +20,7 @@ The agent can handle:
 Example:
     .. code-block:: python
 
-        from agentconnect.agents.telegram import TelegramAIAgent
+        from agentconnect.prebuilt.telegram import TelegramAIAgent
         from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 
         # Create the agent

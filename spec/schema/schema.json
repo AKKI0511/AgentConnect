@@ -1,0 +1,2013 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agentconnect.dev/spec/draft/schema.json",
+  "title": "AgentConnect Public Schema (pre-1.0 draft)",
+  "description": "Generated from schema.ts. Do not edit by hand. Run npm run generate.",
+  "$ref": "#/definitions/AgentConnectPublicSchema",
+  "definitions": {
+    "AgentConnectPublicSchema": {
+      "type": "object",
+      "properties": {
+        "spec_version": {
+          "$ref": "#/definitions/SpecVersion"
+        },
+        "address": {
+          "$ref": "#/definitions/Address"
+        },
+        "qualified_address": {
+          "$ref": "#/definitions/QualifiedAddress"
+        },
+        "collect_mode": {
+          "$ref": "#/definitions/CollectMode"
+        },
+        "ticket_state": {
+          "$ref": "#/definitions/TicketState"
+        },
+        "error_code": {
+          "$ref": "#/definitions/ErrorCode"
+        },
+        "skill_example": {
+          "$ref": "#/definitions/SkillExample"
+        },
+        "skill": {
+          "$ref": "#/definitions/Skill"
+        },
+        "agent_profile": {
+          "$ref": "#/definitions/AgentProfile"
+        },
+        "tag": {
+          "$ref": "#/definitions/Tag"
+        },
+        "error": {
+          "$ref": "#/definitions/ErrorObject"
+        },
+        "deadline_exceeded_error": {
+          "$ref": "#/definitions/DeadlineExceededError"
+        },
+        "no_reply_request_message": {
+          "$ref": "#/definitions/NoReplyRequestMessage"
+        },
+        "reply_expected_request_message": {
+          "$ref": "#/definitions/ReplyExpectedRequestMessage"
+        },
+        "request_message": {
+          "$ref": "#/definitions/RequestMessage"
+        },
+        "event_message": {
+          "$ref": "#/definitions/EventMessage"
+        },
+        "mailbox_message": {
+          "$ref": "#/definitions/MailboxMessage"
+        },
+        "response_message": {
+          "$ref": "#/definitions/ResponseMessage"
+        },
+        "error_message": {
+          "$ref": "#/definitions/ErrorMessage"
+        },
+        "message": {
+          "$ref": "#/definitions/Message"
+        },
+        "delivery": {
+          "$ref": "#/definitions/Delivery"
+        },
+        "ticket": {
+          "$ref": "#/definitions/Ticket"
+        },
+        "directory_entry": {
+          "$ref": "#/definitions/DirectoryEntry"
+        },
+        "directory_match": {
+          "$ref": "#/definitions/DirectoryMatch"
+        },
+        "join_challenge": {
+          "$ref": "#/definitions/JoinChallenge"
+        },
+        "join_request": {
+          "$ref": "#/definitions/JoinRequest"
+        },
+        "runtime_limits": {
+          "$ref": "#/definitions/RuntimeLimits"
+        },
+        "join_result": {
+          "$ref": "#/definitions/JoinResult"
+        },
+        "heartbeat_result": {
+          "$ref": "#/definitions/HeartbeatResult"
+        },
+        "callback_target": {
+          "$ref": "#/definitions/CallbackTarget"
+        },
+        "send_request": {
+          "$ref": "#/definitions/SendRequest"
+        },
+        "send_result": {
+          "$ref": "#/definitions/SendResult"
+        },
+        "lease_request": {
+          "$ref": "#/definitions/LeaseRequest"
+        },
+        "lease_result": {
+          "$ref": "#/definitions/LeaseResult"
+        },
+        "complete_request": {
+          "$ref": "#/definitions/CompleteRequest"
+        },
+        "complete_result": {
+          "$ref": "#/definitions/CompleteResult"
+        },
+        "reply_request": {
+          "$ref": "#/definitions/ReplyRequest"
+        },
+        "reply_result": {
+          "$ref": "#/definitions/ReplyResult"
+        },
+        "get_result_request": {
+          "$ref": "#/definitions/GetResultRequest"
+        },
+        "get_history_request": {
+          "$ref": "#/definitions/GetHistoryRequest"
+        },
+        "history_result": {
+          "$ref": "#/definitions/HistoryResult"
+        },
+        "find_request": {
+          "$ref": "#/definitions/FindRequest"
+        },
+        "find_result": {
+          "$ref": "#/definitions/FindResult"
+        },
+        "get_profile_request": {
+          "$ref": "#/definitions/GetProfileRequest"
+        },
+        "ask_tool_request": {
+          "$ref": "#/definitions/AskToolRequest"
+        },
+        "tell_tool_request": {
+          "$ref": "#/definitions/TellToolRequest"
+        },
+        "runtime_event": {
+          "$ref": "#/definitions/RuntimeEvent"
+        },
+        "tool_error_result": {
+          "$ref": "#/definitions/ToolErrorResult"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Root used only to generate one JSON Schema containing every public object. Applications exchange the referenced objects, not this wrapper."
+    },
+    "SpecVersion": {
+      "type": "string",
+      "const": "1.0.0-draft",
+      "description": "Exact AgentConnect specification version."
+    },
+    "Address": {
+      "type": "string",
+      "description": "Agent Address accepted by the grammar in addressing.md. The location, when present, is one or more dot-separated DNS labels. The Runtime canonicalizes ASCII uppercase to lowercase. Examples: `writer`, `writer@content-squad`, `writer@legal.acme.com`.",
+      "maxLength": 317,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?(?:@(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)?$"
+    },
+    "QualifiedAddress": {
+      "type": "string",
+      "description": "Canonical Address stored in Runtime-owned output. Both parts are lowercase and the location is always present. The location is one or more dot-separated DNS labels, so this type already represents a remote Address such as `writer@legal.acme.com`. A single-Team Runtime only ever emits a single-label location equal to its own Team name.",
+      "maxLength": 317,
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?@(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
+    },
+    "CollectMode": {
+      "type": "string",
+      "enum": [
+        "wait",
+        "ticket",
+        "callback",
+        "stream"
+      ],
+      "description": "How the sender collects the result of a reply-expected request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. A request without a `collect` value and without a `deadline` expects no reply and creates no Ticket.\n\n- `wait`: keep the `send` open until the Ticket is terminal.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
+    },
+    "TicketState": {
+      "type": "string",
+      "enum": [
+        "open",
+        "completed",
+        "failed",
+        "expired",
+        "declined"
+      ],
+      "description": "Closed set of Ticket states."
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "unsupported_version",
+        "unsupported_collect_mode",
+        "unauthorized",
+        "forbidden",
+        "invalid_request",
+        "invalid_address",
+        "address_outside_team",
+        "not_found",
+        "name_conflict",
+        "id_conflict",
+        "busy",
+        "payload_too_large",
+        "lease_expired",
+        "ticket_closed",
+        "unavailable",
+        "internal",
+        "handler_failed",
+        "deadline_exceeded"
+      ],
+      "description": "Well-known public error codes. `ErrorObject.code` remains a string so an Agent application may return a domain-specific failure code."
+    },
+    "SkillExample": {
+      "type": "string",
+      "description": "Short natural-language example of using a Skill. Examples are illustrative text, not typed contracts, because a request to an Agent is free-form `content`, not a call against a declared signature.",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "\\S"
+    },
+    "Skill": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Stable lowercase identifier, unique within the Profile. It is not an Address or a Runtime operation name.",
+          "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Direct description of what the Skill does.",
+          "minLength": 1,
+          "maxLength": 1000,
+          "pattern": "\\S"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SkillExample"
+          },
+          "description": "Concrete natural-language examples used for discovery and reader understanding.",
+          "maxItems": 10
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Tag"
+          },
+          "description": "Optional lowercase labels scoped to this Skill.",
+          "maxItems": 20,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "additionalProperties": false,
+      "description": "One thing an Agent claims it can do, described in natural language.\n\nA Skill has no input or output schema. An Agent is addressed as one conversational participant; a caller describes the work in `content` and does not target a typed Skill signature. Skills exist to make discovery specific and to render an Agent's abilities to a reader, not to define an RPC surface."
+    },
+    "Tag": {
+      "type": "string",
+      "description": "Lowercase discovery label.",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,30}[a-z0-9])?$"
+    },
+    "AgentProfile": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Short description used in discovery results.",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "description": {
+          "type": "string",
+          "description": "Longer optional explanation of suitable work and boundaries.",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Skill"
+          },
+          "description": "One or more Skills. Names must be unique within this array.",
+          "minItems": 1,
+          "maxItems": 50
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Tag"
+          },
+          "description": "Lowercase discovery labels. Duplicate tags are invalid.",
+          "maxItems": 20,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "summary",
+        "skills"
+      ],
+      "additionalProperties": false,
+      "description": "Discovery information for an Agent.\n\nA Profile describes what one participant can do, the way a short bio describes a person. Identity, name, Address, presence, and Session data do not belong here; the DirectoryEntry owns identity and addressing."
+    },
+    "ErrorObject": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Well-known ErrorCode or a lowercase Agent application failure code.",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "message": {
+          "type": "string",
+          "description": "Safe human-readable explanation.",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S"
+        },
+        "details": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Optional structured data safe to reveal to the requester."
+        },
+        "retryable": {
+          "type": "boolean",
+          "description": "Whether repeating the failed action may succeed without changing input."
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "description": "Public failure data. Runtime errors and Agent handler failures share this shape so Clients can handle them consistently."
+    },
+    "JsonObject": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "JSON object with application-defined keys."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ],
+      "description": "Any value representable in JSON."
+    },
+    "DeadlineExceededError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "const": "deadline_exceeded",
+          "description": "Fixed code for deadline expiry."
+        },
+        "message": {
+          "type": "string",
+          "description": "Safe human-readable explanation.",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S"
+        },
+        "details": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Optional structured data safe to reveal to the requester."
+        },
+        "retryable": {
+          "type": "boolean",
+          "description": "Whether repeating the failed action may succeed without changing input."
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "description": "Error stored by an expired Ticket."
+    },
+    "NoReplyRequestMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Immutable Message id and idempotency key."
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Runtime acceptance time."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Correlation id shared by every Message in one causal exchange. The Runtime assigns a new value to a root Message and copies it onto every Message caused by it, so one `trace_id` reconstructs a whole timeline."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Thread grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message that directly caused this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "request",
+          "description": "Identifies work sent to an Agent."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Sender-controlled work input."
+        },
+        "metadata": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Sender-controlled application data. Never used for Runtime decisions."
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "kind",
+        "recipient",
+        "sender",
+        "trace_id"
+      ],
+      "description": "Request that expects no reply and creates no Ticket. It carries no `deadline`; because every object rejects undeclared fields, a `deadline` present on a request selects the reply-expected shape below."
+    },
+    "Uuid": {
+      "type": "string",
+      "description": "RFC 9562 UUID used for Messages, Threads, leases, traces, and Instances.",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "UTC RFC 3339 timestamp with a trailing `Z`. Example: `2026-08-18T15:00:00Z`.",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "ReplyExpectedRequestMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Immutable Message id and idempotency key."
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Runtime acceptance time."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Correlation id shared by every Message in one causal exchange. The Runtime assigns a new value to a root Message and copies it onto every Message caused by it, so one `trace_id` reconstructs a whole timeline."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Thread grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message that directly caused this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "request",
+          "description": "Identifies work sent to an Agent."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Sender-controlled work input."
+        },
+        "metadata": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Sender-controlled application data. Never used for Runtime decisions."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "deadline",
+        "id",
+        "kind",
+        "recipient",
+        "sender",
+        "trace_id"
+      ],
+      "additionalProperties": false,
+      "description": "Request tracked by a Ticket until its deadline. The presence of `deadline` is what marks a request as reply-expected."
+    },
+    "RequestMessage": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NoReplyRequestMessage"
+        },
+        {
+          "$ref": "#/definitions/ReplyExpectedRequestMessage"
+        }
+      ],
+      "description": "Accepted request Message."
+    },
+    "EventMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Immutable Message id and idempotency key."
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Runtime acceptance time."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Correlation id shared by every Message in one causal exchange. The Runtime assigns a new value to a root Message and copies it onto every Message caused by it, so one `trace_id` reconstructs a whole timeline."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Thread grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message that directly caused this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "event",
+          "description": "Identifies information sent without a Ticket."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Sender-controlled event data."
+        },
+        "metadata": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Sender-controlled application data. Never used for Runtime decisions."
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "kind",
+        "recipient",
+        "sender",
+        "trace_id"
+      ],
+      "additionalProperties": false,
+      "description": "Information sent without a reply or Ticket."
+    },
+    "MailboxMessage": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RequestMessage"
+        },
+        {
+          "$ref": "#/definitions/EventMessage"
+        }
+      ],
+      "description": "Message kind stored in a Membership Mailbox and eligible for Delivery."
+    },
+    "ResponseMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Immutable Message id and idempotency key."
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Runtime acceptance time."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Correlation id shared by every Message in one causal exchange. The Runtime assigns a new value to a root Message and copies it onto every Message caused by it, so one `trace_id` reconstructs a whole timeline."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Thread grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "kind": {
+          "type": "string",
+          "const": "response",
+          "description": "Identifies a successful reply."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Successful application result. May be null when the Agent returns none."
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "kind",
+        "parent_id",
+        "recipient",
+        "sender",
+        "trace_id"
+      ],
+      "additionalProperties": false,
+      "description": "Successful reply created by the Runtime."
+    },
+    "ErrorMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Immutable Message id and idempotency key."
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address set by the Runtime."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Runtime acceptance time."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Correlation id shared by every Message in one causal exchange. The Runtime assigns a new value to a root Message and copies it onto every Message caused by it, so one `trace_id` reconstructs a whole timeline."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Thread grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "kind": {
+          "type": "string",
+          "const": "error",
+          "description": "Identifies a failed reply."
+        },
+        "error": {
+          "$ref": "#/definitions/ErrorObject",
+          "description": "Safe failure returned to the requester."
+        }
+      },
+      "required": [
+        "created_at",
+        "error",
+        "id",
+        "kind",
+        "parent_id",
+        "recipient",
+        "sender",
+        "trace_id"
+      ],
+      "additionalProperties": false,
+      "description": "Failed reply created by the Runtime."
+    },
+    "Message": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RequestMessage"
+        },
+        {
+          "$ref": "#/definitions/EventMessage"
+        },
+        {
+          "$ref": "#/definitions/ResponseMessage"
+        },
+        {
+          "$ref": "#/definitions/ErrorMessage"
+        }
+      ],
+      "description": "Immutable Message stored by the Runtime."
+    },
+    "Delivery": {
+      "type": "object",
+      "properties": {
+        "lease_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Opaque id authorizing completion of this attempt."
+        },
+        "lease_expires_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time after which this attempt is no longer active."
+        },
+        "attempt": {
+          "type": "number",
+          "description": "Starts at 1 and increases after recovery.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "message": {
+          "$ref": "#/definitions/MailboxMessage",
+          "description": "Request or event leased from the Membership's Mailbox."
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Message"
+          },
+          "description": "Bounded recent window of earlier Messages from this Thread."
+        },
+        "history_complete": {
+          "type": "boolean",
+          "description": "True when `history` already contains every earlier retained Message."
+        }
+      },
+      "required": [
+        "lease_id",
+        "lease_expires_at",
+        "attempt",
+        "message",
+        "history",
+        "history_complete"
+      ],
+      "additionalProperties": false,
+      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `created_at` then Message id and excluding `message`. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`. This keeps a Delivery's size bounded no matter how long a Thread grows."
+    },
+    "Ticket": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/OpenTicket"
+        },
+        {
+          "$ref": "#/definitions/CompletedTicket"
+        },
+        {
+          "$ref": "#/definitions/FailedTicket"
+        },
+        {
+          "$ref": "#/definitions/ExpiredTicket"
+        },
+        {
+          "$ref": "#/definitions/DeclinedTicket"
+        }
+      ],
+      "description": "Requester-owned durable result record."
+    },
+    "OpenTicket": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "requester": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership that sent the request and owns this Ticket."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership asked to handle the request."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Request acceptance time."
+        },
+        "updated_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time of the last state transition or late-reply observation."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "late_reply_count": {
+          "type": "number",
+          "description": "Number of distinct replies observed after this Ticket became terminal.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "open",
+          "description": "Ticket still waiting for its first accepted outcome."
+        }
+      },
+      "required": [
+        "created_at",
+        "deadline",
+        "id",
+        "late_reply_count",
+        "recipient",
+        "requester",
+        "state",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Ticket waiting for its first accepted reply."
+    },
+    "CompletedTicket": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "requester": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership that sent the request and owns this Ticket."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership asked to handle the request."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Request acceptance time."
+        },
+        "updated_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time of the last state transition or late-reply observation."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "late_reply_count": {
+          "type": "number",
+          "description": "Number of distinct replies observed after this Ticket became terminal.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "completed",
+          "description": "Ticket closed by a successful reply."
+        },
+        "response": {
+          "$ref": "#/definitions/ResponseMessage",
+          "description": "Immutable winning response."
+        }
+      },
+      "required": [
+        "created_at",
+        "deadline",
+        "id",
+        "late_reply_count",
+        "recipient",
+        "requester",
+        "response",
+        "state",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Ticket completed by one successful response."
+    },
+    "FailedTicket": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "requester": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership that sent the request and owns this Ticket."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership asked to handle the request."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Request acceptance time."
+        },
+        "updated_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time of the last state transition or late-reply observation."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "late_reply_count": {
+          "type": "number",
+          "description": "Number of distinct replies observed after this Ticket became terminal.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "failed",
+          "description": "Ticket closed by an Agent failure."
+        },
+        "error": {
+          "$ref": "#/definitions/ErrorObject",
+          "description": "Immutable winning failure."
+        }
+      },
+      "required": [
+        "created_at",
+        "deadline",
+        "error",
+        "id",
+        "late_reply_count",
+        "recipient",
+        "requester",
+        "state",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Ticket completed by an Agent or Runtime failure."
+    },
+    "ExpiredTicket": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "requester": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership that sent the request and owns this Ticket."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership asked to handle the request."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Request acceptance time."
+        },
+        "updated_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time of the last state transition or late-reply observation."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "late_reply_count": {
+          "type": "number",
+          "description": "Number of distinct replies observed after this Ticket became terminal.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "expired",
+          "description": "Ticket closed because its deadline passed first."
+        },
+        "error": {
+          "$ref": "#/definitions/DeadlineExceededError",
+          "description": "Fixed deadline failure."
+        }
+      },
+      "required": [
+        "created_at",
+        "deadline",
+        "error",
+        "id",
+        "late_reply_count",
+        "recipient",
+        "requester",
+        "state",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Ticket whose deadline passed before an accepted reply."
+    },
+    "DeclinedTicket": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id."
+        },
+        "requester": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership that sent the request and owns this Ticket."
+        },
+        "recipient": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership asked to handle the request."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Request acceptance time."
+        },
+        "updated_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time of the last state transition or late-reply observation."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "late_reply_count": {
+          "type": "number",
+          "description": "Number of distinct replies observed after this Ticket became terminal.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "declined",
+          "description": "Ticket closed because the recipient chose not to respond."
+        }
+      },
+      "required": [
+        "created_at",
+        "deadline",
+        "id",
+        "late_reply_count",
+        "recipient",
+        "requester",
+        "state",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Ticket the recipient deliberately declined. The recipient handled the request and chose not to answer, the way a person may read a message and decide no reply is warranted. It is a terminal, non-failure outcome that is explicit to the requester, distinct from a handler failure and from a deadline that expired with no handling."
+    },
+    "DirectoryEntry": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address."
+        },
+        "agent_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Stable identity supplied by the Membership."
+        },
+        "profile": {
+          "$ref": "#/definitions/AgentProfile",
+          "description": "Current discovery information."
+        }
+      },
+      "required": [
+        "address",
+        "agent_did",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "description": "Full Directory record for one Membership, returned by `get_profile`."
+    },
+    "AgentDid": {
+      "type": "string",
+      "description": "Agent-owned `did:key` identity backed by an Ed25519 public key.",
+      "format": "uri",
+      "pattern": "^did:key:z[1-9A-HJ-NP-Za-km-z]+$"
+    },
+    "DirectoryMatch": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address to send work to."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Profile summary line."
+        },
+        "skill_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Declared Skill names, for a cheap capability scan."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Tag"
+          },
+          "description": "Optional discovery labels."
+        },
+        "agent_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Stable identity. Present only when detail is `full`."
+        },
+        "profile": {
+          "$ref": "#/definitions/AgentProfile",
+          "description": "Full discovery information. Present only when detail is `full`."
+        }
+      },
+      "required": [
+        "address",
+        "summary",
+        "skill_names"
+      ],
+      "additionalProperties": false,
+      "description": "One ranked discovery result. It is light by default so a search can list a whole Team without flooding a model's context. `agent_did` and `profile` are present only when the search requested full detail."
+    },
+    "JoinChallenge": {
+      "type": "object",
+      "properties": {
+        "nonce": {
+          "type": "string",
+          "description": "At least 128 bits of random data in base64url form.",
+          "pattern": "^[A-Za-z0-9_-]{22,64}$"
+        },
+        "audience": {
+          "type": "string",
+          "description": "Exact JWT audience required by the Runtime.",
+          "pattern": "^agentconnect:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+        },
+        "expires_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time after which this challenge cannot authenticate a join."
+        }
+      },
+      "required": [
+        "nonce",
+        "audience",
+        "expires_at"
+      ],
+      "additionalProperties": false,
+      "description": "Short-lived challenge used to prove Agent DID control."
+    },
+    "JoinRequest": {
+      "type": "object",
+      "properties": {
+        "spec_version": {
+          "$ref": "#/definitions/SpecVersion",
+          "description": "Exact public contract version implemented by the Client."
+        },
+        "name": {
+          "$ref": "#/definitions/AgentName",
+          "description": "Requested Agent name, canonicalized by the Runtime."
+        },
+        "agent_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Agent-owned identity proved by `identity_proof`."
+        },
+        "profile": {
+          "$ref": "#/definitions/AgentProfile",
+          "description": "Discovery information that replaces the Membership's current Profile."
+        },
+        "instance_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Stable id for one running copy of the Agent. Re-joining with the same `instance_id` replaces that Instance's Session; a different value opens an additional concurrent Instance sharing the Membership and Mailbox. Omit to let the Runtime assign one."
+        },
+        "max_in_flight": {
+          "type": "number",
+          "description": "Maximum active Delivery leases for this Session. Defaults to 1.",
+          "minimum": 1,
+          "maximum": 100,
+          "multipleOf": 1
+        },
+        "join_token": {
+          "type": "string",
+          "description": "Required by a network Runtime; omitted for trusted embedded join.",
+          "minLength": 1
+        },
+        "identity_proof": {
+          "type": "string",
+          "description": "EdDSA JWT required by a network Runtime.",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "spec_version",
+        "name",
+        "agent_did",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "description": "Input that creates or reconnects a Membership and opens one Instance."
+    },
+    "AgentName": {
+      "type": "string",
+      "description": "Agent name input. Length 1 to 63. The Runtime canonicalizes ASCII uppercase to lowercase; `-` and `_` are allowed only between alphanumeric characters.",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?$"
+    },
+    "RuntimeLimits": {
+      "type": "object",
+      "properties": {
+        "max_message_bytes": {
+          "type": "number",
+          "description": "Maximum accepted size in bytes of a `send` body's UTF-8 JSON encoding. A larger `send` fails with `payload_too_large`.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "max_mailbox_depth": {
+          "type": "number",
+          "description": "Maximum Messages one Membership Mailbox holds before `send` returns busy.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "delivery_history_limit": {
+          "type": "number",
+          "description": "Maximum earlier Thread Messages the Runtime includes in a Delivery's `history` window. Older Messages are paged with `get_history`.",
+          "minimum": 0,
+          "multipleOf": 1
+        }
+      },
+      "required": [
+        "max_message_bytes",
+        "max_mailbox_depth",
+        "delivery_history_limit"
+      ],
+      "additionalProperties": false,
+      "description": "Fixed operational limits a Runtime reports at join."
+    },
+    "JoinResult": {
+      "type": "object",
+      "properties": {
+        "session_token": {
+          "$ref": "#/definitions/SessionToken",
+          "description": "Bearer credential for the new Session."
+        },
+        "session_expires_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Current Session expiry."
+        },
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address assigned to the Membership."
+        },
+        "team_name": {
+          "$ref": "#/definitions/TeamName",
+          "description": "Canonical name of the Team served by this Runtime."
+        },
+        "agent_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Verified identity bound to the Membership."
+        },
+        "instance_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Instance id for this Session, assigned when the Client omitted one."
+        },
+        "persistence": {
+          "$ref": "#/definitions/PersistenceMode",
+          "description": "Runtime restart guarantee."
+        },
+        "limits": {
+          "$ref": "#/definitions/RuntimeLimits",
+          "description": "Operational limits this Runtime enforces."
+        },
+        "spec_version": {
+          "$ref": "#/definitions/SpecVersion",
+          "description": "Exact public contract version implemented by the Runtime."
+        }
+      },
+      "required": [
+        "session_token",
+        "session_expires_at",
+        "address",
+        "team_name",
+        "agent_did",
+        "instance_id",
+        "persistence",
+        "limits",
+        "spec_version"
+      ],
+      "additionalProperties": false,
+      "description": "Result of a successful join."
+    },
+    "SessionToken": {
+      "type": "string",
+      "description": "Opaque non-empty bearer credential returned by join.",
+      "minLength": 1
+    },
+    "TeamName": {
+      "type": "string",
+      "description": "Lowercase Team name and valid DNS label. Length 1 to 63.",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+    },
+    "PersistenceMode": {
+      "type": "string",
+      "enum": [
+        "volatile",
+        "durable"
+      ],
+      "description": "How a Runtime survives process exit."
+    },
+    "HeartbeatResult": {
+      "type": "object",
+      "properties": {
+        "session_expires_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Current Session expiry after the heartbeat."
+        }
+      },
+      "required": [
+        "session_expires_at"
+      ],
+      "additionalProperties": false,
+      "description": "Result of a successful Session heartbeat."
+    },
+    "CallbackTarget": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "address": {
+              "$ref": "#/definitions/Address",
+              "description": "Local or same-Team Address that receives the result as a Message."
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Absolute HTTPS URL the Runtime POSTs the result to.",
+              "format": "uri"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Target that receives a `callback` result. Reserved until callback lands."
+    },
+    "SendRequest": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RequestSendRequest"
+        },
+        {
+          "$ref": "#/definitions/EventSendRequest"
+        }
+      ],
+      "description": "Input to Runtime `send`."
+    },
+    "RequestSendRequest": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NoReplySendRequest"
+        },
+        {
+          "$ref": "#/definitions/CollectedSendRequest"
+        }
+      ],
+      "description": "Input for sending a request."
+    },
+    "NoReplySendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Client-generated Message id and idempotency key."
+        },
+        "recipient": {
+          "$ref": "#/definitions/Address",
+          "description": "Local or same-Team qualified Address."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Sender-controlled work or event data."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional conversation grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Message that directly caused this send."
+        },
+        "metadata": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Sender-controlled data that never changes Runtime decisions."
+        },
+        "kind": {
+          "type": "string",
+          "const": "request",
+          "description": "Send work to be handled."
+        }
+      },
+      "required": [
+        "content",
+        "id",
+        "kind",
+        "recipient"
+      ],
+      "description": "Send a request that expects no reply. It names no `collect` and no `deadline`, so it creates no Ticket. A send that carries `collect` and `deadline` selects the reply-expected shape below."
+    },
+    "CollectedSendRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Client-generated Message id and idempotency key."
+        },
+        "recipient": {
+          "$ref": "#/definitions/Address",
+          "description": "Local or same-Team qualified Address."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Sender-controlled work or event data."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional conversation grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Message that directly caused this send."
+        },
+        "metadata": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Sender-controlled data that never changes Runtime decisions."
+        },
+        "kind": {
+          "type": "string",
+          "const": "request",
+          "description": "Send work to be handled."
+        },
+        "collect": {
+          "$ref": "#/definitions/CollectMode",
+          "description": "How the sender collects the result."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Future absolute deadline for the Ticket."
+        },
+        "callback": {
+          "$ref": "#/definitions/CallbackTarget",
+          "description": "Required only when `collect` is `callback`."
+        }
+      },
+      "required": [
+        "collect",
+        "content",
+        "deadline",
+        "id",
+        "kind",
+        "recipient"
+      ],
+      "additionalProperties": false,
+      "description": "Send a reply-expected request tracked by a Ticket."
+    },
+    "EventSendRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Client-generated Message id and idempotency key."
+        },
+        "recipient": {
+          "$ref": "#/definitions/Address",
+          "description": "Local or same-Team qualified Address."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Sender-controlled work or event data."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional conversation grouping id."
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Optional Message that directly caused this send."
+        },
+        "metadata": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Sender-controlled data that never changes Runtime decisions."
+        },
+        "kind": {
+          "type": "string",
+          "const": "event",
+          "description": "Send information without a Ticket."
+        }
+      },
+      "required": [
+        "content",
+        "id",
+        "kind",
+        "recipient"
+      ],
+      "additionalProperties": false,
+      "description": "Send information without a reply."
+    },
+    "SendResult": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AcceptedSendResult"
+        },
+        {
+          "$ref": "#/definitions/TicketedSendResult"
+        }
+      ],
+      "description": "Result of Runtime `send`."
+    },
+    "AcceptedSendResult": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "accepted",
+          "description": "Discriminator for a send that created no Ticket."
+        },
+        "message": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NoReplyRequestMessage"
+            },
+            {
+              "$ref": "#/definitions/EventMessage"
+            }
+          ],
+          "description": "Accepted and Runtime-stamped Message."
+        }
+      },
+      "required": [
+        "status",
+        "message"
+      ],
+      "additionalProperties": false,
+      "description": "Result for an event or a no-reply request."
+    },
+    "TicketedSendResult": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ticketed",
+          "description": "Discriminator for a reply-expected send."
+        },
+        "message": {
+          "$ref": "#/definitions/ReplyExpectedRequestMessage",
+          "description": "Accepted and Runtime-stamped request."
+        },
+        "ticket": {
+          "$ref": "#/definitions/Ticket",
+          "description": "Current Ticket, terminal for `collect=wait`."
+        }
+      },
+      "required": [
+        "status",
+        "message",
+        "ticket"
+      ],
+      "additionalProperties": false,
+      "description": "Result for a reply-expected request."
+    },
+    "LeaseRequest": {
+      "type": "object",
+      "properties": {
+        "max_items": {
+          "type": "number",
+          "description": "Number requested, from 1 to 100. Defaults to 1.",
+          "minimum": 1,
+          "maximum": 100,
+          "multipleOf": 1
+        }
+      },
+      "additionalProperties": false,
+      "description": "Input to pull available work."
+    },
+    "LeaseResult": {
+      "type": "object",
+      "properties": {
+        "deliveries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Delivery"
+          },
+          "description": "Zero or more newly leased attempts."
+        }
+      },
+      "required": [
+        "deliveries"
+      ],
+      "additionalProperties": false,
+      "description": "Deliveries currently leased to the Session."
+    },
+    "CompleteRequest": {
+      "type": "object",
+      "properties": {
+        "lease_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Active lease to finish."
+        }
+      },
+      "required": [
+        "lease_id"
+      ],
+      "additionalProperties": false,
+      "description": "Finish one Delivery without a response. For an event or no-reply request this just ends the Delivery. For a reply-expected request it declines the request: the recipient chose not to answer, and the Ticket becomes `declined`."
+    },
+    "CompleteResult": {
+      "type": "object",
+      "properties": {
+        "ticket": {
+          "$ref": "#/definitions/DeclinedTicket",
+          "description": "Present only when completing a reply-expected request, which declines it."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Result of `complete`."
+    },
+    "ReplyRequest": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ReplySuccessRequest"
+        },
+        {
+          "$ref": "#/definitions/ReplyFailureRequest"
+        }
+      ],
+      "description": "Input to Runtime `reply`."
+    },
+    "ReplySuccessRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Client-generated id for the response or error Message."
+        },
+        "lease_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Active lease for the reply-expected request."
+        },
+        "outcome": {
+          "type": "string",
+          "const": "completed",
+          "description": "Selects a successful Ticket transition."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Successful application result. Use null to answer with no content."
+        }
+      },
+      "required": [
+        "content",
+        "id",
+        "lease_id",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "description": "Complete a Delivery with successful content."
+    },
+    "ReplyFailureRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Client-generated id for the response or error Message."
+        },
+        "lease_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Active lease for the reply-expected request."
+        },
+        "outcome": {
+          "type": "string",
+          "const": "failed",
+          "description": "Selects a failed Ticket transition."
+        },
+        "error": {
+          "$ref": "#/definitions/ErrorObject",
+          "description": "Safe application or handler failure."
+        }
+      },
+      "required": [
+        "error",
+        "id",
+        "lease_id",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "description": "Complete a Delivery with a safe error."
+    },
+    "ReplyResult": {
+      "type": "object",
+      "properties": {
+        "ticket": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CompletedTicket"
+            },
+            {
+              "$ref": "#/definitions/FailedTicket"
+            }
+          ],
+          "description": "Terminal Ticket containing the accepted outcome."
+        }
+      },
+      "required": [
+        "ticket"
+      ],
+      "additionalProperties": false,
+      "description": "Result of an accepted reply."
+    },
+    "GetResultRequest": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Ticket id, equal to its original request Message id."
+        }
+      },
+      "required": [
+        "ticket_id"
+      ],
+      "additionalProperties": false,
+      "description": "Ticket lookup used by non-HTTP bindings."
+    },
+    "GetHistoryRequest": {
+      "type": "object",
+      "properties": {
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread whose retained Messages are read."
+        },
+        "before": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Return Messages older than this Message id, exclusive. Omit for newest."
+        },
+        "limit": {
+          "type": "number",
+          "description": "Page size from 1 to 200. Defaults to 50.",
+          "minimum": 1,
+          "maximum": 200,
+          "multipleOf": 1
+        }
+      },
+      "required": [
+        "thread_id"
+      ],
+      "additionalProperties": false,
+      "description": "Thread history lookup."
+    },
+    "HistoryResult": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Message"
+          },
+          "description": "Requested page ordered by `created_at` then Message id, ascending."
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "True when older retained Messages remain before this page."
+        }
+      },
+      "required": [
+        "messages",
+        "has_more"
+      ],
+      "additionalProperties": false,
+      "description": "One page of retained Thread history."
+    },
+    "FindRequest": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Natural-language discovery query.",
+          "minLength": 1,
+          "maxLength": 1000,
+          "pattern": "\\S"
+        },
+        "limit": {
+          "type": "number",
+          "description": "Maximum results from 1 to 100. Omit to return every match.",
+          "minimum": 1,
+          "maximum": 100,
+          "multipleOf": 1
+        },
+        "detail": {
+          "type": "string",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "description": "How much of each match to return. `summary` returns the light card; `full` adds `agent_did` and the complete Profile. Defaults to `summary`."
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false,
+      "description": "Local Directory search input."
+    },
+    "FindResult": {
+      "type": "object",
+      "properties": {
+        "matches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DirectoryMatch"
+          },
+          "description": "Matches ordered by relevance, best first."
+        }
+      },
+      "required": [
+        "matches"
+      ],
+      "additionalProperties": false,
+      "description": "Ordered local Directory search result."
+    },
+    "GetProfileRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/Address",
+          "description": "Local or same-Team qualified member Address."
+        }
+      },
+      "required": [
+        "address"
+      ],
+      "additionalProperties": false,
+      "description": "Directory lookup used by non-HTTP bindings."
+    },
+    "AskToolRequest": {
+      "type": "object",
+      "properties": {
+        "recipient": {
+          "$ref": "#/definitions/Address",
+          "description": "Local or same-Team qualified recipient."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Work input."
+        },
+        "deadline_seconds": {
+          "type": "number",
+          "description": "Relative deadline from 1 to 86400 seconds.",
+          "minimum": 1,
+          "maximum": 86400,
+          "multipleOf": 1
+        },
+        "wait_seconds": {
+          "type": "number",
+          "description": "Local wait from 0 to 30 seconds. Defaults to 0.",
+          "minimum": 0,
+          "maximum": 30,
+          "multipleOf": 1
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Conversation to continue. Omit to start a fresh Thread; the server mints one and the returned Ticket carries it."
+        },
+        "idempotency_key": {
+          "type": "string",
+          "description": "Stable key so a retried tool call does not create a second request. When omitted the server derives one from the caller, recipient, Thread, and content so an accidental double call is de-duplicated.",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "recipient",
+        "content",
+        "deadline_seconds"
+      ],
+      "additionalProperties": false,
+      "description": "MCP `ask` arguments. The server generates the request Message id."
+    },
+    "TellToolRequest": {
+      "type": "object",
+      "properties": {
+        "recipient": {
+          "$ref": "#/definitions/Address",
+          "description": "Local or same-Team qualified recipient."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Event data."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Conversation to continue. Omit to leave the event unthreaded."
+        },
+        "idempotency_key": {
+          "type": "string",
+          "description": "Stable key so a retried tool call does not create a second event.",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "recipient",
+        "content"
+      ],
+      "additionalProperties": false,
+      "description": "MCP `tell` arguments. The server generates the event Message id."
+    },
+    "RuntimeEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Event type name.",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "data": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Type-specific data."
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ],
+      "additionalProperties": false,
+      "description": "One event pushed on the Session event stream. `type` is open so new event types are added over time; a Client MUST ignore an unknown type. The only type defined in this draft is `work_available`, whose `data` is `{}`."
+    },
+    "ToolErrorResult": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/ErrorObject",
+          "description": "Runtime failure preserved without reinterpretation."
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false,
+      "description": "Structured result used when an MCP tool reaches a Runtime failure."
+    }
+  }
+}

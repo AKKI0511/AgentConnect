@@ -140,12 +140,7 @@ We use several tools to maintain code quality:
    poetry run flake8
    ```
 
-4. Pylint for code analysis:
-   ```powershell
-   poetry run pylint agentconnect/ tests/ demos/
-   ```
-
-5. Type hints are required for all functions:
+4. Type hints are required for all functions:
    ```python
    def example_function(param1: str, param2: int) -> bool:
        return True

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
+- Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
+- Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.
+
+### Removed
+- Deleted unused `agentconnect.communication.protocols`.
+- Removed `pylint` and the PyPI `asyncio` backport from runtime dependencies.
+
+
 ### Planned
 - A2A communication hardening: ResponseTracker, HTTP transport SPI, Inbox server, metrics, remote A2A support.
 - Unified AgentIdentity with registry-verified connect flows (DID-JWT/challenge) and route grants.

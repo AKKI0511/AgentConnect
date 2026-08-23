@@ -4,13 +4,13 @@ install-core:
 	poetry install
 
 install-dev:
-	poetry install --with dev
+	poetry install --with dev --extras "telegram payments cli"
 
 install-demo:
-	poetry install --with demo
+	poetry install --with demo --extras "telegram payments cli"
 
 install-all:
-	poetry install --with dev,demo,research
+	poetry install --with dev,demo,research --extras "telegram payments cli"
 
 install-docs:
 	poetry install --with docs

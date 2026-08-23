@@ -145,3 +145,21 @@ def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
 
     # Since deps are missing, lazy import path should fail internally and disable payments
     assert agent.wallet_provider is None and agent.agent_kit is None
+
+
+def test_prebuilt_aiagent_imports_without_optional_helpers():
+    for name in ["aiogram", "aioconsole", "cdp"]:
+        sys.modules.pop(name, None)
+
+    mod = importlib.import_module("agentconnect.prebuilt")
+    assert hasattr(mod, "AIAgent")
+
+
+def test_communication_protocols_package_removed():
+    importlib.invalidate_caches()
+    sys.modules.pop("agentconnect.communication.protocols", None)
+    try:
+        importlib.import_module("agentconnect.communication.protocols")
+    except ModuleNotFoundError:
+        return
+    raise AssertionError("agentconnect.communication.protocols should not exist")

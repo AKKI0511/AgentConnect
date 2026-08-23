@@ -344,13 +344,15 @@ class AgentConnectSettings(BaseModel):
         data = self.model_dump()
 
         def redact_secrets(obj: Any) -> Any:
-            """Replace any SecretStr instances with a redacted marker."""
+            """Replace secrets and coerce remaining values to YAML-safe types."""
             if isinstance(obj, SecretStr):
                 return "***REDACTED***"
             if isinstance(obj, dict):
                 return {k: redact_secrets(v) for k, v in obj.items()}
             if isinstance(obj, list):
                 return [redact_secrets(v) for v in obj]
-            return obj
+            if isinstance(obj, (str, int, float, bool, type(None))):
+                return obj
+            return str(obj)
 
         return redact_secrets(data)

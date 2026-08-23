@@ -14,12 +14,9 @@ Note:
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from agentconnect.config import settings as global_settings
-
-# Import dependencies directly since they're required
-from cdp import WalletData
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -72,7 +69,7 @@ def set_wallet_data_dir(data_dir: Union[str, Path]) -> Path:
 
 def save_wallet_data(
     agent_id: str,
-    wallet_data: Union[WalletData, str, Dict],
+    wallet_data: Union[Any, str, Dict],
     data_dir: Optional[Union[str, Path]] = None,
 ) -> None:
     """

@@ -61,7 +61,7 @@ def validate_cdp_environment() -> Tuple[bool, str]:
         except ImportError:
             return (
                 False,
-                "CDP SDK not installed. Install it with: pip install cdp-sdk",
+                "CDP SDK not installed. Install it with: pip install 'agentconnect[payments]'",
             )
 
         try:

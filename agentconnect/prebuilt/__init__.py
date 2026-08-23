@@ -1,10 +1,7 @@
 """
-Independent agent implementations for the AgentConnect decentralized framework.
+Ready-made agents for the AgentConnect framework.
 
-This module provides various autonomous agent implementations that operate as independent entities
-in a decentralized network. Each agent maintains its own identity, capabilities, and can optionally
-implement its own internal multi-agent system while communicating with other agents through
-capability-based discovery.
+These helpers sit on top of ``BaseAgent``. They are optional conveniences.
 
 Key components:
 
@@ -12,13 +9,40 @@ Key components:
 - **HumanAgent**: Human-in-the-loop agent that can interact securely with the decentralized network
 - **TelegramAIAgent**: AI agent that integrates with Telegram for user interactions
 - **MemoryType**: Enum for different types of agent memory
-
-Each agent operates autonomously and can discover and communicate with other agents based on
-capabilities rather than pre-defined connections, enabling a truly decentralized architecture.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 from .ai_agent import AIAgent, MemoryType
-from .human_agent import HumanAgent
-from .telegram import TelegramAIAgent
+
+if TYPE_CHECKING:
+    from .human_agent import HumanAgent
+    from .telegram import TelegramAIAgent
 
 __all__ = ["AIAgent", "HumanAgent", "TelegramAIAgent", "MemoryType"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "HumanAgent":
+        try:
+            from .human_agent import HumanAgent
+        except ImportError as exc:
+            raise ImportError(
+                "HumanAgent requires the cli extra. Install with: pip install 'agentconnect[cli]'"
+            ) from exc
+        return HumanAgent
+    if name == "TelegramAIAgent":
+        try:
+            from .telegram import TelegramAIAgent
+        except ImportError as exc:
+            raise ImportError(
+                "TelegramAIAgent requires the telegram extra. Install with: pip install 'agentconnect[telegram]'"
+            ) from exc
+        return TelegramAIAgent
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

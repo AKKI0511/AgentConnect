@@ -35,18 +35,13 @@ dependencies = [
     "langchain-groq (>=0.2.4,<0.3.0)",
     "langchain-google-genai (>=2.0.9,<3.0.0)",
     "python-dotenv (>=1.0.1,<2.0.0)",
-    "aioconsole (>=0.8.1,<0.9.0)",
-    "asyncio (>=3.4.3,<4.0.0)",
     "typing-extensions (>=4.12.2,<5.0.0)",
     "python-dateutil (>=2.9.0.post0,<3.0.0)",
     "cryptography (>=44.0.1,<45.0.0)",
-    "pylint (==3.3.3)",
     "sentence-transformers (>=3.4.1,<4.0.0)",
     "langchain-huggingface (>=0.1.2,<0.2.0)",
     "pandas (>=2.2.3,<3.0.0)",
     "colorama (>=0.4.6,<0.5.0)",
-    "aiogram (>=3.19.0,<4.0.0)",
-    "cdp-sdk (>=0.21.0,<0.22.0)",
     "coinbase-agentkit (>=0.4.0,<0.5.0)",
     "coinbase-agentkit-langchain (>=0.3.0,<0.4.0)",
     "accelerate (>=1.6.0,<2.0.0)",
@@ -60,6 +55,19 @@ dependencies = [
     "httpx (>=0.28.1,<0.29.0)",
     "pyyaml (>=6.0.2,<7.0.0)",
     "typer (>=0.16.1,<0.17.0)",
+    "fastapi (>=0.115.8,<0.116.0)",
+    "uvicorn (>=0.34.0,<0.35.0)",
+]
+
+[project.optional-dependencies]
+telegram = [
+    "aiogram (>=3.19.0,<4.0.0)",
+]
+payments = [
+    "cdp-sdk (>=0.21.0,<0.22.0)",
+]
+cli = [
+    "aioconsole (>=0.8.1,<0.9.0)",
 ]
 
 [project.scripts]
@@ -70,9 +78,6 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.demo.dependencies]
-aioconsole = "^0.8.1"
-fastapi = "^0.115.8"
-uvicorn = "^0.34.0"
 websockets = "^15.0"
 httpx = "^0.28.1"
 python-multipart = "^0.0.20"

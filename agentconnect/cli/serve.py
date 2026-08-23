@@ -8,11 +8,8 @@ import typer
 
 def _missing_servers_extras_message() -> str:
     return (
-        "Servers dependencies are not installed. Install with:\n"
-        "  poetry install --with demo\n"
-        "or with pip:\n"
-        "  pip install fastapi uvicorn"
-        "\nSee agentconnect/servers/README.md for details."
+        "Could not import the registry server. FastAPI and uvicorn are core "
+        "dependencies; reinstall the package and see agentconnect/servers/README.md."
     )
 
 

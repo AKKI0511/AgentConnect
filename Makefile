@@ -25,6 +25,7 @@ hooks:
 
 lint:
 	poetry run flake8 --extend-ignore E501,W293,E128,W291,E402,E20,E701 agentconnect/ demos/api/ demos/utils/
+	poetry run lint-imports
 
 format:
 	poetry run black agentconnect/ demos/

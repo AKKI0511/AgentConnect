@@ -120,6 +120,7 @@ pydata-sphinx-theme = "^0.16.1"
 sphinx-togglebutton = "^0.3.2"
 pytest-asyncio = "^0.26.0"
 pytest = "^8.3.5"
+import-linter = "^2.3"
 
 [tool.poetry.group.docs]
 optional = true
@@ -134,3 +135,56 @@ sphinx-copybutton = "^0.5.2"
 sphinx-markdown-builder = "^0.6.8"
 pydata-sphinx-theme = "^0.16.1"
 sphinx-togglebutton = "^0.3.2"
+
+[tool.importlinter]
+root_package = "agentconnect"
+
+[[tool.importlinter.contracts]]
+name = "core imports no siblings"
+type = "forbidden"
+source_modules = ["agentconnect.core"]
+forbidden_modules = [
+    "agentconnect.agent",
+    "agentconnect.team",
+    "agentconnect.transport",
+    "agentconnect.mcp",
+    "agentconnect.gateway",
+    "agentconnect.index",
+    "agentconnect.cli",
+    "agentconnect.config",
+    "agentconnect.prebuilt",
+    "agentconnect.providers",
+    "agentconnect.prompts",
+    "agentconnect.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "agent never imports team"
+type = "forbidden"
+source_modules = ["agentconnect.agent"]
+forbidden_modules = ["agentconnect.team"]
+
+[[tool.importlinter.contracts]]
+name = "team never imports agent"
+type = "forbidden"
+source_modules = ["agentconnect.team"]
+forbidden_modules = ["agentconnect.agent"]
+
+[[tool.importlinter.contracts]]
+name = "nothing imports prebuilt"
+type = "forbidden"
+source_modules = [
+    "agentconnect.core",
+    "agentconnect.agent",
+    "agentconnect.team",
+    "agentconnect.transport",
+    "agentconnect.mcp",
+    "agentconnect.gateway",
+    "agentconnect.index",
+    "agentconnect.cli",
+    "agentconnect.config",
+    "agentconnect.providers",
+    "agentconnect.prompts",
+    "agentconnect.utils",
+]
+forbidden_modules = ["agentconnect.prebuilt"]

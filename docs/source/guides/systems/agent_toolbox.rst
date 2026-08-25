@@ -104,9 +104,9 @@ available for new work.
 
 **Output**
 
-Returns :class:`AgentSearchOutput <agentconnect.core.registry.search.schemas.AgentSearchOutput>`
+Returns :class:`AgentSearchOutput <agentconnect.team.directory.search.schemas.AgentSearchOutput>`
 with a ``message`` string and a ``results`` list. Each item is an
-:class:`AgentSearchResultItem <agentconnect.core.registry.search.schemas.AgentSearchResultItem>`
+:class:`AgentSearchResultItem <agentconnect.team.directory.search.schemas.AgentSearchResultItem>`
 carrying ``agent_id``, ``similarity_score``, and the profile fields for the requested
 detail level. Pass ``agent_id`` directly to ``send_collaboration_request``.
 

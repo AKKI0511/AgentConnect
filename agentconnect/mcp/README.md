@@ -58,7 +58,7 @@ Custom setups:
 
 ```python
 from agentconnect.mcp.registry_mcp_server import create_agent_discovery_mcp
-from agentconnect.clients import RegistryAPIClient
+from agentconnect.index import RegistryAPIClient
 
 custom_client = RegistryAPIClient(base_url="http://localhost:8000")
 mcp = create_agent_discovery_mcp(registry_client=custom_client)
@@ -181,7 +181,7 @@ Search for agents in the collaborative network using natural language queries ab
   - `"full"` - Includes capabilities + description, examples, version, organization, developer, auth_schemes, input/output modes
 - `include_tags` (list of strings, optional): Filter by exact tag matches. Results must have AT LEAST ONE of these tags
 
-> **📖 Schema Reference:** Input/output schemas are defined in [`agentconnect/core/registry/search/`](../core/registry/search/) - the single source of truth for all search interfaces. See the [Search Module README](../core/registry/search/README.md) for complete documentation.
+> **📖 Schema Reference:** Input/output schemas are defined in [`agentconnect/team/directory/search/`](../team/directory/search/) - the single source of truth for all search interfaces. See the [Search Module README](../team/directory/search/README.md) for complete documentation.
 
 **Example Usage:**
 
@@ -253,7 +253,7 @@ import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from agentconnect.core.registry.search import AgentSearchOutput
+from agentconnect.team.directory.search import AgentSearchOutput
 
 async def find_agents_example():
     # Configure the MCP server
@@ -329,7 +329,7 @@ mcp:
     output_detail: "summary"  # minimal | summary | capabilities | full
 ```
 
-> Server deployment is configured via environment variables only. See `agentconnect/servers/README.md`.
+> Index process settings are configured via environment variables only. See `agentconnect/index/README.md`.
 
 ## Development
 
@@ -388,7 +388,7 @@ async def your_tool_function(
     result = await app_ctx.registry_client.your_operation(param1, param2)
     
     # Use search schemas if returning agent data
-    from agentconnect.core.registry.search import populate_search_result_item
+    from agentconnect.team.directory.search import populate_search_result_item
     
     return {
         "message": "Operation completed successfully",
@@ -528,13 +528,13 @@ The MCP server acts as a bridge between MCP clients and the AgentConnect registr
 ## Schema Reference
 
 **🔗 Single Source of Truth for Search Schemas:**
-- [**Search Module README**](../core/registry/search/README.md) - Complete documentation of all search schemas and utilities
-- [**AgentSearchInput Schema**](../core/registry/search/schemas.py) - Input parameter definitions
-- [**AgentSearchOutput Schema**](../core/registry/search/schemas.py) - Response format specification  
-- [**AgentSearchResultItem Schema**](../core/registry/search/schemas.py) - Individual result structure
-- [**Search Utilities**](../core/registry/search/utils.py) - Data transformation functions
+- [**Search Module README**](../team/directory/search/README.md) - Complete documentation of all search schemas and utilities
+- [**AgentSearchInput Schema**](../team/directory/search/schemas.py) - Input parameter definitions
+- [**AgentSearchOutput Schema**](../team/directory/search/schemas.py) - Response format specification  
+- [**AgentSearchResultItem Schema**](../team/directory/search/schemas.py) - Individual result structure
+- [**Search Utilities**](../team/directory/search/utils.py) - Data transformation functions
 
-> **Important:** The [`agentconnect/core/registry/search/`](../core/registry/search/) module is the authoritative source for all search-related schemas. The MCP server, API endpoints, and LangChain tools all use these same schemas to ensure consistency across the entire AgentConnect ecosystem.
+> **Important:** The [`agentconnect/team/directory/search/`](../team/directory/search/) module is the authoritative source for all search-related schemas. The MCP server, API endpoints, and LangChain tools all use these same schemas to ensure consistency across the entire AgentConnect ecosystem.
 
 ## Useful Links
 

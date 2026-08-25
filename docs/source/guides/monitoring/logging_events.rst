@@ -56,7 +56,7 @@ your system, regardless of agent type:
 .. code-block:: python
 
     async def log_flow(message: Message) -> None:
-        print(f"{message.sender_id} -> {message.receiver_id} [{message.message_type.value}]")
+        print(f"{message.sender_id} -> {message.receiver_id} [{message.kind.value}]")
 
     hub.add_global_handler(log_flow)          # every message through the hub
     hub.add_message_handler("writer", log_flow)  # only messages addressed to "writer"

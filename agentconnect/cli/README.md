@@ -79,7 +79,7 @@ agentconnect serve --help
     agentconnect serve registry --reload
     ```
 
-Developer note: You can also run the server directly: `uvicorn agentconnect.servers.registry_api_server:app` or `python -m agentconnect.servers.registry_api_server`.
+Developer note: You can also run the server directly: `uvicorn agentconnect.index.service:app` or `python -m agentconnect.index.service`.
 
 ### registry
 

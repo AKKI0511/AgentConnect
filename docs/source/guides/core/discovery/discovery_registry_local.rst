@@ -40,8 +40,8 @@ Pass your agent to ``hub.register_agent()``. The hub reads the agent's profile (
     from dotenv import load_dotenv
 
     from agentconnect.prebuilt import AIAgent
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.types import (
         AgentIdentity,
         AgentProfile,
@@ -112,7 +112,7 @@ The registry can also be used on its own, independent of the hub and messaging l
 .. code-block:: python
 
     import asyncio
-    from agentconnect.core.registry import AgentRegistry, AgentRegistration
+    from agentconnect.team.directory import AgentRegistry, AgentRegistration
     from agentconnect.core.types import (
         AgentIdentity,
         AgentType,
@@ -180,7 +180,7 @@ Exact match against registered capability names. Fast and deterministic. If no e
     for agent in agents:
         print(f"{agent.name}: {agent.summary}")
 
-Full parameter reference: :meth:`AgentRegistry.get_by_capability <agentconnect.core.registry.AgentRegistry.get_by_capability>`.
+Full parameter reference: :meth:`AgentRegistry.get_by_capability <agentconnect.team.directory.AgentRegistry.get_by_capability>`.
 
 By Description (Semantic Search)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -198,7 +198,7 @@ Pass any natural language description. The registry encodes it as an embedding a
     for agent_reg, score in results:
         print(f"{agent_reg.name} ({score:.3f}): {agent_reg.summary}")
 
-Full parameter reference: :meth:`AgentRegistry.get_by_capability_semantic <agentconnect.core.registry.AgentRegistry.get_by_capability_semantic>`.
+Full parameter reference: :meth:`AgentRegistry.get_by_capability_semantic <agentconnect.team.directory.AgentRegistry.get_by_capability_semantic>`.
 
 **Narrowing results with filters**
 
@@ -313,7 +313,7 @@ The full YAML block for the registry covers the embedding model path, storage di
           vectors_on_disk: false     # store vectors on disk instead of RAM
           index_on_disk: false       # store HNSW index on disk instead of RAM
 
-For the full list of knobs and what each one does, see the `Registry README on GitHub <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/core/registry/README.md>`_.
+For the full list of knobs and what each one does, see the `Registry README on GitHub <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/team/directory/README.md>`_.
 
 In-code Configuration
 ^^^^^^^^^^^^^^^^^^^^^
@@ -323,7 +323,7 @@ To override configuration at runtime without touching ``agentconnect.yaml``, pas
 .. code-block:: python
 
     from agentconnect.config.models import VectorSearchSettings
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team.directory import AgentRegistry
 
     registry = AgentRegistry(
         vector_search_config=VectorSearchSettings(
@@ -364,11 +364,11 @@ Once running, MCP clients can query the registry without any Python code on the 
 Custom Search Tools
 ^^^^^^^^^^^^^^^^^^^^
 
-The :mod:`agentconnect.core.registry.search` module provides typed input/output schemas on top of the raw registry API:
+The :mod:`agentconnect.team.directory.search` module provides typed input/output schemas on top of the raw registry API:
 
-- :class:`AgentSearchInput <agentconnect.core.registry.search.AgentSearchInput>` for query parameters
-- :func:`populate_search_result_item <agentconnect.core.registry.search.populate_search_result_item>` to convert raw ``(AgentRegistration, score)`` pairs into structured results
-- :class:`AgentSearchOutput <agentconnect.core.registry.search.AgentSearchOutput>` for compact, token-efficient JSON serialization
+- :class:`AgentSearchInput <agentconnect.team.directory.search.AgentSearchInput>` for query parameters
+- :func:`populate_search_result_item <agentconnect.team.directory.search.populate_search_result_item>` to convert raw ``(AgentRegistration, score)`` pairs into structured results
+- :class:`AgentSearchOutput <agentconnect.team.directory.search.AgentSearchOutput>` for compact, token-efficient JSON serialization
 
 Two primary patterns: using the registry as a RAG source to enrich LLM prompts, and wrapping it as a tool for a different AI framework.
 
@@ -378,9 +378,9 @@ Any agent registered via ``hub.register_agent()`` gets ``self.registry`` set aut
 
 .. code-block:: python
 
-    from agentconnect.core.agent import BaseAgent
+    from agentconnect.agent.base import BaseAgent
     from agentconnect.core.message import Message
-    from agentconnect.core.registry.search import (
+    from agentconnect.team.directory.search import (
         AgentSearchInput,
         AgentSearchOutput,
         populate_search_result_item,
@@ -412,7 +412,7 @@ Any agent registered via ``hub.register_agent()`` gets ``self.registry`` set aut
             # Pass system_prompt and message.content to your LLM call
             ...
 
-:class:`AgentSearchOutput.__str__() <agentconnect.core.registry.search.AgentSearchOutput>` returns compact JSON ready to paste into a prompt. Use ``output_detail="summary"`` for routing decisions and ``"capabilities"`` when the LLM needs the full capability list to choose correctly.
+:class:`AgentSearchOutput.__str__() <agentconnect.team.directory.search.AgentSearchOutput>` returns compact JSON ready to paste into a prompt. Use ``output_detail="summary"`` for routing decisions and ``"capabilities"`` when the LLM needs the full capability list to choose correctly.
 
 **Building a search tool for a different framework**
 
@@ -421,8 +421,8 @@ If you are building an agent with Google ADK, OpenAI Agents SDK, or another fram
 .. code-block:: python
 
     from google.adk.agents import Agent
-    from agentconnect.core.agent import BaseAgent
-    from agentconnect.core.registry.search import (
+    from agentconnect.agent.base import BaseAgent
+    from agentconnect.team.directory.search import (
         AgentSearchInput,
         AgentSearchOutput,
         populate_search_result_item,
@@ -488,4 +488,4 @@ Next Steps
 - :doc:`../../systems/agent_network_setup` — build a complete multi-agent system with local discovery
 - :doc:`../../systems/agent_toolbox` — enable agents to find and call each other autonomously
 - :doc:`../../integrations/mcp/discovery_mcp` — expose local discovery to MCP-compatible clients (Cursor, Claude Desktop)
-- `Registry README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/core/registry/README.md>`_ — internals, advanced configuration, and dependency setup
+- `Registry README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/team/directory/README.md>`_ — internals, advanced configuration, and dependency setup

@@ -170,7 +170,7 @@ await human.start_interaction(ai_agent)
 
 ```python
 from agentconnect.core.message import Message
-from agentconnect.core.types import MessageType
+from agentconnect.core.types import MessageKind
 
 # Create a signed message
 message = Message.create(
@@ -178,7 +178,7 @@ message = Message.create(
     receiver_id="research_agent",
     content="What can you tell me about quantum computing?",
     sender_identity=human.identity,  # Message is cryptographically signed
-    message_type=MessageType.TEXT
+    kind=MessageKind.EVENT
 )
 
 # Agent autonomously processes the message and may collaborate with other agents as needed
@@ -190,8 +190,8 @@ response = await ai_agent.process_message(message)
 Agents connect to the decentralized network through the `CommunicationHub`:
 
 ```python
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 
 # Create registry and hub for the decentralized network
 registry = AgentRegistry()
@@ -239,7 +239,7 @@ if not message.verify(agent.identity):
         receiver_id=message.sender_id,
         content="Message verification failed. Communication rejected.",
         sender_identity=agent.identity,
-        message_type=MessageType.ERROR,
+        kind=MessageKind.ERROR,
         metadata={"error_type": "security_verification_failed"}
     )
 ```

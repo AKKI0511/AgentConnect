@@ -11,7 +11,7 @@ Complete :doc:`../../../installation` before starting. Read :doc:`../../core_con
 What Is Remote Discovery
 ------------------------
 
-Remote discovery runs the same :class:`AgentRegistry <agentconnect.core.registry.AgentRegistry>` you know from local discovery but as a standalone server accessible over HTTP. Agents in separate processes, containers, or machines all connect to the same server and share one discovery space. The :class:`RegistryAPIClient <agentconnect.clients.RegistryAPIClient>` mirrors the ``AgentRegistry`` interface so your application code works identically regardless of which backend you use.
+Remote discovery runs the same :class:`AgentRegistry <agentconnect.team.directory.AgentRegistry>` you know from local discovery but as a standalone server accessible over HTTP. Agents in separate processes, containers, or machines all connect to the same server and share one discovery space. The :class:`RegistryAPIClient <agentconnect.index.RegistryAPIClient>` mirrors the ``AgentRegistry`` interface so your application code works identically regardless of which backend you use.
 
 .. admonition:: At a glance
    :class: tip
@@ -123,7 +123,7 @@ The variables you will touch most often:
 
 **Deriving any env variable from the API reference**
 
-Every field in :class:`RegistryAPISettings <agentconnect.servers.config.RegistryAPISettings>` maps to an env variable by the same rule:
+Every field in :class:`RegistryAPISettings <agentconnect.config.servers.RegistryAPISettings>` maps to an env variable by the same rule:
 
 - prefix with ``AGENTCONNECT_REGISTRY_``
 - replace ``.`` (dot path separators) with ``__`` (double underscore)
@@ -245,13 +245,13 @@ The section also accepts timeout, retry, and connection pool fields. All have se
 Using RegistryAPIClient
 ------------------------
 
-The :class:`RegistryAPIClient <agentconnect.clients.RegistryAPIClient>` provides the same interface as the local ``AgentRegistry``. Use it as an async context manager or manage its lifetime explicitly.
+The :class:`RegistryAPIClient <agentconnect.index.RegistryAPIClient>` provides the same interface as the local ``AgentRegistry``. Use it as an async context manager or manage its lifetime explicitly.
 
 **Context manager (recommended)**
 
 .. code-block:: python
 
-    from agentconnect.clients import RegistryAPIClient
+    from agentconnect.index import RegistryAPIClient
 
     async with RegistryAPIClient() as client:
         # client is open for the duration of the block
@@ -272,13 +272,13 @@ Pass ``base_url`` explicitly when the target server differs from ``agentconnect.
 Registering Agents
 ^^^^^^^^^^^^^^^^^^
 
-Pass a fully constructed :class:`AgentRegistration <agentconnect.core.registry.registration.AgentRegistration>` to ``client.register()``:
+Pass a fully constructed :class:`AgentRegistration <agentconnect.team.directory.registration.AgentRegistration>` to ``client.register()``:
 
 .. code-block:: python
 
     import asyncio
-    from agentconnect.clients import RegistryAPIClient
-    from agentconnect.core.registry import AgentRegistration
+    from agentconnect.index import RegistryAPIClient
+    from agentconnect.team.directory import AgentRegistration
     from agentconnect.core.types import (
         AgentIdentity,
         AgentType,
@@ -326,7 +326,7 @@ To remove an agent:
 .. admonition:: Prefer hub.register for most application flows
    :class: note
 
-   You rarely need to build an :class:`AgentRegistration <agentconnect.core.registry.registration.AgentRegistration>` by hand. Passing a ``RegistryAPIClient`` to :class:`CommunicationHub <agentconnect.communication.CommunicationHub>` and calling ``hub.register_agent(agent)`` reads the agent's profile and identity automatically. See `Using with CommunicationHub`_ below.
+   You rarely need to build an :class:`AgentRegistration <agentconnect.team.directory.registration.AgentRegistration>` by hand. Passing a ``RegistryAPIClient`` to :class:`CommunicationHub <agentconnect.team.CommunicationHub>` and calling ``hub.register_agent(agent)`` reads the agent's profile and identity automatically. See `Using with CommunicationHub`_ below.
 
 Finding Agents
 ^^^^^^^^^^^^^^
@@ -342,7 +342,7 @@ Exact match against registered capability names. Falls back to semantic search a
     for agent in agents:
         print(f"{agent.name}: {agent.summary}")
 
-Full parameter reference: :meth:`RegistryAPIClient.get_by_capability <agentconnect.clients.RegistryAPIClient.get_by_capability>`.
+Full parameter reference: :meth:`RegistryAPIClient.get_by_capability <agentconnect.index.RegistryAPIClient.get_by_capability>`.
 
 By Description (Semantic Search)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -377,7 +377,7 @@ Add a ``filters`` dict to restrict the candidate set before semantic scoring. Al
 
 The ``filters`` parameter on the client currently supports ``tags``. For broader filter support, use the HTTP API directly (see `HTTP API Reference`_ below).
 
-Full parameter reference: :meth:`RegistryAPIClient.get_by_capability_semantic <agentconnect.clients.RegistryAPIClient.get_by_capability_semantic>`.
+Full parameter reference: :meth:`RegistryAPIClient.get_by_capability_semantic <agentconnect.index.RegistryAPIClient.get_by_capability_semantic>`.
 
 .. admonition:: Semantic search returns no results
    :class: tip
@@ -433,7 +433,7 @@ Pass a dict of fields to update. Only the supplied fields change; everything els
 Using with CommunicationHub
 ----------------------------
 
-:class:`CommunicationHub <agentconnect.communication.CommunicationHub>` accepts either ``AgentRegistry`` (local) or ``RegistryAPIClient`` (remote). Swap the registry backend without touching any agent or hub logic:
+:class:`CommunicationHub <agentconnect.team.CommunicationHub>` accepts either ``AgentRegistry`` (local) or ``RegistryAPIClient`` (remote). Swap the registry backend without touching any agent or hub logic:
 
 .. code-block:: python
 
@@ -442,8 +442,8 @@ Using with CommunicationHub
     from dotenv import load_dotenv
 
     from agentconnect.prebuilt import AIAgent
-    from agentconnect.clients import RegistryAPIClient
-    from agentconnect.communication import CommunicationHub
+    from agentconnect.index import RegistryAPIClient
+    from agentconnect.team import CommunicationHub
     from agentconnect.core.types import (
         AgentIdentity,
         AgentProfile,
@@ -517,7 +517,7 @@ The endpoint you'll use directly most often is the semantic search:
         "output_detail": "summary"
       }'
 
-The request schema is :class:`AgentSearchInput <agentconnect.core.registry.search.AgentSearchInput>` and the response is :class:`AgentSearchOutput <agentconnect.core.registry.search.AgentSearchOutput>`. The ``output_detail`` field accepts ``"minimal"``, ``"summary"``, ``"capabilities"``, or ``"full"``.
+The request schema is :class:`AgentSearchInput <agentconnect.team.directory.search.AgentSearchInput>` and the response is :class:`AgentSearchOutput <agentconnect.team.directory.search.AgentSearchOutput>`. The ``output_detail`` field accepts ``"minimal"``, ``"summary"``, ``"capabilities"``, or ``"full"``.
 
 Programmatic Server Usage
 --------------------------
@@ -526,8 +526,8 @@ For testing or custom deployments, construct the FastAPI app directly instead of
 
 .. code-block:: python
 
-    from agentconnect.servers.config import RegistryAPISettings
-    from agentconnect.servers.registry_api_server import create_registry_api_app
+    from agentconnect.config.servers import RegistryAPISettings
+    from agentconnect.index.service import create_registry_api_app
 
     settings = RegistryAPISettings(
         host="0.0.0.0",
@@ -562,7 +562,7 @@ Clone the repository on your target machine, install dependencies, and copy the 
     git clone https://github.com/AKKI0511/AgentConnect.git
     cd AgentConnect
     poetry install
-    cp agentconnect/servers/.env.example .env
+    cp agentconnect/index/.env.example .env
 
 Edit ``.env``. Set ``AGENTCONNECT_REGISTRY_HOST=0.0.0.0`` so the server accepts connections from outside localhost, and configure the Qdrant variables for your chosen deployment mode (see `Vector Search Deployment Mode`_ above).
 
@@ -584,7 +584,7 @@ Distributed Agent Discovery
 
    A dedicated guide for building and operating distributed networks of agents across multiple processes and teams is on the roadmap. This section covers discovery specifically. Full distributed orchestration patterns will be covered there.
 
-Any :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` subclass can register with a hub backed by ``RegistryAPIClient``. Every registered agent, regardless of its type or which process it runs in, is indexed in the same shared registry.
+Any :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` subclass can register with a hub backed by ``RegistryAPIClient``. Every registered agent, regardless of its type or which process it runs in, is indexed in the same shared registry.
 
 In the **private team model**, each process runs a self-contained group of independent agents collaborating inside their own hub. Agents across processes share nothing, yet every team's agents are visible in the shared registry. Teams scale independently without any coupling between them.
 
@@ -670,8 +670,8 @@ Any MCP-compatible client (Cursor, Claude Desktop, Google ADK, LangGraph, the Op
        from dotenv import load_dotenv
 
        from agentconnect.prebuilt import AIAgent
-       from agentconnect.clients import RegistryAPIClient
-       from agentconnect.communication import CommunicationHub
+       from agentconnect.index import RegistryAPIClient
+       from agentconnect.team import CommunicationHub
        from agentconnect.core.types import (
            AgentIdentity, AgentProfile, AgentType,
            Capability, ModelName, ModelProvider, Skill,
@@ -767,8 +767,8 @@ Any MCP-compatible client (Cursor, Claude Desktop, Google ADK, LangGraph, the Op
        from dotenv import load_dotenv
 
        from agentconnect.prebuilt import AIAgent
-       from agentconnect.clients import RegistryAPIClient
-       from agentconnect.communication import CommunicationHub
+       from agentconnect.index import RegistryAPIClient
+       from agentconnect.team import CommunicationHub
        from agentconnect.core.types import (
            AgentIdentity, AgentProfile, AgentType,
            Capability, ModelName, ModelProvider,
@@ -833,7 +833,7 @@ Each ``RegistryAPIClient`` instance is independent. If your system spans multipl
 .. code-block:: python
 
     import asyncio
-    from agentconnect.clients import RegistryAPIClient
+    from agentconnect.index import RegistryAPIClient
 
 
     async def federated_search(
@@ -896,5 +896,5 @@ Next Steps
 - :doc:`../../systems/agent_network_setup` — build a complete multi-service system using remote discovery
 - :doc:`../../configuration/sdk_configuration` — full ``agentconnect.yaml`` reference and client settings
 - :doc:`discovery_registry_local` — compare with in-process local discovery
-- `Servers README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/servers/README.md>`_ — complete server environment variable reference
-- :class:`RegistryAPISettings <agentconnect.servers.config.RegistryAPISettings>` / :class:`RegistryClientSettings <agentconnect.config.models.RegistryClientSettings>` — full configuration field reference in the API docs
+- `Servers README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/index/README.md>`_ — complete server environment variable reference
+- :class:`RegistryAPISettings <agentconnect.config.servers.RegistryAPISettings>` / :class:`RegistryClientSettings <agentconnect.config.models.RegistryClientSettings>` — full configuration field reference in the API docs

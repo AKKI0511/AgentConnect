@@ -70,8 +70,8 @@ The minimum to get two agents talking:
     from dotenv import load_dotenv
 
     from agentconnect.prebuilt import AIAgent
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.types import AgentIdentity, ModelName, ModelProvider
 
     async def main():
@@ -170,13 +170,13 @@ the response programmatically — use ``send_message_and_wait_response``:
 
 .. code-block:: python
 
-    from agentconnect.core.types import MessageType
+    from agentconnect.core.types import MessageKind
 
     response = await hub.send_message_and_wait_response(
         sender_id="coordinator",
         receiver_id="analyst",
         content="Run the Q4 revenue report.",
-        message_type=MessageType.REQUEST_COLLABORATION,
+        kind=MessageKind.REQUEST,
         metadata={"priority": "high", "quarter": "Q4-2025"},
         timeout=180,
     )
@@ -191,9 +191,9 @@ Any ``BaseAgent`` subclass registers and communicates the same way as ``AIAgent`
 
 .. code-block:: python
 
-    from agentconnect.core.agent import BaseAgent
+    from agentconnect.agent.base import BaseAgent
     from agentconnect.core.message import Message
-    from agentconnect.core.types import AgentIdentity, AgentType, InteractionMode, MessageType
+    from agentconnect.core.types import AgentIdentity, AgentType, InteractionMode, MessageKind
 
     class SummarizerAgent(BaseAgent):
 
@@ -209,7 +209,7 @@ Any ``BaseAgent`` subclass registers and communicates the same way as ``AIAgent`
             await self.send_message(
                 receiver_id=message.sender_id,
                 content=f"Summary: {message.content[:100]}...",
-                message_type=MessageType.COLLABORATION_RESPONSE,
+                kind=MessageKind.RESPONSE,
                 metadata={"response_to": message.metadata.get("request_id")},
             )
 
@@ -228,7 +228,7 @@ Called for every message addressed to a specific agent:
 .. code-block:: python
 
     async def on_writer_message(message: Message) -> None:
-        print(f"[{message.message_type.value}] → writer | {message.content[:80]}")
+        print(f"[{message.kind.value}] → writer | {message.content[:80]}")
 
     hub.add_message_handler("writer", on_writer_message)
     hub.remove_message_handler("writer", on_writer_message)
@@ -245,7 +245,7 @@ Called for every message that passes through the hub:
             "id": message.id,
             "from": message.sender_id,
             "to": message.receiver_id,
-            "type": message.message_type.value,
+            "type": message.kind.value,
             "ts": message.timestamp.isoformat(),
         })
 
@@ -307,7 +307,7 @@ cross-process registry. Routing stays local:
 
 .. code-block:: python
 
-    from agentconnect.clients.registry_client import RegistryAPIClient
+    from agentconnect.index.client import RegistryAPIClient
 
     registry = RegistryAPIClient(base_url="http://registry.internal:8000")
     hub = CommunicationHub(registry)
@@ -341,7 +341,7 @@ global handler to trace multi-hop delegations:
 .. code-block:: python
 
     async def trace_chain(message: Message) -> None:
-        if message.message_type == MessageType.REQUEST_COLLABORATION:
+        if message.kind == MessageKind.REQUEST:
             chain = message.metadata.get("collaboration_chain", [])
             print(" → ".join(chain + [message.receiver_id]))
 
@@ -368,7 +368,7 @@ sending.
 **Handler stops firing**
 
 Handlers that raise unhandled exceptions are silently removed. Check logs for ``handler error`` from
-``agentconnect.communication.hub``.
+``agentconnect.team.runtime``.
 
 **Message history is always empty**
 

@@ -182,9 +182,9 @@ other framework, subclass ``BaseAgent`` and delegate to your existing logic insi
 
 .. code-block:: python
 
-   from agentconnect.core.agent import BaseAgent
+   from agentconnect.agent.base import BaseAgent
    from agentconnect.core.message import Message
-   from agentconnect.core.types import MessageType
+   from agentconnect.core.types import MessageKind
 
    class MyLangGraphAgent(BaseAgent):
        def __init__(self, agent_id, identity, profile, interaction_modes, graph):
@@ -212,7 +212,7 @@ other framework, subclass ``BaseAgent`` and delegate to your existing logic insi
                receiver_id=message.sender_id,
                content=str(result.get("output", result)),
                sender_identity=self.identity,
-               message_type=MessageType.TEXT,
+               kind=MessageKind.EVENT,
            )
 
 The ``await super().process_message(message)`` call is mandatory and must come first. Skipping
@@ -235,8 +235,8 @@ One registry and one hub serve all agents in the same process:
 
 .. code-block:: python
 
-   from agentconnect.core.registry import AgentRegistry
-   from agentconnect.communication import CommunicationHub
+   from agentconnect.team.directory import AgentRegistry
+   from agentconnect.team import CommunicationHub
 
    registry = AgentRegistry()
    hub = CommunicationHub(registry)
@@ -306,13 +306,13 @@ To trigger work programmatically, send a message from one agent to another direc
 
 .. code-block:: python
 
-   from agentconnect.core.types import MessageType
+   from agentconnect.core.types import MessageKind
 
    # Planner delegates a research task to the researcher
    await planner.send_message(
        receiver_id=researcher.agent_id,
        content="Find the three most cited papers on transformer architecture from 2023.",
-       message_type=MessageType.REQUEST_COLLABORATION,
+       kind=MessageKind.REQUEST,
    )
 
 ``send_message`` is fire-and-forget; the receiving agent processes and replies asynchronously
@@ -330,7 +330,7 @@ interrupting delivery:
    async def log_flow(message: Message) -> None:
        print(
            f"{message.sender_id} -> {message.receiver_id} "
-           f"[{message.message_type.value}]"
+           f"[{message.kind.value}]"
        )
 
    hub.add_global_handler(log_flow)
@@ -357,8 +357,8 @@ Two AI agents and one human operator, fully wired:
    from dotenv import load_dotenv
 
    from agentconnect.prebuilt import AIAgent, HumanAgent
-   from agentconnect.communication import CommunicationHub
-   from agentconnect.core.registry import AgentRegistry
+   from agentconnect.team import CommunicationHub
+   from agentconnect.team.directory import AgentRegistry
    from agentconnect.core.types import (
        AgentIdentity,
        AgentProfile,

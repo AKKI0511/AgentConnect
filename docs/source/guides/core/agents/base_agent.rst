@@ -16,7 +16,7 @@ Before you start, complete the :doc:`../../../installation` setup. If you're new
 What Is BaseAgent
 -----------------
 
-:class:`BaseAgent <agentconnect.core.agent.BaseAgent>` is the abstract foundation for all agents in AgentConnect. It defines the core functionality every agent must implement: identity management, message handling, lifecycle control, and secure communication.
+:class:`BaseAgent <agentconnect.agent.base.BaseAgent>` is the abstract foundation for all agents in AgentConnect. It defines the core functionality every agent must implement: identity management, message handling, lifecycle control, and secure communication.
 
 All agents—whether AI-powered (:class:`AIAgent <agentconnect.prebuilt.AIAgent>`), human-driven (:class:`HumanAgent <agentconnect.prebuilt.HumanAgent>`), or custom implementations—inherit from ``BaseAgent`` and override its abstract methods to provide specialized behavior.
 
@@ -55,12 +55,12 @@ Implement
 - ``process_message(message) -> Message | None``: Define how your agent reacts to incoming messages.
 
   - Best practice: call ``base_response = await super().process_message(message)`` first to let the base class handle verification, cooldown, and built-ins; if it returns a message, return that immediately.
-  - If you return a ``Message``, it will be sent back to the sender (except ``MessageType.IGNORE``, which is not sent). If you return ``None``, the framework assumes you already handled messaging (or intentionally ignored).
+  - If you return a ``Message``, it will be sent back to the sender (except ``MessageKind.EVENT``, which is not sent). If you return ``None``, the framework assumes you already handled messaging (or intentionally ignored).
 
 Use
 ^^^
 
-- ``await send_message(receiver_id, content, message_type=..., metadata=...)``: Send messages to other agents at any time (inside or outside ``process_message``) for multi-step or proactive workflows.
+- ``await send_message(receiver_id, content, kind=..., metadata=...)``: Send messages to other agents at any time (inside or outside ``process_message``) for multi-step or proactive workflows.
 
 .. admonition:: Sending is currently fire-and-forget
    :class: important
@@ -113,7 +113,7 @@ Subclass ``BaseAgent`` and implement the ``process_message()`` method:
 
 .. code-block:: python
 
-    from agentconnect.core.agent import BaseAgent
+    from agentconnect.agent.base import BaseAgent
     from agentconnect.core.message import Message
     from agentconnect.core.types import (
         AgentIdentity,
@@ -121,7 +121,7 @@ Subclass ``BaseAgent`` and implement the ``process_message()`` method:
         AgentType,
         Capability,
         InteractionMode,
-        MessageType,
+        MessageKind,
     )
     
     class EchoAgent(BaseAgent):
@@ -163,7 +163,7 @@ Subclass ``BaseAgent`` and implement the ``process_message()`` method:
                 receiver_id=message.sender_id,
                 content=f"Echo: {message.content}",
                 sender_identity=self.identity,
-                message_type=MessageType.TEXT,
+                kind=MessageKind.EVENT,
             )
 
 Step 2: Register and Run
@@ -172,8 +172,8 @@ Step 2: Register and Run
 .. code-block:: python
 
     import asyncio
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.types import AgentIdentity
     
     async def main():
@@ -293,7 +293,7 @@ Stateless agents process each message independently:
             receiver_id=message.sender_id,
             content=result,
             sender_identity=self.identity,
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
         )
 
 Stateful agents track conversation history:
@@ -326,7 +326,7 @@ Stateful agents track conversation history:
             receiver_id=sender_id,
             content=result,
             sender_identity=self.identity,
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
         )
 
 Sending Multiple Messages
@@ -345,7 +345,7 @@ For tasks requiring multiple responses, send messages directly:
         await self.send_message(
             receiver_id=message.sender_id,
             content="Processing your request...",
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
         )
         
         # Perform work
@@ -355,7 +355,7 @@ For tasks requiring multiple responses, send messages directly:
         await self.send_message(
             receiver_id=message.sender_id,
             content=result,
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
         )
         
         # Return None since we already sent messages
@@ -427,7 +427,7 @@ Pattern A — one-shot reply with correlation:
             receiver_id=message.sender_id,
             content=content,
             sender_identity=self.identity,
-            message_type=MessageType.RESPONSE,
+            kind=MessageKind.RESPONSE,
             metadata={"response_to": request_id} if request_id else None,
         )
 
@@ -446,7 +446,7 @@ Pattern B — ack then final (manual response_to on second send):
         await self.send_message(
             receiver_id=message.sender_id,
             content="Working on it...",
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
         )
 
         # ... perform work ...
@@ -456,7 +456,7 @@ Pattern B — ack then final (manual response_to on second send):
         await self.send_message(
             receiver_id=message.sender_id,
             content=result,
-            message_type=MessageType.RESPONSE,
+            kind=MessageKind.RESPONSE,
             metadata={"response_to": request_id} if request_id else None,
         )
 
@@ -471,7 +471,7 @@ Pattern C — collaboration request handling:
         if base:
             return base
 
-        if message.message_type == MessageType.REQUEST_COLLABORATION:
+        if message.kind == MessageKind.REQUEST:
             # ... perform collaboration task ...
             reply = do_collaboration_logic(message.content)
             return Message.create(
@@ -479,7 +479,7 @@ Pattern C — collaboration request handling:
                 receiver_id=message.sender_id,
                 content=reply,
                 sender_identity=self.identity,
-                message_type=MessageType.COLLABORATION_RESPONSE,
+                kind=MessageKind.RESPONSE,
                 metadata={"response_to": (message.metadata or {}).get("request_id")},
             )
         return None
@@ -512,7 +512,7 @@ Use a stable thread id to group multiple request/response messages with the same
         await self.send_message(
             receiver_id=message.sender_id,
             content="Noted. Continuing in this thread.",
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
             metadata={"thread_id": thread_id},  # app-level; hub ignores for now
         )
         return None
@@ -536,7 +536,7 @@ Example branch:
         if base:
             return base
 
-        if message.message_type == MessageType.COOLDOWN:
+        if message.kind == MessageKind.EVENT:
             delay = int((message.metadata or {}).get("cooldown_remaining", 5))
             # schedule a retry in your own task logic
             return Message.create(
@@ -544,20 +544,20 @@ Example branch:
                 receiver_id=message.sender_id,
                 content=f"Okay, I will retry after {delay}s.",
                 sender_identity=self.identity,
-                message_type=MessageType.IGNORE,
+                kind=MessageKind.EVENT,
             )
 
-        if message.message_type == MessageType.ERROR:
+        if message.kind == MessageKind.ERROR:
             # decide a fallback; example: inform a human or pick another collaborator
             return Message.create(
                 sender_id=self.agent_id,
                 receiver_id=message.sender_id,
                 content="Acknowledged error. I'll adjust and try a different approach.",
                 sender_identity=self.identity,
-                message_type=MessageType.IGNORE,
+                kind=MessageKind.EVENT,
             )
 
-        if message.message_type == MessageType.IGNORE:
+        if message.kind == MessageKind.EVENT:
             # peer chose to ignore; end thread gracefully
             self.end_conversation(message.sender_id)
             return None

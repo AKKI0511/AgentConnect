@@ -1,13 +1,13 @@
 ## AgentConnect SDK Configuration
 
-SDK configuration for agent developers: define `agentconnect.yaml` and optional runtime overrides; servers are configured separately via environment variables in [AgentConnect Servers](../servers/README.md).
+SDK configuration for agent developers: define `agentconnect.yaml` and optional runtime overrides; servers are configured separately via environment variables in [AgentConnect Servers](../index/README.md).
 
 > Important: SDK uses YAML (loaded into `agentconnect.config.settings`). Servers are env-only and do not read YAML. Keep developer (YAML) and operator (env) configuration separate.
 
 ## Configuration Precedence
 
 - Runtime kwargs > agentconnect.yaml > model defaults (Pydantic).
-- Environment variables are not read by the global SDK settings. They are reserved for secrets used by subsystems (for example: `QDRANT_API_KEY`, `CDP_API_KEY_NAME`, `CDP_API_KEY_PRIVATE_KEY`) and for server configuration in `agentconnect/servers/`.
+- Environment variables are not read by the global SDK settings. They are reserved for secrets used by subsystems (for example: `QDRANT_API_KEY`, `CDP_API_KEY_NAME`, `CDP_API_KEY_PRIVATE_KEY`) and for server configuration in `agentconnect/index/`.
 
 ## How to Use
 
@@ -158,11 +158,11 @@ Note: CLI commands re-read configuration fresh each run using `load_settings()` 
 
 - `pydantic` (required)
 - `PyYAML` (optional, for YAML pretty-print and CLI)
-- SDK config does not depend on `pydantic-settings`; servers do (see [AgentConnect Servers](../servers/README.md)).
+- SDK config does not depend on `pydantic-settings`; servers do (see [AgentConnect Servers](../index/README.md)).
 
 
 ## Related Documentation
 
-- **Server Deployment**: See [AgentConnect Servers](../servers/README.md) for deploying registry infrastructure
-- **Core Registry**: See [AgentConnect Core Registry](../core/registry/README.md) for registry functionality
+- **Server Deployment**: See [AgentConnect Servers](../index/README.md) for deploying registry infrastructure
+- **Core Registry**: See [AgentConnect Core Registry](../team/directory/README.md) for registry functionality
 - **Agent Development**: See main documentation for building agents with AgentConnect

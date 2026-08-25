@@ -11,14 +11,14 @@ Before you start, complete the :doc:`../../../installation` setup. If you're new
 What Is AIAgent
 ---------------
 
-:class:`AIAgent <agentconnect.prebuilt.AIAgent>` is a ready-to-use AI-powered agent that extends :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` with language model capabilities. It provides intelligent message processing using LLMs from providers like OpenAI, Anthropic, Google, and Groq, and includes built-in collaboration tools for agent discovery and agent-to-agent (A2A) communication.
+:class:`AIAgent <agentconnect.prebuilt.AIAgent>` is a ready-to-use AI-powered agent that extends :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` with language model capabilities. It provides intelligent message processing using LLMs from providers like OpenAI, Anthropic, Google, and Groq, and includes built-in collaboration tools for agent discovery and agent-to-agent (A2A) communication.
 
 ``AIAgent`` is the recommended choice when you need an autonomous agent that generates intelligent responses, collaborates with other agents, and integrates seamlessly with the AgentConnect ecosystem—without building your own orchestration logic.
 
 .. admonition:: At a glance
    :class: tip
 
-   - Ready-to-use: Built on :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` with LangChain/LangGraph workflows
+   - Ready-to-use: Built on :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` with LangChain/LangGraph workflows
    - Use ``.chat()`` for direct queries with or without hub/registry setup
    - Auto-enables collaboration: Built-in tools (search/send/check) activate when connected to hub + registry
    - Supports customization: Add your own LangChain tools, configure rate limits, enable payments
@@ -55,8 +55,8 @@ The ``.chat()`` method provides a simple interface for interacting with the agen
     import os
     from dotenv import load_dotenv
     from agentconnect.prebuilt import AIAgent
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 
     async def main():
@@ -101,10 +101,10 @@ For custom message handling and multi-agent coordination, use ``send_message()``
 
     import asyncio
     from agentconnect.prebuilt import AIAgent
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.message import Message
-    from agentconnect.core.types import AgentIdentity, MessageType, ModelProvider, ModelName
+    from agentconnect.core.types import AgentIdentity, MessageKind, ModelProvider, ModelName
     import os
     
     async def main():
@@ -126,7 +126,7 @@ For custom message handling and multi-agent coordination, use ``send_message()``
         await agent.send_message(
             receiver_id="other_agent",  # An agent with this ID must be registered with the hub
             content="Please analyze this data",
-            message_type=MessageType.REQUEST_COLLABORATION,
+            kind=MessageKind.REQUEST,
         )
         
         # Start processing loop - Receive incoming messages and send responses
@@ -135,7 +135,7 @@ For custom message handling and multi-agent coordination, use ``send_message()``
     if __name__ == "__main__":
         asyncio.run(main())
 
-``AIAgent`` inherits ``send_message()`` and ``process_message()`` from :class:`BaseAgent <agentconnect.core.agent.BaseAgent>`. For advanced patterns like overriding ``process_message()`` with ``super()`` interplay, correlation handling, and multi-message replies, see :ref:`overriding_process_message`.
+``AIAgent`` inherits ``send_message()`` and ``process_message()`` from :class:`BaseAgent <agentconnect.agent.base.BaseAgent>`. For advanced patterns like overriding ``process_message()`` with ``super()`` interplay, correlation handling, and multi-message replies, see :ref:`overriding_process_message`.
 
 Interactive CLI
 ^^^^^^^^^^^^^^^

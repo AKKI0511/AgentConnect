@@ -47,8 +47,8 @@ The simplest way to set up a Telegram agent is as follows:
     
     from agentconnect.prebuilt.telegram import TelegramAIAgent
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
-    from agentconnect.core.registry import AgentRegistry
-    from agentconnect.communication.hub import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
+    from agentconnect.team.runtime import CommunicationHub
     
     # Load environment variables (assuming you've stored your tokens in a .env file)
     load_dotenv()

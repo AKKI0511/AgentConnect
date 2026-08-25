@@ -22,8 +22,8 @@ First, let's create a new Python file (e.g., ``my_first_agent.py``) and add the 
     from dotenv import load_dotenv
     
     from agentconnect.prebuilt import AIAgent, HumanAgent
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.types import (
         AgentIdentity,
         Capability,
@@ -201,8 +201,8 @@ Complete Example
        from dotenv import load_dotenv
        
        from agentconnect.prebuilt import AIAgent, HumanAgent
-       from agentconnect.communication import CommunicationHub
-       from agentconnect.core.registry import AgentRegistry
+       from agentconnect.team import CommunicationHub
+       from agentconnect.team.directory import AgentRegistry
        from agentconnect.core.types import (
            AgentIdentity,
            Capability,

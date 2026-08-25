@@ -402,8 +402,8 @@ Register your agent with the hub so it is indexed for discovery:
 
 .. code-block:: python
 
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
 
     registry = AgentRegistry()
     hub = CommunicationHub(registry)

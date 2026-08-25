@@ -48,7 +48,7 @@ Once you have created an agent, you can send messages to it:
 
    from agentconnect.prebuilt.human_agent import HumanAgent
    from agentconnect.core.message import Message
-   from agentconnect.core.types import MessageType
+   from agentconnect.core.types import MessageKind
 
    # Create a human agent
    human_agent = HumanAgent(
@@ -64,7 +64,7 @@ Once you have created an agent, you can send messages to it:
        receiver_id=ai_agent.agent_id,
        content="Hello, can you tell me what the capital of France is?",
        sender_identity=human_agent.identity,
-       message_type=MessageType.TEXT,
+       kind=MessageKind.EVENT,
    )
 
    # Process the message
@@ -82,8 +82,8 @@ AgentConnect provides a communication hub for agent interaction:
 
 .. code-block:: python
 
-   from agentconnect.core.registry import AgentRegistry
-   from agentconnect.communication.hub import CommunicationHub
+   from agentconnect.team.directory import AgentRegistry
+   from agentconnect.team.runtime import CommunicationHub
 
    # Create registry and hub
    registry = AgentRegistry()
@@ -137,14 +137,14 @@ Here's a complete example that puts everything together:
    from agentconnect.prebuilt.ai_agent import AIAgent
    from agentconnect.prebuilt.human_agent import HumanAgent
    from agentconnect.core.message import Message
-   from agentconnect.core.registry import AgentRegistry
-   from agentconnect.communication.hub import CommunicationHub
+   from agentconnect.team.directory import AgentRegistry
+   from agentconnect.team.runtime import CommunicationHub
    from agentconnect.core.types import (
        ModelProvider,
        ModelName,
        AgentIdentity,
        InteractionMode,
-       MessageType,
+       MessageKind,
    )
    
    async def main():

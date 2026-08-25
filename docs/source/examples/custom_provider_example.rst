@@ -86,8 +86,8 @@ Once you've implemented your custom provider, you can use it with agents:
 
     from agentconnect.prebuilt import AIAgent
     from agentconnect.core.types import ModelProvider, ModelName, AgentIdentity, InteractionMode
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     
     # Create an agent registry and communication hub
     registry = AgentRegistry()

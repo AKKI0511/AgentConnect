@@ -135,11 +135,11 @@ consumed internally by every SDK component:
 
    * - Component
      - Settings path it reads
-   * - :class:`~agentconnect.clients.registry_client.RegistryAPIClient`
+   * - :class:`~agentconnect.index.client.RegistryAPIClient`
      - ``settings.clients.registry``
-   * - :class:`~agentconnect.core.registry.AgentRegistry`
+   * - :class:`~agentconnect.team.directory.AgentRegistry`
      - ``settings.registry.vector_search``
-   * - :class:`~agentconnect.communication.hub.CommunicationHub`
+   * - :class:`~agentconnect.team.runtime.CommunicationHub`
      - ``settings.communication.enable_message_history``
    * - MCP registry server
      - ``settings.mcp.agent_discovery``

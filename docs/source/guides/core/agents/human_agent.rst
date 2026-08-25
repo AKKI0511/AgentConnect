@@ -11,7 +11,7 @@ Before you start, complete the :doc:`../../../installation` setup. If you're new
 What Is HumanAgent
 ------------------
 
-:class:`HumanAgent <agentconnect.prebuilt.HumanAgent>` is a ready-to-use, terminal-based agent that extends :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` to bring humans into agent workflows. It provides a simple CLI for real-time input/output and behaves as a first-class agent in the ecosystem (registration, routing, verification).
+:class:`HumanAgent <agentconnect.prebuilt.HumanAgent>` is a ready-to-use, terminal-based agent that extends :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` to bring humans into agent workflows. It provides a simple CLI for real-time input/output and behaves as a first-class agent in the ecosystem (registration, routing, verification).
 
 .. admonition:: At a glance
    :class: tip
@@ -29,7 +29,7 @@ Use ``HumanAgent`` when you need:
 - Interactive debugging or demos with live agents in a terminal
 - A human participant in a multi-agent workflow
 
-Use a custom :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` subclass instead when you need a non-terminal interface (web UI, Slack, email) or fully custom input/response logic. See :ref:`custom_human_agent_impl` for how to extend ``HumanAgent`` for those cases.
+Use a custom :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` subclass instead when you need a non-terminal interface (web UI, Slack, email) or fully custom input/response logic. See :ref:`custom_human_agent_impl` for how to extend ``HumanAgent`` for those cases.
 
 How To Use It
 -------------
@@ -46,8 +46,8 @@ Start a dedicated, interactive terminal session between a human and an AI agent:
     import asyncio, os
     from dotenv import load_dotenv
     from agentconnect.prebuilt import AIAgent, HumanAgent
-    from agentconnect.communication import CommunicationHub
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
     from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
 
     async def main():
@@ -120,7 +120,7 @@ Register the human as a normal agent and start ``run()``. Any agent that knows t
     await ai.send_message(
         receiver_id="human_reviewer",
         content="I've completed my analysis. Please review and approve.",
-        message_type=MessageType.TEXT,
+        kind=MessageKind.EVENT,
     )
     # At this point, the human will see the message in their terminal
     # and will be prompted to respond. The script will wait at this point.
@@ -128,7 +128,7 @@ Register the human as a normal agent and start ``run()``. Any agent that knows t
 .. admonition:: Routing via hub
    :class: important
 
-   Agents do not need direct references to each other—messages are routed by ``agent_id`` through the :class:`CommunicationHub <agentconnect.communication.CommunicationHub>`.
+   Agents do not need direct references to each other—messages are routed by ``agent_id`` through the :class:`CommunicationHub <agentconnect.team.CommunicationHub>`.
 
 When a message arrives, the terminal displays the sender and content and prompts for a response. The human's reply is routed back through the hub to the sender.
 
@@ -162,7 +162,7 @@ Optional
 ^^^^^^^^
 
 - **organization** (*str*, optional): Organization or entity the human represents
-- **response_callbacks** (List[Callable], optional): Called after each ``send_message()`` with ``{"receiver_id", "content", "message_type", "timestamp"}``
+- **response_callbacks** (List[Callable], optional): Called after each ``send_message()`` with ``{"receiver_id", "content", "kind", "timestamp"}``
 
 **Effects**
 
@@ -294,7 +294,7 @@ Call ``super(HumanAgent, self)`` to jump directly to ``BaseAgent`` validation (s
 
     from agentconnect.prebuilt import HumanAgent
     from agentconnect.core.message import Message
-    from agentconnect.core.types import MessageType
+    from agentconnect.core.types import MessageKind
     from typing import Optional
 
     class CustomInterfaceAgent(HumanAgent):
@@ -313,7 +313,7 @@ Call ``super(HumanAgent, self)`` to jump directly to ``BaseAgent`` validation (s
                 receiver_id=message.sender_id,
                 content=response_text,
                 sender_identity=self.identity,
-                message_type=MessageType.TEXT,
+                kind=MessageKind.EVENT,
             )
 
         async def _get_response_from_custom_interface(
@@ -343,7 +343,7 @@ Example: Web-Based Approval Agent
        from typing import Optional
        from agentconnect.prebuilt import HumanAgent
        from agentconnect.core.message import Message
-       from agentconnect.core.types import AgentIdentity, MessageType
+       from agentconnect.core.types import AgentIdentity, MessageKind
 
        class WebApprovalAgent(HumanAgent):
            def __init__(
@@ -384,7 +384,7 @@ Example: Web-Based Approval Agent
                        receiver_id=message.sender_id,
                        content=response_content,
                        sender_identity=self.identity,
-                       message_type=MessageType.TEXT,
+                       kind=MessageKind.EVENT,
                    )
 
                except asyncio.TimeoutError:
@@ -394,7 +394,7 @@ Example: Web-Based Approval Agent
                        receiver_id=message.sender_id,
                        content="Approval request timed out",
                        sender_identity=self.identity,
-                       message_type=MessageType.ERROR,
+                       kind=MessageKind.ERROR,
                        metadata={"reason": "timeout"},
                    )
 
@@ -441,7 +441,7 @@ Implementation Notes
 When building a custom ``HumanAgent``:
 
 - Call ``await super(HumanAgent, self).process_message(message)`` first. Return its result immediately if non-``None``
-- Handle timeouts—return ``MessageType.ERROR`` with ``metadata={"reason": "timeout"}``
+- Handle timeouts—return ``MessageKind.ERROR`` with ``metadata={"reason": "timeout"}``
 - Clean up pending entries to prevent memory leaks
 
 .. _human_agent_roadmap:

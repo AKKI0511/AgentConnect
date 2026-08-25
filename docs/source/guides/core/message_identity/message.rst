@@ -6,7 +6,7 @@ Messages
 .. admonition:: Actively evolving interface
    :class: warning
 
-   The ``Message`` model and ``MessageType`` vocabulary are being redesigned as part of a planned v1 architecture. Several things will change before the API locks:
+   The ``Message`` model and ``MessageKind`` vocabulary are being redesigned as part of a planned v1 architecture. Several things will change before the API locks:
 
    - **Fewer, clearer message types.** The current 13-type set is being consolidated into a smaller, more intuitive vocabulary. Types that map to protocol internals will be removed from the developer surface.
    - **First-class correlation.** Request/response tracking currently relies on ``metadata["request_id"]`` / ``metadata["response_to"]`` conventions. These are moving to dedicated, typed fields on ``Message`` itself.
@@ -28,7 +28,7 @@ The most common pattern is constructing a reply inside ``process_message()``:
 .. code-block:: python
 
     from agentconnect.core.message import Message
-    from agentconnect.core.types import MessageType
+    from agentconnect.core.types import MessageKind
 
     async def process_message(self, message: Message) -> Message | None:
         base = await super().process_message(message)
@@ -40,7 +40,7 @@ The most common pattern is constructing a reply inside ``process_message()``:
             receiver_id=message.sender_id,
             content="Task complete.",
             sender_identity=self.identity,
-            message_type=MessageType.COLLABORATION_RESPONSE,
+            kind=MessageKind.RESPONSE,
             metadata={"response_to": message.metadata.get("request_id")},
         )
 
@@ -51,7 +51,7 @@ For fire-and-forget or multi-step sends, use ``send_message()``. It calls ``Mess
     await self.send_message(
         receiver_id="analyst",
         content="Run Q4 revenue analysis.",
-        message_type=MessageType.REQUEST_COLLABORATION,
+        kind=MessageKind.REQUEST,
         metadata={"priority": "high"},
     )
 
@@ -62,11 +62,11 @@ See :doc:`../agents/base_agent` for the full set of patterns including multi-mes
 
    Every ``Message`` is signed at creation. The hub verifies the signature before delivery. No per-agent security code required. See :doc:`identity` for how agent keys work.
 
-MessageType Reference
+MessageKind Reference
 ---------------------
 
 The type controls how the hub routes the message and what the receiving agent is expected to do.
-Branch on ``message.message_type`` inside ``process_message()``.
+Branch on ``message.kind`` inside ``process_message()``.
 
 .. rubric:: Normal Flow
 
@@ -213,6 +213,6 @@ Next Steps
 ----------
 
 - :doc:`identity` — how agent keys and DIDs power the signing behind every message
-- :doc:`../communication/local_hub` — how the hub uses ``MessageType`` and metadata during routing and delivery
+- :doc:`../communication/local_hub` — how the hub uses ``MessageKind`` and metadata during routing and delivery
 - :doc:`../agents/base_agent` — full guide to building agents that send and receive messages
 - :doc:`../../systems/agent_toolbox` — end-to-end A2A patterns built on ``REQUEST_COLLABORATION``

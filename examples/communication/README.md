@@ -38,8 +38,8 @@ When creating your own communication examples, consider:
 ```python
 import asyncio
 import logging
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.communication.hub import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
+from agentconnect.team.runtime import CommunicationHub
 from agentconnect.prebuilt.ai_agent import AIAgent
 
 # Configure logging

@@ -220,7 +220,7 @@ Point it at a specific registry by passing a configured client:
 .. code-block:: python
 
     from agentconnect.mcp.registry_mcp_server import create_agent_discovery_mcp
-    from agentconnect.clients import RegistryAPIClient
+    from agentconnect.index import RegistryAPIClient
 
     client = RegistryAPIClient(base_url="http://localhost:8000")
     mcp = create_agent_discovery_mcp(registry_client=client)
@@ -235,7 +235,7 @@ Point it at a specific registry by passing a configured client:
        import asyncio, json
        from mcp import ClientSession, StdioServerParameters
        from mcp.client.stdio import stdio_client
-       from agentconnect.core.registry.search import AgentSearchOutput
+       from agentconnect.team.directory.search import AgentSearchOutput
 
        async def find_agents():
            params = StdioServerParameters(

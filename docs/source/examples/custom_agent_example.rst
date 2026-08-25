@@ -15,7 +15,7 @@ Here's how to implement a custom agent:
 
 .. code-block:: python
 
-   from agentconnect.core.agent import BaseAgent
+   from agentconnect.agent.base import BaseAgent
    from agentconnect.core.types import AgentType, AgentIdentity, Capability, InteractionMode
    from agentconnect.core.message import Message
    from typing import Optional
@@ -72,7 +72,7 @@ Here's how to implement a custom agent:
                receiver_id=message.sender_id,
                content=processed_content,
                sender_identity=self.identity,
-               message_type=message.message_type,
+               kind=message.kind,
            )
 
 Using the Custom Agent
@@ -85,7 +85,7 @@ Here's how to use the custom agent:
    import asyncio
    from agentconnect.core.types import AgentIdentity
    from agentconnect.core.message import Message
-   from agentconnect.core.types import MessageType
+   from agentconnect.core.types import MessageKind
    
    # Create a custom agent
    custom_agent = CustomAgent(
@@ -111,7 +111,7 @@ Here's how to use the custom agent:
        receiver_id=custom_agent.agent_id,
        content="Please process this text using your special capabilities",
        sender_identity=regular_agent.identity,
-       message_type=MessageType.TEXT,
+       kind=MessageKind.EVENT,
    )
    
    # Process the message
@@ -126,8 +126,8 @@ Here's how to integrate the custom agent with the communication hub:
 .. code-block:: python
 
    import asyncio
-   from agentconnect.core.registry import AgentRegistry
-   from agentconnect.communication.hub import CommunicationHub
+   from agentconnect.team.directory import AgentRegistry
+   from agentconnect.team.runtime import CommunicationHub
    
    # Create registry and hub
    registry = AgentRegistry()
@@ -212,7 +212,7 @@ Here are some advanced features you can implement in your custom agent:
                        receiver_id=message.sender_id,
                        content=f"I've remembered that {key} is {value}",
                        sender_identity=self.identity,
-                       message_type=MessageType.TEXT,
+                       kind=MessageKind.EVENT,
                    )
            
            if "recall" in message.content.lower():
@@ -224,7 +224,7 @@ Here are some advanced features you can implement in your custom agent:
                        receiver_id=message.sender_id,
                        content=f"You asked me to recall {key}, it's {self.memory[key]}",
                        sender_identity=self.identity,
-                       message_type=MessageType.TEXT,
+                       kind=MessageKind.EVENT,
                    )
            
            # Fall back to regular processing

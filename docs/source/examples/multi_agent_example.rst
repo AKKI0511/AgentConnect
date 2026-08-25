@@ -18,15 +18,15 @@ Setting Up Multiple Agents
     from dotenv import load_dotenv
     
     from agentconnect.prebuilt.ai_agent import AIAgent
-    from agentconnect.core.registry import AgentRegistry
-    from agentconnect.communication.hub import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
+    from agentconnect.team.runtime import CommunicationHub
     from agentconnect.core.types import (
         ModelProvider,
         ModelName,
         AgentIdentity,
         InteractionMode,
         Capability,
-        MessageType
+        MessageKind
     )
     from agentconnect.core.message import Message
     
@@ -129,10 +129,10 @@ With AgentConnect, agents can discover and collaborate with each other based on 
             receiver_id="researcher",
             content=initial_request,
             sender_identity=AgentIdentity.create_key_based(),
-            message_type=MessageType.TEXT
+            kind=MessageKind.EVENT
         )
         
-        research_response = await hub.route_message(research_msg)
+        research_response = await hub.send(research_msg)
         print(f"Research complete: {research_response.content[:100]}...")
         
         # Step 2: The analyst processes the research findings
@@ -163,10 +163,10 @@ With AgentConnect, agents can discover and collaborate with each other based on 
             receiver_id="human_user",
             content=final_report,
             sender_identity=AgentIdentity.create_key_based(),
-            message_type=MessageType.TEXT
+            kind=MessageKind.EVENT
         )
         
-        await hub.route_message(final_msg)
+        await hub.send(final_msg)
         
         return final_report
     
@@ -271,11 +271,11 @@ Message handlers allow you to track and orchestrate communication between agents
             receiver_id="researcher",
             content="Research the relationship between quantum computing and machine learning",
             sender_identity=AgentIdentity.create_key_based(),
-            message_type=MessageType.TEXT
+            kind=MessageKind.EVENT
         )
         
         # Route the message and see the handlers in action
-        await hub.route_message(test_msg)
+        await hub.send(test_msg)
     
     # Run the message handler example
     asyncio.run(message_handler_example())
@@ -294,15 +294,15 @@ Here's a complete example that ties everything together:
     
     from agentconnect.prebuilt.ai_agent import AIAgent
     from agentconnect.prebuilt.human_agent import HumanAgent
-    from agentconnect.core.registry import AgentRegistry
-    from agentconnect.communication.hub import CommunicationHub
+    from agentconnect.team.directory import AgentRegistry
+    from agentconnect.team.runtime import CommunicationHub
     from agentconnect.core.types import (
         ModelProvider,
         ModelName,
         AgentIdentity,
         InteractionMode,
         Capability,
-        MessageType
+        MessageKind
     )
     
     async def run_multi_agent_system():

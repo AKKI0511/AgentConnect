@@ -38,8 +38,8 @@ import os
 from dotenv import load_dotenv
 
 from agentconnect.prebuilt import AIAgent
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,
@@ -153,8 +153,8 @@ import os
 from dotenv import load_dotenv
 
 from agentconnect.prebuilt import AIAgent, HumanAgent
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,

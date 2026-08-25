@@ -11,10 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.
+- Laid out the Team-based package tree: `core/` (nouns), `agent/` (client SDK), `team/` (runtime), `transport/`, `gateway/`, and `index/`. `BaseAgent` lives in `agent/`. Message `kind` is the closed set `request`, `response`, `error`, `event`.
+- Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, and nothing imports `prebuilt/`.
 
 ### Removed
 - Deleted unused `agentconnect.communication.protocols`.
 - Removed `pylint` and the PyPI `asyncio` backport from runtime dependencies.
+- Removed the `communication/`, `servers/`, and `clients/` packages after moving their code into `team/`, `transport/`, `gateway/`, `index/`, and `config/`.
 
 
 ### Planned

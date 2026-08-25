@@ -73,14 +73,14 @@ Here's a comprehensive example that creates a Telegram bot with multi-agent capa
     # Import AgentConnect components
     from agentconnect.prebuilt import AIAgent
     from agentconnect.prebuilt.telegram import TelegramAIAgent
-    from agentconnect.communication import CommunicationHub
+    from agentconnect.team import CommunicationHub
     from agentconnect.core.types import (
         AgentIdentity,
         Capability,
         ModelName,
         ModelProvider,
     )
-    from agentconnect.core.registry import AgentRegistry
+    from agentconnect.team.directory import AgentRegistry
     
     # Import tools
     from langchain_community.tools.tavily_search import TavilySearchResults

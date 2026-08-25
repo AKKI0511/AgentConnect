@@ -26,7 +26,7 @@ Overall Vision: Independent Agents
 
 At its heart, AgentConnect is designed to create a network of independent, potentially heterogeneous agents that can discover and communicate with each other securely. Unlike traditional centralized systems, AgentConnect promotes agent autonomy - each agent makes its own decisions about when, how, and with whom to interact.
 
-The framework is built around the :class:`BaseAgent <agentconnect.core.agent.BaseAgent>` abstract class, which provides the foundation for all agents in the system. This base class defines common functionality such as identity management, message handling, and capability declaration, while leaving implementation details to specific agent types like :class:`AIAgent <agentconnect.prebuilt.AIAgent>` or :class:`HumanAgent <agentconnect.prebuilt.HumanAgent>`.
+The framework is built around the :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` abstract class, which provides the foundation for all agents in the system. This base class defines common functionality such as identity management, message handling, and capability declaration, while leaving implementation details to specific agent types like :class:`AIAgent <agentconnect.prebuilt.AIAgent>` or :class:`HumanAgent <agentconnect.prebuilt.HumanAgent>`.
 
 .. admonition:: Mental model: Describe → Discover → Talk
    :class: tip
@@ -38,7 +38,7 @@ The framework is built around the :class:`BaseAgent <agentconnect.core.agent.Bas
 Communication Hub
 -----------------
 
-The Communication Hub (:class:`CommunicationHub <agentconnect.communication.CommunicationHub>`) is the central message router that facilitates agent-to-agent communication. It's important to understand that while the hub routes messages, it doesn't control agent behavior.
+The Communication Hub (:class:`CommunicationHub <agentconnect.team.CommunicationHub>`) is the central message router that facilitates agent-to-agent communication. It's important to understand that while the hub routes messages, it doesn't control agent behavior.
 
 Key responsibilities of the Communication Hub:
 
@@ -52,7 +52,7 @@ The Hub provides a standardized communication channel while preserving agent aut
 Agent Registry
 --------------
 
-The Agent Registry (:class:`AgentRegistry <agentconnect.core.registry.AgentRegistry>`) serves as the dynamic directory or "phone book" where agents register themselves by providing a comprehensive **Agent Profile**. This profile details their identity, capabilities, skills, and other metadata. The registry enables other agents to discover potential collaborators by searching these rich profiles.
+The Agent Registry (:class:`AgentRegistry <agentconnect.team.directory.AgentRegistry>`) serves as the dynamic directory or "phone book" where agents register themselves by providing a comprehensive **Agent Profile**. This profile details their identity, capabilities, skills, and other metadata. The registry enables other agents to discover potential collaborators by searching these rich profiles.
 
 Key functions of the Agent Registry:
 
@@ -71,8 +71,8 @@ The registry doesn't impose or manage agent behavior - it simply provides the di
    While a dedicated guide for these advanced configurations is planned for the :doc:`Advanced Guides <advanced/index>`
    section, you can currently find detailed information and examples in the following README files within the AgentConnect repository:
 
-   - `AgentConnect Registry README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/core/registry/README.md>`_
-   - `Capability Discovery Implementation README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/core/registry/capability_discovery_impl/README.md>`_
+   - `AgentConnect Registry README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/team/directory/README.md>`_
+   - `Capability Discovery Implementation README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/team/directory/capability_discovery_impl/README.md>`_
 
    These documents provide the necessary details for developers looking to fine-tune the registry's vector search behavior for specific needs.
 

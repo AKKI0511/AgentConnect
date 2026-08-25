@@ -28,7 +28,7 @@ All pages
       :link: message
       :link-type: doc
 
-      ``Message`` structure, ``MessageType`` enum, signing, and metadata conventions. Covers how messages are created, what each type signals, and how to pass context via metadata.
+      ``Message`` structure, ``MessageKind`` enum, signing, and metadata conventions. Covers how messages are created, what each type signals, and how to pass context via metadata.
 
    .. grid-item-card:: Agent Identity
       :link: identity

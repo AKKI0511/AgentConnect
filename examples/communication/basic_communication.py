@@ -13,16 +13,16 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
     InteractionMode,
-    MessageType,
+    MessageKind,
     ModelName,
     ModelProvider,
 )
 from agentconnect.core.message import Message
-from agentconnect.communication.hub import CommunicationHub
+from agentconnect.team.runtime import CommunicationHub
 from agentconnect.prebuilt.ai_agent import AIAgent
 
 # Load environment variables
@@ -82,7 +82,7 @@ async def main():
         receiver_id="agent2",
         content="Hello from Agent One!",
         sender_identity=agent1.identity,
-        message_type=MessageType.TEXT,
+        kind=MessageKind.EVENT,
     )
 
     success = await hub.route_message(message)
@@ -97,7 +97,7 @@ async def main():
         sender_id="agent1",
         receiver_id="agent2",
         content="What's your name?",
-        message_type=MessageType.TEXT,
+        kind=MessageKind.EVENT,
         timeout=10,
     )
 

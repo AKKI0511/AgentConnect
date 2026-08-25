@@ -30,13 +30,13 @@ from agentconnect.core.types import (
     AgentIdentity,
     InteractionMode,
     Capability,
-    MessageType,
+    MessageKind,
     ModelName,
     ModelProvider,
     AgentProfile,
 )
-from agentconnect.communication.hub import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team.runtime import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.prompts.tools import PromptTools
 from agentconnect.prompts.templates.prompt_templates import PromptTemplates
 
@@ -463,7 +463,7 @@ class TelegramAIAgent(AIAgent):
         if response:
             # Only send back to Telegram if it's a regular response message
             if (
-                response.message_type == MessageType.RESPONSE
+                response.kind == MessageKind.RESPONSE
                 and message.metadata
                 and message.metadata.get("is_telegram_message")
             ):

@@ -23,7 +23,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
 # Absolute imports from agentconnect package
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import ModelName, ModelProvider
 from agentconnect.prompts.agent_prompts import AgentWorkflow, CollaborationState
 from agentconnect.prompts.templates.prompt_templates import (
@@ -145,7 +145,7 @@ def create_agent_workflow(
         DeprecationWarning,
     )
 
-    from agentconnect.communication import CommunicationHub
+    from agentconnect.team import CommunicationHub
     from agentconnect.prompts.agent_prompts import create_workflow_for_agent
 
     # Create empty list if tools is None
@@ -205,7 +205,7 @@ def create_collaboration_workflow(
         A StateGraph representing the collaboration workflow
     """
     # Create tools for agent collaboration
-    # from agentconnect.communication import CommunicationHub
+    # from agentconnect.team import CommunicationHub
 
     # Initialize the PromptTools
     # prompt_tools = PromptTools(

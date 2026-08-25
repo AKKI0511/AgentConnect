@@ -16,6 +16,8 @@ from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.utils.shared import shared
 from agentconnect.core.message import Message
+from agentconnect.core.kinds import CONTROL_COOLDOWN, CONTROL_STOP
+from agentconnect.core.types import MessageKind
 import json
 
 logger = get_logger("chat_handlers")
@@ -62,9 +64,13 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
             return
 
         # Handle cooldown and stop messages differently
-        if message.message_type in [MessageType.COOLDOWN, MessageType.STOP]:
+        if message.control in (CONTROL_COOLDOWN, CONTROL_STOP):
             ws_message = WebSocketMessage(
-                type=message.message_type,
+                type=(
+                    MessageType.COOLDOWN
+                    if message.control == CONTROL_COOLDOWN
+                    else MessageType.STOP
+                ),
                 content=message.content,
                 sender=message.sender_id,
                 receiver=message.receiver_id,
@@ -94,8 +100,8 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
         ws_message = WebSocketMessage(
             type=(
                 MessageType.TEXT
-                if message.message_type == MessageType.RESPONSE
-                else message.message_type
+                if message.kind == MessageKind.RESPONSE
+                else MessageType.TEXT
             ),
             content=message.content,
             sender=message.sender_id,
@@ -104,7 +110,7 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
             metadata={
                 **(message.metadata or {}),
                 "conversation_type": session_data.get("session_type", "human_agent"),
-                "original_type": message.message_type,  # Store original message type
+                "original_type": message.kind,  # Store original message kind
             },
         )
 
@@ -354,7 +360,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
         core_message = await human_agent.send_message(
             receiver_id=ai_agent.agent_id,
             content=message.content,
-            message_type=message.type,
+            kind=MessageKind.EVENT,
             metadata=message.metadata,
         )
 
@@ -372,8 +378,8 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
                         # Check if this is a response from the AI agent
                         if (
                             response.sender_id == ai_agent.agent_id
-                            and response.message_type
-                            in [MessageType.TEXT, MessageType.RESPONSE]
+                            and response.kind
+                            in [MessageKind.EVENT, MessageKind.RESPONSE]
                         ):
 
                             # Convert AI response to WebSocket message
@@ -398,7 +404,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
                             break
 
                         # Handle error messages
-                        elif response.message_type == MessageType.ERROR:
+                        elif response.kind == MessageKind.ERROR:
                             error_message = WebSocketMessage(
                                 type=MessageType.ERROR,
                                 content=f"AI agent error: {response.content}",
@@ -491,7 +497,7 @@ async def handle_agent_agent_message(session_data: dict, message: WebSocketMessa
     core_message = await sender.send_message(
         receiver_id=receiver_id,
         content=message.content,
-        message_type=message_type,
+        kind=MessageKind.EVENT,
         metadata=metadata,
     )
 

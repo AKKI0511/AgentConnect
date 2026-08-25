@@ -23,10 +23,10 @@ from langchain_community.utilities import TextRequestsWrapper
 from colorama import init, Fore, Style
 
 from agentconnect.prebuilt import AIAgent, HumanAgent, TelegramAIAgent
-from agentconnect.communication import CommunicationHub
+from agentconnect.agent import BaseAgent
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core import (
-    BaseAgent,
-    AgentRegistry,
     AgentIdentity,
     Capability,
     ModelProvider,

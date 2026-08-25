@@ -1,24 +1,14 @@
-"""
-Core type definitions for the AgentConnect framework.
+"""Shared enumerations that are not the public Message, Profile, or Address nouns.
 
-This module provides the fundamental types, enumerations, and data structures
-used throughout the framework, including agent identities, capabilities, and
-message types.
+Identity, Profile, and Message kinds live in their own modules. This module
+re-exports them so existing ``core.types`` imports keep working.
 """
 
-import base64
+from __future__ import annotations
 
-# Standard library imports
-from dataclasses import dataclass, field
-from datetime import datetime
+import importlib
 from enum import Enum
-from typing import Any, Dict, List, Optional
-
-# Third-party imports
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from pydantic import BaseModel, Field
+from typing import Any
 
 
 class ModelProvider(str, Enum):
@@ -140,331 +130,6 @@ class ProtocolVersion(str, Enum):
     V1_1 = "1.1"
 
 
-class VerificationStatus(str, Enum):
-    """
-    Status of agent identity verification.
-
-    This enum defines the different states of agent identity verification.
-    """
-
-    PENDING = "pending"
-    VERIFIED = "verified"
-    FAILED = "failed"
-
-
-@dataclass
-class Capability:
-    """
-    Capability definition for agents.
-
-    This class defines a capability that an agent can provide, including
-    its name, description, and input/output schemas.
-
-    Attributes:
-        name: Name of the capability
-        description: Description of what the capability does
-        input_schema: Schema for the input data
-        output_schema: Schema for the output data
-        version: Version of the capability
-    """
-
-    name: str
-    description: str
-    input_schema: Optional[Dict[str, str]] = None
-    output_schema: Optional[Dict[str, str]] = None
-    version: str = "1.0"
-
-
-@dataclass
-class AgentIdentity:
-    """
-    Decentralized Identity for Agents.
-
-    This class provides identity management for agents, including
-    cryptographic keys for signing and verification.
-
-    Attributes:
-        did: Decentralized Identifier
-        public_key: Public key for verification
-        private_key: Private key for signing (optional)
-        verification_status: Status of identity verification
-        created_at: When the identity was created
-        metadata: Additional information about the identity
-    """
-
-    did: str  # Decentralized Identifier
-    public_key: str
-    private_key: Optional[str] = None
-    verification_status: VerificationStatus = VerificationStatus.PENDING
-    created_at: datetime = field(default_factory=datetime.now)
-    metadata: Dict = field(default_factory=dict)
-
-    @classmethod
-    def create_key_based(cls) -> "AgentIdentity":
-        """
-        Create a new key-based identity for an agent.
-
-        This method generates a new RSA key pair and creates a key-based
-        decentralized identifier (DID) for the agent.
-
-        Returns:
-            A new AgentIdentity with generated keys and DID
-        """
-        # Generate RSA key pair
-        private_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=2048, backend=default_backend()
-        )
-        public_key = private_key.public_key()
-
-        # Serialize keys to PEM format
-        private_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        ).decode("utf-8")
-
-        public_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode("utf-8")
-
-        # Generate DID using key fingerprint
-        key_fingerprint = base64.urlsafe_b64encode(
-            public_key.public_bytes(
-                encoding=serialization.Encoding.DER,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
-        ).decode("utf-8")[:16]
-        did = f"did:key:{key_fingerprint}"
-
-        return cls(
-            did=did,
-            public_key=public_pem,
-            private_key=private_pem,
-            verification_status=VerificationStatus.VERIFIED,
-            metadata={
-                "key_type": "RSA",
-                "key_size": 2048,
-                "creation_method": "key_based",
-            },
-        )
-
-    def sign_message(self, message: str) -> str:
-        """
-        Sign a message using the private key.
-
-        Args:
-            message: The message to sign
-
-        Returns:
-            Base64-encoded signature
-
-        Raises:
-            ValueError: If the private key is not available
-        """
-        if not self.private_key:
-            raise ValueError("Private key not available for signing")
-
-        private_key = serialization.load_pem_private_key(
-            self.private_key.encode(), password=None, backend=default_backend()
-        )
-
-        signature = private_key.sign(
-            message.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256(),
-        )
-        return base64.b64encode(signature).decode()
-
-    def verify_signature(self, message: str, signature: str) -> bool:
-        """
-        Verify a message signature using the public key.
-
-        Args:
-            message: The message that was signed
-            signature: The base64-encoded signature to verify
-
-        Returns:
-            True if the signature is valid, False otherwise
-        """
-        try:
-            public_key = serialization.load_pem_public_key(
-                self.public_key.encode(), backend=default_backend()
-            )
-
-            public_key.verify(
-                base64.b64decode(signature),
-                message.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-            return True
-        except Exception:
-            return False
-
-    def to_dict(self) -> Dict:
-        """
-        Convert identity to dictionary format.
-
-        Returns:
-            Dictionary representation of the identity
-        """
-        return {
-            "did": self.did,
-            "public_key": self.public_key,
-            "verification_status": self.verification_status.value,
-            "created_at": self.created_at.isoformat(),
-            "metadata": self.metadata,
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict) -> "AgentIdentity":
-        """
-        Create identity from dictionary format.
-
-        Args:
-            data: Dictionary containing identity data
-
-        Returns:
-            AgentIdentity instance created from the dictionary
-        """
-        return cls(
-            did=data["did"],
-            public_key=data["public_key"],
-            verification_status=VerificationStatus(data["verification_status"]),
-            created_at=datetime.fromisoformat(data["created_at"]),
-            metadata=data.get("metadata", {}),
-        )
-
-
-@dataclass
-class AgentMetadata:
-    """
-    Metadata for an agent.
-
-    This class contains metadata about an agent, including its ID, type,
-    capabilities, and interaction modes.
-
-    Attributes:
-        agent_id: Unique identifier for the agent
-        agent_type: Type of agent (human, AI)
-        identity: Agent's decentralized identity
-        organization_id: ID of the organization the agent belongs to
-        capabilities: List of capability names the agent provides
-        interaction_modes: Supported interaction modes
-        payment_address: Agent's primary wallet address for receiving payments
-        metadata: Additional information about the agent
-    """
-
-    agent_id: str
-    agent_type: AgentType
-    identity: AgentIdentity
-    organization_id: Optional[str] = None
-    capabilities: List[str] = field(default_factory=list)
-    interaction_modes: List[InteractionMode] = field(default_factory=list)
-    payment_address: Optional[str] = None
-    metadata: Dict = field(default_factory=dict)
-
-
-class Skill(BaseModel):
-    """
-    Skill model for agents.
-
-    This class defines a skill that an agent can possess, including
-    its name and description.
-
-    Attributes:
-        name: Name of the skill
-        description: Optional description of what the skill entails
-    """
-
-    name: str
-    description: Optional[str] = None
-
-
-class AgentProfile(BaseModel):
-    """
-    Comprehensive profile for an agent.
-
-    This class provides a complete profile of an agent, including its capabilities,
-    skills, and other metadata needed for discovery and interaction.
-
-    Attributes:
-        agent_id: Unique identifier for the agent
-        agent_type: Type of agent (human, AI)
-        name: Name of the agent
-        summary: Brief summary of the agent's purpose
-        description: Detailed description of the agent
-        version: Version of the agent
-        documentation_url: URL to the agent's documentation
-        organization: Organization or entity providing the agent (e.g., 'Acme Corp', 'did:org:123').
-                     Using a verifiable ID is recommended for robustness.
-        developer: Individual or team that developed the agent (e.g., 'Alice', 'did:person:abc').
-                  Using a verifiable ID is recommended.
-        url: Endpoint URL for the agent
-        auth_schemes: List of supported authentication schemes
-        default_input_modes: List of supported input modes
-        default_output_modes: List of supported output modes
-        capabilities: List of capabilities the agent provides
-        skills: List of skills the agent possesses
-        examples: Example inputs/outputs or use cases
-        tags: Keywords for filtering
-        payment_address: Agent's primary wallet address for receiving payments
-        custom_metadata: Additional custom metadata about the agent
-        reputation_score: Optional reputation score (excluded from serialization)
-    """
-
-    agent_id: str
-    agent_type: AgentType
-    name: Optional[str] = None
-    summary: Optional[str] = None
-    description: Optional[str] = None
-    version: Optional[str] = None
-    documentation_url: Optional[str] = None
-    organization: Optional[str] = None
-    developer: Optional[str] = None
-    url: Optional[str] = None
-    auth_schemes: List[str] = []
-    default_input_modes: List[str] = []
-    default_output_modes: List[str] = []
-    capabilities: List[Capability] = []
-    skills: List[Skill] = []
-    examples: List[str] = []
-    tags: List[str] = []
-    payment_address: Optional[str] = None
-    custom_metadata: Dict[str, Any] = {}
-    reputation_score: Optional[float] = Field(None, exclude=True)
-
-
-class MessageType(str, Enum):
-    """
-    Types of messages that can be exchanged between agents.
-
-    This enum defines the different types of messages that can be sent
-    between agents in the system.
-    """
-
-    TEXT = "text"
-    COMMAND = "command"
-    RESPONSE = "response"
-    ERROR = "error"
-    VERIFICATION = "verification"
-    CAPABILITY = "capability"
-    PROTOCOL = "protocol"
-    STOP = "stop"
-    SYSTEM = "system"
-    COOLDOWN = "cooldown"
-    IGNORE = "ignore"
-    REQUEST_COLLABORATION = "request_collaboration"
-    COLLABORATION_RESPONSE = "collaboration_response"
-    COLLABORATION_ERROR = "collaboration_error"
-
-
 class NetworkMode(str, Enum):
     """
     Network modes for agent communication.
@@ -475,3 +140,33 @@ class NetworkMode(str, Enum):
 
     STANDALONE = "standalone"
     NETWORKED = "networked"
+
+
+_LAZY_EXPORTS = {
+    "AgentIdentity": ("agentconnect.core.identity", "AgentIdentity"),
+    "AgentMetadata": ("agentconnect.core.identity", "AgentMetadata"),
+    "VerificationStatus": ("agentconnect.core.identity", "VerificationStatus"),
+    "AgentProfile": ("agentconnect.core.profile", "AgentProfile"),
+    "Capability": ("agentconnect.core.profile", "Capability"),
+    "Skill": ("agentconnect.core.profile", "Skill"),
+    "MessageKind": ("agentconnect.core.kinds", "MessageKind"),
+}
+
+__all__ = [
+    "ModelProvider",
+    "ModelName",
+    "AgentType",
+    "InteractionMode",
+    "ProtocolVersion",
+    "NetworkMode",
+    *sorted(_LAZY_EXPORTS),
+]
+
+
+def __getattr__(name: str) -> Any:
+    """Load identity, profile, and kind types without an import cycle."""
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr = target
+    return getattr(importlib.import_module(module_name), attr)

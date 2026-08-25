@@ -6,12 +6,15 @@ capable of dynamic discovery and secure, autonomous communication across distrib
 
 Key components:
 
-- **Agents**: Independent agent implementations (AI, Human) with their own internal structures
-- **Core**: Foundational types, message handling, and registry for capability-based discovery
-- **Communication**: Decentralized hub for agent-to-agent secure messaging
-- **Providers**: LLM provider integrations for autonomous agent intelligence
-- **Prompts**: Tools, workflows, and templates for agent interactions
-- **Utils**: Utility functions for security, interaction control, verification, etc.
+- **core**: nouns with no I/O (Message, Address, identity, Profile, kinds)
+- **agent**: client SDK (`BaseAgent`)
+- **team**: runtime and directory
+- **transport**: in-process delivery
+- **mcp**: team tool surface
+- **gateway**: inbound work from outside the process
+- **index**: optional published-directory service and client
+- **prebuilt**: ready-made agents behind extras
+- **providers** / **prompts**: helper internals until the helper rebuild
 
 Key differentiators:
 

@@ -12,7 +12,7 @@ from aiogram import types
 from langchain_core.messages import HumanMessage
 
 from agentconnect.core.message import Message
-from agentconnect.core.types import AgentIdentity, MessageType
+from agentconnect.core.types import AgentIdentity, MessageKind
 from agentconnect.prebuilt.telegram._utils.message_utils import (
     get_telegram_conversation_id,
     remove_bot_mention_from_text,
@@ -315,7 +315,7 @@ class TelegramMessageProcessor:
             receiver_id=self.agent_id,
             content=content,
             sender_identity=self.identity,
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
             metadata=metadata,
         )
 
@@ -345,7 +345,7 @@ class TelegramMessageProcessor:
                 "messages": [HumanMessage(content=message.content)],
                 "sender": self.agent_id,
                 "receiver": self.agent_id,
-                "message_type": message.message_type.value,
+                "kind": message.kind.value,
                 "metadata": message.metadata,
             }
 

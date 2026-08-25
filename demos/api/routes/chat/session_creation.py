@@ -10,7 +10,7 @@ from demos.api.models.chat import (
     AgentMetadata,
     MessageType,
 )
-from agentconnect.core.agent import BaseAgent
+from agentconnect.agent.base import BaseAgent
 from agentconnect.core.types import (
     InteractionMode,
     AgentIdentity,

@@ -6,7 +6,7 @@ from agentconnect.core.types import (
     ModelProvider,
     ModelName,
     InteractionMode,
-    MessageType,
+    MessageKind,
 )
 
 
@@ -100,8 +100,8 @@ class AgentMessageRequest(BaseModel):
 
     receiver_id: str = Field(..., description="ID of the receiving agent")
     content: str = Field(..., description="Message content")
-    message_type: MessageType = Field(
-        default=MessageType.TEXT, description="Type of message"
+    message_type: MessageKind = Field(
+        default=MessageKind.EVENT, description="Type of message"
     )
     structured_data: Optional[Dict[str, Any]] = Field(
         default=None, description="Optional structured data payload"

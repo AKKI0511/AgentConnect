@@ -4,7 +4,7 @@ from typing import Optional, Annotated
 
 import typer
 
-from agentconnect.clients.registry_client import RegistryAPIClient
+from agentconnect.index.client import RegistryAPIClient
 from agentconnect.mcp.registry_mcp_server import create_agent_discovery_mcp
 
 

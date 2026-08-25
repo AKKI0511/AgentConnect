@@ -15,15 +15,15 @@ import aioconsole
 from colorama import Fore, Style
 
 # Absolute imports from agentconnect package
-from agentconnect.core.agent import BaseAgent
+from agentconnect.agent.base import BaseAgent
+from agentconnect.core.kinds import CONTROL_COOLDOWN, CONTROL_STOP, MessageKind
 from agentconnect.core.message import Message
 from agentconnect.core.types import (
     AgentIdentity,
+    AgentProfile,
     AgentType,
     Capability,
     InteractionMode,
-    MessageType,
-    AgentProfile,
 )
 
 # Set up logging
@@ -137,30 +137,30 @@ class HumanAgent(BaseAgent):
                     await self.send_message(
                         target_agent.agent_id,
                         "__EXIT__",
-                        MessageType.STOP,
-                        {"reason": "user_exit"},
+                        MessageKind.EVENT,
+                        {"reason": "user_exit", "control": CONTROL_STOP},
                     )
                     break
 
                 # Send message
                 await self.send_message(
-                    target_agent.agent_id, user_input, MessageType.TEXT
+                    target_agent.agent_id, user_input, MessageKind.EVENT
                 )
 
                 # Wait for and handle response
                 try:
                     response: Optional[Message] = await self.message_queue.get()
                     if response:
-                        if response.message_type == MessageType.COOLDOWN:
+                        if response.control == CONTROL_COOLDOWN:
                             print(
                                 f"{Fore.YELLOW}⏳ {response.content}{Style.RESET_ALL}"
                             )
-                        elif response.message_type == MessageType.ERROR:
+                        elif response.kind == MessageKind.ERROR:
                             print(
                                 f"{Fore.RED}❌ Error: {response.content}{Style.RESET_ALL}"
                             )
                             print("-" * 40)
-                        elif response.message_type == MessageType.STOP:
+                        elif response.control == CONTROL_STOP:
                             print(
                                 f"{Fore.YELLOW}🛑 Conversation ended by AI agent{Style.RESET_ALL}"
                             )
@@ -208,7 +208,7 @@ class HumanAgent(BaseAgent):
             "Processing message agent_id=%s sender_id=%s type=%s",
             self.agent_id,
             message.sender_id,
-            message.message_type.value,
+            message.kind.value,
         )
 
         # Call the superclass method to handle common message processing logic
@@ -252,7 +252,8 @@ class HumanAgent(BaseAgent):
                 receiver_id=message.sender_id,
                 content="__EXIT__",
                 sender_identity=self.identity,
-                message_type=MessageType.STOP,
+                kind=MessageKind.EVENT,
+                control=CONTROL_STOP,
                 metadata={"reason": "user_exit"},
             )
 
@@ -264,7 +265,7 @@ class HumanAgent(BaseAgent):
                 receiver_id=message.sender_id,
                 content=user_input,
                 sender_identity=self.identity,
-                message_type=MessageType.TEXT,
+                kind=MessageKind.EVENT,
             )
         else:
             # If the user didn't enter any text, log it but don't send a response
@@ -275,20 +276,18 @@ class HumanAgent(BaseAgent):
         self,
         receiver_id: str,
         content: str,
-        message_type: MessageType = MessageType.TEXT,
+        kind: MessageKind = MessageKind.EVENT,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Message:
         """Override send_message to track human responses and notify callbacks"""
         # Call the original method in the parent class
-        message = await super().send_message(
-            receiver_id, content, message_type, metadata
-        )
+        message = await super().send_message(receiver_id, content, kind, metadata)
 
         # Store information about this response
         self.last_response_data = {
             "receiver_id": receiver_id,
             "content": content,
-            "message_type": message_type,
+            "kind": kind,
             "timestamp": asyncio.get_event_loop().time(),
         }
 

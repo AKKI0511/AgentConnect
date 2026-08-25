@@ -41,8 +41,8 @@ from dotenv import load_dotenv
 from colorama import init
 
 # Import agents from their respective modules
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.communication import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
+from agentconnect.team import CommunicationHub
 from agentconnect.core.types import ModelProvider, ModelName
 from agentconnect.prebuilt import HumanAgent
 from agentconnect.core.types import AgentIdentity

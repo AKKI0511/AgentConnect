@@ -23,8 +23,8 @@ from agentconnect.core.types import (
     Skill,
 )
 from agentconnect.prompts.tools import PromptTools
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.communication import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
+from agentconnect.team import CommunicationHub
 
 # Import for data analysis
 import matplotlib

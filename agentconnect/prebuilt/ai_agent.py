@@ -23,7 +23,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.tools import BaseTool
 
 # Absolute imports from agentconnect package
-from agentconnect.core.agent import BaseAgent
+from agentconnect.agent.base import BaseAgent
 from agentconnect.core.message import Message
 from agentconnect.config import settings as global_settings
 from agentconnect.core.types import (
@@ -32,7 +32,7 @@ from agentconnect.core.types import (
     AgentType,
     Capability,
     InteractionMode,
-    MessageType,
+    MessageKind,
     ModelName,
     ModelProvider,
 )
@@ -378,9 +378,7 @@ class AIAgent(BaseAgent):
     ) -> Message:
         """Create a standardized error response message."""
         message_type = (
-            MessageType.COLLABORATION_RESPONSE
-            if is_collaboration_request
-            else MessageType.ERROR
+            MessageKind.RESPONSE if is_collaboration_request else MessageKind.ERROR
         )
 
         metadata = {"error_type": error_type}
@@ -392,7 +390,7 @@ class AIAgent(BaseAgent):
             receiver_id=message.sender_id,
             content=error_msg,
             sender_identity=self.identity,
-            message_type=message_type,
+            kind=message_type,
             metadata=metadata,
         )
 
@@ -413,9 +411,7 @@ class AIAgent(BaseAgent):
         with other independent agents in the decentralized network.
         """
         # Check if this is a collaboration request
-        is_collaboration_request = (
-            message.message_type == MessageType.REQUEST_COLLABORATION
-        )
+        is_collaboration_request = message.kind == MessageKind.REQUEST
 
         # Call the superclass method to handle common message processing logic
         response = await super().process_message(message)
@@ -458,12 +454,12 @@ class AIAgent(BaseAgent):
                 )
 
             # Check if this is an error message that needs special handling
-            if message.message_type == MessageType.ERROR:
+            if message.kind == MessageKind.ERROR:
                 logger.warning(
                     "Received error message agent_id=%s sender_id=%s type=%s",
                     self.agent_id,
                     message.sender_id,
-                    message.message_type.value,
+                    message.kind.value,
                 )
 
                 # If this is from a collaboration, we should handle it gracefully
@@ -490,7 +486,7 @@ class AIAgent(BaseAgent):
                             receiver_id=human_sender,
                             content=error_explanation,
                             sender_identity=self.identity,
-                            message_type=MessageType.TEXT,
+                            kind=MessageKind.EVENT,
                             metadata={"handled_error": error_type},
                         )
 
@@ -513,9 +509,7 @@ class AIAgent(BaseAgent):
             sender_type = (
                 "Human" if message.sender_id.startswith("human") else "AI Agent"
             )
-            is_collab_request = (
-                message.message_type == MessageType.REQUEST_COLLABORATION
-            )
+            is_collab_request = message.kind == MessageKind.REQUEST
             is_collab_response = "response_to" in (message.metadata or {})
 
             context_prefix = ""
@@ -536,7 +530,7 @@ class AIAgent(BaseAgent):
                 "messages": [HumanMessage(content=workflow_input_content)],
                 "sender": message.sender_id,
                 "receiver": self.agent_id,
-                "message_type": message.message_type,
+                "kind": message.kind,
                 "metadata": message.metadata or {},
                 "max_retries": 2,
                 "retry_count": 0,
@@ -561,7 +555,7 @@ class AIAgent(BaseAgent):
                     "Workflow invoke ok agent_id=%s request_id=%s type=%s duration=%dms",
                     self.agent_id,
                     (message.metadata or {}).get("request_id"),
-                    message.message_type.value,
+                    message.kind.value,
                     int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
                 )
             except asyncio.TimeoutError:
@@ -569,7 +563,7 @@ class AIAgent(BaseAgent):
                     "Workflow execution timed out agent_id=%s request_id=%s type=%s duration=%dms",
                     self.agent_id,
                     (message.metadata or {}).get("request_id"),
-                    message.message_type.value,
+                    message.kind.value,
                     int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
                 )
                 return self._create_error_response(
@@ -583,7 +577,7 @@ class AIAgent(BaseAgent):
                     "Workflow invoke failed agent_id=%s request_id=%s type=%s duration=%dms",
                     self.agent_id,
                     (message.metadata or {}).get("request_id"),
-                    message.message_type.value,
+                    message.kind.value,
                     int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
                     exc_info=True,
                 )
@@ -644,9 +638,9 @@ class AIAgent(BaseAgent):
 
             # Determine the appropriate message type for the response
             response_message_type = (
-                MessageType.COLLABORATION_RESPONSE
+                MessageKind.RESPONSE
                 if is_collaboration_request
-                else MessageType.RESPONSE
+                else MessageKind.RESPONSE
             )
 
             # Create response metadata
@@ -669,7 +663,7 @@ class AIAgent(BaseAgent):
                 receiver_id=message.sender_id,
                 content=last_message.content,
                 sender_identity=self.identity,
-                message_type=response_message_type,
+                kind=response_message_type,
                 metadata=response_metadata,
             )
             # Do not log response content; BaseAgent logs process ok
@@ -680,7 +674,7 @@ class AIAgent(BaseAgent):
                 "Error processing message agent_id=%s sender_id=%s type=%s",
                 self.agent_id,
                 message.sender_id,
-                message.message_type.value,
+                message.kind.value,
                 exc_info=True,
             )
             return self._create_error_response(
@@ -800,7 +794,7 @@ class AIAgent(BaseAgent):
             "messages": [HumanMessage(content=query)],
             "sender": "user_standalone",
             "receiver": self.agent_id,
-            "message_type": MessageType.TEXT,
+            "kind": MessageKind.EVENT,
             "metadata": metadata or {},
             "max_retries": 0,
             "retry_count": 0,

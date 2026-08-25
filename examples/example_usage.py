@@ -27,8 +27,8 @@ from dotenv import load_dotenv
 
 # Import directly from the agentconnect package (using the public API)
 from agentconnect.prebuilt import AIAgent, HumanAgent
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.index import RegistryAPIClient
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,
@@ -81,17 +81,17 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
     # Opt-in example logging: adjust a tiny allowlist of logger levels
     if enable_logging:
         allowlist = [
-            "agentconnect.communication.hub",
-            "agentconnect.core.agent",
+            "agentconnect.team.runtime",
+            "agentconnect.agent.base",
             "agentconnect.prebuilt.human_agent",
             "agentconnect.prebuilt.ai_agent",
-            'agentconnect.core.registry.registry_base',
+            'agentconnect.team.directory.registry_base',
         ]
         for name in allowlist:
             logging.getLogger(name).setLevel(logging.INFO)
 
     # Initialize core components
-    registry = AgentRegistry()
+    registry = RegistryAPIClient(base_url="http://localhost:8002")
     hub = CommunicationHub(registry)
 
     # Create secure agent identities

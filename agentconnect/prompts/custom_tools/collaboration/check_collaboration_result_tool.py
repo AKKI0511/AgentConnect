@@ -5,8 +5,8 @@ from typing import Optional
 from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel, Field
 
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 
 logger = logging.getLogger(__name__)
 

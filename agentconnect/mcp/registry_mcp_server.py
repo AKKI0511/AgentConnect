@@ -14,11 +14,11 @@ import httpx
 
 from mcp.server.fastmcp import FastMCP, Context
 
-from agentconnect.clients.registry_client import RegistryAPIClient
-from agentconnect.core.registry.search import (
+from agentconnect.index.client import RegistryAPIClient
+from agentconnect.team.directory.search import (
     populate_search_result_item,
 )
-from agentconnect.core.registry.registration import AgentRegistration
+from agentconnect.team.directory.registration import AgentRegistration
 from agentconnect.core.types import AgentType
 
 

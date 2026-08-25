@@ -28,14 +28,14 @@ from dotenv import load_dotenv
 
 # Import directly from the agentconnect package (using the public API)
 from agentconnect.prebuilt import AIAgent
-from agentconnect.communication import CommunicationHub
+from agentconnect.team import CommunicationHub
 from agentconnect.core.message import Message
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
     Capability,
     InteractionMode,
-    MessageType,
+    MessageKind,
     ModelName,
     ModelProvider,
 )
@@ -153,7 +153,7 @@ def print_system_message(message: str) -> None:
     print(f"\n{Fore.YELLOW}{message}{Style.RESET_ALL}")
 
 
-def get_message_type_color(message_type: MessageType) -> str:
+def get_message_type_color(message_type: MessageKind) -> str:
     """
     Get the appropriate color for a message type.
 
@@ -164,15 +164,15 @@ def get_message_type_color(message_type: MessageType) -> str:
         The ANSI color code for the message type
     """
     type_colors = {
-        MessageType.TEXT: Fore.WHITE,
-        MessageType.RESPONSE: Fore.GREEN,
-        MessageType.ERROR: Fore.RED,
-        MessageType.SYSTEM: Fore.YELLOW,
-        MessageType.REQUEST_COLLABORATION: Fore.BLUE,
-        MessageType.COLLABORATION_RESPONSE: Fore.CYAN,
-        MessageType.COOLDOWN: Fore.MAGENTA,
-        MessageType.STOP: Fore.RED,
-        MessageType.IGNORE: Fore.LIGHTBLACK_EX,
+        MessageKind.EVENT: Fore.WHITE,
+        MessageKind.RESPONSE: Fore.GREEN,
+        MessageKind.ERROR: Fore.RED,
+        MessageKind.EVENT: Fore.YELLOW,
+        MessageKind.REQUEST: Fore.BLUE,
+        MessageKind.RESPONSE: Fore.CYAN,
+        MessageKind.EVENT: Fore.MAGENTA,
+        MessageKind.EVENT: Fore.RED,
+        MessageKind.EVENT: Fore.LIGHTBLACK_EX,
     }
     return type_colors.get(message_type, Fore.WHITE)
 
@@ -196,7 +196,7 @@ async def message_tracking_handler(message: Message) -> None:
 
     # Get colors for sender and message type
     sender_color = AGENT_COLORS.get(message.sender_id, Fore.WHITE)
-    type_color = get_message_type_color(message.message_type)
+    type_color = get_message_type_color(message.kind)
 
     # Format metadata for display
     metadata_str = ""
@@ -212,7 +212,7 @@ async def message_tracking_handler(message: Message) -> None:
     # Print formatted message
     print(
         f"\n{sender_color}[{message.sender_id}] {Fore.WHITE}→ {sender_color}[{message.receiver_id}] "
-        f"{type_color}[{message.message_type.value}]{Style.RESET_ALL}"
+        f"{type_color}[{message.kind.value}]{Style.RESET_ALL}"
     )
 
     # Truncate content if too long
@@ -277,11 +277,11 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = False) -> None:
     if enable_logging:
         import logging as _pylog
         for name in [
-            "agentconnect.communication.hub",
-            "agentconnect.core.agent",
+            "agentconnect.team.runtime",
+            "agentconnect.agent.base",
             "agentconnect.prebuilt.human_agent",
             "agentconnect.prebuilt.ai_agent",
-            'agentconnect.core.registry.registry_base',
+            'agentconnect.team.directory.registry_base',
         ]:
             _pylog.getLogger(name).setLevel(_pylog.INFO)
 
@@ -430,7 +430,7 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = False) -> None:
         # Count messages by type
         message_types: Dict[str, int] = {}
         for msg in message_history:
-            msg_type = msg.message_type.value
+            msg_type = msg.kind.value
             message_types[msg_type] = message_types.get(msg_type, 0) + 1
 
         # Print message type statistics

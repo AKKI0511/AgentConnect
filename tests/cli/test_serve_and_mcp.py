@@ -26,13 +26,15 @@ def test_serve_registry_constructs_uvicorn_run():
     def importer(name: str):
         if name == "uvicorn":
             return uvicorn_stub
-        if name == "agentconnect.servers.config":
+        if name == "agentconnect.config.servers":
             return cfg_stub
-        if name == "agentconnect.servers.registry_api_server":
+        if name == "agentconnect.index.service":
             return srv_stub
         raise ImportError(name)
 
-    with mock.patch("agentconnect.cli.serve.importlib.import_module", side_effect=importer):
+    with mock.patch(
+        "agentconnect.cli.serve.importlib.import_module", side_effect=importer
+    ):
         from agentconnect.cli import serve as serve_mod
 
         serve_mod.registry(host="127.0.0.1", port=8001)

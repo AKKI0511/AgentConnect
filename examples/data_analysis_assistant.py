@@ -36,9 +36,9 @@ from pydantic import BaseModel, Field
 
 from agentconnect.prebuilt.ai_agent import AIAgent
 from agentconnect.prebuilt.human_agent import HumanAgent
-from agentconnect.communication.hub import CommunicationHub
-from agentconnect.core.agent import AgentIdentity
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team.runtime import CommunicationHub
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import Capability, ModelName, ModelProvider
 from agentconnect.prompts.tools import PromptTools
 

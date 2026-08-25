@@ -15,7 +15,7 @@ from agentconnect.config.models import (
 )
 from pydantic import SecretStr
 from agentconnect.config.loaders import load_settings, _merge_configs
-from agentconnect.servers.config import RegistryAPISettings
+from agentconnect.config.servers import RegistryAPISettings
 
 
 # ---------------------------------------------------------------------------

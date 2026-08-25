@@ -25,8 +25,8 @@ from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel
 
 # Absolute imports from agentconnect package
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.prompts.custom_tools.registry import ToolRegistry
 
 # Import implementations from custom_tools

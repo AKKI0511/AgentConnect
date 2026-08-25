@@ -8,14 +8,14 @@ from dotenv import load_dotenv
 pytest.importorskip("aioconsole")
 
 from agentconnect.prebuilt import AIAgent, HumanAgent
-from agentconnect.communication import CommunicationHub
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team import CommunicationHub
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
     InteractionMode,
     ModelName,
     ModelProvider,
-    MessageType,
+    MessageKind,
 )
 
 # Global variables for state tracking
@@ -29,8 +29,7 @@ def response_handler(response_data):
     global human_responded, conversation_ended
 
     # Check if this is an exit message
-    message_type = response_data.get("message_type", MessageType.TEXT)
-    if message_type == MessageType.STOP or response_data.get("content") == "__EXIT__":
+    if response_data.get("content") == "__EXIT__":
         print("Human requested to end the conversation.")
         conversation_ended.set()
 
@@ -95,7 +94,7 @@ async def main():
             receiver_id=human.agent_id,
             content="Hello! This is a test of the human-in-the-loop interaction. You can respond normally, "
             "skip responding by pressing Enter, or end the conversation by typing 'exit'.",
-            message_type=MessageType.TEXT,
+            kind=MessageKind.EVENT,
         )
 
         # Wait for conversation to end or max timeout (5 minutes)

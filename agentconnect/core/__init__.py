@@ -1,48 +1,74 @@
-"""
-Core components for the AgentConnect framework.
+"""Core nouns: Message, Address, identity, Profile, kinds, and errors.
 
-This module provides the foundational building blocks for agent-based systems in the
-decentralized AgentConnect framework, including:
-
-- **Base Agent**: Abstract base class for all agent implementations
-- **Message Handling**: Secure, signed message creation and verification
-- **Agent Identity**: Decentralized identity and cryptographic verification
-- **Capability Registry**: Dynamic discovery of agent capabilities
-- **Type System**: Rich type definitions for the entire framework
-
-The core module focuses on establishing the foundation for decentralized agent interaction
-without imposing centralized control structures.
+This package has no I/O and imports no sibling AgentConnect packages.
 """
 
+from agentconnect.core.address import (
+    ADDRESS_OUTSIDE_TEAM,
+    INVALID_ADDRESS,
+    ParsedAddress,
+    parse_address,
+    parse_agent_name,
+    parse_team_name,
+    resolve_address,
+)
+from agentconnect.core.exceptions import (
+    AgentError,
+    CapabilityError,
+    CommunicationError,
+    ConfigurationError,
+    RegistrationError,
+    SecurityError,
+)
+from agentconnect.core.identity import AgentIdentity, AgentMetadata, VerificationStatus
+from agentconnect.core.kinds import (
+    CONTROL_COOLDOWN,
+    CONTROL_IGNORE,
+    CONTROL_STOP,
+    CONTROL_SYSTEM,
+    MessageKind,
+)
 from agentconnect.core.message import Message
+from agentconnect.core.profile import AgentProfile, Capability, Skill
 from agentconnect.core.types import (
     AgentType,
-    Capability,
-    AgentIdentity,
     InteractionMode,
-    ModelProvider,
     ModelName,
-    AgentProfile,
-    Skill,
+    ModelProvider,
+    NetworkMode,
+    ProtocolVersion,
 )
-from agentconnect.core.registry import AgentRegistry
-from agentconnect.core.agent import BaseAgent
 
-# Define public API
 __all__ = [
-    # Message
-    "Message",
-    # Types
-    "AgentType",
-    "Capability",
+    "ADDRESS_OUTSIDE_TEAM",
+    "INVALID_ADDRESS",
+    "ParsedAddress",
+    "parse_address",
+    "parse_agent_name",
+    "parse_team_name",
+    "resolve_address",
+    "AgentError",
+    "CapabilityError",
+    "CommunicationError",
+    "ConfigurationError",
+    "RegistrationError",
+    "SecurityError",
     "AgentIdentity",
-    "InteractionMode",
-    "ModelProvider",
-    "ModelName",
+    "AgentMetadata",
+    "VerificationStatus",
+    "CONTROL_COOLDOWN",
+    "CONTROL_IGNORE",
+    "CONTROL_STOP",
+    "CONTROL_SYSTEM",
+    "MessageKind",
+    "Message",
     "AgentProfile",
+    "Capability",
     "Skill",
-    # Registry
-    "AgentRegistry",
-    # Agent
-    "BaseAgent",
+    "AgentType",
+    "InteractionMode",
+    "ModelName",
+    "ModelProvider",
+    "NetworkMode",
+    "ProtocolVersion",
 ]

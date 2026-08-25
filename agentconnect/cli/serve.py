@@ -9,7 +9,7 @@ import typer
 def _missing_servers_extras_message() -> str:
     return (
         "Could not import the registry server. FastAPI and uvicorn are core "
-        "dependencies; reinstall the package and see agentconnect/servers/README.md."
+        "dependencies; reinstall the package and see agentconnect/index/README.md."
     )
 
 
@@ -31,10 +31,8 @@ def registry(
     """
     try:
         uvicorn = importlib.import_module("uvicorn")
-        servers_cfg = importlib.import_module("agentconnect.servers.config")
-        registry_server = importlib.import_module(
-            "agentconnect.servers.registry_api_server"
-        )
+        servers_cfg = importlib.import_module("agentconnect.config.servers")
+        registry_server = importlib.import_module("agentconnect.index.service")
     except Exception:
         typer.echo(_missing_servers_extras_message())
         raise typer.Exit(code=1)

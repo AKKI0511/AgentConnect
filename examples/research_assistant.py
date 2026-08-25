@@ -32,14 +32,14 @@ from agentconnect.prebuilt import (
     AIAgent,
     HumanAgent,
 )
-from agentconnect.communication import CommunicationHub
+from agentconnect.team import CommunicationHub
 from agentconnect.core.types import (
     AgentIdentity,
     Capability,
     ModelName,
     ModelProvider,
 )
-from agentconnect.core.registry import AgentRegistry
+from agentconnect.team.directory import AgentRegistry
 from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 
 # Note: logging is configured by the CLI. Examples should not override it.
@@ -51,6 +51,10 @@ from langchain.schema import Document
 from langchain_community.document_transformers.markdownify import MarkdownifyTransformer
 from langchain_community.tools.requests.tool import RequestsGetTool
 from langchain_community.utilities import TextRequestsWrapper
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("agentconnect").setLevel(logging.DEBUG)
 
 # Initialize colorama for cross-platform colored output
 init()

@@ -2,9 +2,9 @@ from fastapi import HTTPException, status
 from datetime import datetime
 
 from agentconnect.prebuilt.ai_agent import AIAgent
-from agentconnect.core.agent import BaseAgent
+from agentconnect.agent.base import BaseAgent
 from agentconnect.core.message import Message
-from agentconnect.core.types import MessageType, SecurityError
+from agentconnect.core.types import MessageKind, SecurityError
 from demos.utils.demo_logger import get_logger
 from demos.utils.shared import shared
 from demos.api.models.agents import AgentMessageRequest, AgentMessageResponse
@@ -71,7 +71,7 @@ async def send_agent_message(
             sent_message: Message = await sender.send_message(
                 receiver_id=message.receiver_id,
                 content=message.content,
-                message_type=MessageType.TEXT,
+                kind=MessageKind.EVENT,
                 metadata=combined_metadata,
             )
 

@@ -23,7 +23,7 @@ def test_import_core_agent_without_coinbase(monkeypatch):
     ]:
         sys.modules.pop(name, None)
 
-    mod = importlib.import_module("agentconnect.core.agent")
+    mod = importlib.import_module("agentconnect.agent.base")
     assert mod is not None
 
 
@@ -35,7 +35,7 @@ def test_import_capability_discovery_without_qdrant_and_hf(monkeypatch):
     ]:
         sys.modules.pop(name, None)
 
-    mod = importlib.import_module("agentconnect.core.registry.capability_discovery")
+    mod = importlib.import_module("agentconnect.team.directory.capability_discovery")
     assert hasattr(mod, "CapabilityDiscoveryService")
 
 
@@ -49,7 +49,7 @@ def test_server_module_import_without_optional_extras(monkeypatch):
     ]:
         sys.modules.pop(name, None)
 
-    module = importlib.import_module("agentconnect.servers.registry_api_server")
+    module = importlib.import_module("agentconnect.index.service")
     assert hasattr(module, "app") and module.app is not None
 
 
@@ -61,7 +61,7 @@ def test_base_agent_does_not_import_coinbase_when_disabled(monkeypatch):
     ]:
         sys.modules.pop(name, None)
 
-    from agentconnect.core.agent import BaseAgent
+    from agentconnect.agent.base import BaseAgent
     from agentconnect.core.types import (
         AgentIdentity,
         AgentProfile,
@@ -107,7 +107,7 @@ def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
     ]:
         sys.modules.pop(name, None)
 
-    from agentconnect.core.agent import BaseAgent
+    from agentconnect.agent.base import BaseAgent
     from agentconnect.core.types import (
         AgentIdentity,
         AgentProfile,
@@ -155,11 +155,19 @@ def test_prebuilt_aiagent_imports_without_optional_helpers():
     assert hasattr(mod, "AIAgent")
 
 
-def test_communication_protocols_package_removed():
+def test_removed_legacy_packages():
     importlib.invalidate_caches()
-    sys.modules.pop("agentconnect.communication.protocols", None)
-    try:
-        importlib.import_module("agentconnect.communication.protocols")
-    except ModuleNotFoundError:
-        return
-    raise AssertionError("agentconnect.communication.protocols should not exist")
+    for name in [
+        "agentconnect.communication",
+        "agentconnect.communication.protocols",
+        "agentconnect.servers",
+        "agentconnect.clients",
+        "agentconnect.core.agent",
+        "agentconnect.core.registry",
+    ]:
+        sys.modules.pop(name, None)
+        try:
+            importlib.import_module(name)
+        except ModuleNotFoundError:
+            continue
+        raise AssertionError(f"{name} should not exist")

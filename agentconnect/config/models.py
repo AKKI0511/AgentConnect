@@ -161,8 +161,8 @@ class RegistrySettings(BaseModel):
     The registry only needs vector-search / storage related configuration.
 
     Runtime parameters for the standalone Registry API server are configured
-    separately in the `agentconnect.servers` package via environment variables
-    with the `AGENTCONNECT_REGISTRY_` prefix. See `agentconnect.servers.config.RegistryAPISettings`.
+    separately in `agentconnect.config.servers` via environment variables
+    with the `AGENTCONNECT_REGISTRY_` prefix. See `agentconnect.config.servers.RegistryAPISettings`.
     """
 
     vector_search: VectorSearchSettings = Field(default_factory=VectorSearchSettings)

@@ -16,12 +16,9 @@ from typing import Dict, Optional
 
 # Absolute imports from agentconnect package
 from agentconnect.core.exceptions import SecurityError
-from agentconnect.core.types import (
-    AgentIdentity,
-    MessageType,
-    ProtocolVersion,
-    VerificationStatus,
-)
+from agentconnect.core.identity import AgentIdentity, VerificationStatus
+from agentconnect.core.kinds import MessageKind
+from agentconnect.core.types import ProtocolVersion
 
 
 @dataclass
@@ -37,7 +34,7 @@ class Message:
         sender_id: ID of the sending agent
         receiver_id: ID of the receiving agent
         content: Message content
-        message_type: Type of message (text, command, response, etc.)
+        kind: Message kind (request, response, error, event)
         timestamp: When the message was created
         metadata: Additional information about the message
         protocol_version: Version of the communication protocol
@@ -48,11 +45,16 @@ class Message:
     sender_id: str
     receiver_id: str
     content: str
-    message_type: MessageType
+    kind: MessageKind
     timestamp: datetime
     metadata: Dict = field(default_factory=dict)
     protocol_version: ProtocolVersion = ProtocolVersion.V1_0
     signature: Optional[str] = None
+
+    @property
+    def control(self) -> Optional[str]:
+        """Application control label stored in metadata, if any."""
+        return (self.metadata or {}).get("control")
 
     @classmethod
     def create(
@@ -61,8 +63,9 @@ class Message:
         receiver_id: str,
         content: str,
         sender_identity: AgentIdentity,
-        message_type: MessageType = MessageType.TEXT,
+        kind: MessageKind = MessageKind.EVENT,
         metadata: Optional[Dict] = None,
+        control: Optional[str] = None,
     ) -> "Message":
         """
         Create a new signed message.
@@ -72,7 +75,7 @@ class Message:
             receiver_id: ID of the receiving agent
             content: Message content
             sender_identity: Identity of the sending agent
-            message_type: Type of message being sent
+            kind: Kind of message being sent
             metadata: Additional information about the message
 
         Returns:
@@ -81,14 +84,17 @@ class Message:
         Raises:
             ValueError: If the sender identity doesn't have a private key for signing
         """
+        metadata = dict(metadata or {})
+        if control:
+            metadata["control"] = control
         msg = cls(
             id=str(uuid.uuid4()),
             sender_id=sender_id,
             receiver_id=receiver_id,
             content=content,
-            message_type=message_type,
+            kind=kind,
             timestamp=datetime.now(),
-            metadata=metadata or {},
+            metadata=metadata,
             protocol_version=ProtocolVersion.V1_0,
         )
         msg.sign(sender_identity)

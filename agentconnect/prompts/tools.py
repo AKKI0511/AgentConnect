@@ -25,7 +25,6 @@ from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel
 
 # Absolute imports from agentconnect package
-from agentconnect.team import CommunicationHub
 from agentconnect.team.directory import AgentRegistry
 from agentconnect.prompts.custom_tools.registry import ToolRegistry
 
@@ -77,7 +76,7 @@ class PromptTools:
     def __init__(
         self,
         agent_registry: Optional[AgentRegistry] = None,
-        communication_hub: Optional[CommunicationHub] = None,
+        communication_hub: Optional[Any] = None,
         llm=None,
     ):
         """

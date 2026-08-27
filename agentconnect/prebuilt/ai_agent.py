@@ -718,7 +718,7 @@ class AIAgent(BaseAgent):
         metadata: Optional[Dict] = None,
     ) -> str:
         """
-        Allows direct interaction with the agent without needing a CommunicationHub or AgentRegistry.
+        Allows direct interaction with the agent without joining a Team.
 
         This method is useful for testing or using a single agent instance directly.
         It simulates a user query and returns the agent's response, maintaining

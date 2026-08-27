@@ -35,8 +35,6 @@ from agentconnect.core.types import (
     ModelProvider,
     AgentProfile,
 )
-from agentconnect.team.runtime import CommunicationHub
-from agentconnect.team.directory import AgentRegistry
 from agentconnect.prompts.tools import PromptTools
 from agentconnect.prompts.templates.prompt_templates import PromptTemplates
 
@@ -108,10 +106,9 @@ class TelegramAIAgent(AIAgent):
                 telegram_token="your_telegram_token"
             )
 
-            # Register with communication hub
-            await hub.register_agent(agent)
+            # Hosting a Telegram agent on a Team uses the session API
+            # (join, lease, reply). That lands with the agent session work.
 
-            # Start the agent
             await agent.run()
     """
 
@@ -786,8 +783,8 @@ if __name__ == "__main__":
             try:
                 # Create agent registry and communication hub
                 # These need to be created inside the async function
-                registry = AgentRegistry()
-                hub = CommunicationHub(registry)
+                hub = None
+                agent = None
 
                 # Create agent
                 agent = TelegramAIAgent(
@@ -801,15 +798,12 @@ if __name__ == "__main__":
                     telegram_token=telegram_token,
                 )
 
-                # Register agent with hub
-                if not await hub.register_agent(agent):
-                    logger.error("Failed to register agent with hub")
-                    return
-
-                logger.info("Successfully registered agent %s with hub", agent.agent_id)
-
-                # Run the agent directly - DON'T create a task that will exit immediately
-                await agent.run()
+                # Team Runtime does not hold Agent objects. Hosting a Telegram
+                # agent through join/lease lands with the session API.
+                logger.error(
+                    "Telegram hosting is waiting on the agent session API; not starting."
+                )
+                return
 
             except asyncio.CancelledError:
                 logger.info("Main task was cancelled")

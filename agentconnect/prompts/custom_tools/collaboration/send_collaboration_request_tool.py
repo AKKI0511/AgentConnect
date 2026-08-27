@@ -7,7 +7,6 @@ from typing import Optional, Any  # Added Any, Dict for kwargs flexibility
 from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel, Field
 
-from agentconnect.team import CommunicationHub
 from agentconnect.team.directory import AgentRegistry
 from agentconnect.core.types import AgentType
 
@@ -63,7 +62,7 @@ class SendCollaborationRequestOutput(BaseModel):
 
 
 def create_send_collaboration_request_tool(
-    communication_hub: Optional[CommunicationHub] = None,
+    communication_hub: Optional[Any] = None,
     agent_registry: Optional[AgentRegistry] = None,
     current_agent_id: Optional[str] = None,
 ) -> StructuredTool:

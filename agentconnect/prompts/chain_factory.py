@@ -145,7 +145,6 @@ def create_agent_workflow(
         DeprecationWarning,
     )
 
-    from agentconnect.team import CommunicationHub
     from agentconnect.prompts.agent_prompts import create_workflow_for_agent
 
     # Create empty list if tools is None
@@ -160,7 +159,7 @@ def create_agent_workflow(
         # Create the PromptTools instance
         prompt_tools = PromptTools(
             agent_registry=agent_registry,
-            communication_hub=CommunicationHub(),  # Use a default hub
+            communication_hub=None,
             llm=llm,
         )
 
@@ -205,12 +204,12 @@ def create_collaboration_workflow(
         A StateGraph representing the collaboration workflow
     """
     # Create tools for agent collaboration
-    # from agentconnect.team import CommunicationHub
+    # from agentconnect.team import Team
 
     # Initialize the PromptTools
     # prompt_tools = PromptTools(
     #     agent_registry=agent_registry,
-    #     communication_hub=CommunicationHub(),  # Use a default hub
+    #     communication_hub=None,
     #     llm=llm
     # )
 

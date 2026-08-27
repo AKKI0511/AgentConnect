@@ -5,7 +5,7 @@ Shared instances module to prevent duplicate initialization
 from typing import Optional, Set
 import redis.asyncio as redis
 from agentconnect.team.directory import AgentRegistry
-from agentconnect.team.runtime import CommunicationHub
+from agentconnect.team import Team
 from demos.utils.demo_logger import get_logger
 import asyncio
 import weakref
@@ -22,7 +22,7 @@ class SharedResources:
     _instance = None
     _redis: Optional[redis.Redis] = None
     _registry: Optional[AgentRegistry] = None
-    _hub: Optional[CommunicationHub] = None
+    _hub: Optional[Team] = None
     _websocket_connections: Set = set()
     _cleanup_lock: Optional[asyncio.Lock] = None
     _is_shutting_down: bool = False
@@ -45,9 +45,9 @@ class SharedResources:
         return self._registry
 
     @property
-    def hub(self) -> CommunicationHub:
+    def hub(self) -> Team:
         if not self._hub:
-            self._hub = CommunicationHub(self.registry)
+            self._hub = Team("demo")
         return self._hub
 
     def register_websocket(self, websocket) -> None:

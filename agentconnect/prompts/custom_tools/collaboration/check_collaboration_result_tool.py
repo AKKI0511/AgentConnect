@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel, Field
 
-from agentconnect.team import CommunicationHub
 from agentconnect.team.directory import AgentRegistry
 
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ class CheckCollaborationResultOutput(BaseModel):
 
 
 def create_check_collaboration_result_tool(
-    communication_hub: Optional[CommunicationHub] = None,
+    communication_hub: Optional[Any] = None,
     agent_registry: Optional[
         AgentRegistry
     ] = None,  # Kept for potential future standalone enhancements or consistency

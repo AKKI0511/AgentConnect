@@ -1,10 +1,9 @@
 import asyncio
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.tools.structured import StructuredTool
 
-from agentconnect.team import CommunicationHub
 from agentconnect.team.directory import AgentRegistry, AgentRegistration
 from agentconnect.core.types import AgentType
 
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 def create_agent_search_tool(
     agent_registry: Optional[AgentRegistry] = None,
     current_agent_id: Optional[str] = None,
-    communication_hub: Optional[CommunicationHub] = None,
+    communication_hub: Optional[Any] = None,
 ) -> StructuredTool:
     """
     Create a tool for searching agents by capability, with fine-grained output and tag filtering.

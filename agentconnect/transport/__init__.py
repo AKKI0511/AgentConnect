@@ -1,5 +1,12 @@
-"""In-process delivery endpoint used by the Runtime."""
+"""Agent-to-Runtime transports for Session operations."""
 
-from agentconnect.transport.inprocess import InProcessAgent
+from agentconnect.transport.agent_http import HttpRuntimeTransport
+from agentconnect.transport.inprocess import InProcessTransport
+from agentconnect.transport.runtime import RuntimeTransport, TransportError
 
-__all__ = ["InProcessAgent"]
+__all__ = [
+    "HttpRuntimeTransport",
+    "InProcessTransport",
+    "RuntimeTransport",
+    "TransportError",
+]

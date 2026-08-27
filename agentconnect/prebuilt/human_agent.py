@@ -98,7 +98,7 @@ class HumanAgent(BaseAgent):
             profile=profile,
         )
 
-        self.name = name
+        self.display_name = name
         self.is_active = True
         self.response_callbacks = response_callbacks or []
         self.last_response_data = {}
@@ -202,7 +202,7 @@ class HumanAgent(BaseAgent):
                     f"{Fore.YELLOW}You can continue typing or type 'exit' to end{Style.RESET_ALL}"
                 )
 
-    async def process_message(self, message: Message) -> Optional[Message]:
+    async def process_message(self, message: Message, ctx=None) -> Optional[Message]:
         """Process incoming messages from other agents"""
         logger.debug(
             "Processing message agent_id=%s sender_id=%s type=%s",

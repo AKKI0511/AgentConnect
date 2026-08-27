@@ -1,0 +1,215 @@
+"""Handler Context: delivery facts plus verbs to call teammates mid-handling.
+
+A handler receives ``(msg, ctx)``. ``msg`` is the delivered Runtime Message
+mapping. ``ctx`` carries verified facts about this Delivery and the methods
+to ask, tell, find, page history, or take a Ticket and answer later.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Mapping, Optional
+
+if TYPE_CHECKING:
+    from agentconnect.agent.session import Session
+
+
+class TicketHandle:
+    """Answer a reply-expected Delivery after ``process_message`` returns.
+
+    The Delivery stays leased until ``reply``, ``fail``, or ``decline``
+    succeeds, or the lease expires and another Instance may take it.
+    """
+
+    def __init__(self, session: "Session", delivery: Mapping[str, Any]) -> None:
+        """Hold the Session and Delivery this handle will finish."""
+        self._session = session
+        self._delivery = dict(delivery)
+        self._done = False
+
+    @property
+    def lease_id(self) -> str:
+        """Lease authorizing this attempt."""
+        return str(self._delivery["lease_id"])
+
+    @property
+    def message_id(self) -> str:
+        """Id of the delivered Message, and of its Ticket when one exists."""
+        return str(self._delivery["message"]["id"])
+
+    async def reply(self, content: Any = None) -> dict[str, Any]:
+        """Complete the request with ``content`` (JSON). ``None`` is valid content."""
+        self._ensure_open()
+        result = await self._session.reply_delivery(
+            self._delivery, outcome="completed", content=content
+        )
+        self._done = True
+        return result
+
+    async def fail(
+        self, message: str, *, code: str = "handler_failed"
+    ) -> dict[str, Any]:
+        """Fail the request with a safe error the requester can see."""
+        self._ensure_open()
+        result = await self._session.reply_delivery(
+            self._delivery,
+            outcome="failed",
+            error={"code": code, "message": message},
+        )
+        self._done = True
+        return result
+
+    async def decline(self) -> dict[str, Any]:
+        """Decline a reply-expected request, or finish an event / no-reply."""
+        self._ensure_open()
+        result = await self._session.complete_delivery(self._delivery)
+        self._done = True
+        return result
+
+    def _ensure_open(self) -> None:
+        if self._done:
+            raise RuntimeError("This Delivery has already been finished")
+
+
+class Context:
+    """Facts about the current Delivery, plus verbs to talk to the Team.
+
+    When several Instances share one Membership they pull one Mailbox.
+    Working state that lives only in this process is lost if another
+    Instance handles the next turn. Use ``history`` (and ``get_history``
+    for older turns) as the source of conversation state.
+    """
+
+    def __init__(
+        self,
+        session: "Session",
+        delivery: Mapping[str, Any],
+        *,
+        sender_did: str,
+        origin: str,
+        external: bool = False,
+    ) -> None:
+        """Attach delivery facts from one leased attempt."""
+        self._session = session
+        self._delivery = dict(delivery)
+        self._ticket: Optional[TicketHandle] = None
+        self.sender_did = sender_did
+        self.origin = origin
+        self.external = external
+
+    @property
+    def message(self) -> dict[str, Any]:
+        """The delivered Runtime Message."""
+        return dict(self._delivery["message"])
+
+    @property
+    def attempt(self) -> int:
+        """Delivery attempt number. At-least-once handling can repeat work."""
+        return int(self._delivery.get("attempt") or 1)
+
+    @property
+    def lease_id(self) -> str:
+        """Lease authorizing completion of this attempt."""
+        return str(self._delivery["lease_id"])
+
+    @property
+    def deadline(self) -> Optional[str]:
+        """Request deadline, or None when no reply is expected."""
+        value = self._delivery["message"].get("deadline")
+        return str(value) if value else None
+
+    @property
+    def trace_id(self) -> str:
+        """Causal id shared by this exchange."""
+        return str(self._delivery["message"]["trace_id"])
+
+    @property
+    def thread_id(self) -> Optional[str]:
+        """Thread grouping id, when the Message belongs to one."""
+        value = self._delivery["message"].get("thread_id")
+        return str(value) if value else None
+
+    @property
+    def history(self) -> list[dict[str, Any]]:
+        """Bounded recent Thread window, excluding the delivered Message."""
+        return list(self._delivery.get("history") or [])
+
+    @property
+    def history_complete(self) -> bool:
+        """True when ``history`` already contains every earlier retained Message."""
+        return bool(self._delivery.get("history_complete", True))
+
+    @property
+    def ticket_taken(self) -> bool:
+        """True after ``ticket()``; the Session will not auto-complete this Delivery."""
+        return self._ticket is not None
+
+    def ticket(self) -> TicketHandle:
+        """Keep the Delivery leased and answer later.
+
+        Return from ``process_message`` after calling this. Reply with
+        ``handle.reply``, ``handle.fail``, or ``handle.decline``.
+        """
+        if self._ticket is None:
+            self._ticket = TicketHandle(self._session, self._delivery)
+        return self._ticket
+
+    async def ask(
+        self,
+        recipient: str,
+        content: Any,
+        *,
+        deadline_seconds: float = 30.0,
+        collect: str = "wait",
+        thread_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Send a reply-expected request and collect the result."""
+        return await self._session.ask(
+            recipient,
+            content,
+            deadline_seconds=deadline_seconds,
+            collect=collect,
+            thread_id=thread_id,
+            parent_id=parent_id,
+            metadata=metadata,
+        )
+
+    async def tell(
+        self,
+        recipient: str,
+        content: Any,
+        *,
+        thread_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        reply_expected: bool = False,
+        deadline_seconds: float = 30.0,
+    ) -> dict[str, Any]:
+        """Send an event, or a no-reply request when ``reply_expected`` is false."""
+        return await self._session.tell(
+            recipient,
+            content,
+            thread_id=thread_id,
+            parent_id=parent_id,
+            metadata=metadata,
+        )
+
+    async def find(
+        self, query: str, *, limit: int = 10, detail: str = "summary"
+    ) -> dict[str, Any]:
+        """Search this Team's Directory, excluding this Agent."""
+        return await self._session.find(query, limit=limit, detail=detail)
+
+    async def get_profile(self, address: str) -> dict[str, Any]:
+        """Return the Directory entry for ``address`` in this Team."""
+        return await self._session.get_profile(address)
+
+    async def get_history(
+        self, *, before: Optional[str] = None, limit: int = 50
+    ) -> dict[str, Any]:
+        """Page older retained Thread history. Newest page when ``before`` is omitted."""
+        thread_id = self.thread_id
+        if thread_id is None:
+            return {"messages": [], "has_more": False}
+        return await self._session.get_history(thread_id, before=before, limit=limit)

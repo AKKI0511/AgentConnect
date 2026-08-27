@@ -394,7 +394,7 @@ class AIAgent(BaseAgent):
             metadata=metadata,
         )
 
-    async def process_message(self, message: Message) -> Optional[Message]:
+    async def process_message(self, message: Message, ctx=None) -> Optional[Message]:
         """
         Process an incoming message autonomously and generate a response.
 

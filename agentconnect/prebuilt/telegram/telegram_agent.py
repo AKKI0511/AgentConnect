@@ -390,7 +390,7 @@ class TelegramAIAgent(AIAgent):
     # The internal _keep_alive method is kept for implementation purposes
     # but is not part of the public API
 
-    async def process_message(self, message: Message) -> Message | None:
+    async def process_message(self, message: Message, ctx=None) -> Message | None:
         """
         Process an incoming AgentConnect message.
 

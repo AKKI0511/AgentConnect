@@ -45,6 +45,19 @@ def mailbox_depth(items: list[dict[str, Any]]) -> int:
     return len(items)
 
 
+def has_available_item(items: list[dict[str, Any]], now) -> bool:
+    """Return True when at least one Mailbox item can be leased now."""
+    for item in items:
+        if item.get("state") == "leased":
+            continue
+        available = item.get("available_at")
+        if available is None:
+            return True
+        if parse_timestamp(available) <= now:
+            return True
+    return False
+
+
 def enqueue_item(items: list[dict[str, Any]], message_id: str, now_ts: str) -> None:
     """Append a queued Mailbox item for ``message_id``."""
     items.append(

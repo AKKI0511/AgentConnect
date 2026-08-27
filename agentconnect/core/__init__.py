@@ -35,6 +35,7 @@ from agentconnect.core.profile import (
     Skill,
     validate_discovery_profile,
 )
+from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.types import (
     AgentType,
     InteractionMode,
@@ -71,6 +72,7 @@ __all__ = [
     "Capability",
     "Skill",
     "validate_discovery_profile",
+    "SPEC_VERSION",
     "AgentType",
     "InteractionMode",
     "ModelName",

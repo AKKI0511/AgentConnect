@@ -6,7 +6,15 @@ objects.
 """
 
 from agentconnect.team.errors import TeamError
+from agentconnect.team.http import create_runtime_app
 from agentconnect.team.runtime import Team
 from agentconnect.team.store import MemoryStore, RedisStore, Store
 
-__all__ = ["Team", "TeamError", "Store", "MemoryStore", "RedisStore"]
+__all__ = [
+    "Team",
+    "TeamError",
+    "Store",
+    "MemoryStore",
+    "RedisStore",
+    "create_runtime_app",
+]

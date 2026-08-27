@@ -63,6 +63,7 @@ from agentconnect.team.codec import (
     semantic_hash,
     utc_now,
 )
+from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.team.constants import (
     COLLECT_IMPLEMENTED,
     COLLECT_NAMED,
@@ -76,7 +77,6 @@ from agentconnect.team.constants import (
     DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
     DEFAULT_THREAD_MESSAGE_LIMIT,
     MESSAGE_KINDS_SEND,
-    SPEC_VERSION,
     SWEEP_INTERVAL_SECONDS,
 )
 from agentconnect.team.errors import TeamError
@@ -138,7 +138,14 @@ class Team:
         self.sweep_interval_seconds = float(sweep_interval_seconds)
         self._lock = asyncio.Lock()
         self._waiters: dict[str, list[asyncio.Event]] = {}
+        self._work_waiters: dict[str, list[asyncio.Event]] = {}
+        self._sse_subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._session_tokens_by_member: dict[str, set[str]] = {}
         self._sweep_task: Optional[asyncio.Task] = None
+        self._http_server: Any = None
+        self._http_task: Optional[asyncio.Task] = None
+        self._http_url: Optional[str] = None
+        self._http_port: Optional[int] = None
         self._started = False
         self._last_now = None
 
@@ -169,8 +176,14 @@ class Team:
         self._sweep_task = loop.create_task(self._sweep_loop())
         return self
 
+    @property
+    def url(self) -> Optional[str]:
+        """HTTP origin this Runtime is serving, or None when not serving."""
+        return self._http_url
+
     async def stop(self) -> None:
-        """Stop background expiry and close the store connection."""
+        """Stop HTTP serving, background expiry, and the store connection."""
+        await self.stop_serving()
         self._started = False
         if self._sweep_task is not None:
             self._sweep_task.cancel()
@@ -189,6 +202,153 @@ class Team:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         """Stop the Runtime when leaving the context manager."""
         await self.stop()
+
+    def _signal_work(self, membership_name: str) -> None:
+        """Hint waiting Clients that the Membership Mailbox has work."""
+        for event in list(self._work_waiters.get(membership_name) or ()):
+            event.set()
+        for token in list(self._session_tokens_by_member.get(membership_name) or ()):
+            for queue in list(self._sse_subscribers.get(token) or ()):
+                try:
+                    queue.put_nowait({"type": "work_available", "data": {}})
+                except asyncio.QueueFull:
+                    pass
+
+    async def wait_for_work(self, session_token: str, timeout: float = 30.0) -> bool:
+        """Block until this Session's Mailbox has leaseable work, or timeout.
+
+        This is an in-process hint, not a Runtime operation. HTTP Clients
+        use the SSE stream instead. Returns True when work looks available.
+        """
+        event = asyncio.Event()
+        name = ""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            name = session["membership_name"]
+            self._work_waiters.setdefault(name, []).append(event)
+            store = self._ensure_started()
+            items = await mailbox_mod.load_mailbox(store, session["address"])
+            if mailbox_mod.has_available_item(items, utc_now()):
+                event.set()
+        try:
+            await asyncio.wait_for(event.wait(), timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            waiters = self._work_waiters.get(name)
+            if waiters is not None:
+                try:
+                    waiters.remove(event)
+                except ValueError:
+                    pass
+                if not waiters:
+                    self._work_waiters.pop(name, None)
+
+    async def subscribe_events(self, session_token: str) -> asyncio.Queue:
+        """Attach an SSE queue to this Session. The caller must unsubscribe."""
+        async with self._lock:
+            await self._require_session(session_token)
+            queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+            self._sse_subscribers.setdefault(session_token, []).append(queue)
+            return queue
+
+    async def unsubscribe_events(
+        self, session_token: str, queue: asyncio.Queue
+    ) -> None:
+        """Detach an SSE queue previously returned by ``subscribe_events``."""
+        queues = self._sse_subscribers.get(session_token)
+        if queues is None:
+            return
+        try:
+            queues.remove(queue)
+        except ValueError:
+            pass
+        if not queues:
+            self._sse_subscribers.pop(session_token, None)
+
+    async def join_challenge(self) -> dict[str, Any]:
+        """Return a short-lived join challenge. Verification lands in identity work."""
+        self._ensure_started()
+        expires = utc_now() + timedelta(minutes=5)
+        return {
+            "nonce": secrets.token_urlsafe(24),
+            "audience": f"agentconnect:{self.name}",
+            "expires_at": format_timestamp(expires),
+        }
+
+    async def serve(self, host: str = "127.0.0.1", port: int = 0) -> str:
+        """Serve Runtime operations over HTTP on a loopback address.
+
+        Returns the origin agents pass to ``BaseAgent.join``, for example
+        ``http://127.0.0.1:9000``. Non-loopback hosts are rejected; a
+        network Runtime that accepts remote joins is later work.
+        """
+        self._ensure_started()
+        if self._http_task is not None and not self._http_task.done():
+            if self._http_url is None:
+                raise TeamError("internal", "HTTP serving is starting")
+            return self._http_url
+        if not _is_loopback(host):
+            _fail(
+                "invalid_request",
+                "Team.serve binds loopback only",
+            )
+        from agentconnect.team.http import create_runtime_app
+        import uvicorn
+
+        app = create_runtime_app(self)
+        config = uvicorn.Config(
+            app,
+            host=host,
+            port=int(port),
+            log_level="warning",
+            lifespan="off",
+        )
+        server = uvicorn.Server(config)
+        server.install_signal_handlers = False
+        self._http_server = server
+        loop = asyncio.get_running_loop()
+        self._http_task = loop.create_task(server.serve())
+        waited = 0.0
+        while not server.started:
+            if self._http_task.done():
+                exc = self._http_task.exception()
+                self._http_task = None
+                self._http_server = None
+                if exc is not None:
+                    raise TeamError("unavailable", f"HTTP serving failed: {exc}")
+                raise TeamError("unavailable", "HTTP serving failed to start")
+            await asyncio.sleep(0.01)
+            waited += 0.01
+            if waited > 5.0:
+                await self.stop_serving()
+                raise TeamError("unavailable", "HTTP serving timed out on start")
+        bound_host, bound_port = _bound_socket(server)
+        display_host = "127.0.0.1" if bound_host in {"0.0.0.0", "::"} else bound_host
+        self._http_port = bound_port
+        self._http_url = f"http://{display_host}:{bound_port}"
+        return self._http_url
+
+    async def stop_serving(self) -> None:
+        """Stop the HTTP listener if one is running."""
+        server = self._http_server
+        task = self._http_task
+        self._http_server = None
+        self._http_task = None
+        self._http_url = None
+        self._http_port = None
+        if server is not None:
+            server.should_exit = True
+        if task is not None:
+            try:
+                await asyncio.wait_for(task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     def _ensure_started(self) -> Store:
         if not self._started or self._store is None:
@@ -272,6 +432,9 @@ class Team:
             f"instance:{session['membership_name']}:{session['instance_id']}",
             session["token"],
         )
+        self._session_tokens_by_member.setdefault(
+            session["membership_name"], set()
+        ).add(session["token"])
 
     async def _delete_session(self, session: dict[str, Any]) -> None:
         store = self._ensure_started()
@@ -280,6 +443,16 @@ class Team:
         await store.delete(
             f"instance:{session['membership_name']}:{session['instance_id']}"
         )
+        tokens = self._session_tokens_by_member.get(session["membership_name"])
+        if tokens is not None:
+            tokens.discard(session["token"])
+            if not tokens:
+                self._session_tokens_by_member.pop(session["membership_name"], None)
+        for queue in self._sse_subscribers.pop(session["token"], []):
+            try:
+                queue.put_nowait(None)
+            except asyncio.QueueFull:
+                pass
 
     async def _require_session(self, session_token: Optional[str]) -> dict[str, Any]:
         if not session_token or not isinstance(session_token, str):
@@ -317,6 +490,7 @@ class Team:
                 await mailbox_mod.save_mailbox(store, lease["address"], items)
             await mailbox_mod.deactivate_lease(store, lease_id)
         session["lease_ids"] = []
+        self._signal_work(session["membership_name"])
 
     def _join_result(
         self, session: dict[str, Any], member: dict[str, Any]
@@ -685,6 +859,7 @@ class Team:
         await store.put(f"msg:{message_id}", message)
         mailbox_mod.enqueue_item(items, message_id, now_ts)
         await mailbox_mod.save_mailbox(store, recipient, items)
+        self._signal_work(recipient_name)
         if thread_id is not None:
             await threads_mod.append_message(
                 store,
@@ -1257,6 +1432,7 @@ class Team:
             if item is not None and item.get("lease_id") == lease_id:
                 mailbox_mod.release_lease_on_item(item, now_ts)
                 await mailbox_mod.save_mailbox(store, lease["address"], items)
+                self._signal_work(lease["membership_name"])
             await mailbox_mod.deactivate_lease(store, lease_id)
         keep_ids: set[str] = set()
         for ticket_id in list(await store.set_members(tickets_mod.OPEN_TICKETS_SET)):
@@ -1316,3 +1492,41 @@ def _relevance(query_tokens: set[str], profile: Mapping[str, Any]) -> float:
     if not haystack:
         return 0.0
     return len(query_tokens & haystack) / len(query_tokens)
+
+
+def _is_loopback(host: str) -> bool:
+    """Return True when ``host`` is a loopback name or address."""
+    import ipaddress
+    import socket
+
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        try:
+            if not ipaddress.ip_address(info[4][0]).is_loopback:
+                return False
+        except (ValueError, IndexError):
+            return False
+    return True
+
+
+def _bound_socket(server: Any) -> tuple[str, int]:
+    """Return (host, port) for a started uvicorn Server."""
+    servers = getattr(server, "servers", None) or []
+    for http_server in servers:
+        sockets = getattr(http_server, "sockets", None) or []
+        for sock in sockets:
+            name = sock.getsockname()
+            if len(name) >= 2:
+                return str(name[0]), int(name[1])
+    raise TeamError("unavailable", "HTTP server started without a bound socket")

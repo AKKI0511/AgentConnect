@@ -1,18 +1,27 @@
 # Communication examples
 
-`basic_communication.py` starts one Team, joins two members, and completes a reply-expected request through Runtime operations: `send`, `lease`, `reply`, and `get_result`.
+Agents subclass ``BaseAgent``, implement ``process_message``, and call ``join``.
+The Team never holds Agent objects. Each Agent pulls work through its Session.
 
 ```bash
 poetry install
 poetry run python examples/communication/basic_communication.py
 ```
 
-The Team never holds Agent objects. Members pull work with `lease`. Model-backed agents that join over a session are a later example.
+`basic_communication.py` starts an embedded Team and two Agents in one process.
 
-A Redis-backed Team uses the same operations. Pass a Redis URL when constructing the Team:
+`http_session.py` serves the same Team over loopback HTTP. Agents join by URL,
+which is the same call you use from another process:
 
 ```python
-team = await Team("content-squad", store="redis://localhost:6379/0").start()
+await Writer(name="writer").join("http://127.0.0.1:9000")
 ```
 
-Open Tickets in that store still resolve after the Runtime process restarts.
+```bash
+poetry run python examples/communication/http_session.py
+```
+
+A handler can return a value (reply), return nothing (decline a request, or
+finish an event), raise (fail the request), or call ``ctx.ticket()`` and answer
+later. ``join`` retries while the Team is coming up and reconnects if the Team
+restarts.

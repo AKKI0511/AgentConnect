@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Team Runtime with store-backed mailboxes, Tickets, and Thread history. `Team("name").start()` serves join, send, lease, complete, reply, get_result, get_history, find, and get_profile. Memory is the default store; Redis keeps open Tickets across a Runtime restart.
+- Agent Session and handler contract. Subclass `BaseAgent`, implement `process_message(msg, ctx)`, and `join` a Team in-process or by URL. The Session pulls work, maps return / None / raise / `ctx.ticket()` onto Runtime reply and complete, retries while the Team is coming up, and reconnects after a restart. `Team.serve()` exposes the HTTP binding (POST + SSE) on loopback.
 
 ### Changed
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
+- Replaced `BaseAgent.run()`, the per-agent queue, and the 100ms poll loop with a pull Session. `join_network` / `register_agent` are gone. `process_message` takes `(msg, ctx)`.
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.

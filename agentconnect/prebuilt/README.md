@@ -185,23 +185,15 @@ message = Message.create(
 response = await ai_agent.process_message(message)
 ```
 
-## Integration with Decentralized Communication Hub
+## Integration with a Team Runtime
 
-Agents connect to the decentralized network through the `CommunicationHub`:
+Agents join a Team and pull work from it. The Runtime never holds Agent objects:
 
 ```python
-from agentconnect.team import CommunicationHub
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.team import Team
 
-# Create registry and hub for the decentralized network
-registry = AgentRegistry()
-hub = CommunicationHub(registry)
-
-# Register independent agents to the network
-await hub.register_agent(ai_agent)
-await hub.register_agent(human)
-
-# Agents can now discover and communicate with each other through capability-based routing
+team = await Team("content-squad").start()
+session = await team.join(name="writer", agent_did=did, profile=profile)
 ```
 
 ## Advanced Features

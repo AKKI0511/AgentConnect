@@ -1,13 +1,12 @@
-"""Team runtime: routing, mailboxes, tickets, threads, and directory."""
+"""Team runtime: routing, mailboxes, tickets, threads, and directory.
 
-from typing import Any
+The public type is :class:`~agentconnect.team.runtime.Team`. Start a Team,
+join as a member, then send and pull work. The Runtime never holds Agent
+objects.
+"""
 
-__all__ = ["CommunicationHub"]
+from agentconnect.team.errors import TeamError
+from agentconnect.team.runtime import Team
+from agentconnect.team.store import MemoryStore, RedisStore, Store
 
-
-def __getattr__(name: str) -> Any:
-    if name == "CommunicationHub":
-        from agentconnect.team.runtime import CommunicationHub
-
-        return CommunicationHub
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = ["Team", "TeamError", "Store", "MemoryStore", "RedisStore"]

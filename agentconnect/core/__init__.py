@@ -29,7 +29,12 @@ from agentconnect.core.kinds import (
     MessageKind,
 )
 from agentconnect.core.message import Message
-from agentconnect.core.profile import AgentProfile, Capability, Skill
+from agentconnect.core.profile import (
+    AgentProfile,
+    Capability,
+    Skill,
+    validate_discovery_profile,
+)
 from agentconnect.core.types import (
     AgentType,
     InteractionMode,
@@ -65,6 +70,7 @@ __all__ = [
     "AgentProfile",
     "Capability",
     "Skill",
+    "validate_discovery_profile",
     "AgentType",
     "InteractionMode",
     "ModelName",

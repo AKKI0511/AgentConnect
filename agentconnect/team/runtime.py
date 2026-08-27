@@ -1,898 +1,1318 @@
-"""
-Message routing system for the AgentConnect framework.
+"""Team Runtime: mailboxes, tickets, threads, and routing.
 
-This module provides a communication hub that handles message routing and agent registration
-without dictating agent behavior. It enables agent discovery and communication in a
-peer-to-peer network where agents make independent decisions.
+A Team is a running process that serves one named Team. Agents stay in
+their own processes and pull work through Runtime operations. This module
+never holds Agent objects and never calls a method on an Agent.
+
+Start a Team, join as a member, then ``send``, ``lease``, ``complete``,
+and ``reply``:
+
+    team = await Team("content-squad").start()
+    writer = await team.join(
+        name="writer",
+        agent_did="did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        profile={
+            "summary": "Writes short drafts from notes.",
+            "skills": [
+                {
+                    "name": "drafting",
+                    "description": "Turn research notes into a two-paragraph draft.",
+                }
+            ],
+        },
+    )
+
+Pass ``store="memory"`` (the default) for a process-local Team. Pass a
+Redis URL when Memberships, mailboxes, open Tickets, and Thread history
+must survive a Runtime restart.
+
+Open Tickets are retained until at least their deadline. Terminal Tickets
+are kept for 24 hours after they close, or until that deadline if it is
+later. Thread history is trimmed by count once no open Ticket still
+needs an older Message.
 """
 
-# Standard library imports
+from __future__ import annotations
+
 import asyncio
 import logging
-import time
-import uuid
-from asyncio import Future
-from typing import Awaitable, Callable, Dict, List, Optional
-from datetime import datetime
+import re
+import secrets
+from datetime import timedelta
+from typing import Any, Mapping, NoReturn, Optional, Union
 
-from agentconnect.index.client import RegistryAPIClient
-
-# Absolute imports from agentconnect package
-from agentconnect.transport.inprocess import InProcessAgent
-from agentconnect.core.exceptions import SecurityError
-from agentconnect.core.message import Message
-from agentconnect.team.directory import AgentRegistration, AgentRegistry
-from agentconnect.core.kinds import (
-    CONTROL_COOLDOWN,
-    CONTROL_STOP,
-    CONTROL_SYSTEM,
-    MessageKind,
+from agentconnect.core.address import (
+    ADDRESS_OUTSIDE_TEAM,
+    INVALID_ADDRESS,
+    parse_agent_name,
+    parse_team_name,
+    resolve_address,
 )
-from agentconnect.core.types import (
-    AgentType,
-    InteractionMode,
-    ProtocolVersion,
-    VerificationStatus,
+from agentconnect.core.profile import validate_discovery_profile
+import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.tickets as tickets_mod
+import agentconnect.team.threads as threads_mod
+from agentconnect.team.codec import (
+    canonical_json,
+    format_timestamp,
+    json_size,
+    new_uuid,
+    parse_timestamp,
+    require_did,
+    require_uuid,
+    semantic_hash,
+    utc_now,
 )
-from agentconnect.config import settings
+from agentconnect.team.constants import (
+    COLLECT_IMPLEMENTED,
+    COLLECT_NAMED,
+    DEFAULT_DELIVERY_HISTORY_LIMIT,
+    DEFAULT_LEASE_TTL_SECONDS,
+    DEFAULT_MAX_IN_FLIGHT,
+    DEFAULT_MAX_INSTANCES,
+    DEFAULT_MAX_MAILBOX_DEPTH,
+    DEFAULT_MAX_MESSAGE_BYTES,
+    DEFAULT_SESSION_TTL_SECONDS,
+    DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
+    DEFAULT_THREAD_MESSAGE_LIMIT,
+    MESSAGE_KINDS_SEND,
+    SPEC_VERSION,
+    SWEEP_INTERVAL_SECONDS,
+)
+from agentconnect.team.errors import TeamError
+from agentconnect.team.store.base import Store
+from agentconnect.team.store.memory import MemoryStore
+from agentconnect.team.store.redis import RedisStore
 
-# Set up logging (application should configure logging globally)
 logger = logging.getLogger(__name__)
 
-# Message types accepted for agent-to-agent routing.
-_AGENT_MESSAGE_KINDS = frozenset(MessageKind)
+_ERROR_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+StoreArg = Union[Store, str, None]
 
 
-def _is_supported_agent_message(message: Message) -> bool:
-    """Return True when an agent-to-agent message uses a supported type and version."""
-    if message.protocol_version != ProtocolVersion.V1_0:
-        logger.error(
-            "Protocol version mismatch expected=%s got=%s",
-            ProtocolVersion.V1_0.value,
-            getattr(message.protocol_version, "value", str(message.protocol_version)),
-        )
-        return False
-    if message.kind not in _AGENT_MESSAGE_KINDS:
-        logger.error(
-            "Unsupported message type: %s",
-            getattr(message.kind, "value", str(message.kind)),
-        )
-        return False
-    return True
+def _fail(code: str, message: str, **kwargs: Any) -> NoReturn:
+    raise TeamError(code, message, **kwargs)
 
 
-# TODO (Next Release): Implement robust concurrency and parallelism handling
-# ====================================================================
-# Current implementation has several concurrency issues that need addressing:
+class Team:
+    """Runtime serving one Team.
 
-# 1. **Thread-Safe Request Management**:
-#    - Add proper locking for pending_responses and late_responses dictionaries
-#    - Implement thread-safe cleanup mechanisms
-
-# 2. **Backpressure and Rate Limiting**:
-#    - Implement proper backpressure when max_pending_requests is reached
-#    - Add request queuing with priority levels (system > collaboration > regular)
-#    - Implement exponential backoff for failed requests
-
-# 3. **Resource Lifecycle Management**:
-#    - Add request expiration with configurable TTL
-#    - Implement periodic cleanup tasks for expired requests
-#    - Add memory usage monitoring and alerts
-
-# 4. **Robust Error Handling**:
-#    - Handle agent disconnections gracefully during pending requests
-#    - Implement circuit breaker pattern for failing agents
-#    - Add retry mechanisms with jitter
-
-# 5. **Performance Optimizations**:
-#    - Consider using asyncio.Queue for request management
-#    - Implement connection pooling for high-throughput scenarios
-#    - Add metrics and observability for performance monitoring
-
-# 6. **Message Ordering and Delivery Guarantees**:
-#    - Implement message ordering for conversations
-#    - Add delivery confirmation mechanisms
-#    - Consider implementing message persistence for critical messages
-# ====================================================================
-
-
-class CommunicationHub:
-    """
-    Message routing system that facilitates peer-to-peer agent communication.
-
-    The CommunicationHub is NOT a central controller of agent behavior, but rather:
-
-    1. Routes messages between independent agents
-    2. Facilitates agent discovery through registration
-    3. Ensures secure message delivery without dictating responses
-    4. Tracks message history for auditability
-
-    Each agent connected to the hub maintains its autonomy and decision-making capability.
-    The hub simply enables discovery and communication without controlling behavior.
+    The Team owns Memberships, Sessions, Mailboxes, Deliveries, Tickets,
+    and Thread history. Use :meth:`join` to create or reconnect a
+    Membership, then pass the returned ``session_token`` to every other
+    operation.
     """
 
-    def __init__(self, registry: AgentRegistry | RegistryAPIClient):
-        """
-        Initialize the communication hub.
-
-        Args:
-            registry: The agent registry to use for agent lookup and verification
-        """
-        self.registry = registry
-        self.active_agents: Dict[str, InProcessAgent] = {}
-
-        # Configure message history based on settings
-        self._message_history: List[Message] = (
-            [] if settings.communication.enable_message_history else None
-        )
-
-        self._message_handlers: Dict[
-            str, List[Callable[[Message], Awaitable[None]]]
-        ] = {}
-        self._global_handlers: List[Callable[[Message], Awaitable[None]]] = []
-        # Store pending requests as {request_id: Future}
-        self.pending_responses: Dict[str, Future] = {}
-        # Store late responses as {request_id: Message}
-        self.late_responses: Dict[str, Message] = {}
-
-    def add_message_handler(
-        self, agent_id: str, handler: Callable[[Message], Awaitable[None]]
-    ) -> None:
-        """
-        Add a message handler for a specific agent.
-
-        Args:
-            agent_id: The ID of the agent to handle messages for
-            handler: Async function that takes a Message and returns None
-
-        Raises:
-            ValueError: If agent_id is None or empty, or if handler is None
-        """
-        if not agent_id or not handler:
-            raise ValueError("agent_id and handler must be provided")
-
-        # Tag the handler with the agent_id for cleanup
-        setattr(handler, "__agent_id__", agent_id)
-
-        if agent_id not in self._message_handlers:
-            self._message_handlers[agent_id] = []
-        if (
-            handler not in self._message_handlers[agent_id]
-        ):  # Prevent duplicate handlers
-            self._message_handlers[agent_id].append(handler)
-
-    def add_global_handler(self, handler: Callable[[Message], Awaitable[None]]) -> None:
-        """Add a global message handler that receives all messages
-
-        Args:
-            handler (Callable): Async function that takes a Message and returns None
-
-        Raises:
-            ValueError: If handler is None
-        """
-        if not handler:
-            raise ValueError("handler must be provided")
-
-        if handler not in self._global_handlers:  # Prevent duplicate handlers
-            self._global_handlers.append(handler)
-
-    def remove_message_handler(
-        self, agent_id: str, handler: Callable[[Message], Awaitable[None]]
-    ) -> bool:
-        """Remove a message handler for a specific agent
-
-        Args:
-            agent_id (str): The ID of the agent
-            handler (Callable): The handler function to remove
-
-        Returns:
-            bool: True if handler was removed, False if not found
-        """
-        if agent_id in self._message_handlers:
-            original_length = len(self._message_handlers[agent_id])
-            self._message_handlers[agent_id] = [
-                h for h in self._message_handlers[agent_id] if h != handler
-            ]
-            if not self._message_handlers[agent_id]:
-                del self._message_handlers[agent_id]
-            return len(self._message_handlers.get(agent_id, [])) < original_length
-        return False
-
-    def remove_global_handler(
-        self, handler: Callable[[Message], Awaitable[None]]
-    ) -> bool:
-        """Remove a global message handler
-
-        Args:
-            handler (Callable): The handler function to remove
-
-        Returns:
-            bool: True if handler was removed, False if not found
-        """
-        original_length = len(self._global_handlers)
-        self._global_handlers = [h for h in self._global_handlers if h != handler]
-        return len(self._global_handlers) < original_length
-
-    def clear_agent_handlers(self, agent_id: str) -> None:
-        """Clear all message handlers for a specific agent
-
-        Args:
-            agent_id (str): The ID of the agent
-        """
-        # Remove specific handlers
-        if agent_id in self._message_handlers:
-            # Get the handlers before deleting
-            handlers = self._message_handlers[agent_id]
-            # Clear any references these handlers might have
-            for handler in handlers:
-                if hasattr(handler, "__agent_id__"):
-                    delattr(handler, "__agent_id__")
-            del self._message_handlers[agent_id]
-
-        # Also clean up any handlers in other agents' lists that might reference this agent
-        for other_agent_id, handlers in list(self._message_handlers.items()):
-            self._message_handlers[other_agent_id] = [
-                h for h in handlers if getattr(h, "__agent_id__", None) != agent_id
-            ]
-
-    async def _notify_handlers(
-        self, message: Message, is_special: bool = False
-    ) -> None:
-        """Notify all relevant handlers about a message
-
-        Args:
-            message (Message): The message that was received
-            is_special (bool): Whether this is a special message type (e.g., COOLDOWN, STOP)
-        """
-        try:
-            # Create a copy of handlers to avoid modification during iteration
-            global_handlers = self._global_handlers.copy()
-
-            # Notify global handlers first
-            for handler in global_handlers:
-                try:
-                    await handler(message)
-                except Exception:
-                    logger.error("Global message handler error", exc_info=True)
-                    # Remove failed handler
-                    if handler in self._global_handlers:
-                        self._global_handlers.remove(handler)
-
-            # For special messages, notify both sender and receiver handlers
-            if is_special and message.sender_id in self._message_handlers:
-                # Create a copy of sender's handlers
-                sender_handlers = self._message_handlers[message.sender_id].copy()
-                for handler in sender_handlers:
-                    try:
-                        await handler(message)
-                    except Exception:
-                        logger.error(
-                            "Sender handler error (sender_id=%s)",
-                            message.sender_id,
-                            exc_info=True,
-                        )
-                        # Remove failed handler
-                        if message.sender_id in self._message_handlers:
-                            self._message_handlers[message.sender_id].remove(handler)
-
-            # Notify receiver's handlers
-            if message.receiver_id in self._message_handlers:
-                # Create a copy of receiver's handlers
-                receiver_handlers = self._message_handlers[message.receiver_id].copy()
-                for handler in receiver_handlers:
-                    try:
-                        await handler(message)
-                    except Exception:
-                        logger.error(
-                            "Receiver handler error (receiver_id=%s)",
-                            message.receiver_id,
-                            exc_info=True,
-                        )
-                        # Remove failed handler
-                        if message.receiver_id in self._message_handlers:
-                            self._message_handlers[message.receiver_id].remove(handler)
-
-        except Exception:
-            logger.error("Error notifying handlers", exc_info=True)
-
-    async def register_agent(self, agent: InProcessAgent) -> bool:
-        """Register agent for active communication"""
-        try:
-            # Create registration with proper identity and verification, and Capability objects
-            registration = AgentRegistration(
-                agent_id=agent.profile.agent_id,
-                agent_type=agent.profile.agent_type,
-                identity=agent.identity,
-                interaction_modes=agent.interaction_modes,
-                name=agent.profile.name,
-                summary=agent.profile.summary,
-                description=agent.profile.description,
-                version=agent.profile.version,
-                documentation_url=agent.profile.documentation_url,
-                organization=agent.profile.organization,
-                developer=agent.profile.developer,
-                url=agent.profile.url,
-                auth_schemes=agent.profile.auth_schemes,
-                default_input_modes=agent.profile.default_input_modes,
-                default_output_modes=agent.profile.default_output_modes,
-                capabilities=agent.profile.capabilities,
-                skills=agent.profile.skills,
-                examples=agent.profile.examples,
-                tags=agent.profile.tags,
-                payment_address=agent.profile.payment_address,
-                custom_metadata=agent.profile.custom_metadata,
-                registered_at=datetime.now(),
-            )
-
-            # Register with central registry first
-            if not await self.registry.register(registration):
-                logger.error(
-                    "Failed to register agent %s with registry", agent.agent_id
-                )
-                return False
-
-            # Add to active agents
-            self.active_agents[agent.agent_id] = agent
-
-            # Set hub and registry in the agent
-            agent.hub = self
-            agent.registry = self.registry
-            logger.info("Agent registered %s", agent.agent_id)
-            return True
-
-        except Exception:
-            logger.error("Error registering agent %s", agent.agent_id, exc_info=True)
-            return False
-
-    async def unregister_agent(self, agent_id: str) -> bool:
-        """Unregister an agent from active communication"""
-        try:
-            if agent_id not in self.active_agents:
-                logger.warning("Agent not active %s", agent_id)
-                return False
-
-            # First clear all message handlers for this agent
-            self.clear_agent_handlers(agent_id)
-
-            # Remove any global handlers that might be associated with this agent
-            self._global_handlers = [
-                h
-                for h in self._global_handlers
-                if getattr(h, "__agent_id__", None) != agent_id
-            ]
-
-            agent = self.active_agents[agent_id]
-            agent.hub = None
-            del self.active_agents[agent_id]
-
-            # Update registry status
-            # await self.registry.update_registration(agent_id, {"status": "unavailable"})
-            # Instead of trying to update a status, perform a full unregistration
-            success_unreg = await self.registry.unregister(agent_id)
-            if not success_unreg:
-                logger.warning("Registry unregistration failed for %s", agent_id)
-
-            # Clean up any pending messages for this agent
-            for other_agent in self.active_agents.values():
-                if agent_id in other_agent.active_conversations:
-                    other_agent.end_conversation(agent_id)
-
-            logger.info("Agent unregistered %s", agent_id)
-            return True
-
-        except Exception:
-            logger.error("Error unregistering agent %s", agent_id, exc_info=True)
-            return False
-
-    async def send(self, message: Message) -> bool:
-        return await self.route_message(message)
-
-    async def route_message(self, message: Message) -> bool:
-        """
-        Route a message between agents without controlling agent behavior.
-
-        This method verifies message security, locates the receiver, delivers the message,
-        and tracks it in message history. While it ensures delivery and tracks history,
-        it does not dictate how agents respond to messages - each agent maintains its
-        independence in processing and responding to messages.
-
-        Args:
-            message: The message to route
-
-        Returns:
-            True if message was successfully routed, False otherwise
-        """
-        try:
-            route_start = time.time()
-
-            # Special handling for system messages
-            if message.control == CONTROL_SYSTEM:
-                if self._message_history is not None:
-                    self._message_history.append(message)
-                await self._notify_handlers(message, is_special=True)
-                return True
-
-            # Validate that sender and receiver are different
-            if message.sender_id == message.receiver_id:
-                logger.error(
-                    "Cannot route message to self (agent_id=%s)", message.sender_id
-                )
-                return False
-
-            # Get sender and receiver
-            sender: Optional[InProcessAgent] = self.active_agents.get(message.sender_id)
-            receiver: Optional[InProcessAgent] = self.active_agents.get(
-                message.receiver_id
-            )
-
-            if not sender or not receiver:
-                logger.warning(
-                    "Missing participant (sender_id=%s receiver_id=%s)",
-                    message.sender_id,
-                    message.receiver_id,
-                )
-                return False
-
-            # Handle special message types
-            if message.control in (CONTROL_COOLDOWN, CONTROL_STOP):
-                # Store in history and notify handlers before special handling
-                if self._message_history is not None:
-                    self._message_history.append(message)
-                await self._notify_handlers(message, is_special=True)
-
-                if message.control == CONTROL_COOLDOWN:
-                    return await self._handle_cooldown_message(message, receiver)
-                else:
-                    return await self._handle_stop_message(message, sender, receiver)
-
-            # Special handling for collaboration responses
-            if message.kind == MessageKind.RESPONSE:
-
-                # Check if this is a response to a pending request
-                if message.metadata and "response_to" in message.metadata:
-                    request_id = message.metadata["response_to"]
-
-                    if request_id in self.pending_responses:
-                        future = self.pending_responses[request_id]
-
-                        if not future.done():
-                            # Check if the future has timed out
-                            if hasattr(future, "_timed_out") and getattr(
-                                future, "_timed_out", False
-                            ):
-                                logger.warning(
-                                    "Late response recorded (request_id=%s)", request_id
-                                )
-                                # Store the late response for potential retrieval
-                                self.late_responses[request_id] = message
-                                # Even though the request timed out, we still want to record the message
-                                # and notify handlers, but we won't set the result on the future
-                            else:
-                                # Set the result on the future if it hasn't timed out
-                                try:
-                                    # IMPORTANT: Use call_soon_threadsafe to ensure the future is resolved in the correct event loop
-                                    loop = asyncio.get_event_loop()
-                                    loop.call_soon_threadsafe(
-                                        future.set_result, message
-                                    )
-                                except Exception:
-                                    logger.error(
-                                        "Error setting future result (request_id=%s)",
-                                        request_id,
-                                        exc_info=True,
-                                    )
-                    else:
-                        logger.warning(
-                            "No pending request for response (request_id=%s)",
-                            request_id,
-                        )
-                else:
-                    logger.warning(
-                        "Collaboration response missing response_to (sender_id=%s receiver_id=%s)",
-                        message.sender_id,
-                        message.receiver_id,
-                    )
-
-                if self._message_history is not None:
-                    self._message_history.append(message)
-                await self._notify_handlers(message)
-                return True
-
-            # Verify identities only if not already verified (noise mitigation)
-            if sender.identity.verification_status != VerificationStatus.VERIFIED:
-                if not await sender.verify_identity():
-                    raise SecurityError("Sender identity verification failed")
-
-            if receiver.identity.verification_status != VerificationStatus.VERIFIED:
-                if not await receiver.verify_identity():
-                    raise SecurityError("Receiver identity verification failed")
-
-            # Verify message signature
-            if not message.verify(sender.identity):
-                raise SecurityError("Message signature verification failed")
-
-            # Check interaction mode compatibility
-            sender_modes = sender.interaction_modes
-            receiver_modes = receiver.interaction_modes
-
-            if not any(mode in receiver_modes for mode in sender_modes):
-                raise ValueError("Incompatible interaction modes")
-
-            # Apply protocol validation for agent-to-agent communication
-            if (
-                InteractionMode.AGENT_TO_AGENT in sender_modes
-                and InteractionMode.AGENT_TO_AGENT in receiver_modes
-            ):
-                if not _is_supported_agent_message(message):
-                    return False
-
-            # Special handling for collaboration requests and responses
-            if message.kind == MessageKind.REQUEST:
-
-                # Ensure collaboration chain is properly initialized
-                if "collaboration_chain" not in message.metadata:
-                    message.metadata["collaboration_chain"] = [message.sender_id]
-                elif message.sender_id not in message.metadata["collaboration_chain"]:
-                    message.metadata["collaboration_chain"].append(message.sender_id)
-
-                # Set original sender if not already set
-                if "original_sender" not in message.metadata:
-                    message.metadata["original_sender"] = message.sender_id
-
-            # Record in history
-            if self._message_history is not None:
-                self._message_history.append(message)
-
-            # !IMPORTANT CHANGE: Create a task to deliver the message to the receiver
-            # This ensures that the message is processed immediately without waiting for the agent's message queue
-            async def deliver_message():
-                try:
-                    await receiver.receive_message(message)
-                    logger.debug(
-                        "Routed message sender=%s receiver=%s type=%s request_id=%s duration=%dms",
-                        sender.agent_id,
-                        receiver.agent_id,
-                        message.kind.value,
-                        (
-                            message.metadata.get("request_id")
-                            if message.metadata
-                            else None
-                        ),
-                        int((time.time() - route_start) * 1000.0),
-                    )
-                except Exception:
-                    logger.error(
-                        "Error delivering message sender=%s receiver=%s request_id=%s",
-                        sender.agent_id,
-                        receiver.agent_id,
-                        (
-                            message.metadata.get("request_id")
-                            if message.metadata
-                            else None
-                        ),
-                    )
-
-            # Schedule the delivery task
-            asyncio.create_task(deliver_message())
-
-            # Notify message handlers
-            await self._notify_handlers(message)
-
-            # Do not emit route summary here; delivery task logs success or error
-            return True
-
-        except Exception:
-            logger.error("Error routing message", exc_info=True)
-            return False
-
-    async def _handle_cooldown_message(
-        self, message: Message, receiver: InProcessAgent
-    ) -> bool:
-        # Only forward cooldown message if receiver is human
-        if receiver.profile.agent_type == AgentType.HUMAN:
-            await receiver.receive_message(message)
-        return True
-
-    async def _handle_stop_message(
-        self, message: Message, sender: InProcessAgent, receiver: InProcessAgent
-    ) -> bool:
-        # Forward the STOP message to the receiver
-        await receiver.receive_message(message)
-        return True
-
-    async def get_agent(self, agent_id: str) -> Optional[InProcessAgent]:
-        """Get an active agent by ID"""
-        try:
-            return self.active_agents.get(agent_id)
-        except Exception as e:
-            logger.error("Error getting agent %s: %s", agent_id, e)
-            return None
-
-    async def get_all_agents(self) -> List[InProcessAgent]:
-        """Get all active agents
-
-        Returns:
-            List[InProcessAgent]: List of all active agents
-
-        Note:
-            This method returns a copy of the active agents list to prevent
-            external modification of the internal state.
-        """
-        try:
-            return list(self.active_agents.values())
-        except Exception as e:
-            logger.error("Error getting all agents: %s", e)
-            return []
-
-    async def is_agent_active(self, agent_id: str) -> bool:
-        """Check if an agent is active"""
-        return agent_id in self.active_agents
-
-    def get_message_history(self) -> List[Message]:
-        """Get message history"""
-        try:
-            if self._message_history is not None:
-                return self._message_history.copy()
-            else:
-                logger.warning("Message history disabled in config")
-                return []
-        except Exception as e:
-            logger.error("Error getting message history: %s", e)
-            return []
-
-    async def send_message_and_wait_response(
+    def __init__(
         self,
-        sender_id: str,
-        receiver_id: str,
-        content: str,
-        kind: MessageKind = MessageKind.REQUEST,
-        metadata: Optional[Dict] = {},
-        timeout: int = 60,
-    ) -> Optional[Message]:
-        """Send a message and wait for a response.
+        name: str,
+        *,
+        store: StoreArg = None,
+        max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
+        max_mailbox_depth: int = DEFAULT_MAX_MAILBOX_DEPTH,
+        delivery_history_limit: int = DEFAULT_DELIVERY_HISTORY_LIMIT,
+        session_ttl_seconds: float = DEFAULT_SESSION_TTL_SECONDS,
+        lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
+        terminal_ticket_retention_seconds: float = DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
+        thread_message_limit: int = DEFAULT_THREAD_MESSAGE_LIMIT,
+        max_instances: int = DEFAULT_MAX_INSTANCES,
+        sweep_interval_seconds: float = SWEEP_INTERVAL_SECONDS,
+    ) -> None:
+        """Create an unstarted Runtime for Team ``name``."""
+        team_name = parse_team_name(name)
+        if team_name is None:
+            raise ValueError("name is not a valid Team name")
+        self.name = team_name
+        self._store_arg = store
+        self._store: Optional[Store] = None
+        self.max_message_bytes = int(max_message_bytes)
+        self.max_mailbox_depth = int(max_mailbox_depth)
+        self.delivery_history_limit = int(delivery_history_limit)
+        self.session_ttl_seconds = float(session_ttl_seconds)
+        self.lease_ttl_seconds = float(lease_ttl_seconds)
+        self.terminal_ticket_retention_seconds = float(
+            terminal_ticket_retention_seconds
+        )
+        self.thread_message_limit = int(thread_message_limit)
+        self.max_instances = int(max_instances)
+        self.sweep_interval_seconds = float(sweep_interval_seconds)
+        self._lock = asyncio.Lock()
+        self._waiters: dict[str, list[asyncio.Event]] = {}
+        self._sweep_task: Optional[asyncio.Task] = None
+        self._started = False
+        self._last_now = None
 
-        Note on timeout behavior:
-        When a timeout occurs, this method returns None, but the future remains in pending_responses.
-        If a response arrives after the timeout, it will still be processed correctly by the hub,
-        but the original caller will have already moved on. Consider using a message queue library
-        like asyncio-nats, aiozmq, or AgentForum for more robust agent communication.
+    @property
+    def persistence(self) -> str:
+        """``volatile`` for memory, ``durable`` for Redis."""
+        if self._store is None:
+            return "volatile" if not self._is_redis_arg(self._store_arg) else "durable"
+        return self._store.persistence
 
-        Args:
-            sender_id: The ID of the sender agent
-            receiver_id: The ID of the receiver agent
-            content: The message content
-            kind: The message kind
-            metadata: Additional metadata to include with the message
-            timeout: Maximum time to wait for response in seconds
+    @property
+    def limits(self) -> dict[str, int]:
+        """Runtime limits reported on ``join``."""
+        return {
+            "max_message_bytes": self.max_message_bytes,
+            "max_mailbox_depth": self.max_mailbox_depth,
+            "delivery_history_limit": self.delivery_history_limit,
+        }
 
-        Returns:
-            The response message, or None if no response was received
-        """
-        try:
-            # Validate sender and receiver
-            if sender_id not in self.active_agents:
-                logger.error("Sender agent not active %s", sender_id)
-                return None
+    async def start(self) -> "Team":
+        """Open the store and start background expiry. Returns this Team."""
+        if self._started:
+            return self
+        self._store = self._build_store()
+        await self._store.open()
+        self._started = True
+        loop = asyncio.get_running_loop()
+        self._sweep_task = loop.create_task(self._sweep_loop())
+        return self
 
-            if receiver_id not in self.active_agents:
-                logger.error("Receiver agent not active %s", receiver_id)
-                return None
-
-            # Validate that sender and receiver are different
-            if sender_id == receiver_id:
-                logger.error("Cannot send message to self (agent_id=%s)", sender_id)
-                return None
-
-            # Generate a unique request ID
-            request_id = metadata.get("request_id", str(uuid.uuid4()))
-
-            # Create metadata with request ID if not provided
-            metadata["request_id"] = request_id
-
-            # Create a future to wait for the response
-            response_future = asyncio.get_event_loop().create_future()
-
-            # Store the future in pending_responses
-            self.pending_responses[request_id] = response_future
-
-            # Create and send the message
-            message = Message.create(
-                sender_id=sender_id,
-                receiver_id=receiver_id,
-                content=content,
-                sender_identity=(
-                    self.active_agents[sender_id].identity
-                    if sender_id in self.active_agents
-                    else None
-                ),
-                kind=kind,
-                metadata=metadata,
-            )
-
-            # !IMPORTANT CHANGE: Create a task to route the message
-            # This ensures that the message routing doesn't block the event loop
-            routing_task = asyncio.create_task(self.route_message(message))
-
-            # Wait for the routing task to complete
-            success = await routing_task
-
-            if not success:
-                if request_id in self.pending_responses:
-                    del self.pending_responses[request_id]
-                logger.error(
-                    "Failed to route message sender=%s receiver=%s request_id=%s",
-                    sender_id,
-                    receiver_id,
-                    request_id,
-                )
-                return None
-
-            # Wait for the response with timeout
+    async def stop(self) -> None:
+        """Stop background expiry and close the store connection."""
+        self._started = False
+        if self._sweep_task is not None:
+            self._sweep_task.cancel()
             try:
-                # Create a task to wait for the future to be resolved
-                # This approach avoids issues with asyncio.shield and asyncio.wait_for
-                done_waiting = False
-                start_time = time.time()
+                await self._sweep_task
+            except asyncio.CancelledError:
+                pass
+            self._sweep_task = None
+        if self._store is not None:
+            await self._store.close()
 
-                while not done_waiting:
-                    # Check if the future is done
-                    if response_future.done():
-                        response = response_future.result()
-                        return response
+    async def __aenter__(self) -> "Team":
+        """Start the Runtime for use as an async context manager."""
+        return await self.start()
 
-                    # Check if we've exceeded the timeout
-                    elapsed_time = time.time() - start_time
-                    if elapsed_time >= timeout:
-                        logger.warning(
-                            "Timeout waiting for response (request_id=%s) duration=%dms",
-                            request_id,
-                            int(elapsed_time * 1000.0),
-                        )
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        """Stop the Runtime when leaving the context manager."""
+        await self.stop()
 
-                        # Mark the request as timed out but keep it in pending_responses
-                        # This allows late responses to be properly handled
-                        if request_id in self.pending_responses:
-                            # Set a timeout flag on the future
-                            setattr(response_future, "_timed_out", True)
+    def _ensure_started(self) -> Store:
+        if not self._started or self._store is None:
+            raise TeamError("unavailable", "Team has not been started")
+        return self._store
 
-                            # Schedule cleanup of the pending response after a grace period
-                            # This ensures we don't accumulate too many pending responses
-                            async def delayed_cleanup():
-                                await asyncio.sleep(60)  # 1 minute grace period
-                                if request_id in self.pending_responses:
-                                    del self.pending_responses[request_id]
+    @staticmethod
+    def _is_redis_arg(store: StoreArg) -> bool:
+        if isinstance(store, RedisStore):
+            return True
+        return isinstance(store, str) and store.startswith("redis")
 
-                            asyncio.create_task(delayed_cleanup())
+    def _build_store(self) -> Store:
+        store = self._store_arg
+        if store is None or store == "memory":
+            return MemoryStore()
+        if isinstance(store, Store):
+            return store
+        if isinstance(store, str) and store.startswith("redis"):
+            return RedisStore(store, prefix=f"ac:{self.name}")
+        raise ValueError("store must be 'memory', a Redis URL, or a Store")
 
-                        done_waiting = True
-                        return None
+    def _now_pair(self):
+        now = utc_now()
+        if self._last_now is not None and now <= self._last_now:
+            now = self._last_now + timedelta(microseconds=1)
+        self._last_now = now
+        return now, format_timestamp(now)
 
-                    # Yield control to the event loop to allow other tasks to run
-                    # This is crucial to allow the response to be processed
-                    await asyncio.sleep(0.01)  # 10ms sleep
+    def _notify(self, ticket_id: str) -> None:
+        for event in self._waiters.get(ticket_id, []):
+            event.set()
 
-                return None
+    def _register_waiter(self, ticket_id: str) -> asyncio.Event:
+        event = asyncio.Event()
+        self._waiters.setdefault(ticket_id, []).append(event)
+        return event
 
-            except Exception:
-                logger.error(
-                    "Error waiting for response (request_id=%s)",
-                    request_id,
-                    exc_info=True,
-                )
-                return None
-
-        except Exception:
-            logger.error("Error in send_message_and_wait_response", exc_info=True)
-            return None
-
-    async def send_collaboration_request(
-        self,
-        sender_id: str,
-        receiver_id: str,
-        task_description: str,
-        timeout: int = 60,
-        **kwargs,
-    ) -> str:
-        """
-        Facilitate a collaboration request between agents based on capabilities.
-
-        This method creates and routes a collaboration request without controlling the outcome.
-        The receiving agent independently decides whether and how to fulfill the request
-        based on its own capabilities and decision-making processes.
-
-        Args:
-            sender_id: ID of the requesting agent
-            receiver_id: ID of the agent being requested to collaborate
-            task_description: Description of the task to be performed
-            timeout: How long to wait for a response in seconds
-            **kwargs: Additional parameters for the collaboration request
-
-        Returns:
-            The response content as a string, or an error message if the request failed
-
-        Raises:
-            ValueError: If the request could not be sent
-            TimeoutError: If the request times out
-        """
+    def _drop_waiter(self, ticket_id: str, event: asyncio.Event) -> None:
+        waiters = self._waiters.get(ticket_id)
+        if waiters is None:
+            return
         try:
-            # Validate sender and receiver
-            if sender_id not in self.active_agents:
-                error_msg = f"Error: Sender agent {sender_id} is not active"
-                logger.error("Sender agent not active %s", sender_id)
-                return error_msg
+            waiters.remove(event)
+        except ValueError:
+            pass
+        if not waiters:
+            self._waiters.pop(ticket_id, None)
 
-            if receiver_id not in self.active_agents:
-                error_msg = f"Error: Receiver agent {receiver_id} is not active"
-                logger.error("Receiver agent not active %s", receiver_id)
-                return error_msg
+    # --- sessions and memberships ---
 
-            # Validate that sender and receiver are different
-            if sender_id == receiver_id:
-                error_msg = f"Error: Cannot send collaboration request to yourself (sender_id={sender_id}, receiver_id={receiver_id})"
-                logger.error(
-                    "Cannot send collaboration request to self (agent_id=%s)", sender_id
-                )
-                return error_msg
+    async def _get_member(self, name: str) -> Optional[dict[str, Any]]:
+        store = self._ensure_started()
+        return await store.get(f"member:{name}")
 
-            # Prepare metadata
-            metadata = kwargs.copy() if kwargs else {}
+    async def _get_member_by_did(self, agent_did: str) -> Optional[dict[str, Any]]:
+        store = self._ensure_started()
+        name = await store.get(f"did:{agent_did}")
+        if not isinstance(name, str):
+            return None
+        return await self._get_member(name)
 
-            # Ensure collaboration chain is properly initialized
-            if "collaboration_chain" not in metadata:
-                metadata["collaboration_chain"] = [sender_id]
-            elif sender_id not in metadata["collaboration_chain"]:
-                metadata["collaboration_chain"].append(sender_id)
+    async def _save_member(self, member: dict[str, Any]) -> None:
+        store = self._ensure_started()
+        await store.put(f"member:{member['name']}", member)
+        await store.put(f"did:{member['agent_did']}", member["name"])
+        await store.set_add("members", member["name"])
 
-            # Set original sender if not already set
-            if "original_sender" not in metadata and metadata["collaboration_chain"]:
-                metadata["original_sender"] = metadata["collaboration_chain"][0]
+    async def _get_session(self, token: str) -> Optional[dict[str, Any]]:
+        store = self._ensure_started()
+        record = await store.get(f"session:{token}")
+        if record is None:
+            return None
+        return record
 
-            # No hot-path start DEBUG; rely on single delivery DEBUG and WARN/ERROR
+    async def _save_session(self, session: dict[str, Any]) -> None:
+        store = self._ensure_started()
+        await store.put(f"session:{session['token']}", session)
+        await store.set_add("sessions", session["token"])
+        await store.put(
+            f"instance:{session['membership_name']}:{session['instance_id']}",
+            session["token"],
+        )
 
-            # Generate a unique request ID for tracking
-            request_id = str(uuid.uuid4())
-            if "request_id" not in metadata:
-                metadata["request_id"] = request_id
+    async def _delete_session(self, session: dict[str, Any]) -> None:
+        store = self._ensure_started()
+        await store.delete(f"session:{session['token']}")
+        await store.set_remove("sessions", session["token"])
+        await store.delete(
+            f"instance:{session['membership_name']}:{session['instance_id']}"
+        )
 
-            # Estimate an appropriate timeout based on task complexity
-            # Base timeout of 60 seconds plus 15 seconds per 100 characters, capped at 5 minutes
-            estimated_timeout = min(60 + (len(task_description) // 100) * 15, 300)
-            effective_timeout = kwargs.get("timeout", estimated_timeout)
+    async def _require_session(self, session_token: Optional[str]) -> dict[str, Any]:
+        if not session_token or not isinstance(session_token, str):
+            _fail("unauthorized", "Session is missing or invalid")
+        session = await self._get_session(session_token)
+        if session is None:
+            _fail("unauthorized", "Session is missing or invalid")
+        now = utc_now()
+        if parse_timestamp(session["expires_at"]) <= now:
+            _fail("unauthorized", "Session is missing or invalid")
+        return session
 
-            # Send the request and wait for response
-            response = await self.send_message_and_wait_response(
-                sender_id=sender_id,
-                receiver_id=receiver_id,
-                content=task_description,
-                kind=MessageKind.REQUEST,
-                metadata=metadata,
-                timeout=effective_timeout,
+    async def _session_count(self, membership_name: str) -> int:
+        store = self._ensure_started()
+        tokens = await store.set_members("sessions")
+        count = 0
+        for token in tokens:
+            session = await self._get_session(token)
+            if session and session["membership_name"] == membership_name:
+                count += 1
+        return count
+
+    async def _release_session_leases(
+        self, session: dict[str, Any], now_ts: str
+    ) -> None:
+        store = self._ensure_started()
+        for lease_id in list(session.get("lease_ids") or []):
+            lease = await mailbox_mod.get_lease(store, lease_id)
+            if lease is None:
+                continue
+            items = await mailbox_mod.load_mailbox(store, lease["address"])
+            item = mailbox_mod.find_item(items, lease["message_id"])
+            if item is not None and item.get("lease_id") == lease_id:
+                mailbox_mod.release_lease_on_item(item, now_ts)
+                await mailbox_mod.save_mailbox(store, lease["address"], items)
+            await mailbox_mod.deactivate_lease(store, lease_id)
+        session["lease_ids"] = []
+
+    def _join_result(
+        self, session: dict[str, Any], member: dict[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            "session_token": session["token"],
+            "session_expires_at": session["expires_at"],
+            "address": member["address"],
+            "team_name": self.name,
+            "agent_did": member["agent_did"],
+            "instance_id": session["instance_id"],
+            "persistence": self.persistence,
+            "limits": self.limits,
+            "spec_version": SPEC_VERSION,
+        }
+
+    async def join(
+        self,
+        name: str | None = None,
+        agent_did: str | None = None,
+        profile: Mapping[str, Any] | None = None,
+        *,
+        spec_version: str = SPEC_VERSION,
+        instance_id: str | None = None,
+        max_in_flight: int = DEFAULT_MAX_IN_FLIGHT,
+        join_token: str | None = None,
+        identity_proof: str | None = None,
+        request: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Create or reconnect a Membership and open a Session.
+
+        Embedded Teams accept joins without credentials. ``name`` is
+        canonicalized to lowercase. A name and DID that already belong
+        together reconnect; any other clash fails with ``name_conflict``.
+        """
+        del join_token, identity_proof
+        if request is not None:
+            name = request.get("name", name)
+            agent_did = request.get("agent_did", agent_did)
+            profile = request.get("profile", profile)
+            spec_version = request.get("spec_version", spec_version)
+            instance_id = request.get("instance_id", instance_id)
+            if "max_in_flight" in request:
+                max_in_flight = request["max_in_flight"]
+        async with self._lock:
+            return await self._join_locked(
+                name=name,
+                agent_did=agent_did,
+                profile=profile,
+                spec_version=spec_version,
+                instance_id=instance_id,
+                max_in_flight=max_in_flight,
             )
 
-            # Log the response status for debugging
-            if response:
-                logger.debug(
-                    "Received collaboration response (request_id=%s)",
-                    metadata["request_id"],
+    async def _join_locked(
+        self,
+        *,
+        name: str | None,
+        agent_did: str | None,
+        profile: Mapping[str, Any] | None,
+        spec_version: str,
+        instance_id: str | None,
+        max_in_flight: int,
+    ) -> dict[str, Any]:
+        self._ensure_started()
+        if spec_version != SPEC_VERSION:
+            _fail("unsupported_version", "Client and Runtime contract drafts differ")
+        canonical_name = parse_agent_name(name or "")
+        if canonical_name is None:
+            _fail("invalid_request", "Agent name is invalid")
+        try:
+            did = require_did(agent_did)
+        except ValueError:
+            _fail("invalid_request", "agent_did must be a did:key identifier")
+        try:
+            canonical_profile = validate_discovery_profile(profile or {})
+        except ValueError as exc:
+            _fail("invalid_request", str(exc))
+        if instance_id is not None:
+            try:
+                instance_id = require_uuid(instance_id, field="instance_id")
+            except ValueError:
+                _fail("invalid_request", "instance_id must be a UUID")
+        else:
+            instance_id = new_uuid()
+        try:
+            in_flight = int(max_in_flight)
+        except (TypeError, ValueError):
+            _fail("invalid_request", "max_in_flight must be an integer")
+        if in_flight < 1 or in_flight > 100:
+            _fail("invalid_request", "max_in_flight must be between 1 and 100")
+
+        by_name = await self._get_member(canonical_name)
+        by_did = await self._get_member_by_did(did)
+        if by_name is None and by_did is None:
+            member = {
+                "name": canonical_name,
+                "address": f"{canonical_name}@{self.name}",
+                "agent_did": did,
+                "profile": canonical_profile,
+            }
+            await self._save_member(member)
+        elif (
+            by_name is not None
+            and by_did is not None
+            and by_name["name"] == by_did["name"]
+            and by_name["agent_did"] == did
+        ):
+            member = dict(by_name)
+            member["profile"] = canonical_profile
+            await self._save_member(member)
+        else:
+            _fail(
+                "name_conflict",
+                "Agent name and DID do not identify the same Membership",
+            )
+
+        store = self._ensure_started()
+        existing_token = await store.get(f"instance:{member['name']}:{instance_id}")
+        now, now_ts = self._now_pair()
+        if isinstance(existing_token, str):
+            old = await self._get_session(existing_token)
+            if old is not None:
+                await self._release_session_leases(old, now_ts)
+                await self._delete_session(old)
+        elif await self._session_count(member["name"]) >= self.max_instances:
+            _fail("busy", "No more Instances may join this Membership")
+
+        expires = now + timedelta(seconds=self.session_ttl_seconds)
+        session = {
+            "token": secrets.token_urlsafe(32),
+            "membership_name": member["name"],
+            "address": member["address"],
+            "agent_did": member["agent_did"],
+            "instance_id": instance_id,
+            "max_in_flight": in_flight,
+            "expires_at": format_timestamp(expires),
+            "lease_ids": [],
+        }
+        await self._save_session(session)
+        return self._join_result(session, member)
+
+    async def disconnect(self, session_token: str) -> None:
+        """Close this Session. The Membership and its Mailbox remain."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            _, now_ts = self._now_pair()
+            await self._release_session_leases(session, now_ts)
+            await self._delete_session(session)
+
+    async def heartbeat(self, session_token: str) -> dict[str, Any]:
+        """Prove the Client still holds its Session and extend expiry."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            now = utc_now()
+            session["expires_at"] = format_timestamp(
+                now + timedelta(seconds=self.session_ttl_seconds)
+            )
+            await self._save_session(session)
+            return {"session_expires_at": session["expires_at"]}
+
+    # --- send ---
+
+    async def send(
+        self, session_token: str, request: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Accept one request or event for one recipient in this Team."""
+        waiter: asyncio.Event | None = None
+        ticket_id: str | None = None
+        deadline_dt = None
+        async with self._lock:
+            result, wait_for = await self._send_locked(session_token, request)
+            if wait_for is not None:
+                ticket_id, deadline_dt = wait_for
+                waiter = self._register_waiter(ticket_id)
+        if waiter is not None and ticket_id is not None and deadline_dt is not None:
+            try:
+                ticket = await self._wait_until_terminal(ticket_id, deadline_dt, waiter)
+                result = dict(result)
+                result["ticket"] = ticket
+            finally:
+                self._drop_waiter(ticket_id, waiter)
+        return result
+
+    async def _send_locked(
+        self, session_token: str, request: Mapping[str, Any]
+    ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
+        session = await self._require_session(session_token)
+        if not isinstance(request, Mapping):
+            _fail("invalid_request", "send body must be an object")
+        body = dict(request)
+        if json_size(body) > self.max_message_bytes:
+            _fail("payload_too_large", "send body exceeds max_message_bytes")
+
+        kind = body.get("kind")
+        if kind not in MESSAGE_KINDS_SEND:
+            _fail("invalid_request", "kind must be request or event")
+        try:
+            message_id = require_uuid(body.get("id"), field="id")
+        except ValueError:
+            _fail("invalid_request", "id must be a UUID")
+        recipient_raw = body.get("recipient")
+        if not isinstance(recipient_raw, str):
+            _fail("invalid_request", "recipient is required")
+        resolved = resolve_address(recipient_raw, self.name)
+        if resolved == INVALID_ADDRESS:
+            _fail("invalid_address", "Address syntax is invalid")
+        if resolved == ADDRESS_OUTSIDE_TEAM:
+            _fail("address_outside_team", "Address does not name the current Team")
+        recipient = resolved
+
+        collect = body.get("collect")
+        deadline_raw = body.get("deadline")
+        if kind == "event":
+            if collect is not None or deadline_raw is not None:
+                _fail("invalid_request", "an event cannot carry collect or deadline")
+        if collect is not None:
+            if collect not in COLLECT_NAMED:
+                _fail("invalid_request", "collect is not a known collection strategy")
+            if collect not in COLLECT_IMPLEMENTED:
+                _fail(
+                    "unsupported_collect_mode",
+                    f"collect={collect} is not implemented yet",
                 )
-                return response.content
+        if kind == "request" and (collect is not None or deadline_raw is not None):
+            if collect is None or deadline_raw is None:
+                _fail(
+                    "invalid_request",
+                    "a reply-expected request needs collect and a future deadline",
+                )
+            try:
+                deadline_dt = parse_timestamp(deadline_raw)
+            except ValueError:
+                _fail("invalid_request", "deadline must be RFC 3339 UTC ending in Z")
+            if deadline_dt <= utc_now():
+                _fail("invalid_request", "deadline must be in the future")
+        else:
+            deadline_dt = None
+            collect = None
+
+        if "content" not in body:
+            _fail("invalid_request", "content is required")
+        content = body["content"]
+        try:
+            canonical_json(content)
+        except (TypeError, ValueError):
+            _fail("invalid_request", "content must be JSON")
+
+        thread_id = body.get("thread_id")
+        if thread_id is not None:
+            try:
+                thread_id = require_uuid(thread_id, field="thread_id")
+            except ValueError:
+                _fail("invalid_request", "thread_id must be a UUID")
+        parent_id = body.get("parent_id")
+        if parent_id is not None:
+            try:
+                parent_id = require_uuid(parent_id, field="parent_id")
+            except ValueError:
+                _fail("invalid_request", "parent_id must be a UUID")
+        metadata = body.get("metadata")
+        if metadata is not None and not isinstance(metadata, dict):
+            _fail("invalid_request", "metadata must be an object")
+
+        extra = set(body.keys()) - {
+            "id",
+            "recipient",
+            "kind",
+            "content",
+            "thread_id",
+            "parent_id",
+            "metadata",
+            "collect",
+            "deadline",
+            "callback",
+        }
+        if extra:
+            _fail("invalid_request", "send body contains unsupported fields")
+
+        store = self._ensure_started()
+        recipient_name = recipient.split("@", 1)[0]
+        recipient_member = await self._get_member(recipient_name)
+        if recipient_member is None:
+            _fail("not_found", "Recipient Membership was not found")
+
+        sender = session["address"]
+        now, now_ts = self._now_pair()
+        trace_id = new_uuid()
+        parent = None
+        if parent_id is not None:
+            parent = await store.get(f"msg:{parent_id}")
+            if parent is None:
+                _fail("not_found", "parent_id was not found")
+            authorized = sender in {parent.get("sender"), parent.get("recipient")}
+            if not authorized:
+                _fail("not_found", "parent_id was not found")
+            if thread_id is not None:
+                parent_thread = parent.get("thread_id")
+                if parent_thread != thread_id:
+                    _fail("invalid_request", "parent_id is not in the same Thread")
+            trace_id = parent["trace_id"]
+
+        if thread_id is not None:
+            thread = await threads_mod.load_thread(store, thread_id)
+            if thread is not None:
+                participants = threads_mod.participant_set(thread)
+                if sender not in participants or recipient not in participants:
+                    _fail(
+                        "forbidden", "Message is outside this Thread's participant set"
+                    )
+
+        semantic = {
+            "content": content,
+            "recipient": recipient,
+            "kind": kind,
+            "deadline": deadline_raw if deadline_dt is not None else None,
+            "collect": collect,
+            "thread_id": thread_id,
+            "parent_id": parent_id,
+            "metadata": metadata,
+        }
+        request_hash = semantic_hash(semantic)
+
+        existing_msg = await store.get(f"msg:{message_id}")
+        existing_send = await store.get(f"send:{message_id}")
+        if existing_msg is not None or existing_send is not None:
+            if existing_send is None or existing_send.get("sender") != sender:
+                _fail("id_conflict", "Message id is already used")
+            if existing_send.get("hash") != request_hash:
+                _fail("id_conflict", "Message id is already used with different data")
+            result = dict(existing_send["result"])
+            if result.get("status") == "ticketed":
+                ticket = await self._expire_ticket_if_due(message_id)
+                if ticket is not None:
+                    result["ticket"] = ticket
+                if (
+                    collect == "wait"
+                    and ticket is not None
+                    and ticket["state"] == "open"
+                ):
+                    return result, (message_id, parse_timestamp(ticket["deadline"]))
+            return result, None
+
+        items = await mailbox_mod.load_mailbox(store, recipient)
+        if mailbox_mod.mailbox_depth(items) >= self.max_mailbox_depth:
+            _fail("busy", "Recipient Mailbox is full")
+
+        message: dict[str, Any] = {
+            "id": message_id,
+            "sender": sender,
+            "recipient": recipient,
+            "kind": kind,
+            "content": content,
+            "created_at": now_ts,
+            "trace_id": trace_id,
+        }
+        if deadline_dt is not None:
+            message["deadline"] = deadline_raw
+        if thread_id is not None:
+            message["thread_id"] = thread_id
+        if parent_id is not None:
+            message["parent_id"] = parent_id
+        if metadata is not None:
+            message["metadata"] = metadata
+
+        await store.put(f"msg:{message_id}", message)
+        mailbox_mod.enqueue_item(items, message_id, now_ts)
+        await mailbox_mod.save_mailbox(store, recipient, items)
+        if thread_id is not None:
+            await threads_mod.append_message(
+                store,
+                thread_id=thread_id,
+                message=message,
+                sender=sender,
+                recipient=recipient,
+            )
+
+        if deadline_dt is None:
+            result = {"status": "accepted", "message": message}
+            await store.put(
+                f"send:{message_id}",
+                {
+                    "sender": sender,
+                    "hash": request_hash,
+                    "collect": collect,
+                    "result": result,
+                },
+            )
+            return result, None
+
+        ticket = tickets_mod.new_open_ticket(
+            ticket_id=message_id,
+            requester=sender,
+            recipient=recipient,
+            created_at=now_ts,
+            deadline=deadline_raw,
+            thread_id=thread_id,
+        )
+        await tickets_mod.save_ticket(store, ticket)
+        result = {"status": "ticketed", "message": message, "ticket": ticket}
+        await store.put(
+            f"send:{message_id}",
+            {
+                "sender": sender,
+                "hash": request_hash,
+                "collect": collect,
+                "result": result,
+            },
+        )
+        if collect == "wait":
+            return result, (message_id, deadline_dt)
+        return result, None
+
+    async def _wait_until_terminal(
+        self, ticket_id: str, deadline_dt, event: asyncio.Event
+    ) -> dict[str, Any]:
+        while True:
+            async with self._lock:
+                ticket = await self._expire_ticket_if_due(ticket_id)
+                if ticket is not None and tickets_mod.is_terminal(ticket):
+                    return ticket
+            remaining = (deadline_dt - utc_now()).total_seconds()
+            if remaining <= 0:
+                async with self._lock:
+                    ticket = await self._expire_ticket_if_due(ticket_id)
+                    if ticket is None:
+                        _fail("not_found", "Ticket was not found")
+                    return ticket
+            try:
+                await asyncio.wait_for(
+                    event.wait(), timeout=min(0.2, max(remaining, 0.01))
+                )
+                event.clear()
+            except asyncio.TimeoutError:
+                continue
+
+    # --- lease / complete / reply ---
+
+    async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
+        """Pull available work from the calling Membership's Mailbox."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            try:
+                n = int(max_items)
+            except (TypeError, ValueError):
+                _fail("invalid_request", "max_items must be an integer")
+            if n < 1 or n > 100:
+                _fail("invalid_request", "max_items must be between 1 and 100")
+            store = self._ensure_started()
+            now, now_ts = self._now_pair()
+            address = session["address"]
+            items = await mailbox_mod.load_mailbox(store, address)
+            await self._expire_mailbox_leases(items, now, now_ts)
+            active = [
+                lease_id
+                for lease_id in session.get("lease_ids") or []
+                if await self._lease_still_active(lease_id, now)
+            ]
+            session["lease_ids"] = active
+            room = max(0, int(session["max_in_flight"]) - len(active))
+            take = min(n, room)
+            deliveries: list[dict[str, Any]] = []
+            kept: list[dict[str, Any]] = []
+            for item in items:
+                if take <= 0:
+                    kept.append(item)
+                    continue
+                if item.get("state") == "leased":
+                    kept.append(item)
+                    continue
+                available = parse_timestamp(item["available_at"])
+                if available > now:
+                    kept.append(item)
+                    continue
+                message = await store.get(f"msg:{item['message_id']}")
+                if message is None:
+                    continue
+                if message.get("kind") == "request" and message.get("deadline"):
+                    ticket = await self._expire_ticket_if_due(message["id"])
+                    if ticket is None or ticket["state"] != "open":
+                        continue
+                    lease_until = min(
+                        now + timedelta(seconds=self.lease_ttl_seconds),
+                        parse_timestamp(ticket["deadline"]),
+                    )
+                else:
+                    lease_until = now + timedelta(seconds=self.lease_ttl_seconds)
+                if lease_until <= now:
+                    continue
+                lease_id = mailbox_mod.new_lease_id()
+                attempt = int(item.get("attempt") or 0) + 1
+                expires_at = format_timestamp(lease_until)
+                item["state"] = "leased"
+                item["attempt"] = attempt
+                item["lease_id"] = lease_id
+                item["lease_expires_at"] = expires_at
+                await mailbox_mod.put_lease(
+                    store,
+                    lease_id=lease_id,
+                    message_id=message["id"],
+                    address=address,
+                    session_token=session["token"],
+                    membership_name=session["membership_name"],
+                    attempt=attempt,
+                    expires_at=expires_at,
+                )
+                session.setdefault("lease_ids", []).append(lease_id)
+                history, complete = await self._delivery_history(message)
+                deliveries.append(
+                    {
+                        "lease_id": lease_id,
+                        "lease_expires_at": expires_at,
+                        "attempt": attempt,
+                        "message": message,
+                        "history": history,
+                        "history_complete": complete,
+                    }
+                )
+                kept.append(item)
+                take -= 1
+            await mailbox_mod.save_mailbox(store, address, kept)
+            await self._save_session(session)
+            return {"deliveries": deliveries}
+
+    async def _expire_mailbox_leases(
+        self, items: list[dict[str, Any]], now, now_ts: str
+    ) -> None:
+        store = self._ensure_started()
+        for item in items:
+            lease_id = mailbox_mod.expire_item_if_needed(item, now, now_ts)
+            if lease_id:
+                await mailbox_mod.deactivate_lease(store, lease_id)
+
+    async def _lease_still_active(self, lease_id: str, now) -> bool:
+        store = self._ensure_started()
+        record = await mailbox_mod.get_lease(store, lease_id)
+        if record is None:
+            return False
+        return mailbox_mod.lease_is_active(record, now)
+
+    async def _delivery_history(
+        self, message: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], bool]:
+        thread_id = message.get("thread_id")
+        if not thread_id:
+            return [], True
+        store = self._ensure_started()
+        thread = await threads_mod.load_thread(store, thread_id)
+        if thread is None:
+            return [], True
+        messages: list[dict[str, Any]] = []
+        for message_id in thread.get("message_ids") or []:
+            stored = await store.get(f"msg:{message_id}")
+            if stored is not None:
+                messages.append(stored)
+        return threads_mod.history_window(
+            messages,
+            delivered_id=message["id"],
+            limit=self.delivery_history_limit,
+            max_bytes=self.max_message_bytes,
+        )
+
+    async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
+        """Finish a Delivery without a response Message.
+
+        An event or no-reply request just ends. A reply-expected request is
+        declined: the Ticket becomes ``declined``, which is not a failure.
+        """
+        async with self._lock:
+            session = await self._require_session(session_token)
+            try:
+                lease_id = require_uuid(lease_id, field="lease_id")
+            except ValueError:
+                _fail("invalid_request", "lease_id must be a UUID")
+            store = self._ensure_started()
+            lease = await mailbox_mod.get_lease(store, lease_id)
+            if (
+                lease is None
+                or lease.get("membership_name") != session["membership_name"]
+            ):
+                _fail("not_found", "lease_id was not found")
+            existing = await store.get(f"complete:{lease_id}")
+            if existing is not None:
+                return dict(existing["result"])
+            now, now_ts = self._now_pair()
+            message = await store.get(f"msg:{lease['message_id']}")
+            ticket = None
+            if message and message.get("kind") == "request" and message.get("deadline"):
+                ticket = await self._expire_ticket_if_due(message["id"])
+                if ticket is not None and tickets_mod.is_terminal(ticket):
+                    _fail("ticket_closed", "Ticket is already terminal")
+            if not mailbox_mod.lease_is_active(lease, now):
+                _fail("lease_expired", "Delivery lease is no longer active")
+            result: dict[str, Any] = {}
+            if ticket is not None and ticket["state"] == "open":
+                ticket = tickets_mod.mark_declined(ticket, now_ts)
+                await tickets_mod.save_ticket(store, ticket)
+                result["ticket"] = ticket
+                self._notify(ticket["id"])
+            await self._finish_delivery(session, lease, now_ts)
+            await store.put(f"complete:{lease_id}", {"result": result})
+            return result
+
+    async def reply(
+        self, session_token: str, request: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Finish a reply-expected Delivery with content or an error."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            if not isinstance(request, Mapping):
+                _fail("invalid_request", "reply body must be an object")
+            body = dict(request)
+            try:
+                reply_id = require_uuid(body.get("id"), field="id")
+                lease_id = require_uuid(body.get("lease_id"), field="lease_id")
+            except ValueError:
+                _fail("invalid_request", "id and lease_id must be UUIDs")
+            outcome = body.get("outcome")
+            if outcome not in {"completed", "failed"}:
+                _fail("invalid_request", "outcome must be completed or failed")
+            store = self._ensure_started()
+            lease = await mailbox_mod.get_lease(store, lease_id)
+            if (
+                lease is None
+                or lease.get("membership_name") != session["membership_name"]
+            ):
+                _fail("not_found", "lease_id was not found")
+
+            if outcome == "completed":
+                if "content" not in body:
+                    _fail(
+                        "invalid_request", "content is required for a completed reply"
+                    )
+                payload = {"outcome": "completed", "content": body.get("content")}
             else:
-                logger.warning(
-                    "No response received within timeout (request_id=%s)",
-                    metadata["request_id"],
-                )
+                error = body.get("error")
+                if not isinstance(error, dict):
+                    _fail("invalid_request", "error is required for a failed reply")
+                payload = {"outcome": "failed", "error": error}
+            try:
+                reply_hash = semantic_hash(payload)
+            except (TypeError, ValueError):
+                _fail("invalid_request", "reply data must be JSON")
 
-                # More helpful error message that provides the request ID for later checking
-                return (
-                    f"No immediate response received from {receiver_id} within {effective_timeout} seconds. "
-                    f"The request is still processing (ID: {metadata['request_id']}). "
-                    f"If you receive a response later, it will be available. "
-                    f"You can continue with other tasks and check back later."
-                )
+            existing_reply = await store.get(f"reply:{reply_id}")
+            existing_msg = await store.get(f"msg:{reply_id}")
+            if existing_reply is not None:
+                if existing_reply.get("sender") != session["address"]:
+                    _fail("id_conflict", "Message id is already used")
+                if existing_reply.get("hash") != reply_hash:
+                    _fail(
+                        "id_conflict", "Message id is already used with different data"
+                    )
+                return dict(existing_reply["result"])
+            if existing_msg is not None:
+                _fail("id_conflict", "Message id is already used")
 
-        except Exception as e:
-            error_msg = "Error sending collaboration request"
-            logger.error(
-                "%s sender=%s receiver=%s: %s", error_msg, sender_id, receiver_id, e
+            now, now_ts = self._now_pair()
+            message = await store.get(f"msg:{lease['message_id']}")
+            if (
+                message is None
+                or message.get("kind") != "request"
+                or not message.get("deadline")
+            ):
+                _fail(
+                    "invalid_request",
+                    "reply is only valid for a reply-expected request",
+                )
+            ticket = await self._expire_ticket_if_due(message["id"])
+            if ticket is not None and tickets_mod.is_terminal(ticket):
+                if (
+                    mailbox_mod.lease_is_active(lease, now)
+                    or lease.get("membership_name") == session["membership_name"]
+                ):
+                    ticket = tickets_mod.observe_late_reply(ticket, now_ts)
+                    await tickets_mod.save_ticket(store, ticket)
+                _fail("ticket_closed", "Ticket is already terminal")
+            if not mailbox_mod.lease_is_active(lease, now):
+                _fail("lease_expired", "Delivery lease is no longer active")
+            if ticket is None or ticket["state"] != "open":
+                _fail("ticket_closed", "Ticket is already terminal")
+
+            if outcome == "failed":
+                error_obj = self._validate_error_object(payload["error"])
+                reply_message: dict[str, Any] = {
+                    "id": reply_id,
+                    "sender": session["address"],
+                    "recipient": message["sender"],
+                    "kind": "error",
+                    "error": error_obj,
+                    "created_at": now_ts,
+                    "trace_id": message["trace_id"],
+                    "parent_id": message["id"],
+                }
+                if message.get("thread_id"):
+                    reply_message["thread_id"] = message["thread_id"]
+                ticket = tickets_mod.mark_failed(ticket, error_obj, now_ts)
+            else:
+                reply_message = {
+                    "id": reply_id,
+                    "sender": session["address"],
+                    "recipient": message["sender"],
+                    "kind": "response",
+                    "content": payload["content"],
+                    "created_at": now_ts,
+                    "trace_id": message["trace_id"],
+                    "parent_id": message["id"],
+                }
+                if message.get("thread_id"):
+                    reply_message["thread_id"] = message["thread_id"]
+                ticket = tickets_mod.mark_completed(ticket, reply_message, now_ts)
+
+            await store.put(f"msg:{reply_id}", reply_message)
+            if message.get("thread_id"):
+                await threads_mod.append_message(
+                    store,
+                    thread_id=message["thread_id"],
+                    message=reply_message,
+                    sender=reply_message["sender"],
+                    recipient=reply_message["recipient"],
+                )
+            await tickets_mod.save_ticket(store, ticket)
+            await self._finish_delivery(session, lease, now_ts)
+            result = {"ticket": ticket}
+            await store.put(
+                f"reply:{reply_id}",
+                {"sender": session["address"], "hash": reply_hash, "result": result},
             )
-            return f"{error_msg}: {str(e)}"
+            self._notify(ticket["id"])
+            return result
+
+    def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
+        code = error.get("code")
+        message = error.get("message")
+        if not isinstance(code, str) or _ERROR_CODE.fullmatch(code) is None:
+            _fail("invalid_request", "error.code is invalid")
+        if not isinstance(message, str) or message.strip() == "" or len(message) > 2000:
+            _fail("invalid_request", "error.message is invalid")
+        out: dict[str, Any] = {"code": code, "message": message}
+        if "details" in error:
+            if not isinstance(error["details"], dict):
+                _fail("invalid_request", "error.details must be an object")
+            out["details"] = error["details"]
+        if "retryable" in error:
+            if not isinstance(error["retryable"], bool):
+                _fail("invalid_request", "error.retryable must be a boolean")
+            out["retryable"] = error["retryable"]
+        return out
+
+    async def _finish_delivery(
+        self, session: dict[str, Any], lease: dict[str, Any], now_ts: str
+    ) -> None:
+        store = self._ensure_started()
+        items = await mailbox_mod.load_mailbox(store, lease["address"])
+        mailbox_mod.remove_item(items, lease["message_id"])
+        await mailbox_mod.save_mailbox(store, lease["address"], items)
+        await mailbox_mod.deactivate_lease(store, lease["lease_id"])
+        lease_ids = list(session.get("lease_ids") or [])
+        if lease["lease_id"] in lease_ids:
+            lease_ids.remove(lease["lease_id"])
+        session["lease_ids"] = lease_ids
+        await self._save_session(session)
+
+    async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
+        """Return the Ticket owned by the calling Membership."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            try:
+                ticket_id = require_uuid(ticket_id, field="ticket_id")
+            except ValueError:
+                _fail("invalid_request", "ticket_id must be a UUID")
+            ticket = await self._expire_ticket_if_due(ticket_id)
+            if ticket is None or ticket.get("requester") != session["address"]:
+                _fail("not_found", "Ticket was not found")
+            return ticket
+
+    async def get_history(
+        self,
+        session_token: str,
+        thread_id: str,
+        *,
+        before: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Return one page of a Thread's retained history."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            try:
+                thread_id = require_uuid(thread_id, field="thread_id")
+            except ValueError:
+                _fail("invalid_request", "thread_id must be a UUID")
+            if before is not None:
+                try:
+                    before = require_uuid(before, field="before")
+                except ValueError:
+                    _fail("invalid_request", "before must be a UUID")
+            try:
+                n = int(limit)
+            except (TypeError, ValueError):
+                _fail("invalid_request", "limit must be an integer")
+            if n < 1 or n > 200:
+                _fail("invalid_request", "limit must be between 1 and 200")
+            store = self._ensure_started()
+            thread = await threads_mod.load_thread(store, thread_id)
+            if thread is None or session["address"] not in threads_mod.participant_set(
+                thread
+            ):
+                _fail("not_found", "Thread was not found")
+            messages: list[dict[str, Any]] = []
+            for message_id in thread.get("message_ids") or []:
+                stored = await store.get(f"msg:{message_id}")
+                if stored is not None:
+                    messages.append(stored)
+            page, has_more = threads_mod.page_history(messages, before=before, limit=n)
+            return {"messages": page, "has_more": has_more}
+
+    async def find(
+        self,
+        session_token: str,
+        query: str,
+        *,
+        limit: int = 10,
+        detail: str = "summary",
+    ) -> dict[str, Any]:
+        """Search this Team's Directory. Ranking is lexical until discovery lands."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            if not isinstance(query, str) or not query.strip() or len(query) > 1000:
+                _fail(
+                    "invalid_request",
+                    "query must be 1 to 1000 non-whitespace characters",
+                )
+            try:
+                n = int(limit)
+            except (TypeError, ValueError):
+                _fail("invalid_request", "limit must be an integer")
+            if n < 1 or n > 100:
+                _fail("invalid_request", "limit must be between 1 and 100")
+            if detail not in {"summary", "full"}:
+                _fail("invalid_request", "detail must be summary or full")
+            store = self._ensure_started()
+            names = await store.set_members("members")
+            scored: list[tuple[float, str, dict[str, Any]]] = []
+            query_tokens = _tokens(query)
+            for name in names:
+                member = await self._get_member(name)
+                if member is None or member["address"] == session["address"]:
+                    continue
+                score = _relevance(query_tokens, member["profile"])
+                scored.append((score, member["address"], member))
+            scored.sort(key=lambda item: (-item[0], item[1]))
+            matches = []
+            for _, _, member in scored[:n]:
+                profile = member["profile"]
+                match: dict[str, Any] = {
+                    "address": member["address"],
+                    "summary": profile["summary"],
+                    "skill_names": [
+                        skill["name"] for skill in profile.get("skills") or []
+                    ],
+                }
+                if profile.get("tags"):
+                    match["tags"] = list(profile["tags"])
+                if detail == "full":
+                    match["agent_did"] = member["agent_did"]
+                    match["profile"] = profile
+                matches.append(match)
+            return {"matches": matches}
+
+    async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
+        """Return one Directory entry by local or same-Team Address."""
+        async with self._lock:
+            await self._require_session(session_token)
+            if not isinstance(address, str):
+                _fail("invalid_request", "address is required")
+            resolved = resolve_address(address, self.name)
+            if resolved == INVALID_ADDRESS:
+                _fail("invalid_address", "Address syntax is invalid")
+            if resolved == ADDRESS_OUTSIDE_TEAM:
+                _fail("address_outside_team", "Address does not name the current Team")
+            name = resolved.split("@", 1)[0]
+            member = await self._get_member(name)
+            if member is None:
+                _fail("not_found", "Membership was not found")
+            return {
+                "address": member["address"],
+                "agent_did": member["agent_did"],
+                "profile": member["profile"],
+            }
+
+    async def _expire_ticket_if_due(self, ticket_id: str) -> Optional[dict[str, Any]]:
+        store = self._ensure_started()
+        ticket = await tickets_mod.load_ticket(store, ticket_id)
+        if ticket is None:
+            return None
+        now, now_ts = self._now_pair()
+        if ticket["state"] == "open" and tickets_mod.deadline_passed(ticket, now):
+            ticket = tickets_mod.mark_expired(ticket, now_ts)
+            await tickets_mod.save_ticket(store, ticket)
+            items = await mailbox_mod.load_mailbox(store, ticket["recipient"])
+            mailbox_mod.remove_item(items, ticket["id"])
+            await mailbox_mod.save_mailbox(store, ticket["recipient"], items)
+            self._notify(ticket["id"])
+        return ticket
+
+    async def _sweep_loop(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(self.sweep_interval_seconds)
+                try:
+                    async with self._lock:
+                        await self._sweep_once()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.debug("Team sweep failed team=%s", self.name, exc_info=True)
+        except asyncio.CancelledError:
+            return
+
+    async def _sweep_once(self) -> None:
+        store = self._ensure_started()
+        now, now_ts = self._now_pair()
+        for token in list(await store.set_members("sessions")):
+            session = await self._get_session(token)
+            if session is None:
+                continue
+            if parse_timestamp(session["expires_at"]) <= now:
+                await self._release_session_leases(session, now_ts)
+                await self._delete_session(session)
+        for lease_id in list(await store.set_members(mailbox_mod.LEASES_SET)):
+            lease = await mailbox_mod.get_lease(store, lease_id)
+            if lease is None:
+                continue
+            if mailbox_mod.lease_is_active(lease, now):
+                continue
+            items = await mailbox_mod.load_mailbox(store, lease["address"])
+            item = mailbox_mod.find_item(items, lease["message_id"])
+            if item is not None and item.get("lease_id") == lease_id:
+                mailbox_mod.release_lease_on_item(item, now_ts)
+                await mailbox_mod.save_mailbox(store, lease["address"], items)
+            await mailbox_mod.deactivate_lease(store, lease_id)
+        keep_ids: set[str] = set()
+        for ticket_id in list(await store.set_members(tickets_mod.OPEN_TICKETS_SET)):
+            ticket = await self._expire_ticket_if_due(ticket_id)
+            if ticket is not None and ticket["state"] == "open":
+                keep_ids.add(ticket["id"])
+        retention = timedelta(seconds=self.terminal_ticket_retention_seconds)
+        for ticket_id in list(await store.set_members(tickets_mod.ALL_TICKETS_SET)):
+            ticket = await tickets_mod.load_ticket(store, ticket_id)
+            if ticket is None or ticket["state"] == "open":
+                continue
+            closed_at = parse_timestamp(ticket["updated_at"])
+            deadline = parse_timestamp(ticket["deadline"])
+            retain_until = max(deadline, closed_at + retention)
+            if retain_until <= now:
+                await tickets_mod.delete_ticket(store, ticket_id)
+            else:
+                keep_ids.add(ticket["id"])
+                if ticket.get("response"):
+                    keep_ids.add(ticket["response"]["id"])
+        for thread_id in list(await store.set_members(threads_mod.THREADS_SET)):
+            thread = await threads_mod.load_thread(store, thread_id)
+            if thread is None:
+                continue
+            messages_by_id: dict[str, dict[str, Any]] = {}
+            for message_id in thread.get("message_ids") or []:
+                stored = await store.get(f"msg:{message_id}")
+                if stored is not None:
+                    messages_by_id[message_id] = stored
+            trimmed = threads_mod.trim_thread_ids(
+                list(thread.get("message_ids") or []),
+                messages_by_id,
+                keep_ids=keep_ids,
+                max_messages=self.thread_message_limit,
+            )
+            dropped = set(thread.get("message_ids") or []) - set(trimmed)
+            if dropped:
+                thread["message_ids"] = trimmed
+                await threads_mod.save_thread(store, thread)
+
+
+def _tokens(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _relevance(query_tokens: set[str], profile: Mapping[str, Any]) -> float:
+    if not query_tokens:
+        return 0.0
+    parts = [str(profile.get("summary") or "")]
+    for skill in profile.get("skills") or []:
+        parts.append(str(skill.get("name") or ""))
+        parts.append(str(skill.get("description") or ""))
+        parts.extend(str(example) for example in skill.get("examples") or [])
+        parts.extend(str(tag) for tag in skill.get("tags") or [])
+    parts.extend(str(tag) for tag in profile.get("tags") or [])
+    haystack = _tokens(" ".join(parts))
+    if not haystack:
+        return 0.0
+    return len(query_tokens & haystack) / len(query_tokens)

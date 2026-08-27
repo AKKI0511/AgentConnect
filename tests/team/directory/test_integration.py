@@ -20,7 +20,7 @@ from agentconnect.core.types import (
 )
 
 
-@pytest_asyncio.fixture(scope="class")
+@pytest_asyncio.fixture(scope="class", loop_scope="class")
 async def registry_instance():
     """Provides a new AgentRegistry instance configured for in-memory Qdrant."""
     # Explicitly configure for in-memory mode for CI/testing
@@ -31,7 +31,7 @@ async def registry_instance():
     # No explicit teardown needed
 
 
-@pytest_asyncio.fixture(scope="class", autouse=True)
+@pytest_asyncio.fixture(scope="class", loop_scope="class", autouse=True)
 async def setup_registry_data(registry_instance: AgentRegistry):
     """Registers test agents with the initialized registry instance."""
     # registry_instance is already initialized due to the ensure_initialized call in its fixture
@@ -185,17 +185,16 @@ async def setup_registry_data(registry_instance: AgentRegistry):
     # The individual register calls awaited the embedding updates.
 
 
+@pytest.mark.asyncio(loop_scope="class")
 class TestCapabilityDiscoveryIntegration:
     """Integration tests for CapabilityDiscoveryService with AgentRegistry."""
 
-    @pytest.mark.asyncio
     async def test_registry_integration(self, registry_instance: AgentRegistry):
         """Test that registry integration works correctly."""
         # Check that all agents are registered
         registrations = await registry_instance.get_all_agents()
         assert len(registrations) == 3
 
-    @pytest.mark.asyncio
     async def test_find_by_capability(self, registry_instance: AgentRegistry):
         """Test finding agents by capability within the registry."""
         # Search for data analysis capabilities
@@ -210,7 +209,6 @@ class TestCapabilityDiscoveryIntegration:
         assert first_agent.agent_id == "data-agent"
         assert score > 0.3
 
-    @pytest.mark.asyncio
     async def test_capability_update(self, registry_instance: AgentRegistry):
         """Test updating agent capabilities."""
         # Define the updates for the NLP agent
@@ -281,7 +279,6 @@ class TestCapabilityDiscoveryIntegration:
             found_nlp_agent
         ), f"Updated agent {agent_id_to_update} not found in search results for new capability."
 
-    @pytest.mark.asyncio
     async def test_organization_filtering(self, registry_instance: AgentRegistry):
         """Test filtering by organization."""
         results = await registry_instance.get_by_capability_semantic(
@@ -294,7 +291,6 @@ class TestCapabilityDiscoveryIntegration:
         first_agent, _ = results[0]
         assert first_agent.agent_id == "data-agent"
 
-    @pytest.mark.asyncio
     async def test_metadata_integration(self, registry_instance: AgentRegistry):
         """Test integration with custom metadata."""
         custom_reg = await registry_instance.get_registration("assistant-agent")
@@ -302,7 +298,6 @@ class TestCapabilityDiscoveryIntegration:
         assert custom_reg.custom_metadata.get("expertise_level") == "beginner"
         assert custom_reg.custom_metadata.get("preferred_language") == "English"
 
-    @pytest.mark.asyncio
     async def test_agent_removal(self, registry_instance: AgentRegistry):
         """Test removing an agent from the registry and discovery service."""
         # Remove the data agent

@@ -3,13 +3,11 @@ import os
 import sys
 
 import pytest
-from dotenv import load_dotenv
 
-pytest.importorskip("aioconsole")
-
-from agentconnect.prebuilt import AIAgent, HumanAgent
-from agentconnect.team import CommunicationHub
-from agentconnect.team.directory import AgentRegistry
+pytest.skip(
+    "interactive human-in-the-loop demo; not a unit test",
+    allow_module_level=True,
+)
 from agentconnect.core.types import (
     AgentIdentity,
     InteractionMode,

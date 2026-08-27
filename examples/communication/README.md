@@ -1,73 +1,18 @@
-# Communication Examples
+# Communication examples
 
-This directory contains examples demonstrating how agents communicate with each other in the AgentConnect framework.
-
-## Available Examples
-
-### Basic Communication
-
-`basic_communication.py` - Demonstrates how to:
-- Set up communication between multiple agents
-- Use the communication hub for message routing
-- Implement different communication protocols
-- Handle message verification and security
-
-## Running Examples
-
-To run these examples:
+`basic_communication.py` starts one Team, joins two members, and completes a reply-expected request through Runtime operations: `send`, `lease`, `reply`, and `get_result`.
 
 ```bash
-# Install dependencies
 poetry install
-
-# Run the basic communication example
-python examples/communication/basic_communication.py
+poetry run python examples/communication/basic_communication.py
 ```
 
-## Creating Your Own Communication Examples
+The Team never holds Agent objects. Members pull work with `lease`. Model-backed agents that join over a session are a later example.
 
-When creating your own communication examples, consider:
-
-1. **Communication Patterns**: Demonstrate different patterns (one-to-one, broadcast, etc.)
-2. **Protocol Implementation**: Show how to implement custom communication protocols
-3. **Security Measures**: Include examples of secure communication
-4. **Error Handling**: Demonstrate handling of communication failures 
-
-## Example Template
+A Redis-backed Team uses the same operations. Pass a Redis URL when constructing the Team:
 
 ```python
-import asyncio
-import logging
-from agentconnect.team.directory import AgentRegistry
-from agentconnect.team.runtime import CommunicationHub
-from agentconnect.prebuilt.ai_agent import AIAgent
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("YourExample")
-
-async def main():
-    # Create registry and hub
-    registry = AgentRegistry()
-    hub = CommunicationHub(registry)
-    
-    try:
-        # Create and register agents
-        # ...
-        
-        # Your example code here
-        # ...
-        
-    except Exception as e:
-        logger.exception(f"Error in example: {str(e)}")
-    finally:
-        # Clean up
-        # Unregister agents
-        # ...
-        
-        logger.info("Example completed")
-
-if __name__ == "__main__":
-    asyncio.run(main()) 
-
+team = await Team("content-squad", store="redis://localhost:6379/0").start()
 ```
+
+Open Tickets in that store still resolve after the Runtime process restarts.

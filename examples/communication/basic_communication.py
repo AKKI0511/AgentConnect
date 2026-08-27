@@ -1,176 +1,118 @@
-"""
-Basic example demonstrating how to use the CommunicationHub for agent communication.
+"""Two members of one Team exchanging a reply-expected request.
 
-This example shows:
-1. Creating and registering agents
-2. Sending messages between agents
-3. Using the request-response pattern
-4. Handling collaboration requests
-5. Implementing agent-to-agent collaboration
+This example talks to the Team Runtime directly: join, send, lease, reply,
+and get_result. It does not start model-backed agents. Those join through
+a session in a later milestone.
+
+Run from the repo root::
+
+    poetry run python examples/communication/basic_communication.py
 """
+
+from __future__ import annotations
 
 import asyncio
-import os
-from dotenv import load_dotenv
+import uuid
+from datetime import datetime, timedelta, timezone
 
-from agentconnect.team.directory import AgentRegistry
-from agentconnect.core.types import (
-    AgentIdentity,
-    InteractionMode,
-    MessageKind,
-    ModelName,
-    ModelProvider,
-)
-from agentconnect.core.message import Message
-from agentconnect.team.runtime import CommunicationHub
-from agentconnect.prebuilt.ai_agent import AIAgent
-
-# Load environment variables
-load_dotenv()
-
-async def message_handler(message: Message) -> None:
-    """Example message handler that prints received messages"""
-    print(f"Received message: {message.content[:50]}...")
+from agentconnect.team import Team, TeamError
 
 
-async def main():
-    # Create registry and hub
-    registry = AgentRegistry()
-    hub = CommunicationHub(registry)
+WRITER_DID = "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m"
+RESEARCHER_DID = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
 
-    # Create agents
-    agent1 = AIAgent(
-        agent_id="agent1",
-        name="Agent One",
-        provider_type=ModelProvider.GOOGLE,
-        model_name=ModelName.GEMINI2_FLASH_LITE,
-        api_key=os.getenv("GOOGLE_API_KEY"),
-        identity=AgentIdentity.create_key_based(),
-        personality="knowledgeable research assistant",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
-    )
+WRITER_PROFILE = {
+    "summary": "Writes short drafts from research notes.",
+    "skills": [
+        {
+            "name": "drafting",
+            "description": "Turn notes into a two-paragraph draft.",
+            "examples": ["Draft a summary of these findings."],
+        }
+    ],
+    "tags": ["writing"],
+}
 
-    agent2 = AIAgent(
-        agent_id="agent2",
-        name="Agent Two",
-        provider_type=ModelProvider.GOOGLE,
-        model_name=ModelName.GEMINI2_FLASH,
-        api_key=os.getenv("GOOGLE_API_KEY"),
-        identity=AgentIdentity.create_key_based(),
-        personality="precise and analytical data specialist",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
-    )
+RESEARCHER_PROFILE = {
+    "summary": "Researches technical topics and returns cited findings.",
+    "skills": [
+        {
+            "name": "technical_research",
+            "description": "Find sources and summarize them with citations.",
+        }
+    ],
+    "tags": ["research"],
+}
 
-    # Register agents with the hub
-    await hub.register_agent(agent1)
-    await hub.register_agent(agent2)
 
-    # Add message handlers
-    hub.add_message_handler("agent1", message_handler)
-    hub.add_message_handler("agent2", message_handler)
+def _deadline(seconds: int = 30) -> str:
+    instant = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    return instant.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Example 1: Simple message sending
-    print("Example 1: Simple message sending")
-    message = Message.create(
-        sender_id="agent1",
-        receiver_id="agent2",
-        content="Hello from Agent One!",
-        sender_identity=agent1.identity,
-        kind=MessageKind.EVENT,
-    )
 
-    success = await hub.route_message(message)
-    print(f"Message routing success: {success}")
+async def main() -> None:
+    team = await Team("content-squad").start()
+    try:
+        writer = await team.join(
+            name="writer",
+            agent_did=WRITER_DID,
+            profile=WRITER_PROFILE,
+        )
+        researcher = await team.join(
+            name="researcher",
+            agent_did=RESEARCHER_DID,
+            profile=RESEARCHER_PROFILE,
+        )
+        print(f"writer address:     {writer['address']}")
+        print(f"researcher address: {researcher['address']}")
+        print(f"persistence:        {writer['persistence']}")
 
-    # Wait a moment for the message to be processed
-    await asyncio.sleep(1)
+        found = await team.find(
+            researcher["session_token"],
+            "someone who can draft a summary",
+            limit=5,
+        )
+        print("find:", [match["address"] for match in found["matches"]])
 
-    # Example 2: Request-response pattern
-    print("\nExample 2: Request-response pattern")
-    response = await hub.send_message_and_wait_response(
-        sender_id="agent1",
-        receiver_id="agent2",
-        content="What's your name?",
-        kind=MessageKind.EVENT,
-        timeout=10,
-    )
+        request_id = str(uuid.uuid4())
+        sent = await team.send(
+            researcher["session_token"],
+            {
+                "id": request_id,
+                "recipient": "writer",
+                "kind": "request",
+                "content": {"task": "Draft a two-paragraph summary of today's notes."},
+                "collect": "ticket",
+                "deadline": _deadline(30),
+            },
+        )
+        print(f"ticket state after send: {sent['ticket']['state']}")
 
-    if response:
-        print(f"Received response: {response.content[:50]}...")
-    else:
-        print("No response received within timeout")
+        leased = await team.lease(writer["session_token"])
+        delivery = leased["deliveries"][0]
+        print(f"writer leased attempt {delivery['attempt']} id={delivery['message']['id']}")
 
-    # Example 3: Collaboration request
-    print("\nExample 3: Collaboration request")
-    result = await hub.send_collaboration_request(
-        sender_id="agent1",
-        receiver_id="agent2",
-        task_description="Please analyze this data: [1, 2, 3, 4, 5]",
-        timeout=20,
-    )
+        replied = await team.reply(
+            writer["session_token"],
+            {
+                "id": str(uuid.uuid4()),
+                "lease_id": delivery["lease_id"],
+                "outcome": "completed",
+                "content": "Draft complete.",
+            },
+        )
+        print(f"ticket state after reply: {replied['ticket']['state']}")
+        print(f"response: {replied['ticket']['response']['content']}")
 
-    print(f"Collaboration result: {result[:50]}...")
+        ticket = await team.get_result(researcher["session_token"], request_id)
+        print(f"get_result: {ticket['state']}")
 
-    # Example 4: Specialized agents collaboration
-    print("\nExample 4: Specialized agents collaboration")
-
-    # Create specialized agents
-    research_assistant = AIAgent(
-        agent_id="research_assistant",
-        name="Research Assistant",
-        provider_type=ModelProvider.GOOGLE,
-        model_name=ModelName.GEMINI2_FLASH_LITE,
-        api_key=os.getenv("GOOGLE_API_KEY"),
-        identity=AgentIdentity.create_key_based(),
-        personality="knowledgeable research assistant specialized in finding information",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
-    )
-
-    data_analyst = AIAgent(
-        agent_id="data_analyst",
-        name="Data Analyst",
-        provider_type=ModelProvider.GOOGLE,
-        model_name=ModelName.GEMINI2_FLASH,
-        api_key=os.getenv("GOOGLE_API_KEY"),
-        identity=AgentIdentity.create_key_based(),
-        personality="precise and analytical data specialist who excels at interpreting numbers",
-        interaction_modes=[
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
-    )
-
-    # Register specialized agents
-    await hub.register_agent(research_assistant)
-    await hub.register_agent(data_analyst)
-
-    # Send a collaboration request between specialized agents
-    print("Sending collaboration request from research_assistant to data_analyst")
-    specialized_result = await hub.send_collaboration_request(
-        sender_id="research_assistant",
-        receiver_id="data_analyst",
-        task_description="Please analyze this dataset and provide key insights: [10, 15, 20, 25, 30]",
-        timeout=30,
-    )
-
-    print(f"Specialized collaboration result: {specialized_result[:100]}...")
-
-    # Clean up all agents
-    await hub.unregister_agent("agent1")
-    await hub.unregister_agent("agent2")
-    await hub.unregister_agent("research_assistant")
-    await hub.unregister_agent("data_analyst")
-
-    print("Example completed successfully")
+        try:
+            await team.get_result(writer["session_token"], request_id)
+        except TeamError as exc:
+            print(f"writer cannot read researcher's ticket: {exc.code}")
+    finally:
+        await team.stop()
 
 
 if __name__ == "__main__":

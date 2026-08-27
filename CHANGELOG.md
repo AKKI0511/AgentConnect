@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Team Runtime with store-backed mailboxes, Tickets, and Thread history. `Team("name").start()` serves join, send, lease, complete, reply, get_result, get_history, find, and get_profile. Memory is the default store; Redis keeps open Tickets across a Runtime restart.
+
 ### Changed
+- Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.

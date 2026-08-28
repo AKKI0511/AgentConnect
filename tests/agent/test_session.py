@@ -31,8 +31,7 @@ async def test_supplied_instance_id_is_reused_on_rejoin(team: Team):
     await first.join(team)
     token = first._session.session_token
     await first.leave()
-    second = EchoAgent(name="writer", instance_id=instance)
-    second.agent_did = first.agent_did
+    second = EchoAgent(name="writer", instance_id=instance, identity=first.identity)
     await second.join(team)
     try:
         assert second.instance_id == instance

@@ -81,18 +81,9 @@ async def verify_ethereum_did(identity: AgentIdentity) -> bool:
 
 
 async def verify_key_did(identity: AgentIdentity) -> bool:
-    """
-    Verify key-based DID.
-
-    Args:
-        identity: Agent's key-based decentralized identity
-
-    Returns:
-        True if the identity is verified, False otherwise
-    """
+    """Return True when ``identity.did`` is the Ed25519 ``did:key`` for its public key."""
     try:
-        # TODO: Implement full key-based DID verification
-        return True
+        return identity.matches_did()
     except Exception as e:
         logger.error("Error verifying key-based DID: %s", e)
         return False

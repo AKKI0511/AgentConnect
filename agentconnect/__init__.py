@@ -42,6 +42,7 @@ __all__ = [
     "SessionError",
     "Team",
     "TeamError",
+    "AgentIdentity",
 ]
 
 import logging
@@ -56,6 +57,7 @@ _LAZY_EXPORTS = {
     "SessionError": ("agentconnect.agent.errors", "SessionError"),
     "Team": ("agentconnect.team.runtime", "Team"),
     "TeamError": ("agentconnect.team.errors", "TeamError"),
+    "AgentIdentity": ("agentconnect.core.identity", "AgentIdentity"),
 }
 
 

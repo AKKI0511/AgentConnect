@@ -10,15 +10,21 @@ poetry run python examples/communication/basic_communication.py
 
 `basic_communication.py` starts an embedded Team and two Agents in one process.
 
-`http_session.py` serves the same Team over loopback HTTP. Agents join by URL,
-which is the same call you use from another process:
+`http_session.py` serves the same Team over loopback HTTP. Agents join by URL.
+Loopback serving still accepts a join without a token; the Session sends an
+identity proof so the Runtime can stamp the Agent DID.
+
+`join_auth.py` starts a Team with ``require_join_auth=True``. The operator
+issues a token bound to one Agent DID. A different Agent cannot use it.
 
 ```python
-await Writer(name="writer").join("http://127.0.0.1:9000")
+issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
+await Writer(name="writer").join(url, join_token=issued["token"])
 ```
 
 ```bash
 poetry run python examples/communication/http_session.py
+poetry run python examples/communication/join_auth.py
 ```
 
 A handler can return a value (reply), return nothing (decline a request, or

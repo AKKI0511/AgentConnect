@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Team Runtime with store-backed mailboxes, Tickets, and Thread history. `Team("name").start()` serves join, send, lease, complete, reply, get_result, get_history, find, and get_profile. Memory is the default store; Redis keeps open Tickets across a Runtime restart.
 - Agent Session and handler contract. Subclass `BaseAgent`, implement `process_message(msg, ctx)`, and `join` a Team in-process or by URL. The Session pulls work, maps return / None / raise / `ctx.ticket()` onto Runtime reply and complete, retries while the Team is coming up, and reconnects after a restart. `Team.serve()` exposes the HTTP binding (POST + SSE) on loopback.
+- Join authentication. Every Agent has an Ed25519 `did:key`. `Team.issue_join_token` issues a scoped, expiring, revocable token. Network joins (`require_join_auth=True`) require that token plus an EdDSA identity proof. Revoking a token or removing a Membership drops the Session immediately. The Runtime mints a membership attestation JWT at join; inbound verification of that statement is later work.
 
 ### Changed
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
 - Replaced `BaseAgent.run()`, the per-agent queue, and the 100ms poll loop with a pull Session. `join_network` / `register_agent` are gone. `process_message` takes `(msg, ctx)`.
+- Switched Agent and Team key generation from RSA to Ed25519 `did:key`. Join identity proofs and MCP access tokens are EdDSA JWTs.
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.
@@ -24,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleted unused `agentconnect.communication.protocols`.
 - Removed `pylint` and the PyPI `asyncio` backport from runtime dependencies.
 - Removed the `communication/`, `servers/`, and `clients/` packages after moving their code into `team/`, `transport/`, `gateway/`, `index/`, and `config/`.
-
 
 ### Planned
 - A2A communication hardening: ResponseTracker, HTTP transport SPI, Inbox server, metrics, remote A2A support.

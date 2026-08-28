@@ -17,6 +17,7 @@ async def test_join_assigns_qualified_address_and_session(team: Team):
     assert result["team_name"] == "content-squad"
     assert result["persistence"] == "volatile"
     assert result["limits"]["max_mailbox_depth"] == 1000
+    assert result["limits"]["wait_hold_seconds"] == 25.0
     assert result["spec_version"] == "1.0.0-draft"
     assert result["session_token"]
     assert result["instance_id"]

@@ -655,3 +655,31 @@ async def test_callback_collect_is_unsupported(team: Team):
             },
         )
     assert exc.value.code == "unsupported_collect_mode"
+
+
+@pytest.mark.asyncio
+async def test_wait_hold_returns_open_ticket():
+    runtime = Team("content-squad", wait_hold_seconds=0.05)
+    await runtime.start()
+    try:
+        await join_member(runtime, "writer")
+        researcher = await join_member(runtime, "researcher")
+        result = await runtime.send(
+            researcher["session_token"],
+            {
+                "id": _id(),
+                "recipient": "writer",
+                "kind": "request",
+                "content": "work",
+                "collect": "wait",
+                "deadline": deadline(20),
+            },
+        )
+        assert result["status"] == "ticketed"
+        assert result["ticket"]["state"] == "open"
+        ticket = await runtime.get_result(
+            researcher["session_token"], result["ticket"]["id"]
+        )
+        assert ticket["state"] == "open"
+    finally:
+        await runtime.stop()

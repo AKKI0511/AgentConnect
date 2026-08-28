@@ -14,8 +14,8 @@ Exact request and result shapes are in [schema/schema.ts](schema/schema.ts). Mes
 | Session | Runtime | until disconnect, replacement, expiry, or token revocation |
 | Mailbox | Runtime | the Membership's lifetime |
 | Delivery lease | Runtime | until reply, completion, or lease expiry |
-| Ticket | Runtime | until the Runtime's documented retention period ends |
-| Thread history | Runtime | until the Runtime's documented retention limit removes it |
+| Ticket | Runtime | open: at least until `deadline`; terminal: until the later of `deadline` and a documented interval after close |
+| Thread history | Runtime | until the documented retention limit removes it; Messages still needed by an open Ticket are kept |
 | Agent working memory | Client | outside this specification |
 
 Membership is durable with respect to Client presence. An offline Agent keeps its Address, Profile, Mailbox, Tickets, and retained Thread history.
@@ -24,7 +24,7 @@ Membership is durable with respect to Client presence. An offline Agent keeps it
 
 A Membership is one Agent in one Team. It has one identity, one Address, one Profile, and one logical Mailbox.
 
-A Membership may have several concurrent **Instances**, each a running copy of the Agent holding one Session. Instances share the Membership's Mailbox and compete for its Deliveries; each Delivery is leased to exactly one Instance. Correlation never lives in an Instance: a Ticket is a Runtime record, so any Instance can complete work another Instance was handling after a lease is released.
+A Membership may have several concurrent **Instances**, each a running copy of the Agent holding one Session. Instances share the Membership's Mailbox and compete for its Deliveries; each Delivery is leased to exactly one Instance. Consecutive turns of one Thread MAY land on different Instances; the retained transcript is what a later Instance reads. Correlation never lives in an Instance: a Ticket is a Runtime record, so any Instance can complete work another Instance was handling after a lease is released.
 
 The Mailbox is one logical queue. A Runtime MAY partition it internally to scale a single busy Agent. Partitioning changes no observable rule except that the Runtime does not promise a total order across the Mailbox.
 
@@ -43,9 +43,10 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 
 `JoinResult.limits` reports the fixed operational limits a Client must respect:
 
-- `max_message_bytes`, the largest accepted `send` body
+- `max_message_bytes`, the largest accepted `send` body, and the byte budget for a Delivery `history` window
 - `max_mailbox_depth`, the point past which `send` returns `busy`
-- `delivery_history_limit`, the size of a Delivery's history window
+- `delivery_history_limit`, the Message-count cap for a Delivery `history` window
+- `wait_hold_seconds`, how long `collect=wait` may keep `send` open
 
 ## Operations
 
@@ -80,6 +81,8 @@ The Runtime applies these rules atomically:
    - Otherwise open an additional concurrent Instance. Assign an `instance_id` when the Client omitted one.
 6. Return the canonical Address, the Instance's `instance_id`, the reported limits, and a new Session.
 
+`instance_id` MUST be unique per running copy. Two copies that share one value keep replacing each other's Session. Clients SHOULD generate a fresh UUID when the caller does not supply a stable id. The Runtime assigns one when `instance_id` is omitted.
+
 A Runtime MUST support at least one Instance per Membership. It MAY cap concurrent Instances and reject one past the cap with `busy`. A Client that reconnects without a stable `instance_id` opens a fresh Instance; the Session it lost expires on its own.
 
 `JoinRequest.max_in_flight` declares how many Deliveries this Session can handle concurrently. It defaults to `1`. The Runtime MUST NOT lease more active Deliveries to the Session than this value.
@@ -100,7 +103,8 @@ A network Runtime requires both credentials defined in [security.md](security.md
   "limits": {
     "max_message_bytes": 1048576,
     "max_mailbox_depth": 1000,
-    "delivery_history_limit": 50
+    "delivery_history_limit": 50,
+    "wait_hold_seconds": 25
   },
   "spec_version": "1.0.0-draft"
 }
@@ -153,9 +157,11 @@ The result depends on the request:
 | event | none | return after acceptance |
 | no-reply request | none | return after acceptance |
 | reply-expected request with `collect=ticket` | created | return the current Ticket immediately |
-| reply-expected request with `collect=wait` | created | wait until the Ticket is terminal |
+| reply-expected request with `collect=wait` | created | hold `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket |
 
 Every reply-expected request MUST include a future `deadline`. A missing or past deadline fails with `invalid_request`. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid.
+
+`wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. The Client collects the terminal result with `get_result`.
 
 Transport disconnect after acceptance does not undo the send. The Client recovers the result by calling `get_result` with the request Message id.
 
@@ -165,7 +171,7 @@ Transport disconnect after acceptance does not undo the send. The Client recover
 
 Message ids are unique across the Team. The Runtime applies these rules:
 
-- replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event or no-reply request returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` waits for a terminal Ticket
+- replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event or no-reply request returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
 - using an existing id from another Membership fails with `id_conflict`
 - replaying the original sender's id with different content, recipient, kind, deadline, collection strategy, Thread, parent, or metadata fails with `id_conflict`
 - a replay MUST NOT create another Delivery
@@ -237,6 +243,8 @@ The operation is read-only. Reading an open or terminal Ticket any number of tim
 `get_history` returns one page of a Thread's retained history, ordered by `created_at` then Message id, ascending.
 
 - `before` names a Message id; the page contains the Messages immediately older than it. Omit `before` to read the newest page.
+- a `before` value that is a UUID and is not in the retained transcript, including an evicted id, returns the newest page
+- a `before` value that is not a UUID fails with `invalid_request`
 - `limit` is between `1` and `200` and defaults to `50`.
 - `has_more` is `true` when older retained Messages remain before this page.
 

@@ -93,14 +93,21 @@ A reply-expected request selects one `collect` strategy:
 
 | `collect` | Ticket | Result of `send` |
 | --- | --- | --- |
-| `wait` | yes | accepted Message plus terminal Ticket |
-| `ticket` | yes | accepted Message plus current Ticket |
+| `wait` | yes | accepted Message plus current Ticket; `send` stays open until the Ticket is terminal or `wait_hold_seconds` elapses |
+| `ticket` | yes | accepted Message plus current Ticket, returned immediately |
 | `callback` | yes | reserved; fails with `unsupported_collect_mode` in this draft |
 | `stream` | yes | reserved; fails with `unsupported_collect_mode` in this draft |
 
 An event, and a request with neither `collect` nor `deadline`, creates no Ticket and returns the accepted Message.
 
-`wait` changes how long `send` stays open. It does not change the underlying Message, Delivery, or Ticket. A Client that loses its connection during `wait` calls `get_result` using the request Message id.
+`wait` changes how long `send` stays open. It does not change the underlying Message, Delivery, or Ticket.
+
+The Runtime reports `wait_hold_seconds` in `JoinResult`. `send` with `collect=wait` stays open until the first of:
+
+- the Ticket becomes terminal
+- `wait_hold_seconds` elapses after this `send` call
+
+When the hold elapses and the Ticket is still `open`, `send` returns that Ticket. The Client then calls `get_result` with the request Message id. A Client that loses its connection during `wait` does the same.
 
 `ticket` returns immediately even if the recipient has already replied. The returned Ticket may therefore be `open` or terminal.
 
@@ -153,7 +160,9 @@ Within the Runtime's reported persistence boundary, an accepted Message is offer
 - expiry or Session loss may create another attempt
 - Clients MUST treat repeated attempts with the same Message id as the same work
 
-When several Instances share a Membership, they pull from one Mailbox and each Delivery is leased to exactly one Instance. At-least-once handling means side effects inside an Agent can repeat. An Agent that performs external side effects SHOULD make them idempotent using the Message id.
+When several Instances share a Membership, they pull from one Mailbox and each Delivery is leased to exactly one Instance. Consecutive turns of one Thread MAY land on different Instances. Conversation state belongs to the retained Thread transcript, not to an Instance. A handler that needs earlier turns reads `history` on the Delivery and pages the rest with `get_history`. Working memory that lives only in one running copy is lost if another Instance handles the next turn.
+
+At-least-once handling means side effects inside an Agent can repeat. An Agent that performs external side effects SHOULD make them idempotent using the Message id.
 
 ## Handler outcome
 
@@ -207,6 +216,14 @@ The first accepted reply wins. Idempotent replay of that same reply returns the 
 
 `get_result` is repeatable. Reads with no intervening state transition or late reply return identical data while the Ticket is retained.
 
+### Ticket retention
+
+An open Ticket, the request Message it names, and any Thread Messages needed to resolve it MUST remain readable until at least the Ticket `deadline`. A Runtime MUST NOT evict that data because a generic retention interval elapsed while the Ticket is still `open`.
+
+After a Ticket becomes terminal, the Runtime retains it until the later of the Ticket `deadline` and a documented interval after the terminal transition. `get_result` returns `not_found` only after that retention ends.
+
+Count and age limits on Thread history apply only to Messages that no open Ticket still needs.
+
 ### Completed Ticket example
 
 ```json
@@ -250,8 +267,11 @@ A Delivery carries a bounded recent window of its Thread, not the whole transcri
 - it is ordered by `created_at`, then Message id
 - it excludes the currently delivered Message
 - it holds at most `delivery_history_limit` Messages, reported in `JoinResult`
+- its UTF-8 JSON encoding MUST NOT exceed `max_message_bytes`; the Runtime drops oldest Messages from the window until both caps hold
 - `history_complete` is `true` when the window already contains every earlier retained Message
 - an empty complete history is `[]` with `history_complete=true`
+
+Whichever cap is hit first truncates the window. `history_complete` is `false` when either cap dropped earlier Messages.
 
 This keeps every Delivery bounded no matter how long a Thread grows.
 
@@ -259,7 +279,12 @@ This keeps every Delivery bounded no matter how long a Thread grows.
 
 `get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `created_at` then Message id, and `has_more` states whether older retained Messages remain. Only a Thread participant may read its history; a non-participant receives `not_found`.
 
-The Runtime MAY limit Thread retention by age or Message count. It MUST document the limit. When retention has removed the oldest Messages, `get_history` returns the oldest that remain and MUST NOT fabricate the missing ones. Retention removes history only; it does not change Message, Delivery, or Ticket state.
+`before` is a Message id. Omit it to read the newest page.
+
+- a well-formed UUID that is missing from the retained transcript, including one retention has removed, is treated as "return the newest page"
+- a value that is not a UUID fails with `invalid_request`
+
+The Runtime MAY limit Thread retention by age or Message count. It MUST document the limit. It MUST NOT drop a Message that an open Ticket still needs in order to resolve. When retention has removed the oldest Messages, `get_history` returns the oldest that remain and MUST NOT fabricate the missing ones. Retention removes history only; it does not change Message, Delivery, or Ticket state.
 
 The current draft defines grouping, the delivered window, and paged retrieval. It does not define an explicit Thread object or a close operation; a Thread ends by retention.
 
@@ -282,6 +307,12 @@ These vectors are normative summaries. An implementation test may express them i
 | reply with `content=null` | Ticket `completed` with null content |
 | `complete` for an event or no-reply request | Delivery finished; no Ticket |
 | Thread longer than the window | Delivery `history_complete=false`; `get_history` pages the remainder |
+| Thread window exceeds `max_message_bytes` | Delivery `history` truncated by size; `history_complete=false` |
 | `get_history` for a non-participant | `not_found`; no history revealed |
+| `get_history` `before` a well-formed UUID not in the retained transcript | newest page; same shape as omitting `before` |
+| `get_history` `before` a non-UUID | `invalid_request` |
+| open Ticket whose deadline has not passed | `get_result` returns the Ticket after the terminal-retention interval would have elapsed |
+| `collect=wait` hold elapses while the Ticket is `open` | `send` returns `status=ticketed` with that Ticket; `get_result` still reads it |
+| two Instances handle consecutive turns of one Thread | each Delivery is leased to one Instance; the later Delivery's `history` contains the earlier turn |
 | another Membership submits a retained `lease_id` | `not_found`; no Delivery or Ticket state changes |
 | `collect=callback` or `collect=stream` | `unsupported_collect_mode`; nothing created |

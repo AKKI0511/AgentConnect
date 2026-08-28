@@ -140,11 +140,13 @@ Content-Type: application/json
 
 ## Waiting sends
 
-For `collect=wait`, `POST /messages` stays open until the Ticket becomes terminal. A terminal Ticket returns in `SendResult` with HTTP `200`, including `failed` and `expired` states.
+For `collect=wait`, `POST /messages` stays open until the Ticket becomes terminal or `wait_hold_seconds` elapses, whichever is first. The response is HTTP `200` with `SendResult` in either case, including `open`, `failed`, `expired`, and `declined` Tickets.
+
+If the hold elapses while the Ticket is still `open`, the body is a ticketed `SendResult` whose Ticket is `open`. The Client then calls `GET /tickets/{message_id}` until the Ticket is terminal.
 
 If the HTTP connection closes after acceptance, the Runtime keeps the Message and Ticket. The Client calls `GET /tickets/{message_id}` after reconnecting.
 
-Clients SHOULD use `collect=ticket` when work may exceed ordinary HTTP timeouts.
+Clients SHOULD set their HTTP timeout above `wait_hold_seconds`. Use `collect=ticket` when the caller does not want `send` to hold.
 
 ## Idempotency
 

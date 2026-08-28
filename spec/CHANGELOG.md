@@ -16,9 +16,13 @@ Defines:
 - Skills as natural-language claims with examples and tags, without input or output schemas
 - request, event, response, and error Messages, with `trace_id` correlating one causal operation while `thread_id` groups a conversation
 - reply expectation on the Message and the collection strategy (`wait`, `ticket`, and reserved `callback` and `stream`) on the `send`
+- `wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket
 - pull delivery with exclusive leases, at-least-once handling, and a reported message-size limit
 - requester-owned Tickets with five states, including an explicit `declined` when a recipient chooses not to answer
-- Thread grouping, a bounded delivered history window, and paged history retrieval with `get_history`
+- Ticket and Thread retention that outlasts an open Ticket deadline
+- Thread grouping, a delivered history window bounded by count and by `max_message_bytes`, and paged history retrieval with `get_history`
+- `get_history` `before` an unknown or evicted Message id returns the newest page
+- concurrent Instances sharing one Mailbox, with conversation state in the Thread transcript rather than in a running copy
 - embedded and authenticated network joins, with an Instance-aware Session
 - Runtime operations and their HTTP mapping, including a typed Session event stream
 - MCP tools `find`, `ask`, `tell`, `get_result`, and `get_history`

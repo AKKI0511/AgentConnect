@@ -97,7 +97,7 @@ export type PersistenceMode = "volatile" | "durable";
  * the recipient never observes it. A request without a `collect` value and
  * without a `deadline` expects no reply and creates no Ticket.
  *
- * - `wait`: keep the `send` open until the Ticket is terminal.
+ * - `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.
  * - `ticket`: return a Ticket immediately and collect the result later.
  * - `callback`: return immediately and deliver the result to a target later.
  * - `stream`: receive partial results ending with a final result.
@@ -358,9 +358,11 @@ export type Message =
  * One exclusive attempt to handle a Message.
  *
  * `history` is a bounded recent window of the Thread, ordered by `created_at`
- * then Message id and excluding `message`. When `history_complete` is false,
- * older retained Messages exist and can be paged with `get_history`. This keeps
- * a Delivery's size bounded no matter how long a Thread grows.
+ * then Message id and excluding `message`. The window is capped by
+ * `delivery_history_limit` and by `max_message_bytes`. When
+ * `history_complete` is false, older retained Messages exist and can be paged
+ * with `get_history`. This keeps a Delivery's size bounded no matter how long
+ * a Thread grows.
  */
 export interface Delivery {
   /** Opaque id authorizing completion of this attempt. */
@@ -517,10 +519,10 @@ export interface JoinRequest {
   /** Discovery information that replaces the Membership's current Profile. */
   profile: AgentProfile;
   /**
-   * Stable id for one running copy of the Agent. Re-joining with the same
-   * `instance_id` replaces that Instance's Session; a different value opens an
-   * additional concurrent Instance sharing the Membership and Mailbox. Omit to
-   * let the Runtime assign one.
+   * Stable id for one running copy of the Agent. It MUST be unique per running
+   * copy. Re-joining with the same `instance_id` replaces that Instance's
+   * Session; a different value opens an additional concurrent Instance sharing
+   * the Membership and Mailbox. Omit to let the Runtime assign one.
    */
   instance_id?: Uuid;
   /**
@@ -546,7 +548,9 @@ export interface JoinRequest {
 export interface RuntimeLimits {
   /**
    * Maximum accepted size in bytes of a `send` body's UTF-8 JSON encoding.
-   * A larger `send` fails with `payload_too_large`.
+   * A larger `send` fails with `payload_too_large`. The same budget caps a
+   * Delivery `history` window: the window's UTF-8 JSON encoding MUST NOT
+   * exceed this value.
    * @minimum 1
    * @multipleOf 1
    */
@@ -559,11 +563,20 @@ export interface RuntimeLimits {
   max_mailbox_depth: number;
   /**
    * Maximum earlier Thread Messages the Runtime includes in a Delivery's
-   * `history` window. Older Messages are paged with `get_history`.
+   * `history` window. Older Messages are paged with `get_history`. The window
+   * is also truncated so its UTF-8 JSON encoding does not exceed
+   * `max_message_bytes`.
    * @minimum 0
    * @multipleOf 1
    */
   delivery_history_limit: number;
+  /**
+   * Seconds a `collect=wait` `send` may stay open. When this elapses and the
+   * Ticket is still `open`, `send` returns that Ticket and the Client
+   * continues with `get_result`. `0` returns immediately after acceptance.
+   * @minimum 0
+   */
+  wait_hold_seconds: number;
 }
 
 /** Result of a successful join. */
@@ -673,7 +686,7 @@ export interface TicketedSendResult {
   status: "ticketed";
   /** Accepted and Runtime-stamped request. */
   message: ReplyExpectedRequestMessage;
-  /** Current Ticket, terminal for `collect=wait`. */
+  /** Current Ticket. Terminal unless `collect=wait` ended at the wait hold. */
   ticket: Ticket;
 }
 
@@ -757,7 +770,12 @@ export interface GetResultRequest {
 export interface GetHistoryRequest {
   /** Thread whose retained Messages are read. */
   thread_id: Uuid;
-  /** Return Messages older than this Message id, exclusive. Omit for newest. */
+  /**
+   * Return Messages older than this Message id, exclusive. Omit for the newest
+   * page. A well-formed UUID that is not in the retained transcript, including
+   * an evicted id, returns the newest page. A non-UUID value is
+   * `invalid_request`.
+   */
   before?: Uuid;
   /**
    * Page size from 1 to 200. Defaults to 50.

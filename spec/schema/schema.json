@@ -181,7 +181,7 @@
         "callback",
         "stream"
       ],
-      "description": "How the sender collects the result of a reply-expected request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. A request without a `collect` value and without a `deadline` expects no reply and creates no Ticket.\n\n- `wait`: keep the `send` open until the Ticket is terminal.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
+      "description": "How the sender collects the result of a reply-expected request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. A request without a `collect` value and without a `deadline` expects no reply and creates no Ticket.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
     },
     "TicketState": {
       "type": "string",
@@ -787,7 +787,7 @@
         "history_complete"
       ],
       "additionalProperties": false,
-      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `created_at` then Message id and excluding `message`. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`. This keeps a Delivery's size bounded no matter how long a Thread grows."
+      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `created_at` then Message id and excluding `message`. The window is capped by `delivery_history_limit` and by `max_message_bytes`. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`. This keeps a Delivery's size bounded no matter how long a Thread grows."
     },
     "Ticket": {
       "anyOf": [
@@ -1223,7 +1223,7 @@
         },
         "instance_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Stable id for one running copy of the Agent. Re-joining with the same `instance_id` replaces that Instance's Session; a different value opens an additional concurrent Instance sharing the Membership and Mailbox. Omit to let the Runtime assign one."
+          "description": "Stable id for one running copy of the Agent. It MUST be unique per running copy. Re-joining with the same `instance_id` replaces that Instance's Session; a different value opens an additional concurrent Instance sharing the Membership and Mailbox. Omit to let the Runtime assign one."
         },
         "max_in_flight": {
           "type": "number",
@@ -1262,7 +1262,7 @@
       "properties": {
         "max_message_bytes": {
           "type": "number",
-          "description": "Maximum accepted size in bytes of a `send` body's UTF-8 JSON encoding. A larger `send` fails with `payload_too_large`.",
+          "description": "Maximum accepted size in bytes of a `send` body's UTF-8 JSON encoding. A larger `send` fails with `payload_too_large`. The same budget caps a Delivery `history` window: the window's UTF-8 JSON encoding MUST NOT exceed this value.",
           "minimum": 1,
           "multipleOf": 1
         },
@@ -1274,15 +1274,21 @@
         },
         "delivery_history_limit": {
           "type": "number",
-          "description": "Maximum earlier Thread Messages the Runtime includes in a Delivery's `history` window. Older Messages are paged with `get_history`.",
+          "description": "Maximum earlier Thread Messages the Runtime includes in a Delivery's `history` window. Older Messages are paged with `get_history`. The window is also truncated so its UTF-8 JSON encoding does not exceed `max_message_bytes`.",
           "minimum": 0,
           "multipleOf": 1
+        },
+        "wait_hold_seconds": {
+          "type": "number",
+          "description": "Seconds a `collect=wait` `send` may stay open. When this elapses and the Ticket is still `open`, `send` returns that Ticket and the Client continues with `get_result`. `0` returns immediately after acceptance.",
+          "minimum": 0
         }
       },
       "required": [
         "max_message_bytes",
         "max_mailbox_depth",
-        "delivery_history_limit"
+        "delivery_history_limit",
+        "wait_hold_seconds"
       ],
       "additionalProperties": false,
       "description": "Fixed operational limits a Runtime reports at join."
@@ -1619,7 +1625,7 @@
         },
         "ticket": {
           "$ref": "#/definitions/Ticket",
-          "description": "Current Ticket, terminal for `collect=wait`."
+          "description": "Current Ticket. Terminal unless `collect=wait` ended at the wait hold."
         }
       },
       "required": [
@@ -1801,7 +1807,7 @@
         },
         "before": {
           "$ref": "#/definitions/Uuid",
-          "description": "Return Messages older than this Message id, exclusive. Omit for newest."
+          "description": "Return Messages older than this Message id, exclusive. Omit for the newest page. A well-formed UUID that is not in the retained transcript, including an evicted id, returns the newest page. A non-UUID value is `invalid_request`."
         },
         "limit": {
           "type": "number",

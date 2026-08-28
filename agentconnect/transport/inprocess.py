@@ -22,6 +22,13 @@ class InProcessTransport:
             raise TypeError("in-process transport needs a started Team")
         self._runtime = runtime
 
+    async def join_challenge(self) -> dict[str, Any]:
+        """Return a one-time join challenge from the embedded Team."""
+        try:
+            return await self._runtime.join_challenge()
+        except Exception as exc:
+            raise wrap_runtime_error(exc) from exc
+
     async def join(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Create or reconnect a Membership and open a Session."""
         try:

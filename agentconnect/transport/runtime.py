@@ -77,6 +77,9 @@ class RuntimeTransport(Protocol):
     async def join(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Create or reconnect a Membership and open a Session."""
 
+    async def join_challenge(self) -> dict[str, Any]:
+        """Return a short-lived challenge used to prove Agent DID control."""
+
     async def disconnect(self, session_token: str) -> None:
         """Close this Session. Membership is retained."""
 

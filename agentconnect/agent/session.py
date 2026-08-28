@@ -270,7 +270,9 @@ class Session:
         delay = 0.05
         while not self._stopped:
             try:
-                result = await self._transport.join(self._join_body())
+                body = self._join_body()
+                await self._attach_join_credentials(body)
+                result = await self._transport.join(body)
                 if self._stopped:
                     token = result.get("session_token")
                     if token:
@@ -292,6 +294,26 @@ class Session:
                     delay = min(delay * 2, 2.0)
                     continue
                 raise SessionError.from_transport(exc) from exc
+
+    async def _attach_join_credentials(self, body: dict[str, Any]) -> None:
+        """Add join_token and identity_proof when this join is authenticated."""
+        token = getattr(self._agent, "join_token", None)
+        target_is_url = isinstance(self._target, str)
+        require = bool(getattr(self._target, "require_join_auth", False))
+        if not (target_is_url or token or require):
+            return
+        challenge_fn = getattr(self._transport, "join_challenge", None)
+        if challenge_fn is None:
+            return
+        challenge = await challenge_fn()
+        try:
+            body["identity_proof"] = self._agent.prove_join(challenge)
+        except ValueError as exc:
+            raise SessionError(
+                "unauthorized", "Join credentials are missing or invalid"
+            ) from exc
+        if token:
+            body["join_token"] = token
 
     def _apply_join(self, result: Mapping[str, Any]) -> None:
         self.session_token = str(result["session_token"])

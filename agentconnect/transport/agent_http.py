@@ -60,6 +60,10 @@ class HttpRuntimeTransport:
             timeout=httpx.Timeout(timeout, connect=min(5.0, timeout))
         )
 
+    async def join_challenge(self) -> dict[str, Any]:
+        """GET /join/challenge."""
+        return await self._request("GET", "/join/challenge", auth=None)
+
     async def join(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """POST /join."""
         return await self._request("POST", "/join", json=dict(request), auth=None)

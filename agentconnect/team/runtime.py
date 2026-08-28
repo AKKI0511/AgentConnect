@@ -22,6 +22,16 @@ and ``reply``:
         },
     )
 
+Embedded joins omit credentials. A Team started with
+``require_join_auth=True`` (or any join that carries credentials) checks a
+join token and an EdDSA identity proof.
+
+    team = await Team("content-squad", require_join_auth=True).start()
+    url = await team.serve()
+    writer = Writer(name="writer")
+    issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
+    await writer.join(url, join_token=issued["token"])
+
 Pass ``store="memory"`` (the default) for a process-local Team. Pass a
 Redis URL when Memberships, mailboxes, open Tickets, and Thread history
 must survive a Runtime restart.
@@ -48,7 +58,9 @@ from agentconnect.core.address import (
     parse_team_name,
     resolve_address,
 )
+from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import validate_discovery_profile
+import agentconnect.team.auth as auth_mod
 import agentconnect.team.mailbox as mailbox_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
@@ -68,6 +80,8 @@ from agentconnect.team.constants import (
     COLLECT_IMPLEMENTED,
     COLLECT_NAMED,
     DEFAULT_DELIVERY_HISTORY_LIMIT,
+    DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
+    DEFAULT_JOIN_TOKEN_TTL_SECONDS,
     DEFAULT_LEASE_TTL_SECONDS,
     DEFAULT_MAX_IN_FLIGHT,
     DEFAULT_MAX_INSTANCES,
@@ -117,8 +131,18 @@ class Team:
         thread_message_limit: int = DEFAULT_THREAD_MESSAGE_LIMIT,
         max_instances: int = DEFAULT_MAX_INSTANCES,
         sweep_interval_seconds: float = SWEEP_INTERVAL_SECONDS,
+        require_join_auth: bool = False,
+        join_challenge_ttl_seconds: float = DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
+        join_token_ttl_seconds: float = DEFAULT_JOIN_TOKEN_TTL_SECONDS,
     ) -> None:
-        """Create an unstarted Runtime for Team ``name``."""
+        """Create an unstarted Runtime for Team ``name``.
+
+        Args:
+            name: Team name, a lowercase DNS label.
+            store: ``"memory"`` (default), a Redis URL, or a Store.
+            require_join_auth: When True, every join needs a join token and
+                an identity proof, including in-process joins.
+        """
         team_name = parse_team_name(name)
         if team_name is None:
             raise ValueError("name is not a valid Team name")
@@ -136,8 +160,13 @@ class Team:
         self.thread_message_limit = int(thread_message_limit)
         self.max_instances = int(max_instances)
         self.sweep_interval_seconds = float(sweep_interval_seconds)
+        self.require_join_auth = bool(require_join_auth)
+        self.join_challenge_ttl_seconds = float(join_challenge_ttl_seconds)
+        self.join_token_ttl_seconds = float(join_token_ttl_seconds)
+        self._identity: Optional[AgentIdentity] = None
         self._lock = asyncio.Lock()
         self._waiters: dict[str, list[asyncio.Event]] = {}
+        self._session_wake: dict[str, list[asyncio.Event]] = {}
         self._work_waiters: dict[str, list[asyncio.Event]] = {}
         self._sse_subscribers: dict[str, list[asyncio.Queue]] = {}
         self._session_tokens_by_member: dict[str, set[str]] = {}
@@ -165,6 +194,18 @@ class Team:
             "delivery_history_limit": self.delivery_history_limit,
         }
 
+    @property
+    def identity(self) -> AgentIdentity:
+        """Team Ed25519 identity. Available after :meth:`start`."""
+        if self._identity is None:
+            raise TeamError("unavailable", "Team has not been started")
+        return self._identity
+
+    @property
+    def team_did(self) -> str:
+        """Team ``did:key``. Available after :meth:`start`."""
+        return self.identity.did
+
     async def start(self) -> "Team":
         """Open the store and start background expiry. Returns this Team."""
         if self._started:
@@ -172,6 +213,7 @@ class Team:
         self._store = self._build_store()
         await self._store.open()
         self._started = True
+        await self._ensure_identity()
         loop = asyncio.get_running_loop()
         self._sweep_task = loop.create_task(self._sweep_loop())
         return self
@@ -268,14 +310,18 @@ class Team:
             self._sse_subscribers.pop(session_token, None)
 
     async def join_challenge(self) -> dict[str, Any]:
-        """Return a short-lived join challenge. Verification lands in identity work."""
-        self._ensure_started()
-        expires = utc_now() + timedelta(minutes=5)
-        return {
-            "nonce": secrets.token_urlsafe(24),
-            "audience": f"agentconnect:{self.name}",
-            "expires_at": format_timestamp(expires),
-        }
+        """Return a short-lived one-time challenge for an identity proof.
+
+        Fetch this, sign it with the Agent key, then pass the JWT as
+        ``identity_proof`` on :meth:`join`.
+        """
+        store = self._ensure_started()
+        async with self._lock:
+            return await auth_mod.create_join_challenge(
+                store,
+                self.name,
+                ttl_seconds=self.join_challenge_ttl_seconds,
+            )
 
     async def serve(self, host: str = "127.0.0.1", port: int = 0) -> str:
         """Serve Runtime operations over HTTP on a loopback address.
@@ -435,6 +481,9 @@ class Team:
         self._session_tokens_by_member.setdefault(
             session["membership_name"], set()
         ).add(session["token"])
+        join_token = session.get("join_token")
+        if isinstance(join_token, str) and join_token:
+            await auth_mod.bind_session_to_token(store, join_token, session["token"])
 
     async def _delete_session(self, session: dict[str, Any]) -> None:
         store = self._ensure_started()
@@ -448,11 +497,36 @@ class Team:
             tokens.discard(session["token"])
             if not tokens:
                 self._session_tokens_by_member.pop(session["membership_name"], None)
+        join_token = session.get("join_token")
+        if isinstance(join_token, str) and join_token:
+            await auth_mod.unbind_session_from_token(
+                store, join_token, session["token"]
+            )
+        self._wake_session(session["token"])
         for queue in self._sse_subscribers.pop(session["token"], []):
             try:
                 queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
+
+    def _wake_session(self, session_token: str) -> None:
+        """Wake waiters bound to this Session (waiting sends, work hints)."""
+        for event in self._session_wake.pop(session_token, []):
+            event.set()
+
+    def _register_session_wake(self, session_token: str, event: asyncio.Event) -> None:
+        self._session_wake.setdefault(session_token, []).append(event)
+
+    def _drop_session_wake(self, session_token: str, event: asyncio.Event) -> None:
+        waiters = self._session_wake.get(session_token)
+        if waiters is None:
+            return
+        try:
+            waiters.remove(event)
+        except ValueError:
+            pass
+        if not waiters:
+            self._session_wake.pop(session_token, None)
 
     async def _require_session(self, session_token: Optional[str]) -> dict[str, Any]:
         if not session_token or not isinstance(session_token, str):
@@ -522,11 +596,15 @@ class Team:
     ) -> dict[str, Any]:
         """Create or reconnect a Membership and open a Session.
 
-        Embedded Teams accept joins without credentials. ``name`` is
-        canonicalized to lowercase. A name and DID that already belong
-        together reconnect; any other clash fails with ``name_conflict``.
+        Embedded Teams accept joins without credentials. Pass
+        ``join_token`` and ``identity_proof`` when the Team was started
+        with ``require_join_auth=True``, or when joining over HTTP with a
+        token the operator issued.
+
+        ``name`` is canonicalized to lowercase. A name and DID that already
+        belong together reconnect; any other clash fails with
+        ``name_conflict``.
         """
-        del join_token, identity_proof
         if request is not None:
             name = request.get("name", name)
             agent_did = request.get("agent_did", agent_did)
@@ -535,6 +613,10 @@ class Team:
             instance_id = request.get("instance_id", instance_id)
             if "max_in_flight" in request:
                 max_in_flight = request["max_in_flight"]
+            if "join_token" in request:
+                join_token = request.get("join_token")
+            if "identity_proof" in request:
+                identity_proof = request.get("identity_proof")
         async with self._lock:
             return await self._join_locked(
                 name=name,
@@ -543,6 +625,8 @@ class Team:
                 spec_version=spec_version,
                 instance_id=instance_id,
                 max_in_flight=max_in_flight,
+                join_token=join_token,
+                identity_proof=identity_proof,
             )
 
     async def _join_locked(
@@ -554,6 +638,8 @@ class Team:
         spec_version: str,
         instance_id: str | None,
         max_in_flight: int,
+        join_token: str | None,
+        identity_proof: str | None,
     ) -> dict[str, Any]:
         self._ensure_started()
         if spec_version != SPEC_VERSION:
@@ -583,6 +669,19 @@ class Team:
         if in_flight < 1 or in_flight > 100:
             _fail("invalid_request", "max_in_flight must be between 1 and 100")
 
+        store = self._ensure_started()
+        now, now_ts = self._now_pair()
+        token_record = await auth_mod.authenticate_join(
+            store,
+            team_name=self.name,
+            agent_did=did,
+            name=canonical_name,
+            join_token=join_token,
+            identity_proof=identity_proof,
+            require_auth=self.require_join_auth,
+            now=now,
+        )
+
         by_name = await self._get_member(canonical_name)
         by_did = await self._get_member_by_did(did)
         if by_name is None and by_did is None:
@@ -592,7 +691,6 @@ class Team:
                 "agent_did": did,
                 "profile": canonical_profile,
             }
-            await self._save_member(member)
         elif (
             by_name is not None
             and by_did is not None
@@ -601,16 +699,25 @@ class Team:
         ):
             member = dict(by_name)
             member["profile"] = canonical_profile
-            await self._save_member(member)
         else:
             _fail(
                 "name_conflict",
                 "Agent name and DID do not identify the same Membership",
             )
 
-        store = self._ensure_started()
+        attestation = auth_mod.mint_member_attestation(
+            self.identity,
+            agent_did=did,
+            name=canonical_name,
+            address=member["address"],
+            team_name=self.name,
+            now=now,
+        )
+        if attestation is not None:
+            member["attestation"] = attestation
+        await self._save_member(member)
+
         existing_token = await store.get(f"instance:{member['name']}:{instance_id}")
-        now, now_ts = self._now_pair()
         if isinstance(existing_token, str):
             old = await self._get_session(existing_token)
             if old is not None:
@@ -630,6 +737,10 @@ class Team:
             "expires_at": format_timestamp(expires),
             "lease_ids": [],
         }
+        if token_record is not None:
+            session["join_token"] = token_record["token"]
+            if token_record.get("single_use"):
+                await auth_mod.mark_join_token_used(store, token_record)
         await self._save_session(session)
         return self._join_result(session, member)
 
@@ -652,6 +763,132 @@ class Team:
             await self._save_session(session)
             return {"session_expires_at": session["expires_at"]}
 
+    async def issue_join_token(
+        self,
+        *,
+        agent_did: str | None = None,
+        name: str | None = None,
+        ttl_seconds: float | None = None,
+        single_use: bool = False,
+    ) -> auth_mod.JoinToken:
+        """Issue a join token scoped to this Team.
+
+        Bind ``agent_did``, ``name``, or both so a leaked token cannot be
+        used by a different Agent. Omit both for an invite that any
+        proving Agent can consume.
+
+            issued = await team.issue_join_token(
+                name="writer", agent_did=writer.agent_did
+            )
+            await writer.join(url, join_token=issued["token"])
+        """
+        store = self._ensure_started()
+        canonical_name = None
+        if name is not None:
+            canonical_name = parse_agent_name(name)
+            if canonical_name is None:
+                _fail("invalid_request", "Agent name is invalid")
+        if agent_did is not None:
+            try:
+                agent_did = require_did(agent_did)
+            except ValueError:
+                _fail("invalid_request", "agent_did must be a did:key identifier")
+        ttl = self.join_token_ttl_seconds if ttl_seconds is None else float(ttl_seconds)
+        if ttl <= 0:
+            _fail("invalid_request", "ttl_seconds must be positive")
+        async with self._lock:
+            return await auth_mod.issue_join_token(
+                store,
+                self.name,
+                agent_did=agent_did,
+                name=canonical_name,
+                ttl_seconds=ttl,
+                single_use=bool(single_use),
+            )
+
+    async def revoke_join_token(self, token: str) -> None:
+        """Revoke ``token`` and drop every Session created from it.
+
+        A later join with this token fails with ``unauthorized``. Waiting
+        sends return ``unauthorized``. Event streams close.
+        """
+        store = self._ensure_started()
+        async with self._lock:
+            record = await auth_mod.revoke_join_token_record(store, token)
+            if record is None:
+                return
+            _, now_ts = self._now_pair()
+            for session_token in await auth_mod.sessions_for_join_token(store, token):
+                session = await self._get_session(session_token)
+                if session is None:
+                    continue
+                await self._release_session_leases(session, now_ts)
+                await self._delete_session(session)
+
+    async def remove_membership(self, name: str) -> None:
+        """Remove a Membership and drop every Session it holds.
+
+        This is the kill switch. Waiting sends return ``unauthorized``.
+        Held leases stop being completable. Join tokens bound to the
+        name or DID are revoked.
+        """
+        canonical = parse_agent_name(name)
+        if canonical is None:
+            _fail("invalid_request", "Agent name is invalid")
+        store = self._ensure_started()
+        async with self._lock:
+            member = await self._get_member(canonical)
+            if member is None:
+                _fail("not_found", "Membership was not found")
+            _, now_ts = self._now_pair()
+            for session_token in list(
+                self._session_tokens_by_member.get(canonical) or ()
+            ):
+                session = await self._get_session(session_token)
+                if session is None:
+                    continue
+                await self._release_session_leases(session, now_ts)
+                await self._delete_session(session)
+            for token in await auth_mod.tokens_bound_to_member(
+                store, name=canonical, agent_did=member.get("agent_did")
+            ):
+                await auth_mod.revoke_join_token_record(store, token)
+                for session_token in await auth_mod.sessions_for_join_token(
+                    store, token
+                ):
+                    session = await self._get_session(session_token)
+                    if session is None:
+                        continue
+                    await self._release_session_leases(session, now_ts)
+                    await self._delete_session(session)
+            await store.delete(f"member:{canonical}")
+            await store.set_remove("members", canonical)
+            agent_did = member.get("agent_did")
+            if isinstance(agent_did, str):
+                await store.delete(f"did:{agent_did}")
+
+    async def membership_attestation(self, name: str) -> Optional[str]:
+        """Return the stored membership attestation JWT for ``name``, if any."""
+        canonical = parse_agent_name(name)
+        if canonical is None:
+            _fail("invalid_request", "Agent name is invalid")
+        member = await self._get_member(canonical)
+        if member is None:
+            _fail("not_found", "Membership was not found")
+        token = member.get("attestation")
+        return token if isinstance(token, str) else None
+
+    async def _ensure_identity(self) -> AgentIdentity:
+        store = self._ensure_started()
+        record = await store.get("team:identity")
+        if isinstance(record, dict) and record.get("private_key"):
+            identity = AgentIdentity.from_dict(record)
+        else:
+            identity = AgentIdentity.create_key_based()
+            await store.put("team:identity", identity.to_secret_dict())
+        self._identity = identity
+        return identity
+
     # --- send ---
 
     async def send(
@@ -666,13 +903,17 @@ class Team:
             if wait_for is not None:
                 ticket_id, deadline_dt = wait_for
                 waiter = self._register_waiter(ticket_id)
+                self._register_session_wake(session_token, waiter)
         if waiter is not None and ticket_id is not None and deadline_dt is not None:
             try:
-                ticket = await self._wait_until_terminal(ticket_id, deadline_dt, waiter)
+                ticket = await self._wait_until_terminal(
+                    session_token, ticket_id, deadline_dt, waiter
+                )
                 result = dict(result)
                 result["ticket"] = ticket
             finally:
                 self._drop_waiter(ticket_id, waiter)
+                self._drop_session_wake(session_token, waiter)
         return result
 
     async def _send_locked(
@@ -906,10 +1147,15 @@ class Team:
         return result, None
 
     async def _wait_until_terminal(
-        self, ticket_id: str, deadline_dt, event: asyncio.Event
+        self, session_token: str, ticket_id: str, deadline_dt, event: asyncio.Event
     ) -> dict[str, Any]:
         while True:
             async with self._lock:
+                session = await self._get_session(session_token)
+                if session is None:
+                    _fail("unauthorized", "Session is missing or invalid")
+                if parse_timestamp(session["expires_at"]) <= utc_now():
+                    _fail("unauthorized", "Session is missing or invalid")
                 ticket = await self._expire_ticket_if_due(ticket_id)
                 if ticket is not None and tickets_mod.is_terminal(ticket):
                     return ticket
@@ -1414,6 +1660,7 @@ class Team:
     async def _sweep_once(self) -> None:
         store = self._ensure_started()
         now, now_ts = self._now_pair()
+        await auth_mod.sweep_join_state(store, now=now)
         for token in list(await store.set_members("sessions")):
             session = await self._get_session(token)
             if session is None:

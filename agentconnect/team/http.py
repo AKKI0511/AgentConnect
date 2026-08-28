@@ -52,7 +52,7 @@ def create_runtime_app(team: Team) -> FastAPI:
 
     @app.get(HTTP_PREFIX + "/join/challenge")
     async def join_challenge() -> JSONResponse:
-        """Return a join challenge. Verification is later work."""
+        """Return a one-time join challenge for an identity proof."""
         body = await team.join_challenge()
         return JSONResponse(body, headers=_NO_STORE)
 

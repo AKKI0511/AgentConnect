@@ -21,6 +21,9 @@ DEFAULT_THREAD_MESSAGE_LIMIT = 10_000
 
 SWEEP_INTERVAL_SECONDS = 0.5
 
+DEFAULT_JOIN_CHALLENGE_TTL_SECONDS = 60
+DEFAULT_JOIN_TOKEN_TTL_SECONDS = 3600
+
 COLLECT_IMPLEMENTED = frozenset({"wait", "ticket"})
 COLLECT_NAMED = frozenset({"wait", "ticket", "callback", "stream"})
 MESSAGE_KINDS_SEND = frozenset({"request", "event"})

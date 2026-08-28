@@ -6,6 +6,11 @@ DEFAULT_MAX_MESSAGE_BYTES = 1_048_576
 DEFAULT_MAX_MAILBOX_DEPTH = 1000
 DEFAULT_DELIVERY_HISTORY_LIMIT = 50
 
+# Seconds a collect=wait send may stay open. After this the Runtime
+# returns the current Ticket (possibly still open) and the caller uses
+# get_result. Proxies drop idle HTTP well before a 24h deadline.
+DEFAULT_WAIT_HOLD_SECONDS = 25.0
+
 DEFAULT_SESSION_TTL_SECONDS = 300
 DEFAULT_LEASE_TTL_SECONDS = 60
 DEFAULT_MAX_IN_FLIGHT = 1

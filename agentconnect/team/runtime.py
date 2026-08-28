@@ -39,7 +39,9 @@ must survive a Runtime restart.
 Open Tickets are retained until at least their deadline. Terminal Tickets
 are kept for 24 hours after they close, or until that deadline if it is
 later. Thread history is trimmed by count once no open Ticket still
-needs an older Message.
+needs an older Message. A ``collect=wait`` send holds until the Ticket
+is terminal or ``wait_hold_seconds`` elapses, then returns the current
+Ticket.
 """
 
 from __future__ import annotations
@@ -90,6 +92,7 @@ from agentconnect.team.constants import (
     DEFAULT_SESSION_TTL_SECONDS,
     DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
     DEFAULT_THREAD_MESSAGE_LIMIT,
+    DEFAULT_WAIT_HOLD_SECONDS,
     MESSAGE_KINDS_SEND,
     SWEEP_INTERVAL_SECONDS,
 )
@@ -125,6 +128,7 @@ class Team:
         max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
         max_mailbox_depth: int = DEFAULT_MAX_MAILBOX_DEPTH,
         delivery_history_limit: int = DEFAULT_DELIVERY_HISTORY_LIMIT,
+        wait_hold_seconds: float = DEFAULT_WAIT_HOLD_SECONDS,
         session_ttl_seconds: float = DEFAULT_SESSION_TTL_SECONDS,
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
         terminal_ticket_retention_seconds: float = DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
@@ -142,6 +146,9 @@ class Team:
             store: ``"memory"`` (default), a Redis URL, or a Store.
             require_join_auth: When True, every join needs a join token and
                 an identity proof, including in-process joins.
+            wait_hold_seconds: How long ``collect=wait`` may keep ``send``
+                open. After this the current Ticket is returned even if it
+                is still open; collect the rest with ``get_result``.
         """
         team_name = parse_team_name(name)
         if team_name is None:
@@ -152,6 +159,7 @@ class Team:
         self.max_message_bytes = int(max_message_bytes)
         self.max_mailbox_depth = int(max_mailbox_depth)
         self.delivery_history_limit = int(delivery_history_limit)
+        self.wait_hold_seconds = float(wait_hold_seconds)
         self.session_ttl_seconds = float(session_ttl_seconds)
         self.lease_ttl_seconds = float(lease_ttl_seconds)
         self.terminal_ticket_retention_seconds = float(
@@ -186,12 +194,13 @@ class Team:
         return self._store.persistence
 
     @property
-    def limits(self) -> dict[str, int]:
+    def limits(self) -> dict[str, int | float]:
         """Runtime limits reported on ``join``."""
         return {
             "max_message_bytes": self.max_message_bytes,
             "max_mailbox_depth": self.max_mailbox_depth,
             "delivery_history_limit": self.delivery_history_limit,
+            "wait_hold_seconds": self.wait_hold_seconds,
         }
 
     @property
@@ -894,7 +903,11 @@ class Team:
     async def send(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
-        """Accept one request or event for one recipient in this Team."""
+        """Accept one request or event for one recipient in this Team.
+
+        ``collect=wait`` holds until the Ticket is terminal or
+        ``wait_hold_seconds`` elapses, then returns the current Ticket.
+        """
         waiter: asyncio.Event | None = None
         ticket_id: str | None = None
         deadline_dt = None
@@ -1149,6 +1162,7 @@ class Team:
     async def _wait_until_terminal(
         self, session_token: str, ticket_id: str, deadline_dt, event: asyncio.Event
     ) -> dict[str, Any]:
+        hold_until = utc_now() + timedelta(seconds=self.wait_hold_seconds)
         while True:
             async with self._lock:
                 session = await self._get_session(session_token)
@@ -1159,7 +1173,10 @@ class Team:
                 ticket = await self._expire_ticket_if_due(ticket_id)
                 if ticket is not None and tickets_mod.is_terminal(ticket):
                     return ticket
-            remaining = (deadline_dt - utc_now()).total_seconds()
+            now = utc_now()
+            remaining_deadline = (deadline_dt - now).total_seconds()
+            remaining_hold = (hold_until - now).total_seconds()
+            remaining = min(remaining_deadline, remaining_hold)
             if remaining <= 0:
                 async with self._lock:
                     ticket = await self._expire_ticket_if_due(ticket_id)
@@ -1522,7 +1539,12 @@ class Team:
         before: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Return one page of a Thread's retained history."""
+        """Return one page of a Thread's retained history.
+
+        Omit ``before`` for the newest page. A UUID that is not in the
+        retained transcript, including one retention has removed, returns
+        that newest page. A non-UUID ``before`` is ``invalid_request``.
+        """
         async with self._lock:
             session = await self._require_session(session_token)
             try:

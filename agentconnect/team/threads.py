@@ -3,7 +3,9 @@
 A Thread is an opaque UUID shared by related Messages among a fixed
 participant set. The first accepted Message using a ``thread_id`` fixes
 that set. The Runtime stores retained Messages under the Thread id and
-serves a bounded window on each Delivery.
+serves a bounded window on each Delivery. The window is capped by count
+and by UTF-8 JSON bytes. ``get_history`` pages older turns; a ``before``
+id that is gone from the transcript returns the newest page.
 """
 
 from __future__ import annotations
@@ -127,8 +129,10 @@ def page_history(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Return one page of retained history, oldest of the page first.
 
-    Omit ``before`` to read the newest page. ``has_more`` is True when older
-    retained Messages remain before this page.
+    Omit ``before`` to read the newest page. A ``before`` id that is not
+    in the retained transcript, including one retention has removed,
+    returns that newest page. ``has_more`` is True when older retained
+    Messages remain before this page.
     """
     ordered = sorted(messages, key=_sort_key)
     if before is not None:

@@ -5,6 +5,11 @@ POST for every operation except Ticket and history reads. SSE on
 
 This binding is the agent Session over HTTP. It is not the gateway
 outbound stack in ``transport/http.py``.
+
+A ``collect=wait`` send uses the client timeout. The Runtime returns
+when the Ticket is terminal or ``wait_hold_seconds`` elapses. If the
+connection drops after acceptance, this client recovers with
+``get_result``.
 """
 
 from __future__ import annotations
@@ -18,10 +23,6 @@ import httpx
 from agentconnect.transport.runtime import TransportError
 
 AGENTCONNECT_V1 = "/agentconnect/v1"
-
-# Proxies drop idle connections well before a 24h wait. After this many
-# seconds a wait send falls back to get_result (SI-002).
-WAIT_HOLD_SECONDS = 25.0
 
 _RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
@@ -81,18 +82,18 @@ class HttpRuntimeTransport:
     async def send(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
-        """POST /messages. A ``wait`` send falls back to get_result after 25s."""
+        """POST /messages.
+
+        If a ``wait`` connection drops after acceptance, recover the
+        current Ticket with ``get_result``.
+        """
         body = dict(request)
-        timeout = self._timeout
-        if body.get("collect") == "wait":
-            timeout = WAIT_HOLD_SECONDS
         try:
             return await self._request(
                 "POST",
                 "/messages",
                 json=body,
                 auth=session_token,
-                timeout=timeout,
             )
         except httpx.TimeoutException:
             ticket_id = body.get("id")
@@ -105,34 +106,38 @@ class HttpRuntimeTransport:
             return await self._recover_wait(session_token, ticket_id)
 
     async def _recover_wait(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """After a dropped wait connection, poll get_result until terminal."""
-        while True:
+        """After a dropped wait connection, return the current Ticket."""
+        last_error: TransportError | None = None
+        for _ in range(50):
             try:
                 ticket = await self.get_result(session_token, ticket_id)
             except TransportError as exc:
                 if exc.code == "not_found":
-                    raise TransportError(
-                        "unavailable",
-                        "wait send was interrupted before acceptance",
-                        retryable=True,
-                    ) from exc
+                    last_error = exc
+                    await _sleep(0.1)
+                    continue
                 raise
-            if ticket.get("state") != "open":
-                return {
-                    "status": "ticketed",
-                    "message": {
-                        "id": ticket_id,
-                        "sender": ticket.get("requester"),
-                        "recipient": ticket.get("recipient"),
-                        "kind": "request",
-                        "content": None,
-                        "created_at": ticket.get("created_at"),
-                        "trace_id": ticket_id,
-                        "deadline": ticket.get("deadline"),
-                    },
-                    "ticket": ticket,
-                }
-            await _sleep(0.1)
+            message: dict[str, Any] = {
+                "id": ticket_id,
+                "sender": ticket.get("requester"),
+                "recipient": ticket.get("recipient"),
+                "kind": "request",
+                "content": None,
+                "created_at": ticket.get("created_at"),
+                "deadline": ticket.get("deadline"),
+            }
+            if ticket.get("thread_id"):
+                message["thread_id"] = ticket["thread_id"]
+            return {
+                "status": "ticketed",
+                "message": message,
+                "ticket": ticket,
+            }
+        raise TransportError(
+            "unavailable",
+            "wait send was interrupted before acceptance",
+            retryable=True,
+        ) from last_error
 
     async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
         """POST /mailbox/lease."""

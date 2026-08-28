@@ -16,7 +16,7 @@ import inspect
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _RETRY_JOIN_CODES = frozenset({"unavailable"})
-_RECONNECT_CODES = frozenset({"unavailable", "unauthorized"})
+_RECONNECT_CODES = frozenset({"unauthorized", "unavailable"})
+CollectMode = Literal["wait", "ticket", "callback", "stream"]
 
 
 def bind_transport(target: Any) -> Any:
@@ -71,7 +72,7 @@ class Session:
         self.session_token: Optional[str] = None
         self.address: Optional[str] = None
         self.team_name: Optional[str] = None
-        self.limits: dict[str, int] = {}
+        self.limits: dict[str, int | float] = {}
         self.persistence: Optional[str] = None
         self.session_expires_at: Optional[str] = None
         self._connected = False
@@ -126,13 +127,24 @@ class Session:
         content: Any,
         *,
         deadline_seconds: float = 30.0,
-        collect: str = "wait",
+        collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Send a reply-expected request."""
+        """Send a reply-expected request.
+
+        ``collect="wait"`` (default) returns a terminal Ticket. If the
+        Runtime's wait hold elapses first, this method keeps calling
+        ``get_result`` until the Ticket is terminal.
+
+        ``collect="ticket"`` returns immediately with the current Ticket.
+
+            thread_id = str(uuid.uuid4())
+            await session.ask("writer", "outline this", thread_id=thread_id)
+            await session.ask("writer", "expand section 2", thread_id=thread_id)
+        """
         body: dict[str, Any] = {
             "id": message_id or str(uuid.uuid4()),
             "recipient": recipient,
@@ -147,7 +159,23 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        return await self._call("send", self._transport.send, self._token(), body)
+        result = await self._call("send", self._transport.send, self._token(), body)
+        if collect == "wait" and isinstance(result, dict):
+            ticket = result.get("ticket")
+            if isinstance(ticket, dict) and ticket.get("state") == "open":
+                ticket_id = ticket.get("id")
+                if isinstance(ticket_id, str):
+                    result = dict(result)
+                    result["ticket"] = await self._await_ticket(ticket_id)
+        return result
+
+    async def _await_ticket(self, ticket_id: str) -> dict[str, Any]:
+        """Poll ``get_result`` until the Ticket is no longer ``open``."""
+        while True:
+            ticket = await self.get_result(ticket_id)
+            if ticket.get("state") != "open":
+                return ticket
+            await asyncio.sleep(0.05)
 
     async def tell(
         self,
@@ -209,7 +237,11 @@ class Session:
         before: Optional[str] = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Return one page of retained Thread history."""
+        """Return one page of retained Thread history.
+
+        Omit ``before`` for the newest page. A UUID that is not in the
+        transcript returns that newest page.
+        """
         return await self._call(
             "get_history",
             self._transport.get_history,

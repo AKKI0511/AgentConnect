@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union, cast
 from dotenv import load_dotenv
 
 from agentconnect.agent.errors import SessionError
-from agentconnect.agent.session import Session
+from agentconnect.agent.session import CollectMode, Session
 from agentconnect.core.address import parse_agent_name
 from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.identity import (
@@ -231,12 +231,26 @@ class BaseAgent:
         content: Any,
         *,
         deadline_seconds: float = 30.0,
-        collect: str = "wait",
+        collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, Any]:
-        """Send a reply-expected request through this Session."""
+        """Send a reply-expected request through this Session.
+
+        ``collect="wait"`` (default) returns when the Ticket is terminal.
+        ``collect="ticket"`` returns a handle immediately.
+
+            result = await agent.ask("writer", {"task": "draft this"})
+            print(result["ticket"]["response"]["content"])
+
+            pending = await agent.ask("writer", "long job", collect="ticket")
+            ticket = await agent.get_result(pending["ticket"]["id"])
+
+            thread_id = str(uuid.uuid4())
+            await agent.ask("writer", "outline this", thread_id=thread_id)
+            await agent.ask("writer", "expand section 2", thread_id=thread_id)
+        """
         return await self._require_session().ask(
             recipient,
             content,
@@ -278,8 +292,34 @@ class BaseAgent:
         return await self._require_session().get_profile(address)
 
     async def get_result(self, ticket_id: str) -> dict[str, Any]:
-        """Return a Ticket this Agent opened."""
+        """Return a Ticket this Agent opened.
+
+        ticket = await agent.get_result(pending["ticket"]["id"])
+        """
         return await self._require_session().get_result(ticket_id)
+
+    async def get_history(
+        self,
+        thread_id: str,
+        *,
+        before: Optional[str] = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Return one page of retained Thread history.
+
+        Omit ``before`` for the newest page. A UUID that is not in the
+        transcript, including one retention has removed, returns that
+        newest page.
+
+            page = await agent.get_history(thread_id)
+            if page["has_more"]:
+                older = await agent.get_history(
+                    thread_id, before=page["messages"][0]["id"]
+                )
+        """
+        return await self._require_session().get_history(
+            thread_id, before=before, limit=limit
+        )
 
     async def process_message(self, message: Mapping[str, Any], ctx: Any = None) -> Any:
         """Handle one Delivery.

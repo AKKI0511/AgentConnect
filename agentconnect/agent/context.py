@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
-    from agentconnect.agent.session import Session
+    from agentconnect.agent.session import CollectMode, Session
 
 
 class TicketHandle:
@@ -130,7 +130,11 @@ class Context:
 
     @property
     def history(self) -> list[dict[str, Any]]:
-        """Bounded recent Thread window, excluding the delivered Message."""
+        """Bounded recent Thread window, excluding the delivered Message.
+
+        Use this as conversation state. Older turns are on
+        :meth:`get_history` when ``history_complete`` is False.
+        """
         return list(self._delivery.get("history") or [])
 
     @property
@@ -159,12 +163,15 @@ class Context:
         content: Any,
         *,
         deadline_seconds: float = 30.0,
-        collect: str = "wait",
+        collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, Any]:
-        """Send a reply-expected request and collect the result."""
+        """Send a reply-expected request and collect the result.
+
+        Same contract as :meth:`agentconnect.agent.base.BaseAgent.ask`.
+        """
         return await self._session.ask(
             recipient,
             content,
@@ -208,7 +215,11 @@ class Context:
     async def get_history(
         self, *, before: Optional[str] = None, limit: int = 50
     ) -> dict[str, Any]:
-        """Page older retained Thread history. Newest page when ``before`` is omitted."""
+        """Page older retained Thread history.
+
+        Omit ``before`` for the newest page of this Delivery's Thread.
+        Returns empty history when the Message has no ``thread_id``.
+        """
         thread_id = self.thread_id
         if thread_id is None:
             return {"messages": [], "has_more": False}

@@ -3,10 +3,11 @@
 from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context, TicketHandle
 from agentconnect.agent.errors import SessionError
-from agentconnect.agent.session import Session
+from agentconnect.agent.session import CollectMode, Session
 
 __all__ = [
     "BaseAgent",
+    "CollectMode",
     "Context",
     "TicketHandle",
     "Session",

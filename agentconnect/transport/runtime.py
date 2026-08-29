@@ -120,7 +120,7 @@ class RuntimeTransport(Protocol):
         session_token: str,
         query: str,
         *,
-        limit: int = 10,
+        limit: int | None = None,
         detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory."""

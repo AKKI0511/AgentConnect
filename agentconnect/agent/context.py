@@ -203,9 +203,13 @@ class Context:
         )
 
     async def find(
-        self, query: str, *, limit: int = 10, detail: str = "summary"
+        self, query: str, *, limit: int | None = None, detail: str = "summary"
     ) -> dict[str, Any]:
-        """Search this Team's Directory, excluding this Agent."""
+        """Search this Team's Directory, excluding this Agent.
+
+        found = await ctx.find("someone who can review a contract")
+        peer = found["matches"][0]["address"]
+        """
         return await self._session.find(query, limit=limit, detail=detail)
 
     async def get_profile(self, address: str) -> dict[str, Any]:

@@ -195,14 +195,17 @@ class HttpRuntimeTransport:
         session_token: str,
         query: str,
         *,
-        limit: int = 10,
+        limit: int | None = None,
         detail: str = "summary",
     ) -> dict[str, Any]:
         """POST /directory/find."""
+        body: dict[str, Any] = {"query": query, "detail": detail}
+        if limit is not None:
+            body["limit"] = limit
         return await self._request(
             "POST",
             "/directory/find",
-            json={"query": query, "limit": limit, "detail": detail},
+            json=body,
             auth=session_token,
         )
 

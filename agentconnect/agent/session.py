@@ -206,9 +206,12 @@ class Session:
         return await self._call("send", self._transport.send, self._token(), body)
 
     async def find(
-        self, query: str, *, limit: int = 10, detail: str = "summary"
+        self, query: str, *, limit: int | None = None, detail: str = "summary"
     ) -> dict[str, Any]:
-        """Search this Team's Directory."""
+        """Search this Team's Directory.
+
+        found = await session.find("someone who can draft a summary")
+        """
         return await self._call(
             "find",
             self._transport.find,

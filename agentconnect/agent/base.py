@@ -282,13 +282,21 @@ class BaseAgent:
         )
 
     async def find(
-        self, query: str, *, limit: int = 10, detail: str = "summary"
+        self, query: str, *, limit: int | None = None, detail: str = "summary"
     ) -> dict[str, Any]:
-        """Search this Team's Directory, excluding this Agent."""
+        """Search this Team's Directory, excluding this Agent.
+
+        found = await agent.find("someone who can review a contract")
+        found["matches"][0]["address"]
+        """
         return await self._require_session().find(query, limit=limit, detail=detail)
 
     async def get_profile(self, address: str) -> dict[str, Any]:
-        """Return the Directory entry for ``address``."""
+        """Return the Directory entry for ``address``.
+
+        entry = await agent.get_profile("writer")
+        entry["profile"]["summary"]
+        """
         return await self._require_session().get_profile(address)
 
     async def get_result(self, ticket_id: str) -> dict[str, Any]:

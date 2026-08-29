@@ -35,8 +35,23 @@ def test_import_capability_discovery_without_qdrant_and_hf(monkeypatch):
     ]:
         sys.modules.pop(name, None)
 
-    mod = importlib.import_module("agentconnect.team.directory.capability_discovery")
+    mod = importlib.import_module("agentconnect.index.registry.capability_discovery")
     assert hasattr(mod, "CapabilityDiscoveryService")
+
+
+def test_import_team_directory_without_torch_or_qdrant(monkeypatch):
+    for name in [
+        "torch",
+        "sentence_transformers",
+        "fastembed",
+        "qdrant_client",
+        "litellm",
+    ]:
+        sys.modules.pop(name, None)
+
+    mod = importlib.import_module("agentconnect.team.directory")
+    assert hasattr(mod, "Directory")
+    assert hasattr(mod, "HashedEmbedder")
 
 
 def test_server_module_import_without_optional_extras(monkeypatch):

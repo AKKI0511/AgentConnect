@@ -164,3 +164,35 @@ async def test_redis_mailbox_event_survives_restart(redis_store: RedisStore):
         await second.complete(writer["session_token"], delivery["lease_id"])
     finally:
         await second.stop()
+
+
+@pytest.mark.asyncio
+async def test_redis_directory_vectors_survive_runtime_restart(redis_store: RedisStore):
+    first = Team("content-squad", store=redis_store, embeddings="none")
+    await first.start()
+    try:
+        await join_member(
+            first,
+            "reviewer",
+            agent_did=make_did("reviewer"),
+            profile=profile(
+                summary="Reviews contracts for missing terms.",
+                skill="contract_review",
+                description="Review a contract.",
+                tags=["contracts"],
+            ),
+        )
+        await join_member(first, "writer", agent_did=make_did("writer"))
+    finally:
+        await first.stop()
+
+    second = Team("content-squad", store=redis_store, embeddings="none")
+    await second.start()
+    try:
+        caller = await join_member(
+            second, "researcher", agent_did=make_did("researcher")
+        )
+        found = await second.find(caller["session_token"], "contract review")
+        assert found["matches"][0]["address"] == "reviewer@content-squad"
+    finally:
+        await second.stop()

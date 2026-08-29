@@ -159,7 +159,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.find(
             token,
             query,
-            limit=body.get("limit", 10),
+            limit=body.get("limit"),
             detail=body.get("detail", "summary"),
         )
         return JSONResponse(result)

@@ -1,15 +1,28 @@
-"""Discovery Profile and Skill value types.
+"""Discovery Profile, Skill, and Directory result types.
 
 A Profile describes what an Agent claims it can do. Identity, name, Address,
-and routing data belong elsewhere. ``Capability`` remains for the current
-directory implementation until discovery is rebuilt.
+and routing data belong to the Membership and Directory entry, not the Profile.
+
+The Runtime accepts a discovery mapping on ``join``::
+
+    profile = {
+        "summary": "Writes short drafts from notes.",
+        "skills": [
+            {
+                "name": "drafting",
+                "description": "Turn research notes into a two-paragraph draft.",
+            }
+        ],
+    }
+
+``Capability`` remains for older helper registration objects.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Required, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -31,10 +44,16 @@ class Capability:
 
 
 class Skill(BaseModel):
-    """One thing an Agent claims it can do, described in natural language."""
+    """One thing an Agent claims it can do, described in natural language.
+
+    A Skill has no input or output schema. Callers send free-form content
+    to the Agent; they do not invoke a typed signature.
+    """
 
     name: str
     description: Optional[str] = None
+    examples: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
 
 
 class AgentProfile(BaseModel):
@@ -172,3 +191,46 @@ def validate_discovery_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
     if extra:
         raise ValueError("profile contains unsupported fields")
     return out
+
+
+class SkillClaim(TypedDict, total=False):
+    """One Skill in a discovery Profile mapping passed to ``join``."""
+
+    name: Required[str]
+    description: Required[str]
+    examples: list[str]
+    tags: list[str]
+
+
+class DiscoveryProfile(TypedDict, total=False):
+    """Discovery mapping accepted by ``Team.join`` and ``BaseAgent(profile=...)``."""
+
+    summary: Required[str]
+    skills: Required[list[SkillClaim]]
+    description: str
+    tags: list[str]
+
+
+class DirectoryEntry(TypedDict):
+    """Full Directory record for one Membership, returned by ``get_profile``."""
+
+    address: str
+    agent_did: str
+    profile: dict[str, Any]
+
+
+class DirectoryMatch(TypedDict, total=False):
+    """One ranked ``find`` result. Light by default; ``detail='full'`` fills the rest."""
+
+    address: Required[str]
+    summary: Required[str]
+    skill_names: Required[list[str]]
+    tags: list[str]
+    agent_did: str
+    profile: dict[str, Any]
+
+
+class FindResult(TypedDict):
+    """Ordered local Directory search result."""
+
+    matches: list[DirectoryMatch]

@@ -49,7 +49,12 @@ from agentconnect.core.message import Message
 from agentconnect.core.profile import (
     AgentProfile,
     Capability,
+    DirectoryEntry,
+    DirectoryMatch,
+    DiscoveryProfile,
+    FindResult,
     Skill,
+    SkillClaim,
     validate_discovery_profile,
 )
 from agentconnect.core.spec import SPEC_VERSION
@@ -100,7 +105,12 @@ __all__ = [
     "Message",
     "AgentProfile",
     "Capability",
+    "DirectoryEntry",
+    "DirectoryMatch",
+    "DiscoveryProfile",
+    "FindResult",
     "Skill",
+    "SkillClaim",
     "validate_discovery_profile",
     "SPEC_VERSION",
     "AgentType",

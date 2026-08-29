@@ -62,6 +62,8 @@ from agentconnect.core.address import (
 )
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import validate_discovery_profile
+from agentconnect.team.directory import Directory, MAX_FIND_LIMIT
+from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
 import agentconnect.team.auth as auth_mod
 import agentconnect.team.mailbox as mailbox_mod
 import agentconnect.team.tickets as tickets_mod
@@ -115,9 +117,10 @@ class Team:
     """Runtime serving one Team.
 
     The Team owns Memberships, Sessions, Mailboxes, Deliveries, Tickets,
-    and Thread history. Use :meth:`join` to create or reconnect a
-    Membership, then pass the returned ``session_token`` to every other
-    operation.
+    Thread history, and the Directory. Use :meth:`join` to create or
+    reconnect a Membership, then pass the returned ``session_token`` to
+    every other operation. ``find`` ranks other members from a
+    natural-language query.
     """
 
     def __init__(
@@ -138,6 +141,7 @@ class Team:
         require_join_auth: bool = False,
         join_challenge_ttl_seconds: float = DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
         join_token_ttl_seconds: float = DEFAULT_JOIN_TOKEN_TTL_SECONDS,
+        embeddings: EmbeddingsArg = "auto",
     ) -> None:
         """Create an unstarted Runtime for Team ``name``.
 
@@ -149,6 +153,13 @@ class Team:
             wait_hold_seconds: How long ``collect=wait`` may keep ``send``
                 open. After this the current Ticket is returned even if it
                 is still open; collect the rest with ``get_result``.
+            embeddings: How Profiles are turned into vectors for ``find``.
+                ``"auto"`` uses a hosted embedding API when a key is
+                already configured, a local ONNX model when
+                ``agentconnect[embeddings]`` is installed, and hashed
+                n-grams otherwise. ``"none"`` forces hashed n-grams.
+                Pass a callable ``(list[str]) -> list[list[float]]`` to
+                supply your own embeddings.
         """
         team_name = parse_team_name(name)
         if team_name is None:
@@ -171,6 +182,11 @@ class Team:
         self.require_join_auth = bool(require_join_auth)
         self.join_challenge_ttl_seconds = float(join_challenge_ttl_seconds)
         self.join_token_ttl_seconds = float(join_token_ttl_seconds)
+        try:
+            self._embedder = resolve_embedder(embeddings)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
+        self._directory: Optional[Directory] = None
         self._identity: Optional[AgentIdentity] = None
         self._lock = asyncio.Lock()
         self._waiters: dict[str, list[asyncio.Event]] = {}
@@ -222,6 +238,7 @@ class Team:
         self._store = self._build_store()
         await self._store.open()
         self._started = True
+        self._directory = Directory(self._store, self._embedder)
         await self._ensure_identity()
         loop = asyncio.get_running_loop()
         self._sweep_task = loop.create_task(self._sweep_loop())
@@ -725,6 +742,8 @@ class Team:
         if attestation is not None:
             member["attestation"] = attestation
         await self._save_member(member)
+        if self._directory is not None:
+            await self._directory.upsert(member["name"], member["profile"])
 
         existing_token = await store.get(f"instance:{member['name']}:{instance_id}")
         if isinstance(existing_token, str):
@@ -875,6 +894,8 @@ class Team:
             agent_did = member.get("agent_did")
             if isinstance(agent_did, str):
                 await store.delete(f"did:{agent_did}")
+            if self._directory is not None:
+                await self._directory.drop(canonical)
 
     async def membership_attestation(self, name: str) -> Optional[str]:
         """Return the stored membership attestation JWT for ``name``, if any."""
@@ -1581,10 +1602,17 @@ class Team:
         session_token: str,
         query: str,
         *,
-        limit: int = 10,
+        limit: int | None = None,
         detail: str = "summary",
     ) -> dict[str, Any]:
-        """Search this Team's Directory. Ranking is lexical until discovery lands."""
+        """Search this Team's Directory. The caller is excluded from results.
+
+        Omit ``limit`` to receive every other member, ordered by relevance,
+        at most 100. Pass ``detail="full"`` to include each Profile.
+
+            found = await team.find(token, "someone who can review a contract")
+            found["matches"][0]["address"]
+        """
         async with self._lock:
             session = await self._require_session(session_token)
             if not isinstance(query, str) or not query.strip() or len(query) > 1000:
@@ -1592,42 +1620,39 @@ class Team:
                     "invalid_request",
                     "query must be 1 to 1000 non-whitespace characters",
                 )
-            try:
-                n = int(limit)
-            except (TypeError, ValueError):
-                _fail("invalid_request", "limit must be an integer")
-            if n < 1 or n > 100:
-                _fail("invalid_request", "limit must be between 1 and 100")
+            cap: int | None
+            if limit is None:
+                cap = None
+            else:
+                try:
+                    cap = int(limit)
+                except (TypeError, ValueError):
+                    _fail("invalid_request", "limit must be an integer")
+                if cap < 1 or cap > MAX_FIND_LIMIT:
+                    _fail(
+                        "invalid_request",
+                        f"limit must be between 1 and {MAX_FIND_LIMIT}",
+                    )
             if detail not in {"summary", "full"}:
                 _fail("invalid_request", "detail must be summary or full")
             store = self._ensure_started()
             names = await store.set_members("members")
-            scored: list[tuple[float, str, dict[str, Any]]] = []
-            query_tokens = _tokens(query)
+            members: list[dict[str, Any]] = []
             for name in names:
                 member = await self._get_member(name)
-                if member is None or member["address"] == session["address"]:
-                    continue
-                score = _relevance(query_tokens, member["profile"])
-                scored.append((score, member["address"], member))
-            scored.sort(key=lambda item: (-item[0], item[1]))
-            matches = []
-            for _, _, member in scored[:n]:
-                profile = member["profile"]
-                match: dict[str, Any] = {
-                    "address": member["address"],
-                    "summary": profile["summary"],
-                    "skill_names": [
-                        skill["name"] for skill in profile.get("skills") or []
-                    ],
-                }
-                if profile.get("tags"):
-                    match["tags"] = list(profile["tags"])
-                if detail == "full":
-                    match["agent_did"] = member["agent_did"]
-                    match["profile"] = profile
-                matches.append(match)
-            return {"matches": matches}
+                if member is not None:
+                    members.append(member)
+            exclude = session["address"]
+            directory = self._directory
+        if directory is None:
+            _fail("unavailable", "Team has not been started")
+        return await directory.search(
+            query,
+            members,
+            exclude_address=exclude,
+            limit=cap,
+            detail=detail,
+        )
 
     async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
         """Return one Directory entry by local or same-Team Address."""
@@ -1741,26 +1766,6 @@ class Team:
             if dropped:
                 thread["message_ids"] = trimmed
                 await threads_mod.save_thread(store, thread)
-
-
-def _tokens(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
-
-
-def _relevance(query_tokens: set[str], profile: Mapping[str, Any]) -> float:
-    if not query_tokens:
-        return 0.0
-    parts = [str(profile.get("summary") or "")]
-    for skill in profile.get("skills") or []:
-        parts.append(str(skill.get("name") or ""))
-        parts.append(str(skill.get("description") or ""))
-        parts.extend(str(example) for example in skill.get("examples") or [])
-        parts.extend(str(tag) for tag in skill.get("tags") or [])
-    parts.extend(str(tag) for tag in profile.get("tags") or [])
-    haystack = _tokens(" ".join(parts))
-    if not haystack:
-        return 0.0
-    return len(query_tokens & haystack) / len(query_tokens)
 
 
 def _is_loopback(host: str) -> bool:

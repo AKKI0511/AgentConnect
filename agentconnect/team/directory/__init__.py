@@ -1,14 +1,35 @@
+"""This Team's member Directory.
+
+Semantic ``find`` ranks every Membership except the caller. Vectors live in
+the Team Store. There is no vector database and no setting to turn search on.
+
+    team = await Team("content-squad").start()
+    found = await agent.find("someone who can review a contract")
+    found["matches"][0]["address"]
+    entry = await agent.get_profile("reviewer")
+
+Pass ``embeddings=`` to :class:`~agentconnect.team.runtime.Team` only when you
+want a specific backend. ``"auto"`` is the default.
 """
-Agent registry for the AgentConnect framework.
 
-This module provides the AgentRegistry class for agent registration, discovery,
-and capability matching, as well as the AgentRegistration dataclass for storing
-agent registration information.
-"""
+from agentconnect.team.directory.directory import (
+    Directory,
+    MAX_FIND_LIMIT,
+    profile_text,
+)
+from agentconnect.team.directory.embedder import (
+    Embedder,
+    EmbeddingsArg,
+    HashedEmbedder,
+    resolve_embedder,
+)
 
-from agentconnect.team.directory.registration import AgentRegistration
-from agentconnect.team.directory.registry_base import AgentRegistry
-from agentconnect.team.directory.capability_discovery import CapabilityDiscoveryService
-
-# Define public API
-__all__ = ["AgentRegistry", "AgentRegistration", "CapabilityDiscoveryService"]
+__all__ = [
+    "Directory",
+    "Embedder",
+    "EmbeddingsArg",
+    "HashedEmbedder",
+    "MAX_FIND_LIMIT",
+    "profile_text",
+    "resolve_embedder",
+]

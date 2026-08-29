@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent Session and handler contract. Subclass `BaseAgent`, implement `process_message(msg, ctx)`, and `join` a Team in-process or by URL. The Session pulls work, maps return / None / raise / `ctx.ticket()` onto Runtime reply and complete, retries while the Team is coming up, and reconnects after a restart. `Team.serve()` exposes the HTTP binding (POST + SSE) on loopback.
 - Join authentication. Every Agent has an Ed25519 `did:key`. `Team.issue_join_token` issues a scoped, expiring, revocable token. Network joins (`require_join_auth=True`) require that token plus an EdDSA identity proof. Revoking a token or removing a Membership drops the Session immediately. The Runtime mints a membership attestation JWT at join; inbound verification of that statement is later work.
 - Ticket and Thread contract. Open Tickets (and Thread Messages they still need) are kept until at least the deadline. `collect=wait` holds `send` for at most `wait_hold_seconds` (default 25) and then returns the current Ticket. `BaseAgent.ask(collect="wait")` still waits for a terminal Ticket. A Delivery history window is capped by count and by `max_message_bytes`. `get_history(before=...)` with a missing UUID returns the newest page. `callback` and `stream` fail with `unsupported_collect_mode`.
+- Team Directory with store-backed embeddings. `find` ranks every other member from a natural-language query. Omit `limit` to receive the whole Team, ordered, up to 100. Hosted embeddings are used when an OpenAI key is already configured; otherwise a hashed n-gram vector (or optional `fastembed`) is used. Profiles are embedded on join and again when they change.
 
 ### Changed
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.
+- Replaced the Qdrant/sentence-transformers Team registry with a local Directory. `AgentRegistry` now lives under `agentconnect.index.registry` as Index machinery. `Team.find` is semantic ranking over store-backed vectors, not a lexical stub.
 - Laid out the Team-based package tree: `core/` (nouns), `agent/` (client SDK), `team/` (runtime), `transport/`, `gateway/`, and `index/`. `BaseAgent` lives in `agent/`. Message `kind` is the closed set `request`, `response`, `error`, `event`.
 - Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, and nothing imports `prebuilt/`.
 

@@ -19,6 +19,17 @@ from agentconnect.team import Team
 class Writer(BaseAgent):
     """Turns a request into a short draft and returns it."""
 
+    profile = {
+        "summary": "Writes short drafts from notes.",
+        "skills": [
+            {
+                "name": "drafting",
+                "description": "Turn research notes into a two-paragraph draft.",
+            }
+        ],
+        "tags": ["writing"],
+    }
+
     async def process_message(self, msg, ctx):
         if msg.get("kind") != "request":
             return None

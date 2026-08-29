@@ -10,6 +10,9 @@ poetry run python examples/communication/basic_communication.py
 
 `basic_communication.py` starts an embedded Team and two Agents in one process.
 
+`discovery.py` joins a reviewer and a writer, then uses ``find`` to hire
+by describing the work. Semantic ranking is on with no extra setup.
+
 `threads.py` continues a conversation with ``thread_id``. The handler reads
 ``ctx.history``. Older turns are paged with ``get_history``.
 ``collect="ticket"`` returns a handle; ``collect="wait"`` returns the
@@ -28,6 +31,7 @@ await Writer(name="writer").join(url, join_token=issued["token"])
 ```
 
 ```bash
+poetry run python examples/communication/discovery.py
 poetry run python examples/communication/http_session.py
 poetry run python examples/communication/join_auth.py
 poetry run python examples/communication/threads.py

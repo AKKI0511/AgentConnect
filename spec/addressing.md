@@ -152,9 +152,22 @@ The result is an ordered list of matches, best first, with no scores. Scores are
 
 Discovery is written for a model deciding who to hire, so it is cheap by default. Each match is a light card: the Address to send to, the Profile `summary`, the Agent's Skill names for a quick capability scan, and any tags. A model skims the ranked cards, then reads the one it wants in full with `get_profile`. When a caller wants everything inline, `detail=full` adds the Agent DID and the complete Profile to every match.
 
-The Runtime searches every Membership except the caller. It returns at most `limit` matches, defaulting to 10, ordered by relevance with equal-relevance entries ordered by canonical Address.
+The Runtime searches every Membership except the caller. Matches are ordered by relevance, with equal-relevance entries ordered by canonical Address.
+
+`limit` is optional. When omitted, `find` returns every remaining member, at most 100. When present it MUST be between `1` and `100` and caps the list. A Team of 15 and a Team of 150 use the same request.
 
 Search MUST work on a fresh Team without optional infrastructure. The search method is an implementation choice, but changing it MUST NOT change the request or result shape. A future policy layer may hide some members from some callers; that filters the result list and does not change its shape, and a later cross-Team scope adds reach rather than a new result type.
+
+### Default size vectors
+
+The caller is excluded. Other members are the rest of the Team.
+
+| Other members | `limit` | Result size |
+| --- | --- | --- |
+| 8 | omitted | 8 |
+| 15 | omitted | 15 |
+| 150 | omitted | 100 |
+| 15 | 3 | 3 |
 
 ### Search example
 

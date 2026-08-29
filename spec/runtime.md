@@ -260,10 +260,11 @@ The Runtime MUST:
 - consider every other Membership in the Team
 - order matches by relevance, best first
 - break equal-relevance ties by canonical Address
-- return at most `limit` matches, defaulting to `10`
+- when `limit` is omitted, return every remaining member, at most 100
+- when `limit` is present, return at most that many matches; `limit` MUST be between `1` and `100`
 - return each match at the requested `detail`
 
-`limit` MUST be between `1` and `100`. `detail` is `summary` or `full` and defaults to `summary`; `full` adds `agent_did` and the complete Profile to each match. Search MUST work without optional infrastructure. Ranking implementation is outside the specification, and changing it MUST NOT change the request or result shape.
+`detail` is `summary` or `full` and defaults to `summary`; `full` adds `agent_did` and the complete Profile to each match. Search MUST work without optional infrastructure. Ranking implementation is outside the specification, and changing it MUST NOT change the request or result shape.
 
 A future addition may widen `find` to reach beyond the local Team. That is an added scope, not a reshape: the result stays a list of ranked matches whose Addresses are already qualified.
 

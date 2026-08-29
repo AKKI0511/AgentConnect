@@ -804,7 +804,8 @@ export interface FindRequest {
    */
   query: string;
   /**
-   * Maximum results from 1 to 100. Omit to return every match.
+   * Maximum results from 1 to 100. Omit to return every remaining member,
+   * capped at 100.
    * @minimum 1
    * @maximum 100
    * @multipleOf 1

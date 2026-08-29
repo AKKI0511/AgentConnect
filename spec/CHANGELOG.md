@@ -13,6 +13,7 @@ Defines:
 - Agent, Team, Runtime, Client, Membership, Instance, Session, and Mailbox boundaries
 - concurrent Instances that share one Membership Mailbox, and a Mailbox that may be partitioned for scale
 - Agent names, Team names, canonical Addresses that already admit a remote location, Profiles, and local Directory search
+- `find` with no `limit` returns every other member of a small Team, ordered, and caps a large Team at 100
 - Skills as natural-language claims with examples and tags, without input or output schemas
 - request, event, response, and error Messages, with `trace_id` correlating one causal operation while `thread_id` groups a conversation
 - reply expectation on the Message and the collection strategy (`wait`, `ticket`, and reserved `callback` and `stream`) on the `send`

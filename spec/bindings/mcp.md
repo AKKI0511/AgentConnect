@@ -37,7 +37,7 @@ Arguments:
 ```
 
 - `query` is required, contains 1 to 1,000 characters, and includes at least one non-whitespace character.
-- `limit` is optional, between `1` and `100`, and defaults to `10`.
+- `limit` is optional, between `1` and `100`. Omit it to return every remaining member, at most 100.
 - `detail` is optional, `summary` or `full`, and defaults to `summary`.
 
 Result: `FindResult`. Each match is a light card by default so a model can scan a whole Team cheaply; `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail if it needs more than the card shows.

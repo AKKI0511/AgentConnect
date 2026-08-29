@@ -4,7 +4,7 @@ Shared instances module to prevent duplicate initialization
 
 from typing import Optional, Set
 import redis.asyncio as redis
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.team import Team
 from demos.utils.demo_logger import get_logger
 import asyncio

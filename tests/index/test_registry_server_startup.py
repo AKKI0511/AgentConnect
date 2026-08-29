@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from agentconnect.index.service import create_registry_api_app
 from agentconnect.config.servers import RegistryAPISettings
-from agentconnect.team.directory.registry_base import AgentRegistry
+from agentconnect.index.registry.registry_base import AgentRegistry
 
 
 def _clear_registry_env(monkeypatch: pytest.MonkeyPatch) -> None:

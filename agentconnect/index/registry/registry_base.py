@@ -18,9 +18,9 @@ from agentconnect.core.types import (
     InteractionMode,
     VerificationStatus,
 )
-from agentconnect.team.directory.registration import AgentRegistration
-from agentconnect.team.directory.capability_discovery import CapabilityDiscoveryService
-from agentconnect.team.directory.identity_verification import (
+from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
+from agentconnect.index.registry.identity_verification import (
     verify_agent_identity,
 )
 from agentconnect.config import settings as global_settings

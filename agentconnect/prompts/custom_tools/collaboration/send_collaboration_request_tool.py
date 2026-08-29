@@ -7,7 +7,7 @@ from typing import Optional, Any  # Added Any, Dict for kwargs flexibility
 from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel, Field
 
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.core.types import AgentType
 
 logger = logging.getLogger(__name__)

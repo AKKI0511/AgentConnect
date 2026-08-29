@@ -25,7 +25,7 @@ from colorama import init, Fore, Style
 from agentconnect.prebuilt import AIAgent, HumanAgent, TelegramAIAgent
 from agentconnect.agent import BaseAgent
 from agentconnect.team import CommunicationHub
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.core import (
     AgentIdentity,
     Capability,

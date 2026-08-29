@@ -164,7 +164,7 @@ Each module includes self-contained test functions that can be run directly:
 
 ```python
 # Example test for indexing
-python -c "from agentconnect.team.directory.capability_discovery_impl.indexing import main; import asyncio; asyncio.run(main())"
+python -c "from agentconnect.index.registry.capability_discovery_impl.indexing import main; import asyncio; asyncio.run(main())"
 ```
 
 > Note: The recommended way to configure capability discovery is via `agentconnect.yaml` under `registry.vector_search`. Programmatic usage must pass a `VectorSearchSettings` instance (construct directly or via a nested dict). For convenience, the implementation functions accept `None` to fall back to `settings.registry.vector_search`. See [AgentConnect Configuration](../../../config/README.md) for full configuration details.

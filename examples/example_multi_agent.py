@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 from agentconnect.prebuilt import AIAgent
 from agentconnect.team import CommunicationHub
 from agentconnect.core.message import Message
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.core.types import (
     AgentIdentity,
     Capability,
@@ -281,7 +281,7 @@ async def run_ecommerce_analysis_demo(enable_logging: bool = False) -> None:
             "agentconnect.agent.base",
             "agentconnect.prebuilt.human_agent",
             "agentconnect.prebuilt.ai_agent",
-            'agentconnect.team.directory.registry_base',
+            "agentconnect.index.registry.registry_base",
         ]:
             _pylog.getLogger(name).setLevel(_pylog.INFO)
 

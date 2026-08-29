@@ -19,13 +19,13 @@ from agentconnect.core.types import (
     InteractionMode,
     Skill,
 )
-from agentconnect.team.directory.registration import AgentRegistration
-from agentconnect.team.directory.capability_discovery import CapabilityDiscoveryService
-from agentconnect.team.directory.capability_discovery_impl.embedding_utils import (
+from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
+from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     check_semantic_search_requirements,
     create_huggingface_embeddings,
 )
-from agentconnect.team.directory.capability_discovery_impl.qdrant_client import (
+from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
     initialize_qdrant_clients,
 )
 from agentconnect.config.models import VectorSearchSettings

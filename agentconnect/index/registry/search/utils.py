@@ -6,8 +6,8 @@ to search interface objects (AgentSearchResultItem) with appropriate detail leve
 """
 
 from typing import Dict, List
-from agentconnect.team.directory.search.schemas import AgentSearchResultItem
-from agentconnect.team.directory.registration import (
+from agentconnect.index.registry.search.schemas import AgentSearchResultItem
+from agentconnect.index.registry.registration import (
     AgentRegistration,
     Capability,
     Skill,

@@ -16,7 +16,7 @@ from typing import Dict, List, Set, Tuple, Any, Optional, Union, TYPE_CHECKING, 
 # Avoid importing implementation modules at top-level to prevent optional deps from loading
 
 # Absolute imports from agentconnect package
-from agentconnect.team.directory.registration import AgentRegistration
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.config.models import VectorSearchSettings
 from agentconnect.config import settings as global_settings
 
@@ -93,7 +93,7 @@ class CapabilityDiscoveryService:
         start_ts = time.time()
         try:
             # Check which backends are available
-            from agentconnect.team.directory.capability_discovery_impl.embedding_utils import (
+            from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
                 check_semantic_search_requirements,
                 create_huggingface_embeddings,
             )
@@ -121,7 +121,7 @@ class CapabilityDiscoveryService:
             self._capability_to_agent_map = {}
 
             # Initialize Qdrant clients
-            from agentconnect.team.directory.capability_discovery_impl.qdrant_client import (
+            from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
                 initialize_qdrant_clients,
                 init_qdrant_collection,
             )
@@ -176,7 +176,7 @@ class CapabilityDiscoveryService:
                 return
 
             # Update the capability map
-            from agentconnect.team.directory.capability_discovery_impl.indexing import (
+            from agentconnect.index.registry.capability_discovery_impl.indexing import (
                 update_capability_embeddings,
             )
 
@@ -216,7 +216,7 @@ class CapabilityDiscoveryService:
         start_ts = time.time()
         try:
             # Delete points from Qdrant
-            from agentconnect.team.directory.capability_discovery_impl.qdrant_client import (
+            from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
                 delete_points_by_agent_id,
             )
 
@@ -267,7 +267,7 @@ class CapabilityDiscoveryService:
 
             # Make sure collection is initialized
             if not self._collection_initialized:
-                from agentconnect.team.directory.capability_discovery_impl.qdrant_client import (
+                from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
                     init_qdrant_collection,
                 )
 
@@ -284,7 +284,7 @@ class CapabilityDiscoveryService:
                     return
 
             # Compute embeddings and store in Qdrant
-            from agentconnect.team.directory.capability_discovery_impl.indexing import (
+            from agentconnect.index.registry.capability_discovery_impl.indexing import (
                 precompute_all_capability_embeddings as _precompute_all_capability_embeddings,
             )
 
@@ -346,7 +346,7 @@ class CapabilityDiscoveryService:
             semantic_search_func = self.find_by_capability_semantic
 
         # Call the implementation function (boundary logged at service level)
-        from agentconnect.team.directory.capability_discovery_impl.search import (
+        from agentconnect.index.registry.capability_discovery_impl.search import (
             find_by_capability_name as _find_by_capability_name,
         )
 
@@ -389,7 +389,7 @@ class CapabilityDiscoveryService:
             and self._collection_initialized
         ):
             start_ts = time.time()
-            from agentconnect.team.directory.capability_discovery_impl.search import (
+            from agentconnect.index.registry.capability_discovery_impl.search import (
                 search_with_qdrant as _search_with_qdrant,
             )
 
@@ -413,7 +413,7 @@ class CapabilityDiscoveryService:
             return results
         else:
             # Fall back to basic string similarity if Qdrant search not available
-            from agentconnect.team.directory.capability_discovery_impl.search import (
+            from agentconnect.index.registry.capability_discovery_impl.search import (
                 fallback_string_search as _fallback_string_search,
             )
 

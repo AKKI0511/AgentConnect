@@ -38,7 +38,7 @@ from agentconnect.prebuilt.ai_agent import AIAgent
 from agentconnect.prebuilt.human_agent import HumanAgent
 from agentconnect.team.runtime import CommunicationHub
 from agentconnect.core.identity import AgentIdentity
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.core.types import Capability, ModelName, ModelProvider
 from agentconnect.prompts.tools import PromptTools
 

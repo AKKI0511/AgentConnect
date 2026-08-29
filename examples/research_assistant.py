@@ -39,7 +39,7 @@ from agentconnect.core.types import (
     ModelName,
     ModelProvider,
 )
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.utils.callbacks import ToolTracerCallbackHandler
 
 # Note: logging is configured by the CLI. Examples should not override it.

@@ -2,7 +2,7 @@
 Registry Client for AgentConnect
 
 This client provides a high-level interface for interacting with the AgentConnect Registry API Server.
-It mimics the interface of agentconnect.team.directory.AgentRegistry, but uses HTTPX for asynchronous requests.
+It mimics the interface of agentconnect.index.registry.AgentRegistry, but uses HTTPX for asynchronous requests.
 """
 
 import asyncio
@@ -14,8 +14,8 @@ import time
 import httpx
 from pydantic import ValidationError
 
-from agentconnect.team.directory.registration import AgentRegistration
-from agentconnect.team.directory.search import (
+from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.registry.search import (
     AgentSearchInput,
     AgentSearchOutput,
     AgentSearchResultItem,
@@ -109,7 +109,7 @@ def with_retry(
 class RegistryAPIClient:
     """
     Client for interacting with the AgentConnect Registry API Server.
-    This client mimics the interface of `agentconnect.team.directory.AgentRegistry`.
+    This client mimics the interface of `agentconnect.index.registry.AgentRegistry`.
 
     Quickstart Example:
         .. code-block:: python

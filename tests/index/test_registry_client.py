@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
 from agentconnect.index.client import RegistryAPIClient
-from agentconnect.team.directory.registration import AgentRegistration
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.core.types import AgentType, InteractionMode, AgentIdentity
 
 

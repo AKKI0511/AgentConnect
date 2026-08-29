@@ -77,7 +77,7 @@ Converts `List[Skill]` to `List[Dict[str, str]]` with "name" and "description" k
 ### Basic Search with Different Detail Levels
 
 ```python
-from agentconnect.team.directory.search import (
+from agentconnect.index.registry.search import (
     AgentSearchInput, 
     populate_search_result_item
 )
@@ -102,7 +102,7 @@ search_result = populate_search_result_item(
 ### Working with Search Results
 
 ```python
-from agentconnect.team.directory.search import AgentSearchOutput
+from agentconnect.index.registry.search import AgentSearchOutput
 
 # Create output with results
 output = AgentSearchOutput(
@@ -167,7 +167,7 @@ No direct configuration is required for this module. It relies on:
 
 - `pydantic`: For schema validation and serialization
 - `typing`: For type hints and annotations
-- `agentconnect.team.directory.registration`: For domain object types
+- `agentconnect.index.registry.registration`: For domain object types
 
 ## Error Handling
 

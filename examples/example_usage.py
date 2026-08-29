@@ -85,7 +85,7 @@ async def main(enable_logging: bool = False, enable_payments: bool = False) -> N
             "agentconnect.agent.base",
             "agentconnect.prebuilt.human_agent",
             "agentconnect.prebuilt.ai_agent",
-            'agentconnect.team.directory.registry_base',
+            "agentconnect.index.registry.registry_base",
         ]
         for name in allowlist:
             logging.getLogger(name).setLevel(logging.INFO)

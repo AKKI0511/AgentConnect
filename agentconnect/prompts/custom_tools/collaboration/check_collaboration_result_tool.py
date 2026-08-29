@@ -5,7 +5,7 @@ from typing import Any, Optional
 from langchain_core.tools.structured import StructuredTool
 from pydantic import BaseModel, Field
 
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 
 logger = logging.getLogger(__name__)
 

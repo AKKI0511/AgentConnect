@@ -23,7 +23,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
 # Absolute imports from agentconnect package
-from agentconnect.team.directory import AgentRegistry
+from agentconnect.index.registry import AgentRegistry
 from agentconnect.core.types import ModelName, ModelProvider
 from agentconnect.prompts.agent_prompts import AgentWorkflow, CollaborationState
 from agentconnect.prompts.templates.prompt_templates import (

@@ -4,11 +4,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.tools.structured import StructuredTool
 
-from agentconnect.team.directory import AgentRegistry, AgentRegistration
+from agentconnect.index.registry import AgentRegistry, AgentRegistration
 from agentconnect.core.types import AgentType
 
 # Import from centralized schemas and utilities
-from agentconnect.team.directory.search import (
+from agentconnect.index.registry.search import (
     AgentSearchInput,
     AgentSearchOutput,
     AgentSearchResultItem,

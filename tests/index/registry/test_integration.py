@@ -9,8 +9,8 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from agentconnect.team.directory import AgentRegistry
-from agentconnect.team.directory.registration import AgentRegistration
+from agentconnect.index.registry import AgentRegistry
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.core.types import (
     AgentIdentity,
     AgentType,

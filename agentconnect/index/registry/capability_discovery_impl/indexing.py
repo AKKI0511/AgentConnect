@@ -13,7 +13,7 @@ import uuid
 import hashlib
 import asyncio
 
-from agentconnect.team.directory.registration import AgentRegistration
+from agentconnect.index.registry.registration import AgentRegistration
 
 # Configure logger (module namespace)
 logger = logging.getLogger(__name__)
@@ -308,7 +308,7 @@ async def update_capability_embeddings(
     agent_id = registration.agent_id
 
     # First delete all existing points for this agent
-    from agentconnect.team.directory.capability_discovery_impl.qdrant_client import (
+    from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
         delete_points_by_agent_id,
     )
 
@@ -373,7 +373,7 @@ def extract_capability_index(
 
 async def main():
     #  Test usage
-    from agentconnect.team.directory.registration import AgentRegistration
+    from agentconnect.index.registry.registration import AgentRegistration
     from agentconnect.core.types import (
         AgentType,
         InteractionMode,

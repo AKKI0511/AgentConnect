@@ -253,7 +253,7 @@ import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from agentconnect.team.directory.search import AgentSearchOutput
+from agentconnect.index.registry.search import AgentSearchOutput
 
 async def find_agents_example():
     # Configure the MCP server
@@ -388,7 +388,7 @@ async def your_tool_function(
     result = await app_ctx.registry_client.your_operation(param1, param2)
     
     # Use search schemas if returning agent data
-    from agentconnect.team.directory.search import populate_search_result_item
+    from agentconnect.index.registry.search import populate_search_result_item
     
     return {
         "message": "Operation completed successfully",

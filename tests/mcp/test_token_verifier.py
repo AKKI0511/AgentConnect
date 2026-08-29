@@ -8,8 +8,8 @@ from agentconnect.core.types import (
     AgentType,
     InteractionMode,
 )
-from agentconnect.team.directory.registry_base import AgentRegistry
-from agentconnect.team.directory.registration import AgentRegistration
+from agentconnect.index.registry.registry_base import AgentRegistry
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.mcp.token_verifier import MCPRegistryTokenVerifier
 from agentconnect.mcp.communication_mcp_server import create_communication_mcp
 from types import SimpleNamespace

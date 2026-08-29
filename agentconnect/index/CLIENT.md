@@ -84,7 +84,7 @@ client = RegistryAPIClient(
 ```python
 import asyncio
 from agentconnect.index import RegistryAPIClient
-from agentconnect.team.directory import AgentRegistration
+from agentconnect.index.registry import AgentRegistration
 from agentconnect.core import AgentType, InteractionMode, AgentIdentity, Capability
 
 async def register_agent_example():
@@ -369,7 +369,7 @@ async def get_agents_batch_endpoint(
 - Minimal changes to existing client logic
 
 #### Option 3: Enhanced Schema (Breaking Change)
-**Target:** `agentconnect/team/directory/search/schemas.py`
+**Target:** `agentconnect/index/registry/search/schemas.py`
 
 Extend `AgentSearchResultItem` to include all critical fields from `AgentRegistration`:
 
@@ -399,5 +399,5 @@ class AgentSearchResultItem(BaseModel):
 
 - **Client:** `agentconnect/index/client.py` - Lines 278-403 (N+1 pattern)
 - **Server:** `agentconnect/index/registry_api_server.py` - Lines 257-296 (semantic search endpoint)
-- **Schemas:** `agentconnect/team/directory/search/schemas.py` - AgentSearchResultItem definition
-- **Utils:** `agentconnect/team/directory/search/utils.py` - populate_search_result_item function
+- **Schemas:** `agentconnect/index/registry/search/schemas.py` - AgentSearchResultItem definition
+- **Utils:** `agentconnect/index/registry/search/utils.py` - populate_search_result_item function

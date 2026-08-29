@@ -12,6 +12,8 @@ from typing import Dict, List, Set
 from datetime import datetime
 from tests.core.utils import print_header, print_step, print_success, print_result
 
+pytestmark = pytest.mark.slow
+
 # Core imports
 from agentconnect.core.types import (
     AgentType,
@@ -20,8 +22,8 @@ from agentconnect.core.types import (
     InteractionMode,
     Skill,
 )
-from agentconnect.team.directory.registration import AgentRegistration
-from agentconnect.team.directory.capability_discovery import CapabilityDiscoveryService
+from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
 
 # Sample test data
 TEST_CAPABILITIES = [

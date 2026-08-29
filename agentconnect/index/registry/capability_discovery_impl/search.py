@@ -10,8 +10,8 @@ from typing import Callable, Dict, List, Set, Tuple, Optional, Awaitable
 from langchain_core.embeddings import Embeddings
 from qdrant_client import AsyncQdrantClient
 
-from agentconnect.team.directory.registration import AgentRegistration
-from agentconnect.team.directory.capability_discovery_impl.embedding_utils import (
+from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     calculate_similarity,
 )
 

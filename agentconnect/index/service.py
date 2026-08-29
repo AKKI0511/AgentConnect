@@ -13,8 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # AgentConnect core imports
-from agentconnect.team.directory import AgentRegistry, AgentRegistration
-from agentconnect.team.directory.search import (
+from agentconnect.index.registry import AgentRegistry, AgentRegistration
+from agentconnect.index.registry.search import (
     AgentSearchInput,
     AgentSearchOutput,
     populate_search_result_item,

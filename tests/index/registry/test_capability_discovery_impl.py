@@ -17,21 +17,21 @@ from tests.core.utils import (
 )
 
 # Import implementation modules directly for testing
-from agentconnect.team.directory.capability_discovery_impl.embedding_utils import (
+from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     calculate_similarity,
     cosine_similarity,
     check_semantic_search_requirements,
     create_huggingface_embeddings,
 )
-from agentconnect.team.directory.capability_discovery_impl.qdrant_client import (
+from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
     initialize_qdrant_clients,
     init_qdrant_collection,
 )
-from agentconnect.team.directory.capability_discovery_impl.search import (
+from agentconnect.index.registry.capability_discovery_impl.search import (
     find_by_capability_name,
     fallback_string_search,
 )
-from agentconnect.team.directory.capability_discovery_impl.indexing import (
+from agentconnect.index.registry.capability_discovery_impl.indexing import (
     update_capability_embeddings,
     extract_capability_index,
 )
@@ -326,7 +326,7 @@ class TestSearch:
         print_header("Testing Fallback String Search")
 
         # Create test registrations
-        from tests.team.directory.test_capability_discovery_e2e import (
+        from tests.index.registry.test_capability_discovery_e2e import (
             create_test_registrations,
         )
 
@@ -355,7 +355,7 @@ class TestSearch:
         print_header("Testing Find by Capability Name")
 
         # Create test registrations
-        from tests.team.directory.test_capability_discovery_e2e import (
+        from tests.index.registry.test_capability_discovery_e2e import (
             create_test_registrations,
             extract_capabilities_index,
         )
@@ -433,7 +433,7 @@ class TestIndexing:
         print_header("Testing Extract Capability Index")
 
         # Create test registrations
-        from tests.team.directory.test_capability_discovery_e2e import (
+        from tests.index.registry.test_capability_discovery_e2e import (
             create_test_registrations,
         )
 
@@ -473,7 +473,7 @@ class TestIndexing:
         print_header("Testing Update Capability Embeddings")
 
         # Create test registrations and embeddings model
-        from tests.team.directory.test_capability_discovery_e2e import (
+        from tests.index.registry.test_capability_discovery_e2e import (
             create_test_registrations,
         )
 

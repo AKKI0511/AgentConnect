@@ -17,7 +17,7 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 from agentconnect.core.identity import decode_eddsa_jwt, split_jwt
 from agentconnect.index import RegistryAPIClient
-from agentconnect.team.directory.registry_base import AgentRegistry
+from agentconnect.index.registry.registry_base import AgentRegistry
 
 
 class MCPRegistryTokenVerifier(TokenVerifier):

@@ -1,39 +1,38 @@
-"""
-AgentConnect Configuration System
+"""Team file loading for AgentConnect.
 
-This module provides a comprehensive, developer-friendly configuration system for AgentConnect
-that follows industry best practices from frameworks like LangChain and CrewAI.
+``agentconnect.yaml`` describes a Team the CLI starts. Embedded
+``Team("name").start()`` needs no file.
 
-Key features:
+    from agentconnect.config import TeamConfig, load_team_config
 
-- Sane defaults that work out of the box
-- Single global settings object with nested models
-- Three-tier precedence: runtime kwargs > agentconnect.yaml > defaults
-- Minimal YAML exposure - only essential developer-facing settings
-- Environment variables are reserved for secrets and read by subsystems directly, not by the global settings
-
-Usage:
-    .. code-block:: python
-
-        from agentconnect.config import settings, load_settings
-
-        # Access nested configuration
-        registry_config = settings.registry.vector_search
-        client_config = settings.clients.registry
-
-        # Override at runtime
-        custom_settings = load_settings(registry={'vector_search': {'in_memory': False}})
+    config = load_team_config()
+    print(config.team, config.port)
 """
 
-from agentconnect.config.loaders import load_settings
-from agentconnect.config.models import AgentConnectSettings
+from agentconnect.config.loaders import (
+    find_config_file,
+    load_team_config,
+    render_example_yaml,
+    save_example_config,
+    validate_config_file,
+)
+from agentconnect.config.models import (
+    HostedAgentConfig,
+    PaymentsSettings,
+    TeamConfig,
+    VectorSearchSettings,
+)
+from agentconnect.config.servers import RegistryAPISettings
 
-# Global settings instance - this is the main export
-settings = load_settings()
-
-# Public API
 __all__ = [
-    "settings",
-    "load_settings",
-    "AgentConnectSettings",
+    "TeamConfig",
+    "HostedAgentConfig",
+    "PaymentsSettings",
+    "VectorSearchSettings",
+    "RegistryAPISettings",
+    "load_team_config",
+    "find_config_file",
+    "render_example_yaml",
+    "save_example_config",
+    "validate_config_file",
 ]

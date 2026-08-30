@@ -11,7 +11,7 @@ from pydantic_settings.sources.providers.env import (
     EnvSettingsSource as PydanticEnvSettingsSource,
 )
 
-from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config.vector import VectorSearchSettings
 
 
 # === STANDALONE SERVER SETTINGS ===

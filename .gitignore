@@ -198,7 +198,7 @@ data/
 .vscode/
 .idea/
 
-# Local CLI state from gentconnect up
+# Local CLI state from `agentconnect up`
 .agentconnect/
 
 # Project specific

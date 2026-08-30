@@ -183,6 +183,9 @@ def test_removed_legacy_packages():
         "agentconnect.mcp.registry_mcp_server",
         "agentconnect.mcp.token_verifier",
         "agentconnect.cli.mcp",
+        "agentconnect.cli.config",
+        "agentconnect.cli.serve",
+        "agentconnect.cli.registry",
     ]:
         sys.modules.pop(name, None)
         try:

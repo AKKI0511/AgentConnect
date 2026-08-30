@@ -55,6 +55,20 @@ def test_agent_base_does_not_load_team_package():
         _restore_modules(saved_team)
 
 
+def test_agent_tools_does_not_load_team_or_mcp():
+    saved_team = _pop_modules(_names_with_prefix("agentconnect.team"))
+    saved_mcp = _pop_modules(_names_with_prefix("agentconnect.mcp"))
+    saved_tools = _pop_modules(_names_with_prefix("agentconnect.agent.tools"))
+    try:
+        importlib.import_module("agentconnect.agent.tools")
+        assert _names_with_prefix("agentconnect.team") == []
+        assert _names_with_prefix("agentconnect.mcp") == []
+    finally:
+        _restore_modules(saved_tools)
+        _restore_modules(saved_mcp)
+        _restore_modules(saved_team)
+
+
 def test_core_does_not_export_base_agent():
     import agentconnect.core as core
 

@@ -31,10 +31,9 @@ a team of agents does flows from these three primitives.
 **How to connect these tools to your agent**
 
 ``AIAgent`` includes all three automatically on hub registration. For agents built with
-other frameworks, the Discovery MCP server already exposes ``search_for_agents``; see
-:doc:`../integrations/mcp/discovery_mcp`. The Communication MCP with
-``send_collaboration_request`` and ``check_collaboration_result`` is planned for a
-near-term release.
+other frameworks, :doc:`../integrations/mcp/discovery_mcp` documents Team MCP
+(``find``, ``ask``, ``tell``, ``get_result``, ``get_history``) and
+``BaseAgent.team_tools()``.
 
 See :doc:`agent_network_setup` for wiring the hub and registry these tools depend on.
 
@@ -265,21 +264,18 @@ the right queries.
 See :doc:`../core/agent_profile_and_capabilities` for the full field reference and
 guidance on writing profiles that discovery finds.
 
-.. admonition:: On the horizon: Communication MCP
+.. admonition:: Team MCP
    :class: note
 
-   The Discovery MCP server (available now) already exposes ``search_for_agents`` to any
-   MCP-compatible agent or client. The Communication MCP, which will expose
-   ``send_collaboration_request`` and ``check_collaboration_result`` over the same
-   standard interface, is planned for a near-term release. When it ships, any agent
-   using any framework can connect all three tools without depending on AgentConnect
-   internals.
+   ``Team.serve()`` exposes ``find``, ``ask``, ``tell``, ``get_result``, and
+   ``get_history`` to any MCP client. Python hosts that do not speak MCP use
+   ``BaseAgent.team_tools()``. See :doc:`../integrations/mcp/discovery_mcp`.
 
 See Also
 ---------
 
 - :doc:`agent_network_setup` — wire up the hub, registry, and run loops
 - :doc:`../core/agent_profile_and_capabilities` — write profiles that search finds reliably
-- :doc:`../integrations/mcp/discovery_mcp` — connect ``search_for_agents`` via MCP today
+- :doc:`../integrations/mcp/discovery_mcp` — Team MCP and ``team_tools()``
 - :doc:`../payments/agent_payment` — payment-gated A2A workflows
 - :doc:`../monitoring/event_monitoring` — trace and observe collaboration flows

@@ -353,13 +353,16 @@ These tools let your AI agent discover collaborators and delegate work without a
 Discovery MCP Server
 ^^^^^^^^^^^^^^^^^^^^^
 
-The registry can be exposed as an MCP server so that Claude Desktop, Cursor, or any MCP-compatible client can search your registered agents by natural language query:
+The Team MCP server exposes ``find``, ``ask``, ``tell``, ``get_result``, and
+``get_history`` so Cursor or Claude can talk to a served Team:
 
-.. code-block:: bash
+.. code-block:: python
 
-    agentconnect mcp start
+    url = await team.serve()
+    print(team.mcp_url)
 
-Once running, MCP clients can query the registry without any Python code on the client side. See :doc:`../../integrations/mcp/discovery_mcp` for setup, configuration, and how to connect it to your MCP client.
+See :doc:`../../integrations/mcp/discovery_mcp` for Cursor config and
+``BaseAgent.team_tools()``.
 
 Custom Search Tools
 ^^^^^^^^^^^^^^^^^^^^

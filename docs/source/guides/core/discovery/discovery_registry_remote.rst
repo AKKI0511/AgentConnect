@@ -634,15 +634,11 @@ In the **private team model**, each process runs a self-contained group of indep
 
 Neither team imports code from the other. Discovery is the only connection.
 
-**Path 1. Discovery MCP (recommended starting point)**
+**Path 1. Team MCP**
 
-Most AI frameworks ship with native MCP support. Start the Discovery MCP server once and every framework's agents get capability search across all teams for free, with no custom tool code, no ``RegistryAPIClient`` imports, and no framework coupling:
-
-.. code-block:: bash
-
-    agentconnect mcp start agent-discovery
-
-Any MCP-compatible client (Cursor, Claude Desktop, Google ADK, LangGraph, the OpenAI Agents SDK) can now search all five agents from both teams with a natural language query. See :doc:`../../integrations/mcp/discovery_mcp` for client configuration.
+``Team.serve()`` mounts the Team MCP server at ``{origin}/mcp``. Add
+``team.mcp_url`` to Cursor or Claude. Tools are ``find``, ``ask``, ``tell``,
+``get_result``, and ``get_history``. See :doc:`../../integrations/mcp/discovery_mcp`.
 
 **Path 2. Built-in ``search_for_agents`` (AIAgent teams)**
 

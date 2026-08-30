@@ -1,10 +1,9 @@
-Model Context Protocol (MCP)
-=============================
+Team MCP
+=======
 
-MCP integration enables AgentConnect agents to expose their capabilities and be discovered through the Model Context Protocol. This allows AI assistants like Claude and Cursor to interact with your agent network through standardized MCP servers.
-
-.. note::
-   Additional MCP guides (e.g., direct A2A communication via MCP) are coming soon.
+A Team exposes ``find``, ``ask``, ``tell``, ``get_result``, and ``get_history``
+over MCP. ``Team.serve()`` mounts that server at ``{origin}/mcp``. Cursor and
+Claude add the URL. Python hosts that do not speak MCP use ``team_tools()``.
 
 All pages
 ---------
@@ -12,12 +11,11 @@ All pages
 .. grid:: 1 1 2 2
    :gutter: 3
 
-   .. grid-item-card:: Discovery MCP
+   .. grid-item-card:: Team MCP
       :link: discovery_mcp
       :link-type: doc
 
-      Expose Registry search as an MCP tool. Covers server setup, Cursor/Claude
-      configuration, and calling the tool from an MCP client.
+      Serve a Team, add ``team.mcp_url`` to Cursor, and call find / ask / tell.
 
 .. toctree::
    :maxdepth: 1

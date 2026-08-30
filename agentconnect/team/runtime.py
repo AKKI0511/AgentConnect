@@ -68,6 +68,7 @@ import agentconnect.team.auth as auth_mod
 import agentconnect.team.mailbox as mailbox_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
+import agentconnect.team.trace as trace_mod
 from agentconnect.team.codec import (
     canonical_json,
     format_timestamp,
@@ -123,8 +124,9 @@ class Team:
     Thread history, and the Directory. Use :meth:`join` to create or
     reconnect a Membership, then pass the returned ``session_token`` to
     every other operation. ``find`` ranks other members from a
-    natural-language query. :meth:`serve` also mounts the Team MCP server
-    at ``{origin}/mcp``.
+    natural-language query. :meth:`status` and :meth:`get_trace` are the
+    operator view of members and of one causal timeline. :meth:`serve`
+    also mounts the Team MCP server at ``{origin}/mcp``.
     """
 
     def __init__(
@@ -211,6 +213,7 @@ class Team:
         self._session_wake: dict[str, list[asyncio.Event]] = {}
         self._work_waiters: dict[str, list[asyncio.Event]] = {}
         self._sse_subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._trace_subscribers: list[tuple[str, asyncio.Queue]] = []
         self._session_tokens_by_member: dict[str, set[str]] = {}
         self._sweep_task: Optional[asyncio.Task] = None
         self._http_server: Any = None
@@ -313,6 +316,16 @@ class Team:
                 except asyncio.QueueFull:
                     pass
 
+    async def _record_trace(self, event: dict[str, Any]) -> None:
+        """Persist one Trace event and notify watch subscribers."""
+        store = self._ensure_started()
+        stored = await trace_mod.append_event(store, event)
+        for _token, queue in list(self._trace_subscribers):
+            try:
+                queue.put_nowait(stored)
+            except asyncio.QueueFull:
+                pass
+
     async def wait_for_work(self, session_token: str, timeout: float = 30.0) -> bool:
         """Block until this Session's Mailbox has leaseable work, or timeout.
 
@@ -411,8 +424,9 @@ class Team:
     async def ensure_operator_session(self) -> str:
         """Return a live Session token for the reserved ``operator`` Membership.
 
-        Loopback MCP calls with no Authorization header use this Session.
-        The name ``operator`` is reserved. A different Agent cannot join it.
+        Loopback MCP and HTTP calls with no Authorization header use this
+        Session. The name ``operator`` is reserved. A different Agent
+        cannot join it.
         """
         store = self._ensure_started()
         if self._operator_token:
@@ -648,6 +662,16 @@ class Team:
                 queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
+        remaining: list[tuple[str, asyncio.Queue]] = []
+        for token, queue in self._trace_subscribers:
+            if token == session["token"]:
+                try:
+                    queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    pass
+            else:
+                remaining.append((token, queue))
+        self._trace_subscribers = remaining
         if self._operator_token == session["token"]:
             self._operator_token = None
 
@@ -679,6 +703,13 @@ class Team:
         now = utc_now()
         if parse_timestamp(session["expires_at"]) <= now:
             _fail("unauthorized", "Session is missing or invalid")
+        return session
+
+    async def _require_operator(self, session_token: Optional[str]) -> dict[str, Any]:
+        """Return the Session, or fail if it is not the operator."""
+        session = await self._require_session(session_token)
+        if session["membership_name"] != OPERATOR_NAME:
+            _fail("forbidden", "This operation is limited to the operator")
         return session
 
     async def _session_count(self, membership_name: str) -> int:
@@ -1259,6 +1290,20 @@ class Team:
         mailbox_mod.enqueue_item(items, message_id, now_ts)
         await mailbox_mod.save_mailbox(store, recipient, items)
         self._signal_work(recipient_name)
+        await self._record_trace(
+            trace_mod.make_event(
+                at=now_ts,
+                type="accepted",
+                trace_id=trace_id,
+                actor=sender,
+                message_id=message_id,
+                detail={
+                    "kind": kind,
+                    "sender": sender,
+                    "recipient": recipient,
+                },
+            )
+        )
         if thread_id is not None:
             await threads_mod.append_message(
                 store,
@@ -1290,6 +1335,16 @@ class Team:
             thread_id=thread_id,
         )
         await tickets_mod.save_ticket(store, ticket)
+        await self._record_trace(
+            trace_mod.make_event(
+                at=now_ts,
+                type="ticket_opened",
+                trace_id=trace_id,
+                actor=sender,
+                message_id=message_id,
+                ticket_id=message_id,
+            )
+        )
         result = {"status": "ticketed", "message": message, "ticket": ticket}
         await store.put(
             f"send:{message_id}",
@@ -1420,6 +1475,17 @@ class Team:
                 )
                 kept.append(item)
                 take -= 1
+                await self._record_trace(
+                    trace_mod.make_event(
+                        at=now_ts,
+                        type="leased",
+                        trace_id=str(message["trace_id"]),
+                        actor=address,
+                        message_id=message["id"],
+                        ticket_id=(message["id"] if message.get("deadline") else None),
+                        detail={"attempt": attempt},
+                    )
+                )
             await mailbox_mod.save_mailbox(store, address, kept)
             await self._save_session(session)
             return {"deliveries": deliveries}
@@ -1501,6 +1567,21 @@ class Team:
                 self._notify(ticket["id"])
             await self._finish_delivery(session, lease, now_ts)
             await store.put(f"complete:{lease_id}", {"result": result})
+            if isinstance(message, dict) and message.get("trace_id"):
+                detail: dict[str, Any] = {}
+                if ticket is not None and ticket.get("state") == "declined":
+                    detail["declined"] = True
+                await self._record_trace(
+                    trace_mod.make_event(
+                        at=now_ts,
+                        type="completed",
+                        trace_id=str(message["trace_id"]),
+                        actor=session["address"],
+                        message_id=str(lease["message_id"]),
+                        ticket_id=ticket["id"] if ticket is not None else None,
+                        detail=detail,
+                    )
+                )
             return result
 
     async def reply(
@@ -1629,6 +1710,20 @@ class Team:
                 {"sender": session["address"], "hash": reply_hash, "result": result},
             )
             self._notify(ticket["id"])
+            await self._record_trace(
+                trace_mod.make_event(
+                    at=now_ts,
+                    type="replied",
+                    trace_id=str(message["trace_id"]),
+                    actor=session["address"],
+                    message_id=message["id"],
+                    ticket_id=ticket["id"],
+                    detail={
+                        "outcome": ("failed" if outcome == "failed" else "completed"),
+                        "reply_id": reply_id,
+                    },
+                )
+            )
             return result
 
     def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
@@ -1799,6 +1894,108 @@ class Team:
                 "profile": member["profile"],
             }
 
+    async def status(self, session_token: str) -> dict[str, Any]:
+        """Return members, online state, Mailbox depths, and open Tickets.
+
+        Operator only.
+
+            token = await team.ensure_operator_session()
+            snapshot = await team.status(token)
+            snapshot["members"][0]["mailbox_depth"]
+        """
+        async with self._lock:
+            await self._require_operator(session_token)
+            store = self._ensure_started()
+            now = utc_now()
+            names = await store.set_members("members")
+            open_ids = await store.set_members(tickets_mod.OPEN_TICKETS_SET)
+            by_recipient: dict[str, int] = {}
+            open_count = 0
+            for ticket_id in open_ids:
+                ticket = await tickets_mod.load_ticket(store, ticket_id)
+                if ticket is None or ticket.get("state") != "open":
+                    continue
+                open_count += 1
+                recipient = str(ticket["recipient"])
+                by_recipient[recipient] = by_recipient.get(recipient, 0) + 1
+            members: list[dict[str, Any]] = []
+            for name in names:
+                member = await self._get_member(name)
+                if member is None:
+                    continue
+                address = str(member["address"])
+                items = await mailbox_mod.load_mailbox(store, address)
+                online = False
+                for token in list(
+                    self._session_tokens_by_member.get(str(member["name"])) or ()
+                ):
+                    session = await self._get_session(token)
+                    if session is None:
+                        continue
+                    if parse_timestamp(session["expires_at"]) > now:
+                        online = True
+                        break
+                members.append(
+                    {
+                        "name": member["name"],
+                        "address": address,
+                        "online": online,
+                        "mailbox_depth": mailbox_mod.mailbox_depth(items),
+                        "open_tickets": by_recipient.get(address, 0),
+                    }
+                )
+            members.sort(key=lambda row: str(row["address"]))
+            result: dict[str, Any] = {
+                "team_name": self.name,
+                "persistence": self.persistence,
+                "open_tickets": open_count,
+                "members": members,
+            }
+            if self._http_url:
+                result["origin"] = self._http_url
+            return result
+
+    async def get_trace(self, session_token: str, trace_id: str) -> dict[str, Any]:
+        """Return the recorded timeline for one ``trace_id``.
+
+        The operator may read any Trace. A member may read a Trace they
+        appear in. Anyone else gets ``not_found``.
+
+            token = await team.ensure_operator_session()
+            timeline = await team.get_trace(token, message["trace_id"])
+        """
+        async with self._lock:
+            session = await self._require_session(session_token)
+            try:
+                trace_id = require_uuid(trace_id, field="trace_id")
+            except ValueError:
+                _fail("invalid_request", "trace_id must be a UUID")
+            events = await trace_mod.load_events(self._ensure_started(), trace_id)
+            if not events:
+                _fail("not_found", "Trace was not found")
+            if session["membership_name"] != OPERATOR_NAME:
+                if not trace_mod.caller_appears(events, str(session["address"])):
+                    _fail("not_found", "Trace was not found")
+            return {"trace_id": trace_id, "events": events}
+
+    async def subscribe_trace_events(self, session_token: str) -> asyncio.Queue:
+        """Attach a watch queue for new Trace events. Operator only."""
+        async with self._lock:
+            await self._require_operator(session_token)
+            queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+            self._trace_subscribers.append((session_token, queue))
+            return queue
+
+    async def unsubscribe_trace_events(
+        self, session_token: str, queue: asyncio.Queue
+    ) -> None:
+        """Detach a queue previously returned by ``subscribe_trace_events``."""
+        self._trace_subscribers = [
+            item
+            for item in self._trace_subscribers
+            if not (item[0] == session_token and item[1] is queue)
+        ]
+
     async def _expire_ticket_if_due(self, ticket_id: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
         ticket = await tickets_mod.load_ticket(store, ticket_id)
@@ -1812,6 +2009,19 @@ class Team:
             mailbox_mod.remove_item(items, ticket["id"])
             await mailbox_mod.save_mailbox(store, ticket["recipient"], items)
             self._notify(ticket["id"])
+            message = await store.get(f"msg:{ticket_id}")
+            if isinstance(message, dict) and message.get("trace_id"):
+                await self._record_trace(
+                    trace_mod.make_event(
+                        at=now_ts,
+                        type="ticket_closed",
+                        trace_id=str(message["trace_id"]),
+                        actor=str(ticket["recipient"]),
+                        message_id=ticket_id,
+                        ticket_id=ticket_id,
+                        detail={"state": "expired"},
+                    )
+                )
         return ticket
 
     async def _sweep_loop(self) -> None:

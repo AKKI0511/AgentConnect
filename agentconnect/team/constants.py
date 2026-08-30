@@ -34,14 +34,14 @@ COLLECT_NAMED = frozenset({"wait", "ticket", "callback", "stream"})
 MESSAGE_KINDS_SEND = frozenset({"request", "event"})
 TICKET_TERMINAL = frozenset({"completed", "failed", "expired", "declined"})
 
-# Reserved for the loopback MCP operator Membership.
+# Reserved for the loopback operator Membership (CLI and MCP).
 OPERATOR_NAME = "operator"
 RESERVED_MCP_TOOL_NAMES = frozenset(
     {"find", "ask", "tell", "get_result", "get_history"}
 )
 
 OPERATOR_PROFILE = {
-    "summary": "Person using this Team from an MCP client.",
+    "summary": "Person using this Team from the CLI or an MCP client.",
     "skills": [
         {
             "name": "operate",

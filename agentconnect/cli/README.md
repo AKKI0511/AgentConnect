@@ -103,24 +103,6 @@ agentconnect registry --help
     agentconnect registry ping --timeout 5.0
     ```
 
-### mcp
-
-Model Context Protocol integration.
-
-```bash
-agentconnect mcp --help
-```
-
-- start agent-discovery
-  - Purpose: Start the Agent Discovery MCP server (stdio).
-  - Options:
-    - `--registry-url <URL>` Override Registry base URL; defaults to SDK config (`clients.registry.base_url`).
-  - Examples:
-    ```bash
-    agentconnect mcp start agent-discovery
-    agentconnect mcp start agent-discovery --registry-url http://localhost:8000
-    ```
-
 ### doctor
 
 Run quick diagnostics and print a concise status summary.
@@ -135,8 +117,7 @@ agentconnect doctor
 - CLI commands re-read configuration fresh each run via `load_settings()`. Library code often uses a process-level snapshot via `from agentconnect.config import settings`.
 - Preferred quickstart commands:
   ```bash
-  agentconnect config init
-  agentconnect serve registry
-  agentconnect registry ping
-  agentconnect mcp start agent-discovery
+    agentconnect config init
+    agentconnect serve registry
+    agentconnect registry ping
   ```

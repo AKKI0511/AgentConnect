@@ -39,22 +39,3 @@ def test_serve_registry_constructs_uvicorn_run():
 
         serve_mod.registry(host="127.0.0.1", port=8001)
         assert run_mock.called
-
-
-def test_mcp_start_uses_default_and_override():
-    from agentconnect.cli import mcp as mcp_mod
-
-    with mock.patch("agentconnect.cli.mcp.create_agent_discovery_mcp") as factory_mock:
-        mcp_instance = mock.Mock()
-        factory_mock.return_value = mcp_instance
-
-        mcp_mod.start_agent_discovery()
-        assert mcp_instance.run.called
-        _, kwargs = factory_mock.call_args
-        assert kwargs.get("registry_client") is None
-
-        mcp_instance.run.reset_mock()
-        mcp_mod.start_agent_discovery(registry_url="http://example.com")
-        assert mcp_instance.run.called
-        _, kwargs2 = factory_mock.call_args
-        assert kwargs2.get("registry_client") is not None

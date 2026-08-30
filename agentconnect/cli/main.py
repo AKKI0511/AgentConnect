@@ -8,7 +8,6 @@ from agentconnect import __version__
 from . import config as config_cmds
 from . import registry as registry_cmds
 from . import serve as serve_cmds
-from . import mcp as mcp_cmds
 from . import doctor as doctor_cmds
 
 
@@ -45,18 +44,6 @@ registry_app = typer.Typer(
 )
 registry_app.command("ping")(registry_cmds.ping)
 app.add_typer(registry_app, name="registry")
-
-
-# mcp group with nested start/agent-discovery
-mcp_app = typer.Typer(
-    no_args_is_help=True, add_completion=False, help="MCP integration"
-)
-start_app = typer.Typer(
-    no_args_is_help=True, add_completion=False, help="Start MCP servers"
-)
-start_app.command("agent-discovery")(mcp_cmds.start_agent_discovery)
-mcp_app.add_typer(start_app, name="start")
-app.add_typer(mcp_app, name="mcp")
 
 
 @app.command("doctor")

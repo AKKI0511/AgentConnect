@@ -1,14 +1,45 @@
 # MCP binding
 
-A Team exposes five AgentConnect tools through MCP. The tools are the model-facing form of Runtime operations; their results use the public objects in [schema/schema.ts](../schema/schema.ts).
+A Team exposes five AgentConnect tools through MCP. The tools are the model-facing form of Runtime operations. Their results use the public objects in [schema/schema.ts](../schema/schema.ts).
 
 The MCP server is a Runtime Client. It authenticates the caller, performs Runtime operations on that caller's Session, and keeps no correctness state of its own.
 
+When the Runtime is served over HTTP, this binding is mounted at `{origin}/mcp` using streamable HTTP with no sticky routing.
+
+```text
+http://127.0.0.1:9000/mcp
+```
+
 ## Authentication
 
-Every tool call MUST identify one valid member Session. The server derives the sender from that Session and rejects unauthenticated calls.
+Every tool call MUST identify one valid member Session. The server derives the sender from that Session. Tool arguments never include `sender`, `agent_did`, or `session_token`.
 
-Tool arguments never include `sender`, `agent_did`, or `session_token`.
+```http
+Authorization: Bearer <session_token>
+```
+
+A missing, malformed, expired, replaced, or revoked Session token is an MCP-level authentication failure, except for the loopback operator case below.
+
+### Loopback operator
+
+On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned Membership named `operator`. The Runtime creates that Membership on first use and keeps a Session for it.
+
+The name `operator` is reserved for this Membership. A join that reuses it with a different DID fails with `name_conflict`.
+
+A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
+
+```http
+POST /mcp
+(no Authorization)
+
+→ find, ask, tell, get_result, and get_history run as operator
+```
+
+```http
+Authorization: Bearer <session_token of writer>
+
+→ the same tools run as writer
+```
 
 ## Core tools
 
@@ -20,7 +51,7 @@ The tool names are:
 - `get_result`
 - `get_history`
 
-Names and argument meanings are stable within a released contract. This set is deliberately small: a model finds a peer, sends work and collects the result, and reloads a conversation when it needs the earlier context.
+Names and argument meanings are stable within a released contract. This set is deliberately small. A model finds a peer, sends work and collects the result, and reloads a conversation when it needs the earlier context.
 
 ## `find`
 
@@ -40,7 +71,7 @@ Arguments:
 - `limit` is optional, between `1` and `100`. Omit it to return every remaining member, at most 100.
 - `detail` is optional, `summary` or `full`, and defaults to `summary`.
 
-Result: `FindResult`. Each match is a light card by default so a model can scan a whole Team cheaply; `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail if it needs more than the card shows.
+Result: `FindResult`. Each match is a light card by default so a model can scan a whole Team cheaply. `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail if it needs more than the card shows.
 
 The tool searches only the caller's Team and excludes the caller.
 
@@ -80,11 +111,29 @@ The server returns the current `Ticket`, and the Ticket carries its `thread_id`.
 
 ### Conversation continuity
 
-Omitting `thread_id` starts a fresh conversation: the server mints a Thread and returns it on the Ticket. Passing that `thread_id` back into a later `ask` or `tell` continues the same conversation, and the recipient receives the earlier turns as Delivery history. To start over, omit `thread_id` again. The model does not invent Thread ids; it reuses the one the server returned.
+Omitting `thread_id` starts a fresh conversation. The server mints a Thread and returns it on the Ticket. Passing that `thread_id` back into a later `ask` or `tell` continues the same conversation, and the recipient receives the earlier turns as Delivery history. To start over, omit `thread_id` again. The model does not invent Thread ids. It reuses the one the server returned.
 
 ### Idempotency
 
-A model tool call may be retried by the framework. The server MUST NOT let a retry create a second request. It uses `idempotency_key` when present, and otherwise derives a key from the caller, recipient, `thread_id`, and `content`. A retry with the same effective key returns the same Ticket rather than sending duplicate work.
+A model tool call may be retried by the framework. The server MUST NOT let a retry create a second request.
+
+When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key returns the original Ticket.
+
+When `idempotency_key` is omitted, the request Message id is UUID5 of `ask|<caller_address>|<recipient>|<thread_id or empty>|<canonical JSON of content>|<mcp_request_id>`. `mcp_request_id` is the JSON-RPC request id of this tool call, stringified. The omitted `thread_id` is hashed as empty even if the server later mints a Thread for the send.
+
+A retried MCP request reuses the JSON-RPC id and therefore the same Message id. A second distinct tool call, even with identical arguments, has a different request id and MUST open a second Ticket.
+
+```json
+{"recipient": "writer", "content": "same", "deadline_seconds": 30}
+```
+
+Two such `ask` calls with different JSON-RPC ids produce two Tickets.
+
+```json
+{"recipient": "writer", "content": "same", "deadline_seconds": 30, "idempotency_key": "draft-1"}
+```
+
+Two such `ask` calls from the same caller return one Ticket.
 
 ## `tell`
 
@@ -103,7 +152,7 @@ Arguments:
 }
 ```
 
-`recipient` and `content` are required. `thread_id` and `idempotency_key` are optional, with the same idempotency behavior as `ask`.
+`recipient` and `content` are required. `thread_id` and `idempotency_key` are optional, with the same idempotency behavior as `ask` (`tell|` in the UUID5 material instead of `ask|`).
 
 Result: `AcceptedSendResult`.
 
@@ -136,14 +185,20 @@ Arguments:
 ```
 
 - `thread_id` is required.
-- `before` is optional; omit it for the newest page, or pass the oldest Message id already seen to page further back.
+- `before` is optional. Omit it for the newest page, or pass the oldest Message id already seen to page further back.
 - `limit` is optional, between `1` and `200`, and defaults to `50`.
 
-Result: `HistoryResult`. Only a Thread participant may read it; any other caller receives `not_found`.
+Result: `HistoryResult`. Only a Thread participant may read it. Any other caller receives `not_found`.
+
+## Roster resource
+
+The server publishes the Team roster as an MCP resource at `agentconnect://team/roster`. The body is `TeamRoster`.
+
+The resource lists every current Membership, including `operator` when that Membership exists. It is not a search. Models that need ranking use `find`.
 
 ## Reserved collection strategies
 
-`ask` always uses `collect=ticket`, which covers the model cases: send work, optionally wait briefly, otherwise poll `get_result`. The `callback` and `stream` strategies are not exposed as MCP tools in this draft. When they are added, they will be additional arguments or tools, not a change to the five names above.
+`ask` always uses `collect=ticket`, which covers the model cases. Send work, optionally wait briefly, otherwise poll `get_result`. The `callback` and `stream` strategies are not exposed as MCP tools in this draft. When they are added, they will be additional arguments or tools, not a change to the five names above.
 
 ## Errors
 

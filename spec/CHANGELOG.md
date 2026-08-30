@@ -27,6 +27,9 @@ Defines:
 - embedded and authenticated network joins, with an Instance-aware Session
 - Runtime operations and their HTTP mapping, including a typed Session event stream
 - MCP tools `find`, `ask`, `tell`, `get_result`, and `get_history`
+- MCP roster resource at `agentconnect://team/roster`
+- loopback MCP calls with no Authorization header bind to a reserved `operator` Membership
+- MCP `ask`/`tell` without `idempotency_key` include the JSON-RPC request id so two deliberate identical calls stay distinct
 - documented TypeScript structures and generated JSON Schema
 
 This is a draft. No implementation may claim conformance yet.

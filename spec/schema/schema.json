@@ -146,6 +146,9 @@
         "tell_tool_request": {
           "$ref": "#/definitions/TellToolRequest"
         },
+        "team_roster": {
+          "$ref": "#/definitions/TeamRoster"
+        },
         "runtime_event": {
           "$ref": "#/definitions/RuntimeEvent"
         },
@@ -1939,7 +1942,7 @@
         },
         "idempotency_key": {
           "type": "string",
-          "description": "Stable key so a retried tool call does not create a second request. When omitted the server derives one from the caller, recipient, Thread, and content so an accidental double call is de-duplicated.",
+          "description": "Stable key so a retried tool call does not create a second request. When present, the Message id is UUID5 of caller plus this key. When omitted, the server includes the MCP JSON-RPC request id so a second distinct call with the same arguments is a new Ticket, while a retry of the same request is not.",
           "minLength": 1,
           "maxLength": 200
         }
@@ -1969,7 +1972,7 @@
         },
         "idempotency_key": {
           "type": "string",
-          "description": "Stable key so a retried tool call does not create a second event.",
+          "description": "Stable key so a retried tool call does not create a second event. Same derivation rule as `AskToolRequest.idempotency_key`.",
           "minLength": 1,
           "maxLength": 200
         }
@@ -1980,6 +1983,28 @@
       ],
       "additionalProperties": false,
       "description": "MCP `tell` arguments. The server generates the event Message id."
+    },
+    "TeamRoster": {
+      "type": "object",
+      "properties": {
+        "team_name": {
+          "type": "string",
+          "description": "Team this roster belongs to."
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DirectoryEntry"
+          },
+          "description": "Every current Membership, including `operator` when it exists."
+        }
+      },
+      "required": [
+        "team_name",
+        "members"
+      ],
+      "additionalProperties": false,
+      "description": "MCP roster resource body at `agentconnect://team/roster`."
     },
     "RuntimeEvent": {
       "type": "object",

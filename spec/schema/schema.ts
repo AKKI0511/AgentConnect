@@ -857,8 +857,10 @@ export interface AskToolRequest {
   thread_id?: Uuid;
   /**
    * Stable key so a retried tool call does not create a second request. When
-   * omitted the server derives one from the caller, recipient, Thread, and
-   * content so an accidental double call is de-duplicated.
+   * present, the Message id is UUID5 of caller plus this key. When omitted,
+   * the server includes the MCP JSON-RPC request id so a second distinct call
+   * with the same arguments is a new Ticket, while a retry of the same request
+   * is not.
    * @minLength 1
    * @maxLength 200
    */
@@ -874,11 +876,20 @@ export interface TellToolRequest {
   /** Conversation to continue. Omit to leave the event unthreaded. */
   thread_id?: Uuid;
   /**
-   * Stable key so a retried tool call does not create a second event.
+   * Stable key so a retried tool call does not create a second event. Same
+   * derivation rule as `AskToolRequest.idempotency_key`.
    * @minLength 1
    * @maxLength 200
    */
   idempotency_key?: string;
+}
+
+/** MCP roster resource body at `agentconnect://team/roster`. */
+export interface TeamRoster {
+  /** Team this roster belongs to. */
+  team_name: string;
+  /** Every current Membership, including `operator` when it exists. */
+  members: DirectoryEntry[];
 }
 
 /**
@@ -953,6 +964,7 @@ export interface AgentConnectPublicSchema {
   get_profile_request?: GetProfileRequest;
   ask_tool_request?: AskToolRequest;
   tell_tool_request?: TellToolRequest;
+  team_roster?: TeamRoster;
   runtime_event?: RuntimeEvent;
   tool_error_result?: ToolErrorResult;
 }

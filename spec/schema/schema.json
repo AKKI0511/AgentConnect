@@ -149,6 +149,27 @@
         "team_roster": {
           "$ref": "#/definitions/TeamRoster"
         },
+        "trace_event": {
+          "$ref": "#/definitions/TraceEvent"
+        },
+        "trace_result": {
+          "$ref": "#/definitions/TraceResult"
+        },
+        "status_member": {
+          "$ref": "#/definitions/StatusMember"
+        },
+        "status_result": {
+          "$ref": "#/definitions/StatusResult"
+        },
+        "issue_join_token_request": {
+          "$ref": "#/definitions/IssueJoinTokenRequest"
+        },
+        "join_token_issued": {
+          "$ref": "#/definitions/JoinTokenIssued"
+        },
+        "revoke_join_token_request": {
+          "$ref": "#/definitions/RevokeJoinTokenRequest"
+        },
         "runtime_event": {
           "$ref": "#/definitions/RuntimeEvent"
         },
@@ -2006,6 +2027,230 @@
       "additionalProperties": false,
       "description": "MCP roster resource body at `agentconnect://team/roster`."
     },
+    "TraceEvent": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "When the Runtime recorded the event."
+        },
+        "type": {
+          "$ref": "#/definitions/TraceEventType",
+          "description": "What happened."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Causal id shared with the Messages in this operation."
+        },
+        "actor": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Membership that performed the step, or the requester for accept and open."
+        },
+        "message_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message this step is about, when there is one."
+        },
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Ticket this step is about, when there is one."
+        },
+        "detail": {
+          "$ref": "#/definitions/JsonObject",
+          "description": "Type-specific fields. `accepted` includes `kind`, `sender`, and `recipient`. `leased` includes `attempt`. `replied` includes `outcome` and `reply_id`. `ticket_closed` includes `state`. Unknown keys are ignored by a Client."
+        }
+      },
+      "required": [
+        "at",
+        "type",
+        "trace_id",
+        "actor",
+        "detail"
+      ],
+      "additionalProperties": false,
+      "description": "One recorded step of a causal operation. `get_trace` returns these in the order the Runtime stored them."
+    },
+    "TraceEventType": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "ticket_opened",
+        "leased",
+        "completed",
+        "replied",
+        "ticket_closed"
+      ],
+      "description": "Closed set of Trace timeline event types.\n\n- `accepted`: the Runtime stored a Message.\n- `ticket_opened`: a reply-expected request created a Ticket.\n- `leased`: a Session took a Delivery.\n- `completed`: `complete` finished the Delivery.\n- `replied`: `reply` stored a response or error Message.\n- `ticket_closed`: an open Ticket expired with no `reply` or `complete`."
+    },
+    "TraceResult": {
+      "type": "object",
+      "properties": {
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Requested causal id."
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TraceEvent"
+          },
+          "description": "Recorded events, oldest first."
+        }
+      },
+      "required": [
+        "trace_id",
+        "events"
+      ],
+      "additionalProperties": false,
+      "description": "Result of `get_trace`."
+    },
+    "StatusMember": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/AgentName",
+          "description": "Canonical Agent name."
+        },
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address."
+        },
+        "online": {
+          "type": "boolean",
+          "description": "True when the Membership has at least one unexpired Session."
+        },
+        "mailbox_depth": {
+          "type": "number",
+          "description": "Queued plus leased Mailbox items.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "open_tickets": {
+          "type": "number",
+          "description": "Open Tickets whose recipient is this Membership.",
+          "minimum": 0,
+          "multipleOf": 1
+        }
+      },
+      "required": [
+        "name",
+        "address",
+        "online",
+        "mailbox_depth",
+        "open_tickets"
+      ],
+      "additionalProperties": false,
+      "description": "One Membership row in `status`."
+    },
+    "StatusResult": {
+      "type": "object",
+      "properties": {
+        "team_name": {
+          "$ref": "#/definitions/TeamName",
+          "description": "Canonical Team name."
+        },
+        "persistence": {
+          "$ref": "#/definitions/PersistenceMode",
+          "description": "Runtime restart guarantee."
+        },
+        "origin": {
+          "type": "string",
+          "description": "HTTP origin when the Runtime is serving, for example `http://127.0.0.1:9000`. Omitted when it is not serving."
+        },
+        "open_tickets": {
+          "type": "number",
+          "description": "Open Tickets in the Team.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StatusMember"
+          },
+          "description": "Every Membership, including `operator`. Ordered by Address."
+        }
+      },
+      "required": [
+        "team_name",
+        "persistence",
+        "open_tickets",
+        "members"
+      ],
+      "additionalProperties": false,
+      "description": "Result of `status`."
+    },
+    "IssueJoinTokenRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/AgentName",
+          "description": "Bind the token to this Agent name."
+        },
+        "agent_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Bind the token to this Agent DID."
+        },
+        "ttl_seconds": {
+          "type": "number",
+          "description": "Lifetime in seconds. Omit to use the Runtime default.",
+          "minimum": 1
+        },
+        "single_use": {
+          "type": "boolean",
+          "description": "When true, a successful join consumes the token. Defaults to false."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Operator input that creates a join token."
+    },
+    "JoinTokenIssued": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Secret the Agent sends as `join_token`. Keep it out of logs and Messages.",
+          "minLength": 1
+        },
+        "expires_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Time after which this token cannot authenticate a join."
+        },
+        "single_use": {
+          "type": "boolean",
+          "description": "Whether a successful join consumes the token."
+        },
+        "name": {
+          "$ref": "#/definitions/AgentName",
+          "description": "Bound Agent name, when the operator set one."
+        },
+        "agent_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Bound Agent DID, when the operator set one."
+        }
+      },
+      "required": [
+        "token",
+        "expires_at",
+        "single_use"
+      ],
+      "additionalProperties": false,
+      "description": "Operator view of a join token the Runtime just issued."
+    },
+    "RevokeJoinTokenRequest": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Token secret to revoke.",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false,
+      "description": "Operator input that revokes a join token."
+    },
     "RuntimeEvent": {
       "type": "object",
       "properties": {
@@ -2024,7 +2269,7 @@
         "data"
       ],
       "additionalProperties": false,
-      "description": "One event pushed on the Session event stream. `type` is open so new event types are added over time; a Client MUST ignore an unknown type. The only type defined in this draft is `work_available`, whose `data` is `{}`."
+      "description": "One event pushed on the Session event stream. `type` is open so new event types are added over time; a Client MUST ignore an unknown type. This draft defines `work_available`, whose `data` is `{}`, and `trace`, whose `data` is a `TraceEvent`."
     },
     "ToolErrorResult": {
       "type": "object",

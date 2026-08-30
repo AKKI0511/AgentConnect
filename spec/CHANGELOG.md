@@ -28,7 +28,10 @@ Defines:
 - Runtime operations and their HTTP mapping, including a typed Session event stream
 - MCP tools `find`, `ask`, `tell`, `get_result`, and `get_history`
 - MCP roster resource at `agentconnect://team/roster`
-- loopback MCP calls with no Authorization header bind to a reserved `operator` Membership
+- loopback MCP and HTTP calls with no Authorization header bind to a reserved `operator` Membership
+- operator operations `status`, `issue_join_token`, and `revoke_join_token`
+- `get_trace` reconstructs the timeline for one `trace_id`; a member reads a Trace they appear in, the operator reads any Trace
+- HTTP trace watch stream at `GET /traces/events`
 - MCP `ask`/`tell` without `idempotency_key` include the JSON-RPC request id so two deliberate identical calls stay distinct
 - documented TypeScript structures and generated JSON Schema
 

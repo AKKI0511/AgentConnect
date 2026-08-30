@@ -42,6 +42,8 @@ Every token MUST be:
 
 A token MAY also bind an Agent DID, Agent name, or both. If a bound value differs from `JoinRequest`, the join fails.
 
+The operator issues and revokes tokens through `issue_join_token` and `revoke_join_token`. The hosting process may call the same issuance on the Runtime object.
+
 Revoking a token MUST prevent another join with it. Any active Session created from that token MUST become unauthorized no later than the Runtime's next Session-authentication check.
 
 ### Join challenge
@@ -102,6 +104,9 @@ The Session is bound to one Instance of one Membership. It authorizes only that 
 - `get_history` for Threads the Membership participates in
 - `find`
 - `get_profile`
+- `get_trace` for a Trace the Membership appears in
+
+The reserved `operator` Membership may also call `status`, `issue_join_token`, `revoke_join_token`, and `get_trace` for any Trace. A person talking to a loopback Runtime uses this Membership. See [bindings/http.md](bindings/http.md) and [bindings/mcp.md](bindings/mcp.md).
 
 The Runtime authenticates every operation. A Session cannot choose another sender, lease another Membership's Mailbox, complete or reply to a lease held by another Membership, read another Membership's Ticket, or read Thread history for a participant set it is not in.
 
@@ -150,3 +155,6 @@ The Runtime SHOULD avoid distinguishing authentication failures in public error 
 | one member reads another member's Ticket | `not_found` |
 | non-participant calls `get_history` | `not_found` |
 | Session expires while holding leases | leases are released; Membership and Ticket state remain |
+| member Session calls `status` | `forbidden` |
+| member Session calls `issue_join_token` | `forbidden` |
+| loopback HTTP with no Authorization | operations run as `operator` |

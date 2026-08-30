@@ -30,6 +30,7 @@ The current draft defines one Team and the Agents that belong to it:
 - the Session event stream
 - embedded and HTTP Runtime access
 - the Team's MCP tools
+- operator status, join-token issue and revoke, and the Trace timeline for one causal operation
 
 Anything not defined by these files is outside the current draft. Cross-team delivery, external-content provenance labeling, topic broadcast and subscription, and payments are later additions and are intentionally absent here.
 
@@ -48,6 +49,7 @@ Anything not defined by these files is outside the current draft. Cross-team del
 | **Message** | An immutable request, event, response, or error accepted by the Runtime. |
 | **Delivery** | One leased attempt to handle a Message. |
 | **Ticket** | The requester's durable record for one reply-expected Message. |
+| **Trace** | Ordered events the Runtime recorded for one `trace_id`. |
 | **Thread** | Messages grouped under one `thread_id`, with retained history. |
 | **Profile** | Discovery information describing an Agent's Skills. |
 | **Address** | A human- and model-readable Agent name, optionally qualified by location. |

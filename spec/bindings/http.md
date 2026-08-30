@@ -38,16 +38,22 @@ Every schema-defined public object rejects fields not declared on that object.
 | `get_history` | `GET /threads/{thread_id}/history` | query `before`, `limit` | `HistoryResult` |
 | `find` | `POST /directory/find` | `FindRequest` | `FindResult` |
 | `get_profile` | `GET /directory/members/{address}` | none | `DirectoryEntry` |
+| `status` | `GET /status` | none | `StatusResult` |
+| `get_trace` | `GET /traces/{trace_id}` | none | `TraceResult` |
+| `issue_join_token` | `POST /tokens` | `IssueJoinTokenRequest` | `JoinTokenIssued` |
+| `revoke_join_token` | `POST /tokens/revoke` | `RevokeJoinTokenRequest` | `204 No Content` |
+
+`GET /traces/events` is the operator watch stream. It is not `get_trace` for a `trace_id` of `events`.
 
 Schema names refer to [schema/schema.ts](../schema/schema.ts).
 
-`{address}` is a local or same-Team qualified Address encoded as one URL path segment. `{ticket_id}` and `{thread_id}` are UUIDs. The `get_history` query parameters `before` and `limit` map to the fields of `GetHistoryRequest`.
+`{address}` is a local or same-Team qualified Address encoded as one URL path segment. `{ticket_id}`, `{thread_id}`, and `{trace_id}` are UUIDs. The `get_history` query parameters `before` and `limit` map to the fields of `GetHistoryRequest`.
 
-Every successful route MUST return `200 OK` with the listed JSON result, except `disconnect`, which MUST return `204 No Content` with no body.
+Every successful route MUST return `200 OK` with the listed JSON result, except `disconnect` and `revoke_join_token`, which MUST return `204 No Content` with no body.
 
 ## Authentication
 
-`join/challenge` and `join` do not use a Session. Every other route requires:
+`join/challenge` and `join` do not use a Session. Every other route requires a Session.
 
 ```http
 Authorization: Bearer <session_token>
@@ -56,6 +62,12 @@ Authorization: Bearer <session_token>
 The join token and identity proof remain inside `JoinRequest`. They MUST NOT be copied into the `Authorization` header.
 
 Missing, malformed, expired, replaced, or revoked Session credentials return `401` with `code=unauthorized`.
+
+### Loopback operator
+
+On a loopback listener, a call with no `Authorization` header is bound to the reserved `operator` Membership, the same Membership loopback MCP uses. A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
+
+A non-loopback listener MUST NOT bind a missing header to `operator`. That request returns `401`.
 
 Responses from `/join/challenge`, `/join`, and `/session/heartbeat` MUST include `Cache-Control: no-store`.
 
@@ -186,6 +198,24 @@ data: {}
 The response uses `Content-Type: text/event-stream` and `Cache-Control: no-store`. The Runtime MUST close the stream when the Session is invalidated.
 
 Lost, duplicated, or delayed stream events do not lose work. A Client can ignore the stream and poll `lease`; Mailbox and Ticket correctness cannot depend on the stream.
+
+## Trace watch stream
+
+An operator Client MAY open:
+
+```http
+GET /agentconnect/v1/traces/events
+Authorization: Bearer <operator session_token>
+Accept: text/event-stream
+```
+
+On loopback the `Authorization` header MAY be omitted, as for other operator routes.
+
+Each SSE event is a `RuntimeEvent` whose `type` is `trace` and whose `data` is one `TraceEvent`. Comment keepalives follow the Session stream rules. A non-operator Session fails with `403` and `code=forbidden` instead of opening the stream.
+
+The stream starts at subscription time. It does not replay stored events. `GET /traces/{trace_id}` is the complete record.
+
+The Runtime MUST close the stream when the Session is invalidated.
 
 ## HTTP transport rules
 

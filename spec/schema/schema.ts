@@ -893,9 +893,146 @@ export interface TeamRoster {
 }
 
 /**
+ * Closed set of Trace timeline event types.
+ *
+ * - `accepted`: the Runtime stored a Message.
+ * - `ticket_opened`: a reply-expected request created a Ticket.
+ * - `leased`: a Session took a Delivery.
+ * - `completed`: `complete` finished the Delivery.
+ * - `replied`: `reply` stored a response or error Message.
+ * - `ticket_closed`: an open Ticket expired with no `reply` or `complete`.
+ */
+export type TraceEventType =
+  | "accepted"
+  | "ticket_opened"
+  | "leased"
+  | "completed"
+  | "replied"
+  | "ticket_closed";
+
+/**
+ * One recorded step of a causal operation. `get_trace` returns these in the
+ * order the Runtime stored them.
+ */
+export interface TraceEvent {
+  /** When the Runtime recorded the event. */
+  at: Timestamp;
+  /** What happened. */
+  type: TraceEventType;
+  /** Causal id shared with the Messages in this operation. */
+  trace_id: Uuid;
+  /** Membership that performed the step, or the requester for accept and open. */
+  actor: QualifiedAddress;
+  /** Message this step is about, when there is one. */
+  message_id?: Uuid;
+  /** Ticket this step is about, when there is one. */
+  ticket_id?: Uuid;
+  /**
+   * Type-specific fields. `accepted` includes `kind`, `sender`, and
+   * `recipient`. `leased` includes `attempt`. `replied` includes `outcome`
+   * and `reply_id`. `ticket_closed` includes `state`. Unknown keys are
+   * ignored by a Client.
+   */
+  detail: JsonObject;
+}
+
+/** Result of `get_trace`. */
+export interface TraceResult {
+  /** Requested causal id. */
+  trace_id: Uuid;
+  /** Recorded events, oldest first. */
+  events: TraceEvent[];
+}
+
+/** One Membership row in `status`. */
+export interface StatusMember {
+  /** Canonical Agent name. */
+  name: AgentName;
+  /** Canonical qualified Address. */
+  address: QualifiedAddress;
+  /** True when the Membership has at least one unexpired Session. */
+  online: boolean;
+  /**
+   * Queued plus leased Mailbox items.
+   * @minimum 0
+   * @multipleOf 1
+   */
+  mailbox_depth: number;
+  /**
+   * Open Tickets whose recipient is this Membership.
+   * @minimum 0
+   * @multipleOf 1
+   */
+  open_tickets: number;
+}
+
+/** Result of `status`. */
+export interface StatusResult {
+  /** Canonical Team name. */
+  team_name: TeamName;
+  /** Runtime restart guarantee. */
+  persistence: PersistenceMode;
+  /**
+   * HTTP origin when the Runtime is serving, for example
+   * `http://127.0.0.1:9000`. Omitted when it is not serving.
+   */
+  origin?: string;
+  /**
+   * Open Tickets in the Team.
+   * @minimum 0
+   * @multipleOf 1
+   */
+  open_tickets: number;
+  /** Every Membership, including `operator`. Ordered by Address. */
+  members: StatusMember[];
+}
+
+/** Operator input that creates a join token. */
+export interface IssueJoinTokenRequest {
+  /** Bind the token to this Agent name. */
+  name?: AgentName;
+  /** Bind the token to this Agent DID. */
+  agent_did?: AgentDid;
+  /**
+   * Lifetime in seconds. Omit to use the Runtime default.
+   * @minimum 1
+   */
+  ttl_seconds?: number;
+  /** When true, a successful join consumes the token. Defaults to false. */
+  single_use?: boolean;
+}
+
+/** Operator view of a join token the Runtime just issued. */
+export interface JoinTokenIssued {
+  /**
+   * Secret the Agent sends as `join_token`. Keep it out of logs and Messages.
+   * @minLength 1
+   */
+  token: string;
+  /** Time after which this token cannot authenticate a join. */
+  expires_at: Timestamp;
+  /** Whether a successful join consumes the token. */
+  single_use: boolean;
+  /** Bound Agent name, when the operator set one. */
+  name?: AgentName;
+  /** Bound Agent DID, when the operator set one. */
+  agent_did?: AgentDid;
+}
+
+/** Operator input that revokes a join token. */
+export interface RevokeJoinTokenRequest {
+  /**
+   * Token secret to revoke.
+   * @minLength 1
+   */
+  token: string;
+}
+
+/**
  * One event pushed on the Session event stream. `type` is open so new event
- * types are added over time; a Client MUST ignore an unknown type. The only
- * type defined in this draft is `work_available`, whose `data` is `{}`.
+ * types are added over time; a Client MUST ignore an unknown type. This draft
+ * defines `work_available`, whose `data` is `{}`, and `trace`, whose `data`
+ * is a `TraceEvent`.
  */
 export interface RuntimeEvent {
   /**
@@ -965,6 +1102,13 @@ export interface AgentConnectPublicSchema {
   ask_tool_request?: AskToolRequest;
   tell_tool_request?: TellToolRequest;
   team_roster?: TeamRoster;
+  trace_event?: TraceEvent;
+  trace_result?: TraceResult;
+  status_member?: StatusMember;
+  status_result?: StatusResult;
+  issue_join_token_request?: IssueJoinTokenRequest;
+  join_token_issued?: JoinTokenIssued;
+  revoke_join_token_request?: RevokeJoinTokenRequest;
   runtime_event?: RuntimeEvent;
   tool_error_result?: ToolErrorResult;
 }

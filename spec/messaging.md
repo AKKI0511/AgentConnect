@@ -71,13 +71,15 @@ Every Message id is an RFC 9562 UUID and is unique within the Team. The id has t
 A Message carries both a `thread_id` and a `trace_id` because they group it along different axes, and both are useful to a handler.
 
 - `thread_id` is the **conversation**: an id shared by a fixed participant set across every turn. It decides retained history and what a handler sees, and one conversation lasts across many separate exchanges over time.
-- `trace_id` is one **causal operation**: a root Message and everything it causes, even across different conversations and different Agents. It answers "show me everything that happened because of this one request," which is what `agentconnect trace` reconstructs.
+- `trace_id` is one **causal operation**: a root Message and everything it causes, even across different conversations and different Agents. It answers "show me everything that happened because of this one request," which is what `get_trace` reconstructs.
 
 They coincide in the simple case and diverge the moment work fans out:
 
 > `researcher` asks `writer` in conversation `T1`; that request opens trace `X`. To answer, `writer` asks `editor` in a new conversation `T2`; because that request is caused by the first, it copies trace `X` while living in thread `T2`, so trace `X` now spans `T1` and `T2`. Later `researcher` asks `writer` something unrelated in `T1`, opening trace `Y`. One Thread holds several traces, and one trace spans several Threads.
 
 So `thread_id` groups history for the participants, `trace_id` groups a debugging timeline for one operation, and `parent_id` is the single direct cause. A Delivery's Message carries `thread_id` and `trace_id` so a handler knows both which conversation it is in and which operation it serves. A Ticket carries only `thread_id`, because the conversation is what a requester continues; the request's `trace_id` is read from the request or from the stored response, not duplicated onto the Ticket.
+
+`get_trace` reconstructs that timeline as `TraceEvent` values, in the order the Runtime recorded them. Event `type` is one of `accepted`, `ticket_opened`, `leased`, `completed`, `replied`, and `ticket_closed`. `completed` is a `complete` that finished the Delivery. `ticket_closed` is recorded when a Ticket expires without a `reply` or `complete`.
 
 The Runtime MUST NOT invent a global sequence number. Ordering is scoped to retained Thread history. There is no total order across a Mailbox, which is what lets a Mailbox be partitioned for scale.
 

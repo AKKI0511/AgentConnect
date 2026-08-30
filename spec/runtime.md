@@ -15,6 +15,7 @@ Exact request and result shapes are in [schema/schema.ts](schema/schema.ts). Mes
 | Mailbox | Runtime | the Membership's lifetime |
 | Delivery lease | Runtime | until reply, completion, or lease expiry |
 | Ticket | Runtime | open: at least until `deadline`; terminal: until the later of `deadline` and a documented interval after close |
+| Trace events | Runtime | at least while any Message or Ticket that carries that `trace_id` is retained; MAY persist longer; MAY drop the oldest events past a cap |
 | Thread history | Runtime | until the documented retention limit removes it; Messages still needed by an open Ticket are kept |
 | Agent working memory | Client | outside this specification |
 
@@ -35,7 +36,7 @@ Every Runtime reports one `persistence` value in `JoinResult`.
 | Value | Required behavior |
 | --- | --- |
 | `volatile` | Shared state survives Client disconnects but may be lost when the Runtime process exits. |
-| `durable` | Memberships, Mailboxes, accepted Messages, open Tickets, and retained Thread history survive a Runtime restart. |
+| `durable` | Memberships, Mailboxes, accepted Messages, open Tickets, Trace events, and retained Thread history survive a Runtime restart. |
 
 A Runtime MUST NOT report `durable` unless all listed state survives restart as one consistent state. A partially persistent Runtime reports `volatile`.
 
@@ -63,8 +64,14 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 | `get_history` | Thread participant | one page of Thread history |
 | `find` | member Session | ordered Directory matches |
 | `get_profile` | member Session | one Directory entry |
+| `status` | operator Session | members, online state, Mailbox depths, open Tickets |
+| `get_trace` | operator Session, or a member Session that appears in the trace | ordered Trace events for one `trace_id` |
+| `issue_join_token` | operator Session | a join token scoped to this Team |
+| `revoke_join_token` | operator Session | the token revoked; Sessions created from it unauthorized |
 
 All operations except `join` require a valid Session. A request with an expired, replaced, disconnected, or revoked Session MUST fail with `unauthorized` and MUST NOT change shared state.
+
+The reserved `operator` Membership may call every member operation and the operator operations above. A non-operator Session that calls `status`, `issue_join_token`, or `revoke_join_token` fails with `forbidden`.
 
 ## `join`
 
@@ -273,6 +280,94 @@ A future addition may widen `find` to reach beyond the local Team. That is an ad
 `get_profile` resolves an Address in the current Team and returns its full `DirectoryEntry`. It may return the caller's own entry.
 
 The Runtime MUST NOT place the returned Profile into another handler's input unless that handler explicitly called `find` or `get_profile` and passed the data itself.
+
+## `status`
+
+`status` is a snapshot of this Team for an operator. It is read-only.
+
+The result MUST include:
+
+- the Team name and reported `persistence`
+- HTTP origin when the Runtime is serving, omitted when it is not
+- every Membership, including `operator`
+- the number of open Tickets in the Team
+
+Each member row MUST include the canonical name and Address, whether the Membership has at least one unexpired Session (`online`), current Mailbox depth, and the number of open Tickets whose recipient is that Membership.
+
+Mailbox depth counts queued and leased items, matching the busy limit.
+
+```json
+{
+  "team_name": "content-squad",
+  "persistence": "volatile",
+  "origin": "http://127.0.0.1:9000",
+  "open_tickets": 1,
+  "members": [
+    {
+      "name": "writer",
+      "address": "writer@content-squad",
+      "online": true,
+      "mailbox_depth": 1,
+      "open_tickets": 1
+    }
+  ]
+}
+```
+
+## `get_trace`
+
+`get_trace` returns the stored timeline for one `trace_id`, oldest event first.
+
+The Runtime records a Trace event when it accepts a Message, opens a Ticket, leases a Delivery, finishes a Delivery with `complete` or `reply`, or expires a Ticket. A replay of an already accepted `send`, `complete`, or `reply` MUST NOT append another event. A `send` that fails before acceptance creates no Trace.
+
+An unknown `trace_id`, and a non-operator caller that does not appear in the Trace, both return `not_found`. Appearing in the Trace means the caller's Address is an event `actor` or a Message `sender` or `recipient` named by an event.
+
+Events for one `trace_id` are retained at least while any Message or Ticket that carries that id is retained. A Runtime MAY keep them longer. A Runtime MAY cap the stored list; when the cap is reached it drops the oldest events.
+
+```json
+{
+  "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
+  "events": [
+    {
+      "at": "2026-08-18T15:00:00Z",
+      "type": "accepted",
+      "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
+      "actor": "researcher@content-squad",
+      "message_id": "15c44926-4c2a-4a01-a13b-95152da9a859",
+      "detail": {
+        "kind": "request",
+        "sender": "researcher@content-squad",
+        "recipient": "writer@content-squad"
+      }
+    },
+    {
+      "at": "2026-08-18T15:00:00Z",
+      "type": "ticket_opened",
+      "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
+      "actor": "researcher@content-squad",
+      "message_id": "15c44926-4c2a-4a01-a13b-95152da9a859",
+      "ticket_id": "15c44926-4c2a-4a01-a13b-95152da9a859",
+      "detail": {}
+    }
+  ]
+}
+```
+
+| Situation | Required observation |
+| --- | --- |
+| accepted request, never leased, then expired | events `accepted`, `ticket_opened`, `ticket_closed` with `detail.state=expired`; no `leased` |
+| handler returns an error | `leased` then `replied` with `detail.outcome=failed` |
+| recipient `complete`s a reply-expected request | `completed` then the Ticket is `declined` |
+| member Session reads a Trace it does not appear in | `not_found` |
+| operator Session reads that same Trace | `TraceResult` |
+
+## `issue_join_token` and `revoke_join_token`
+
+`issue_join_token` creates a join token as defined in [security.md](security.md). The operator MAY bind `name`, `agent_did`, both, or neither. `ttl_seconds` defaults to the Runtime's join-token lifetime. `single_use` defaults to `false`.
+
+The result includes the secret `token`. It MUST NOT be written into Message content, metadata, or Trace `detail`.
+
+`revoke_join_token` revokes that secret if it exists. Revoking an unknown token is a no-op success. Revoking MUST invalidate every Session created from the token, with the same promptness as [security.md](security.md) immediate revocation.
 
 ## Mailbox limits
 

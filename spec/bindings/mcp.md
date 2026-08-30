@@ -22,7 +22,7 @@ A missing, malformed, expired, replaced, or revoked Session token is an MCP-leve
 
 ### Loopback operator
 
-On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned Membership named `operator`. The Runtime creates that Membership on first use and keeps a Session for it.
+On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned Membership named `operator`. The Runtime creates that Membership on first use and keeps a Session for it. Loopback HTTP Runtime routes use the same Membership.
 
 The name `operator` is reserved for this Membership. A join that reuses it with a different DID fails with `name_conflict`.
 

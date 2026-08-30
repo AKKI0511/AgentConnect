@@ -1,13 +1,15 @@
 """HTTP binding for agent-to-team Runtime operations.
 
 Routes match ``spec/bindings/http.md``. This is the Session binding, not
-the later gateway. Embedded serving binds loopback only.
+the later gateway. Embedded serving binds loopback only. The Team MCP
+server is mounted at ``/mcp``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from fastapi import FastAPI, Header, Query, Request
@@ -41,8 +43,29 @@ _NO_STORE = {"Cache-Control": "no-store"}
 
 
 def create_runtime_app(team: Team) -> FastAPI:
-    """Return an ASGI app that serves ``team`` at ``/agentconnect/v1``."""
-    app = FastAPI(title="AgentConnect Runtime", docs_url=None, redoc_url=None)
+    """Return an ASGI app that serves ``team`` at ``/agentconnect/v1`` and ``/mcp``."""
+    from agentconnect.mcp.server import create_team_mcp
+
+    mcp = create_team_mcp(team)
+    team._mcp = mcp
+    mcp_asgi = mcp.streamable_http_app(
+        streamable_http_path="/",
+        stateless_http=True,
+        json_response=True,
+        host="127.0.0.1",
+    )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        async with mcp.session_manager.run():
+            yield
+
+    app = FastAPI(
+        title="AgentConnect Runtime",
+        docs_url=None,
+        redoc_url=None,
+        lifespan=lifespan,
+    )
     app.state.team = team
 
     @app.exception_handler(TeamError)
@@ -209,6 +232,7 @@ def create_runtime_app(team: Team) -> FastAPI:
             headers=_NO_STORE,
         )
 
+    app.mount("/mcp", mcp_asgi)
     return app
 
 

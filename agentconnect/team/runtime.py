@@ -51,7 +51,7 @@ import logging
 import re
 import secrets
 from datetime import timedelta
-from typing import Any, Mapping, NoReturn, Optional, Union
+from typing import Any, Callable, Mapping, NoReturn, Optional, Sequence, Union
 
 from agentconnect.core.address import (
     ADDRESS_OUTSIDE_TEAM,
@@ -60,7 +60,7 @@ from agentconnect.core.address import (
     parse_team_name,
     resolve_address,
 )
-from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.identity import AgentIdentity, issue_identity_proof
 from agentconnect.core.profile import validate_discovery_profile
 from agentconnect.team.directory import Directory, MAX_FIND_LIMIT
 from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
@@ -96,6 +96,9 @@ from agentconnect.team.constants import (
     DEFAULT_THREAD_MESSAGE_LIMIT,
     DEFAULT_WAIT_HOLD_SECONDS,
     MESSAGE_KINDS_SEND,
+    OPERATOR_NAME,
+    OPERATOR_PROFILE,
+    RESERVED_MCP_TOOL_NAMES,
     SWEEP_INTERVAL_SECONDS,
 )
 from agentconnect.team.errors import TeamError
@@ -120,7 +123,8 @@ class Team:
     Thread history, and the Directory. Use :meth:`join` to create or
     reconnect a Membership, then pass the returned ``session_token`` to
     every other operation. ``find`` ranks other members from a
-    natural-language query.
+    natural-language query. :meth:`serve` also mounts the Team MCP server
+    at ``{origin}/mcp``.
     """
 
     def __init__(
@@ -142,6 +146,7 @@ class Team:
         join_challenge_ttl_seconds: float = DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
         join_token_ttl_seconds: float = DEFAULT_JOIN_TOKEN_TTL_SECONDS,
         embeddings: EmbeddingsArg = "auto",
+        tools: Sequence[Callable[..., Any]] | None = None,
     ) -> None:
         """Create an unstarted Runtime for Team ``name``.
 
@@ -160,6 +165,9 @@ class Team:
                 n-grams otherwise. ``"none"`` forces hashed n-grams.
                 Pass a callable ``(list[str]) -> list[list[float]]`` to
                 supply your own embeddings.
+            tools: Extra MCP tools this Team serves beside find, ask, tell,
+                get_result, and get_history. Each item is a callable whose
+                ``__name__`` is the tool name. Those five names are reserved.
         """
         team_name = parse_team_name(name)
         if team_name is None:
@@ -186,6 +194,16 @@ class Team:
             self._embedder = resolve_embedder(embeddings)
         except (TypeError, ValueError) as exc:
             raise ValueError(str(exc)) from exc
+        extras = list(tools or [])
+        reserved = RESERVED_MCP_TOOL_NAMES
+        for fn in extras:
+            name = getattr(fn, "__name__", "")
+            if name in reserved:
+                raise ValueError(f"tool name {name!r} is reserved")
+        self._extra_tools = extras
+        self._operator_token: Optional[str] = None
+        self._mcp: Any = None
+        self._mcp_session_cm: Any = None
         self._directory: Optional[Directory] = None
         self._identity: Optional[AgentIdentity] = None
         self._lock = asyncio.Lock()
@@ -248,6 +266,19 @@ class Team:
     def url(self) -> Optional[str]:
         """HTTP origin this Runtime is serving, or None when not serving."""
         return self._http_url
+
+    @property
+    def mcp_url(self) -> Optional[str]:
+        """MCP streamable-HTTP URL, or None when not serving.
+
+        Add this URL to Cursor or any MCP client:
+
+            url = await team.serve()
+            team.mcp_url  # http://127.0.0.1:<port>/mcp
+        """
+        if self._http_url is None:
+            return None
+        return f"{self._http_url}/mcp"
 
     async def stop(self) -> None:
         """Stop HTTP serving, background expiry, and the store connection."""
@@ -349,12 +380,94 @@ class Team:
                 ttl_seconds=self.join_challenge_ttl_seconds,
             )
 
+    async def caller_address(self, session_token: str) -> str:
+        """Return the qualified Address stamped on this Session."""
+        async with self._lock:
+            session = await self._require_session(session_token)
+            return str(session["address"])
+
+    async def roster(self) -> dict[str, Any]:
+        """Return every Membership as a DirectoryEntry list.
+
+        Used by the MCP roster resource. Not an HTTP Runtime operation.
+        """
+        store = self._ensure_started()
+        names = await store.set_members("members")
+        members: list[dict[str, Any]] = []
+        for name in names:
+            member = await self._get_member(name)
+            if member is None:
+                continue
+            members.append(
+                {
+                    "address": member["address"],
+                    "agent_did": member["agent_did"],
+                    "profile": member["profile"],
+                }
+            )
+        members.sort(key=lambda item: str(item["address"]))
+        return {"team_name": self.name, "members": members}
+
+    async def ensure_operator_session(self) -> str:
+        """Return a live Session token for the reserved ``operator`` Membership.
+
+        Loopback MCP calls with no Authorization header use this Session.
+        The name ``operator`` is reserved. A different Agent cannot join it.
+        """
+        store = self._ensure_started()
+        if self._operator_token:
+            try:
+                await self.heartbeat(self._operator_token)
+                return self._operator_token
+            except TeamError as exc:
+                if exc.code != "unauthorized":
+                    raise
+                self._operator_token = None
+
+        record = await store.get("team:operator")
+        if isinstance(record, dict) and record.get("private_key"):
+            identity = AgentIdentity.from_dict(record)
+            instance_id = record.get("instance_id")
+            if not isinstance(instance_id, str):
+                instance_id = new_uuid()
+        else:
+            identity = AgentIdentity.create_key_based()
+            instance_id = new_uuid()
+            payload = identity.to_secret_dict()
+            payload["instance_id"] = instance_id
+            await store.put("team:operator", payload)
+
+        join_kwargs: dict[str, Any] = {
+            "name": OPERATOR_NAME,
+            "agent_did": identity.did,
+            "profile": OPERATOR_PROFILE,
+            "instance_id": instance_id,
+        }
+        if self.require_join_auth:
+            issued = await self.issue_join_token(
+                name=OPERATOR_NAME, agent_did=identity.did
+            )
+            challenge = await self.join_challenge()
+            join_kwargs["join_token"] = issued["token"]
+            join_kwargs["identity_proof"] = issue_identity_proof(identity, challenge)
+        try:
+            result = await self.join(**join_kwargs)
+        except TeamError as exc:
+            if exc.code == "name_conflict":
+                _fail(
+                    "name_conflict",
+                    "The name operator is reserved for the MCP local operator",
+                )
+            raise
+        self._operator_token = str(result["session_token"])
+        return self._operator_token
+
     async def serve(self, host: str = "127.0.0.1", port: int = 0) -> str:
-        """Serve Runtime operations over HTTP on a loopback address.
+        """Serve Runtime HTTP and the Team MCP server on a loopback address.
 
         Returns the origin agents pass to ``BaseAgent.join``, for example
-        ``http://127.0.0.1:9000``. Non-loopback hosts are rejected; a
-        network Runtime that accepts remote joins is later work.
+        ``http://127.0.0.1:9000``. The MCP door is ``{origin}/mcp``.
+        Non-loopback hosts are rejected.
         """
         self._ensure_started()
         if self._http_task is not None and not self._http_task.done():
@@ -366,6 +479,7 @@ class Team:
                 "invalid_request",
                 "Team.serve binds loopback only",
             )
+        await self.ensure_operator_session()
         from agentconnect.team.http import create_runtime_app
         import uvicorn
 
@@ -375,7 +489,7 @@ class Team:
             host=host,
             port=int(port),
             log_level="warning",
-            lifespan="off",
+            lifespan="on",
         )
         server = uvicorn.Server(config)
         server.install_signal_handlers = False
@@ -534,6 +648,8 @@ class Team:
                 queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
+        if self._operator_token == session["token"]:
+            self._operator_token = None
 
     def _wake_session(self, session_token: str) -> None:
         """Wake waiters bound to this Session (waiting sends, work hints)."""
@@ -696,6 +812,14 @@ class Team:
             _fail("invalid_request", "max_in_flight must be between 1 and 100")
 
         store = self._ensure_started()
+        if canonical_name == OPERATOR_NAME:
+            record = await store.get("team:operator")
+            stored_did = record.get("did") if isinstance(record, dict) else None
+            if stored_did != did:
+                _fail(
+                    "name_conflict",
+                    "The name operator is reserved for the MCP local operator",
+                )
         now, now_ts = self._now_pair()
         token_record = await auth_mod.authenticate_join(
             store,

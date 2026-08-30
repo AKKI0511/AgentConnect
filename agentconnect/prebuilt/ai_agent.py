@@ -25,7 +25,7 @@ from langchain_core.tools import BaseTool
 # Absolute imports from agentconnect package
 from agentconnect.agent.base import BaseAgent
 from agentconnect.core.message import Message
-from agentconnect.config import settings as global_settings
+from agentconnect.config.models import PaymentsSettings
 from agentconnect.core.types import (
     AgentIdentity,
     AgentProfile,
@@ -332,7 +332,7 @@ class AIAgent(BaseAgent):
 
                 agentkit_tools = get_langchain_tools(self.agent_kit)
                 custom_tools_list.extend(agentkit_tools)
-                configured_symbol = global_settings.payments.default_token_symbol
+                configured_symbol = PaymentsSettings().default_token_symbol
                 # Do not emit extra ok lines; keep workflow.init minimal
 
                 # Enable payment capabilities in the system prompt config

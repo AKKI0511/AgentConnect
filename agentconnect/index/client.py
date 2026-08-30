@@ -21,9 +21,21 @@ from agentconnect.index.registry.search import (
     AgentSearchResultItem,
 )
 from agentconnect.core.types import AgentType, InteractionMode
-from agentconnect.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class _RegistryClientDefaults:
+    base_url = "http://localhost:8000"
+    default_timeout = 30.0
+    connect_timeout = 10.0
+    read_timeout = 30.0
+    pool_timeout = 5.0
+    max_retries = 3
+    retry_backoff_factor = 0.5
+    retryable_status_codes = [502, 503, 504]
+    max_connections = 10
+    max_keepalive_connections = 5
 
 
 def with_retry(
@@ -40,7 +52,7 @@ def with_retry(
         async def wrapper(*args, **kwargs):
             """Wrapper function with retry logic."""
             # Get configuration from settings if not provided
-            client_settings = settings.clients.registry
+            client_settings = _RegistryClientDefaults
 
             actual_max_retries = (
                 max_retries if max_retries is not None else client_settings.max_retries
@@ -147,8 +159,7 @@ class RegistryAPIClient:
         """
         Initialize the API client.
 
-        All None values will default to the corresponding AgentConnect client settings
-        from the configuration (`settings.clients.registry`).
+        All None values use the Index client defaults.
 
         Args:
             base_url: The base URL of the `AgentRegistry` API server.
@@ -159,7 +170,7 @@ class RegistryAPIClient:
             max_connections: Maximum number of connections in the pool.
             max_keepalive_connections: Maximum number of keep-alive connections.
         """
-        client_settings = settings.clients.registry
+        client_settings = _RegistryClientDefaults
 
         # Resolve base URL from args or settings; raise clear error if missing
         resolved_base_url = (
@@ -167,7 +178,7 @@ class RegistryAPIClient:
         )
         if not resolved_base_url:
             raise ValueError(
-                "RegistryAPIClient base_url is not configured. Set clients.registry.base_url in agentconnect.yaml or pass base_url explicitly."
+                "RegistryAPIClient base_url is not configured. Pass base_url explicitly."
             )
         self.base_url = (
             resolved_base_url

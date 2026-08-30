@@ -23,8 +23,7 @@ from agentconnect.index.registry.capability_discovery import CapabilityDiscovery
 from agentconnect.index.registry.identity_verification import (
     verify_agent_identity,
 )
-from agentconnect.config import settings as global_settings
-from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config.vector import VectorSearchSettings
 
 # Set up logging (module namespace)
 logger = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ class AgentRegistry:
 
         # Ensure vector_search_config is a proper Pydantic model
         if vector_search_config is None:
-            self._vector_search_config = global_settings.registry.vector_search
+            self._vector_search_config = VectorSearchSettings()
         elif isinstance(vector_search_config, VectorSearchSettings):
             self._vector_search_config = vector_search_config
         else:

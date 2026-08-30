@@ -6,23 +6,27 @@ for individual agents within the AgentConnect framework. It specifically facilit
 and retrieval of wallet state to enable consistent wallet access across agent restarts.
 
 Note:
-- The wallet directory is configured via YAML using ``payments.wallet_data_dir``.
+- The wallet directory defaults to ``data/agent_wallets`` or
+  ``AGENTCONNECT_WALLET_DIR``.
 - Legacy runtime setter utilities ``set_wallet_data_dir`` and ``set_default_data_dir`` are
   deprecated no-ops retained only for compatibility and are ignored at runtime.
 """
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from agentconnect.config import settings as global_settings
+from agentconnect.config.models import PaymentsSettings
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Default path for wallet data storage (driven by configuration)
-DEFAULT_DATA_DIR = Path(global_settings.payments.wallet_data_dir)
+# Default path for wallet data storage
+DEFAULT_DATA_DIR = Path(
+    os.environ.get("AGENTCONNECT_WALLET_DIR") or PaymentsSettings().wallet_data_dir
+)
 
 
 def set_default_data_dir(data_dir: Union[str, Path]) -> Path:

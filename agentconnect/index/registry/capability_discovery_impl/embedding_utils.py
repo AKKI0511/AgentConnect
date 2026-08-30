@@ -10,8 +10,7 @@ from typing import Dict, Optional, Union
 from langchain_huggingface import HuggingFaceEmbeddings
 
 # Absolute imports from agentconnect package
-from agentconnect.config.models import VectorSearchSettings
-from agentconnect.config import settings
+from agentconnect.config.vector import VectorSearchSettings
 
 # Configure logger (module namespace)
 logger = logging.getLogger(__name__)
@@ -124,12 +123,9 @@ def create_huggingface_embeddings(
     try:
         from langchain_huggingface import HuggingFaceEmbeddings
 
-        if config is None:
-            model_name = settings.registry.vector_search.model_name
-            cache_folder = settings.registry.vector_search.cache_folder
-        else:
-            model_name = config.model_name
-            cache_folder = config.cache_folder
+        cfg = config if config is not None else VectorSearchSettings()
+        model_name = cfg.model_name
+        cache_folder = cfg.cache_folder
 
         # Create embeddings model with caching
         # Try with explicit model_kwargs and encode_kwargs first

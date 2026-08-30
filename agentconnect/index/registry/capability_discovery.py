@@ -17,8 +17,7 @@ from typing import Dict, List, Set, Tuple, Any, Optional, Union, TYPE_CHECKING, 
 
 # Absolute imports from agentconnect package
 from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.config.models import VectorSearchSettings
-from agentconnect.config import settings as global_settings
+from agentconnect.config.vector import VectorSearchSettings
 
 # Type-only imports for IDEs and static analysis (no runtime import)
 if TYPE_CHECKING:
@@ -61,7 +60,7 @@ class CapabilityDiscoveryService:
         )
         self._capability_to_agent_map: Dict[str, AgentRegistration] = {}
         if vector_search_config is None:
-            self._vector_store_config = global_settings.registry.vector_search
+            self._vector_store_config = VectorSearchSettings()
         elif isinstance(vector_search_config, VectorSearchSettings):
             self._vector_store_config = vector_search_config
         else:

@@ -454,7 +454,7 @@ class BaseAgent:
                 erc20_action_provider,
                 cdp_api_action_provider,
             )
-            from agentconnect.config import settings as global_settings
+            from agentconnect.config.models import PaymentsSettings
 
             cdp_config = (
                 CdpWalletProviderConfig(wallet_data=wallet_data)
@@ -465,7 +465,7 @@ class BaseAgent:
                 "_CdpWalletProvider", CdpWalletProvider(cdp_config)
             )
             action_providers = [wallet_action_provider(), cdp_api_action_provider()]
-            payment_symbol = global_settings.payments.default_token_symbol
+            payment_symbol = PaymentsSettings().default_token_symbol
             if payment_symbol != "ETH":
                 action_providers.append(erc20_action_provider())
             self.agent_kit = cast(

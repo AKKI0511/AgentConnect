@@ -12,8 +12,7 @@ from qdrant_client import QdrantClient, AsyncQdrantClient
 from qdrant_client.local.async_qdrant_local import AsyncQdrantLocal
 
 # Absolute imports from agentconnect package
-from agentconnect.config.models import VectorSearchSettings
-from agentconnect.config import settings
+from agentconnect.config.vector import VectorSearchSettings
 
 # Configure logger (module namespace)
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ async def initialize_qdrant_clients(
     Initialize both synchronous and asynchronous Qdrant clients.
 
     Args:
-        config: VectorSearchSettings for Qdrant clients, or None to use global `settings.registry.vector_search`.
+        config: VectorSearchSettings for Qdrant clients, or None to use defaults.
 
     Returns:
         Tuple of (sync_client, async_client) or (None, None) if initialization failed
@@ -38,20 +37,15 @@ async def initialize_qdrant_clients(
         from qdrant_client import QdrantClient, AsyncQdrantClient
 
         if config is None:
-            connection_config = settings.registry.vector_search.get_connection_config()
-        else:
-            connection_config = config.get_connection_config()
+            config = VectorSearchSettings()
+        connection_config = config.get_connection_config()
 
         timeout = connection_config.get("timeout", 30)
         prefer_grpc = connection_config.get("prefer_grpc", False)
         grpc_port = connection_config.get("grpc_port", None)
 
         # Deployment details
-        deployment = (
-            config.deployment
-            if config is not None
-            else settings.registry.vector_search.deployment
-        )
+        deployment = config.deployment
         mode = deployment.type
         local_path = None
         remote_url = None
@@ -173,21 +167,10 @@ async def init_qdrant_collection(
 
             # Use scalar quantization if enabled in config
             quantization_config = None
-            use_quantization = (
-                config.advanced.use_quantization
-                if config is not None
-                else settings.registry.vector_search.advanced.use_quantization
-            )
-            index_on_disk = (
-                config.advanced.index_on_disk
-                if config is not None
-                else settings.registry.vector_search.advanced.index_on_disk
-            )
-            vectors_on_disk = (
-                config.advanced.vectors_on_disk
-                if config is not None
-                else settings.registry.vector_search.advanced.vectors_on_disk
-            )
+            cfg = config if config is not None else VectorSearchSettings()
+            use_quantization = cfg.advanced.use_quantization
+            index_on_disk = cfg.advanced.index_on_disk
+            vectors_on_disk = cfg.advanced.vectors_on_disk
 
             if use_quantization:
                 from qdrant_client.http import models as qdrant_models

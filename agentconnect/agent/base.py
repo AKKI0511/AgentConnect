@@ -41,6 +41,7 @@ from dotenv import load_dotenv
 
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import CollectMode, Session
+from agentconnect.agent.tools import TeamTools
 from agentconnect.core.address import parse_agent_name
 from agentconnect.core.exceptions import SecurityError
 from agentconnect.core.identity import (
@@ -329,6 +330,23 @@ class BaseAgent:
             thread_id, before=before, limit=limit
         )
 
+    def team_tools(self) -> TeamTools:
+        """Return find, ask, tell, get_result, and get_history for this Agent.
+
+        Safe to call before ``join``. The callables fail until a Session
+        exists. Use these when the host does not speak MCP.
+
+            tools = self.team_tools()
+            found = await tools.find(query="someone who can draft a summary")
+            ticket = await tools.ask(
+                recipient=found["matches"][0]["address"],
+                content=msg["content"],
+                deadline_seconds=30,
+                wait_seconds=10,
+            )
+        """
+        return TeamTools(self._require_session)
+
     async def process_message(self, message: Mapping[str, Any], ctx: Any = None) -> Any:
         """Handle one Delivery.
 
@@ -420,22 +438,6 @@ class BaseAgent:
     async def can_receive_message(self, sender_id: str) -> bool:
         """Return False during cooldown."""
         return not self.is_in_cooldown()
-
-    def mint_mcp_access_token(self, audience: str, ttl_s: int = 600) -> str:
-        """Mint an EdDSA JWT for Authorization: Bearer against an MCP server."""
-        if not self.identity or not getattr(self.identity, "private_key", None):
-            raise ValueError("Agent identity has no private key for signing")
-        now = int(time.time())
-        claims: dict[str, object] = {
-            "sub": self.agent_id,
-            "aud": audience,
-            "iat": now,
-            "exp": now + int(ttl_s),
-            "jti": str(uuid.uuid4()),
-        }
-        from agentconnect.core.identity import encode_eddsa_jwt
-
-        return encode_eddsa_jwt(claims, self.identity.private_key)
 
     def _init_payments(self, wallet_data_dir: Optional[Union[str, Path]]) -> None:
         try:

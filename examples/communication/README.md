@@ -22,6 +22,11 @@ terminal Ticket.
 Loopback serving still accepts a join without a token; the Session sends an
 identity proof so the Runtime can stamp the Agent DID.
 
+`tools.py` uses ``team_tools()`` so a coordinator finds a writer and asks
+without hardcoding an Address. Same five tools as the Team MCP server.
+
+`mcp.py` serves the Team and prints ``team.mcp_url`` for Cursor MCP config.
+
 `join_auth.py` starts a Team with ``require_join_auth=True``. The operator
 issues a token bound to one Agent DID. A different Agent cannot use it.
 
@@ -32,9 +37,11 @@ await Writer(name="writer").join(url, join_token=issued["token"])
 
 ```bash
 poetry run python examples/communication/discovery.py
+poetry run python examples/communication/tools.py
 poetry run python examples/communication/http_session.py
 poetry run python examples/communication/join_auth.py
 poetry run python examples/communication/threads.py
+poetry run python examples/communication/mcp.py
 ```
 
 A handler can return a value (reply), return nothing (decline a request, or

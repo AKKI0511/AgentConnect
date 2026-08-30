@@ -13,22 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Join authentication. Every Agent has an Ed25519 `did:key`. `Team.issue_join_token` issues a scoped, expiring, revocable token. Network joins (`require_join_auth=True`) require that token plus an EdDSA identity proof. Revoking a token or removing a Membership drops the Session immediately. The Runtime mints a membership attestation JWT at join; inbound verification of that statement is later work.
 - Ticket and Thread contract. Open Tickets (and Thread Messages they still need) are kept until at least the deadline. `collect=wait` holds `send` for at most `wait_hold_seconds` (default 25) and then returns the current Ticket. `BaseAgent.ask(collect="wait")` still waits for a terminal Ticket. A Delivery history window is capped by count and by `max_message_bytes`. `get_history(before=...)` with a missing UUID returns the newest page. `callback` and `stream` fail with `unsupported_collect_mode`.
 - Team Directory with store-backed embeddings. `find` ranks every other member from a natural-language query. Omit `limit` to receive the whole Team, ordered, up to 100. Hosted embeddings are used when an OpenAI key is already configured; otherwise a hashed n-gram vector (or optional `fastembed`) is used. Profiles are embedded on join and again when they change.
+- Team MCP server mounted at `{origin}/mcp` by `Team.serve()`. Tools are `find`, `ask`, `tell`, `get_result`, and `get_history`. Loopback calls with no Authorization header run as the reserved `operator` Membership. Frameworks that do not speak MCP use `BaseAgent.team_tools()`.
 
 ### Changed
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
 - Replaced `BaseAgent.run()`, the per-agent queue, and the 100ms poll loop with a pull Session. `join_network` / `register_agent` are gone. `process_message` takes `(msg, ctx)`.
-- Switched Agent and Team key generation from RSA to Ed25519 `did:key`. Join identity proofs and MCP access tokens are EdDSA JWTs.
+- Switched Agent and Team key generation from RSA to Ed25519 `did:key`. Join identity proofs are EdDSA JWTs.
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.
 - Replaced the Qdrant/sentence-transformers Team registry with a local Directory. `AgentRegistry` now lives under `agentconnect.index.registry` as Index machinery. `Team.find` is semantic ranking over store-backed vectors, not a lexical stub.
+- Replaced standalone discovery and communication MCP servers with one Team MCP server. `agentconnect mcp start` is gone. MCP access tokens are the member Session token, not a separate JWT.
 - Laid out the Team-based package tree: `core/` (nouns), `agent/` (client SDK), `team/` (runtime), `transport/`, `gateway/`, and `index/`. `BaseAgent` lives in `agent/`. Message `kind` is the closed set `request`, `response`, `error`, `event`.
-- Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, and nothing imports `prebuilt/`.
+- Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, `agent/` and `mcp/` do not import each other, and nothing imports `prebuilt/`.
 
 ### Removed
 - Deleted unused `agentconnect.communication.protocols`.
 - Removed `pylint` and the PyPI `asyncio` backport from runtime dependencies.
 - Removed the `communication/`, `servers/`, and `clients/` packages after moving their code into `team/`, `transport/`, `gateway/`, `index/`, and `config/`.
+- Removed `communication_mcp_server`, `registry_mcp_server`, `token_verifier`, `BaseAgent.mint_mcp_access_token`, and the `agentconnect mcp` CLI group.
 
 ### Planned
 - A2A communication hardening: ResponseTracker, HTTP transport SPI, Inbox server, metrics, remote A2A support.

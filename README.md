@@ -167,7 +167,6 @@ Quick CLI examples:
 agentconnect config init
 agentconnect serve registry
 agentconnect registry ping
-agentconnect mcp start agent-discovery
 ```
 
 *   [Running Examples](examples/README.md)
@@ -257,22 +256,20 @@ For developers who want to contribute to AgentConnect, please refer to our [Deve
 
 ```
 AgentConnect/
-├── agentconnect/           # Core framework
-│   ├── __init__.py        # Package initialization with public API
+├── agentconnect/           # Runtime
+│   ├── core/              # Nouns: Address, Profile, identity, kinds
+│   ├── agent/             # Client SDK (BaseAgent, Session, team_tools)
+│   ├── team/              # Team Runtime
+│   ├── transport/        # Agent-to-Team HTTP
+│   ├── mcp/               # One MCP server per Team
+│   ├── gateway/           # Later inbound gateway
+│   ├── index/             # Optional Index / registry
 │   ├── cli/               # Command-line interface
+│   ├── config/            # agentconnect.yaml
 │   ├── prebuilt/          # Ready-made agents (AIAgent, HumanAgent, Telegram)
-│   ├── communication/     # Communication protocols
-│   ├── core/              # Core components
-│   ├── clients/           # SDK API clients (e.g., Registry client)
-│   ├── config/            # SDK configuration system (agentconnect.yaml)
-│   ├── mcp/               # MCP server and tools
-│   ├── prompts/           # Prompt templates
-│   ├── providers/         # AI provider integrations
-│   ├── servers/           # Server runtimes and configuration
-│   └── utils/             # Utilities
-├── demos/                 # Demo applications
-│   ├── api/              # FastAPI backend
-│   └── ui/               # React frontend
+│   ├── prompts/           # Prompt templates (until helper rebuild)
+│   └── providers/         # AI provider integrations (until helper rebuild)
+├── spec/                  # Public Team Runtime contract
 ├── examples/              # Example applications
 ├── docs/                  # Documentation
 └── tests/                 # Test suite
@@ -284,7 +281,7 @@ AgentConnect/
 - ✅ **Autonomous communication between agents**  
 - ✅ **Capability-based agent discovery**
 - ✅ **Coinbase AgentKit Payment Integration**
-- ⬜ **MCP Integration**
+- ✅ **Team MCP server** (`Team.serve()` at `{origin}/mcp`; `BaseAgent.team_tools()` for hosts that do not speak MCP)
 - ⬜ **Agent Identity & Reputation System**
 - ⬜ **Asynchronous Agent Collaboration System**
 - ⬜ **Marketplace-Style Agent Discovery**

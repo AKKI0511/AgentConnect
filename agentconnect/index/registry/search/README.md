@@ -122,9 +122,9 @@ This module is used by:
    - REST endpoints for agent search
    - Consistent request/response format
 
-2. **MCP Servers** (`agentconnect/mcp/`)
-   - Model Context Protocol implementations
-   - Standardized tool interfaces
+2. **Team MCP** (`agentconnect/mcp/`)
+   - `find`, `ask`, `tell`, `get_result`, `get_history` on a served Team
+   - Session-bound callables via `BaseAgent.team_tools()`
 
 3. **LangChain Tools** (`agentconnect/prompts/custom_tools/`)
    - Agent search tools for LLM workflows

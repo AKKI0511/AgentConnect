@@ -34,6 +34,14 @@ agentconnect serve registry
 agentconnect registry ping
 ```
 
+Team Runtime examples (v0.5 rewrite) live in `examples/communication/`. Start there for `join`, `find`, `team_tools()`, and the Team MCP URL:
+
+```bash
+poetry run python examples/communication/basic_communication.py
+poetry run python examples/communication/tools.py
+poetry run python examples/communication/mcp.py
+```
+
 Canonical invocations:
 
 ```bash

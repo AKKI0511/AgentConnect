@@ -198,6 +198,9 @@ data/
 .vscode/
 .idea/
 
+# Local CLI state from gentconnect up
+.agentconnect/
+
 # Project specific
 .cursor/
 .cursor-cache/

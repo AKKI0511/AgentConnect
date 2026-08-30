@@ -1,10 +1,8 @@
-"""
-AgentConnect CLI package.
+"""AgentConnect CLI package.
 
-Provides a minimal, production-ready command line interface composed of
-focused subcommands with clear boundaries between SDK config and server config.
+Console entrypoint ``agentconnect``. A person is a Client of the Team.
 """
 
-from .main import app  # re-export for console script entrypoint
+from .main import app
 
 __all__ = ["app"]

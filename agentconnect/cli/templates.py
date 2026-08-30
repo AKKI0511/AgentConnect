@@ -1,0 +1,41 @@
+"""Scaffold text for ``agentconnect init``."""
+
+from __future__ import annotations
+
+ASSISTANT_PY = '''"""Starter Agent created by ``agentconnect init``."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from agentconnect.agent import BaseAgent
+
+
+class Assistant(BaseAgent):
+    """Echoes reply-expected work so a fresh Team can be asked immediately.
+
+    .. code-block:: python
+
+        await Assistant(name="assistant").join(team)
+    """
+
+    profile = {
+        "summary": "Handles short tasks and returns a plain reply.",
+        "skills": [
+            {
+                "name": "assist",
+                "description": "Read a request and return a short answer.",
+            }
+        ],
+        "tags": ["assistant"],
+    }
+
+    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
+        """Reply to a request with the received content."""
+        if msg.get("kind") != "request":
+            return None
+        return {"echo": msg.get("content")}
+'''
+
+AGENTS_INIT_PY = '''"""Hosted Agents for this Team."""
+'''

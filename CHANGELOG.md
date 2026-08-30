@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ticket and Thread contract. Open Tickets (and Thread Messages they still need) are kept until at least the deadline. `collect=wait` holds `send` for at most `wait_hold_seconds` (default 25) and then returns the current Ticket. `BaseAgent.ask(collect="wait")` still waits for a terminal Ticket. A Delivery history window is capped by count and by `max_message_bytes`. `get_history(before=...)` with a missing UUID returns the newest page. `callback` and `stream` fail with `unsupported_collect_mode`.
 - Team Directory with store-backed embeddings. `find` ranks every other member from a natural-language query. Omit `limit` to receive the whole Team, ordered, up to 100. Hosted embeddings are used when an OpenAI key is already configured; otherwise a hashed n-gram vector (or optional `fastembed`) is used. Profiles are embedded on join and again when they change.
 - Team MCP server mounted at `{origin}/mcp` by `Team.serve()`. Tools are `find`, `ask`, `tell`, `get_result`, and `get_history`. Loopback calls with no Authorization header run as the reserved `operator` Membership. Frameworks that do not speak MCP use `BaseAgent.team_tools()`.
+- Team file (`agentconnect.yaml`) generated from `TeamConfig`. `agentconnect up` starts the Runtime and hosted Agents. The CLI includes init, up, down, status, token, find, ask, trace, watch, and doctor.
+- Trace timeline stored with the Team. `get_trace` returns accept, lease, reply, and expiry events for one `trace_id`. `agentconnect trace` prints that timeline. Loopback HTTP with no Authorization header is the operator, the same Membership MCP uses.
 
 ### Changed
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
@@ -24,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Promoted `fastapi` and `uvicorn` to core dependencies so serving no longer requires the demo group.
 - Replaced the Qdrant/sentence-transformers Team registry with a local Directory. `AgentRegistry` now lives under `agentconnect.index.registry` as Index machinery. `Team.find` is semantic ranking over store-backed vectors, not a lexical stub.
 - Replaced standalone discovery and communication MCP servers with one Team MCP server. `agentconnect mcp start` is gone. MCP access tokens are the member Session token, not a separate JWT.
+- Replaced SDK-wide `AgentConnectSettings` and the old `config`, `serve registry`, and `registry ping` commands with a Team file plus the operator CLI. Embedded `Team("name").start()` still needs no file.
 - Laid out the Team-based package tree: `core/` (nouns), `agent/` (client SDK), `team/` (runtime), `transport/`, `gateway/`, and `index/`. `BaseAgent` lives in `agent/`. Message `kind` is the closed set `request`, `response`, `error`, `event`.
 - Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, `agent/` and `mcp/` do not import each other, and nothing imports `prebuilt/`.
 

@@ -25,21 +25,27 @@ This directory contains examples demonstrating various features and use cases of
 
 ## Running Examples
 
-Run examples by invoking the scripts directly from the project root. If an example depends on the Registry API server, start it first and verify health.
-
-Server prerequisites (if required by the example):
-
-```bash
-agentconnect serve registry
-agentconnect registry ping
-```
-
-Team Runtime examples (v0.5 rewrite) live in `examples/communication/`. Start there for `join`, `find`, `team_tools()`, and the Team MCP URL:
+Run examples from the project root. Team Runtime examples live in `examples/communication/`. Start there for `join`, `find`, `team_tools()`, the Team MCP URL, and a Team started from a file:
 
 ```bash
 poetry run python examples/communication/basic_communication.py
 poetry run python examples/communication/tools.py
 poetry run python examples/communication/mcp.py
+poetry run python examples/communication/trace.py
+```
+
+To start a Team from `agentconnect.yaml`:
+
+```bash
+cd examples/communication/hosted_team
+poetry run agentconnect up
+```
+
+Then in another terminal:
+
+```bash
+poetry run agentconnect find "someone who can draft a summary"
+poetry run agentconnect ask writer "Draft two paragraphs about the launch."
 ```
 
 Canonical invocations:

@@ -164,9 +164,10 @@ For detailed instructions on using AgentConnect, including the command-line inte
 Quick CLI examples:
 
 ```bash
-agentconnect config init
-agentconnect serve registry
-agentconnect registry ping
+agentconnect init
+agentconnect up
+agentconnect find "someone who can draft a summary"
+agentconnect ask assistant "What can you do?"
 ```
 
 *   [Running Examples](examples/README.md)

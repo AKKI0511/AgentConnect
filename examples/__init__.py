@@ -17,9 +17,8 @@ Run these examples directly via Python scripts from the project root, for exampl
     python examples/data_analysis_assistant.py
     python examples/multi_agent/multi_agent_system.py
 
-If an example requires the Registry API server, start and verify it first:
-    agentconnect serve registry
-    agentconnect registry ping
+Team Runtime examples live in examples/communication/. Start a Team from a
+file with `cd examples/communication/hosted_team` then `agentconnect up`.
 """
 
 from examples.data_analysis_assistant import run_data_analysis_assistant_demo

@@ -1,123 +1,43 @@
 # AgentConnect CLI
 
-Command line interface for AgentConnect.
-
-## Installation
-
-The CLI is installed with the `agentconnect` package and exposes the `agentconnect` console script.
-
-## Global Usage
+The ``agentconnect`` program is a person talking to a Team. Every verb an
+Agent has, a person has. ``up`` starts the Runtime from
+``agentconnect.yaml``. The other commands call that Runtime over loopback
+HTTP as the reserved ``operator`` Membership.
 
 ```bash
-agentconnect --help
+agentconnect init
+agentconnect up
 ```
 
-## Commands and Options
-
-### version
-
-Print the installed AgentConnect version.
+In another terminal:
 
 ```bash
-agentconnect version
+agentconnect status
+agentconnect find "someone who can draft a summary"
+agentconnect ask assistant "What can you do?"
+agentconnect trace <trace-id>
 ```
 
-### config
+## Commands
 
-Manage SDK configuration (`agentconnect.yaml`).
+- ``init`` — write ``agentconnect.yaml`` and ``agents/assistant.py``
+- ``up`` / ``down`` — start or stop the Team and hosted Agents
+- ``status`` — members, online state, mailbox depths, open tickets
+- ``token issue`` / ``token revoke`` — join credentials
+- ``find`` — Directory search
+- ``ask`` — send reply-expected work and wait
+- ``trace`` — print the timeline for one causal operation
+- ``watch`` — print new Trace events
+- ``doctor`` — Team file, keys, and whether the Runtime is reachable
+- ``version`` — package version
 
-```bash
-agentconnect config --help
-```
+``up --detach`` starts in the background. ``down`` stops that process.
+State lives in ``.agentconnect/state.json``.
 
-- init
-  - Purpose: Generate `agentconnect.yaml` in the current directory.
-  - Flags:
-    - `--force` Overwrite existing `agentconnect.yaml` if present.
-  - Examples:
-    ```bash
-    agentconnect config init
-    agentconnect config init --force
-    ```
+``--url`` points any command at a Runtime that is already serving.
+Without it, the CLI uses the saved origin, then host and port from the
+Team file, then ``http://127.0.0.1:9000``.
 
-- show
-  - Purpose: Print effective (redacted) settings from SDK config loader.
-  - Output: YAML if PyYAML is installed, otherwise JSON.
-  - Examples:
-    ```bash
-    agentconnect config show
-    ```
-
-- validate
-  - Purpose: Validate a YAML file against SDK models; suitable for CI.
-  - Args:
-    - `<file>` Path to YAML file to validate (must exist and be readable).
-  - Exit codes: 0 valid, 1 invalid.
-  - Examples:
-    ```bash
-    agentconnect config validate agentconnect.yaml
-    ```
-
-### serve
-
-Start servers. Servers are configured via environment variables only (no YAML). For the Registry API server, variables are prefixed with `AGENTCONNECT_REGISTRY_`.
-
-```bash
-agentconnect serve --help
-```
-
-- registry
-  - Purpose: Start the Registry API server (FastAPI) using env-only settings.
-  - Options:
-    - `--host <str>` Override server host (default comes from env).
-    - `--port <int>` Override server port (default comes from env).
-    - `--reload` Enable auto-reload (development).
-  - Examples:
-    ```bash
-    agentconnect serve registry
-    agentconnect serve registry --host 0.0.0.0 --port 8000
-    agentconnect serve registry --reload
-    ```
-
-Developer note: You can also run the server directly: `uvicorn agentconnect.index.service:app` or `python -m agentconnect.index.service`.
-
-### registry
-
-Utilities for interacting with the Registry API.
-
-```bash
-agentconnect registry --help
-```
-
-- ping
-  - Purpose: Health check the Registry API (`GET /health`).
-  - Options:
-    - `--base-url <URL>` Override base URL; defaults to `clients.registry.base_url` from `agentconnect.yaml`.
-    - `--timeout <float>` Timeout in seconds (default: 3.0).
-  - Exit codes:
-    - 0 healthy, 3 unhealthy, 4 unreachable, 2 misconfigured.
-  - Examples:
-    ```bash
-    agentconnect registry ping
-    agentconnect registry ping --base-url http://localhost:8000
-    agentconnect registry ping --timeout 5.0
-    ```
-
-### doctor
-
-Run quick diagnostics and print a concise status summary.
-
-```bash
-agentconnect doctor
-```
-
-## Notes
-
-- Servers are configured via environment variables only. The CLI does not read YAML for server runtime.
-- CLI commands re-read configuration fresh each run via `load_settings()`. Library code often uses a process-level snapshot via `from agentconnect.config import settings`.
-- Preferred quickstart commands:
-  ```bash
-    agentconnect config init
-    agentconnect serve registry
-    agentconnect registry ping
-  ```
+``--json`` prints machine-readable output on ``status``, ``find``,
+``ask``, ``trace``, and ``token issue``.

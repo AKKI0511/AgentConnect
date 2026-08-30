@@ -27,6 +27,12 @@ without hardcoding an Address. Same five tools as the Team MCP server.
 
 `mcp.py` serves the Team and prints ``team.mcp_url`` for Cursor MCP config.
 
+`hosted_team/` is a Team file. From that directory, ``agentconnect up``
+starts the Runtime and joins ``Writer``. ``agentconnect ask`` and
+``agentconnect trace`` then talk to it as the operator.
+
+`trace.py` fails a request on purpose, then prints the Trace timeline.
+
 `join_auth.py` starts a Team with ``require_join_auth=True``. The operator
 issues a token bound to one Agent DID. A different Agent cannot use it.
 
@@ -42,7 +48,13 @@ poetry run python examples/communication/http_session.py
 poetry run python examples/communication/join_auth.py
 poetry run python examples/communication/threads.py
 poetry run python examples/communication/mcp.py
+poetry run python examples/communication/trace.py
 ```
+
+From ``examples/communication/hosted_team``::
+
+    poetry run agentconnect up
+
 
 A handler can return a value (reply), return nothing (decline a request, or
 finish an event), raise (fail the request), or call ``ctx.ticket()`` and answer

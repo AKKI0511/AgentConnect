@@ -6,7 +6,6 @@ capability discovery system, including embedding utils, indexing, and Qdrant cli
 """
 
 import pytest
-import numpy as np
 from tests.core.utils import (
     print_header,
     print_step,
@@ -92,11 +91,11 @@ class TestEmbeddingUtils:
         # Test cases with expected results
         test_cases = [
             # (vec1, vec2, expected_similarity)
-            (np.array([1, 0, 0]), np.array([1, 0, 0]), 1.0),  # Identical
-            (np.array([1, 0, 0]), np.array([0, 1, 0]), 0.0),  # Orthogonal
-            (np.array([1, 1, 0]), np.array([1, 0, 0]), 0.7071),  # 45 degrees
-            (np.array([1, 0, 0]), np.array([-1, 0, 0]), -1.0),  # Opposite
-            (np.array([0, 0, 0]), np.array([1, 1, 1]), 0.0),  # Zero vector
+            ([1, 0, 0], [1, 0, 0], 1.0),
+            ([1, 0, 0], [0, 1, 0], 0.0),
+            ([1, 1, 0], [1, 0, 0], 0.7071),
+            ([1, 0, 0], [-1, 0, 0], -1.0),
+            ([0, 0, 0], [1, 1, 1], 0.0),
         ]
 
         # Print a header for the matrix
@@ -157,7 +156,7 @@ class TestEmbeddingUtils:
         print_header("Testing HuggingFace Embeddings Creation")
 
         print_step("Creating embeddings model with default config")
-        vs = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})
+        vs = VectorSearchSettings.model_validate({"model_name": "hashed"})
         embeddings_model = create_huggingface_embeddings(vs)
 
         if embeddings_model:
@@ -256,7 +255,7 @@ class TestQdrantClient:
         print_header("Testing Qdrant Collection Initialization")
 
         print_step("Creating embeddings model")
-        vs_emb = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})
+        vs_emb = VectorSearchSettings.model_validate({"model_name": "hashed"})
         embeddings_model = create_huggingface_embeddings(vs_emb)
 
         if not embeddings_model:
@@ -481,7 +480,7 @@ class TestIndexing:
 
         print_step("Creating embeddings model")
         config = VectorSearchSettings.model_validate(
-            {"model_name": "all-MiniLM-L6-v2"}
+            {"model_name": "hashed"}
         )  # Use small model for tests
         embeddings_model = create_huggingface_embeddings(config)
 

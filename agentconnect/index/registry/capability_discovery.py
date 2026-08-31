@@ -21,9 +21,11 @@ from agentconnect.config.vector import VectorSearchSettings
 
 # Type-only imports for IDEs and static analysis (no runtime import)
 if TYPE_CHECKING:
-    from langchain_core.embeddings import Embeddings as _Embeddings
     from qdrant_client import QdrantClient as _QdrantClient
     from qdrant_client import AsyncQdrantClient as _AsyncQdrantClient
+    from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
+        Embeddings as _Embeddings,
+    )
 
 # Set up logging
 logger = logging.getLogger(__name__)

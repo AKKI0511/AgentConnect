@@ -7,13 +7,15 @@ handling updates, deletions, and processing agent registrations.
 
 import logging
 from typing import Dict, Set, Tuple, List
-from langchain_core.embeddings import Embeddings
 from qdrant_client import AsyncQdrantClient
 import uuid
 import hashlib
 import asyncio
 
 from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
+    Embeddings,
+)
 
 # Configure logger (module namespace)
 logger = logging.getLogger(__name__)
@@ -424,7 +426,7 @@ async def main():
 
     vs = VectorSearchSettings.model_validate(
         {
-            "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+            "model_name": "hashed",
             "deployment": {"type": "in_memory"},
         }
     )

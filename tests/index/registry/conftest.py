@@ -204,7 +204,7 @@ async def embeddings_model():
         pytest.skip("Embedding model not available")
         return None
 
-    vs = VectorSearchSettings.model_validate({"model_name": "all-MiniLM-L6-v2"})
+    vs = VectorSearchSettings.model_validate({"model_name": "hashed"})
     return create_huggingface_embeddings(vs)
 
 
@@ -227,7 +227,7 @@ async def discovery_service():
         {
             "deployment": {"type": "in_memory"},
             "advanced": {"use_quantization": False},
-            "model_name": "all-MiniLM-L6-v2",
+            "model_name": "hashed",
         }
     )
     service = CapabilityDiscoveryService(vs)

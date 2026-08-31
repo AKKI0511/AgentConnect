@@ -123,7 +123,7 @@ The system can be configured with custom embedding models and Qdrant parameters 
 from agentconnect.config.models import VectorSearchSettings
 
 config = {
-    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "model_name": "hashed",
     "cache_folder": "./.cache/huggingface/embeddings",
     "deployment": {"type": "in_memory"},
     # "deployment": {"type": "local_file", "path": "./local_qdrant"},
@@ -152,9 +152,9 @@ discovery_service = CapabilityDiscoveryService(vector_search_config=vs)
 
 The system has several dependencies with graceful degradation:
 
-- **Basic Requirements**: `langchain-core`, `numpy`
-- **Embedding Model**: `langchain-huggingface`, `sentence-transformers`
-- **Vector Store**: `qdrant-client`
+- **Basic Requirements**: core AgentConnect
+- **Embedding Model**: hashed n-grams by default; `fastembed` via `agentconnect[embeddings]`
+- **Vector Store**: `qdrant-client` via `agentconnect[index]`
 
 The system will automatically detect available dependencies and adjust functionality accordingly.
 

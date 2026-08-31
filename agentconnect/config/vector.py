@@ -65,8 +65,8 @@ class VectorSearchSettings(BaseModel):
     """Vector search configuration for the Index service."""
 
     model_name: str = Field(
-        default="sentence-transformers/all-mpnet-base-v2",
-        description="Embedding model for semantic search",
+        default="hashed",
+        description="Embedding model for Index search. hashed, or a fastembed model id.",
     )
     cache_folder: str = Field(
         default="./.cache/huggingface/embeddings",

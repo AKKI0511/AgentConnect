@@ -7,12 +7,14 @@ for vector search operations.
 
 import logging
 from typing import Tuple, Optional, List, Union
-from langchain_core.embeddings import Embeddings
 from qdrant_client import QdrantClient, AsyncQdrantClient
 from qdrant_client.local.async_qdrant_local import AsyncQdrantLocal
 
 # Absolute imports from agentconnect package
 from agentconnect.config.vector import VectorSearchSettings
+from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
+    Embeddings,
+)
 
 # Configure logger (module namespace)
 logger = logging.getLogger(__name__)

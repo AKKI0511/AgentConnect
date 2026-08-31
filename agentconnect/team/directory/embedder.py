@@ -106,7 +106,7 @@ class CallableEmbedder:
 
 
 class OpenAIEmbedder:
-    """Hosted embeddings through the OpenAI client already in core deps."""
+    """Hosted embeddings through the OpenAI HTTP API. Uses httpx, not the OpenAI SDK."""
 
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL) -> None:
         """Use ``model``. ``text-embedding-3-*`` requests 384 dimensions."""
@@ -116,21 +116,30 @@ class OpenAIEmbedder:
 
     def _client_obj(self) -> Any:
         if self._client is None:
-            from openai import AsyncOpenAI
+            import httpx
 
-            self._client = AsyncOpenAI()
+            self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """Call the OpenAI embeddings API."""
+        """POST /v1/embeddings. Requires ``OPENAI_API_KEY``."""
         if not texts:
             return []
-        kwargs: dict[str, Any] = {"model": self._model, "input": list(texts)}
+        key = os.environ.get("OPENAI_API_KEY") or os.environ.get("AZURE_OPENAI_API_KEY")
+        if not key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        payload: dict[str, Any] = {"model": self._model, "input": list(texts)}
         if self._model.startswith("text-embedding-3"):
-            kwargs["dimensions"] = HASHED_DIM
-        response = await self._client_obj().embeddings.create(**kwargs)
-        ordered = sorted(response.data, key=lambda item: item.index)
-        return [l2_normalize(list(item.embedding)) for item in ordered]
+            payload["dimensions"] = HASHED_DIM
+        response = await self._client_obj().post(
+            "https://api.openai.com/v1/embeddings",
+            headers={"Authorization": f"Bearer {key}"},
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()["data"]
+        ordered = sorted(data, key=lambda item: item["index"])
+        return [l2_normalize(list(item["embedding"])) for item in ordered]
 
 
 class LiteLLMEmbedder:

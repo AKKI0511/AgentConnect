@@ -1,396 +1,124 @@
-"""
-Interaction control for the AgentConnect framework.
+"""Turn and token tracking for prebuilt helpers.
 
-This module provides rate limiting and interaction tracking for agents,
-including token-based rate limiting, automatic cooldown, and integration
-with LangChain and LangGraph.
+This module no longer depends on LangChain. ``InteractionControl`` counts
+tokens and turns. Cooldown still goes through ``BaseAgent.set_cooldown``.
 """
+
+from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass
-
-# Standard library imports
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
-# Third-party imports
-from langchain_core.callbacks.base import BaseCallbackHandler
-
-# Set up logging
 logger = logging.getLogger(__name__)
 
 
 class InteractionState(Enum):
-    """
-    Enum for interaction states.
-
-    Attributes:
-        CONTINUE: Continue the interaction
-        STOP: Stop the interaction
-        WAIT: Wait before continuing the interaction
-    """
+    """What the helper should do after a turn."""
 
     CONTINUE = "continue"
     STOP = "stop"
     WAIT = "wait"
 
 
-class RateLimitingCallbackHandler(BaseCallbackHandler):
-    """
-    Callback handler that implements rate limiting for LLM calls.
+@dataclass
+class TokenConfig:
+    """Per-minute and per-hour token caps."""
 
-    This handler tracks token usage and enforces rate limits for LLM calls,
-    triggering cooldown periods when limits are reached.
+    max_tokens_per_minute: int = 70000
+    max_tokens_per_hour: int = 700000
 
-    Attributes:
-        max_tokens_per_minute: Maximum tokens allowed per minute
-        max_tokens_per_hour: Maximum tokens allowed per hour
-        current_minute_tokens: Current token count for the minute
-        current_hour_tokens: Current token count for the hour
-        last_minute_reset: Timestamp of the last minute reset
-        last_hour_reset: Timestamp of the last hour reset
-        in_cooldown: Whether the handler is in cooldown
-        cooldown_until: Timestamp when cooldown ends
-        cooldown_callback: Optional callback function to call when cooldown is triggered
-    """
+
+class RateLimitingCallbackHandler:
+    """Records token usage. Not a model-framework callback."""
 
     def __init__(
         self,
-        max_tokens_per_minute: int = 5500,
-        max_tokens_per_hour: int = 100000,
-        cooldown_callback: Optional[Callable[[int], None]] = None,
-    ):
-        """
-        Initialize the rate limiting callback handler.
-
-        Args:
-            max_tokens_per_minute: Maximum tokens allowed per minute
-            max_tokens_per_hour: Maximum tokens allowed per hour
-            cooldown_callback: Optional callback function to call when cooldown is triggered
-        """
+        max_tokens_per_minute: int,
+        max_tokens_per_hour: int,
+        on_limit: Optional[Callable[[int], None]] = None,
+    ) -> None:
+        """Bind caps and an optional cooldown callback."""
         self.max_tokens_per_minute = max_tokens_per_minute
         self.max_tokens_per_hour = max_tokens_per_hour
+        self.on_limit = on_limit
         self.current_minute_tokens = 0
         self.current_hour_tokens = 0
-        self.last_minute_reset = time.time()
-        self.last_hour_reset = time.time()
-        self.in_cooldown = False
-        self.cooldown_until = 0
-        self.cooldown_callback = cooldown_callback
+        self.minute_start = time.time()
+        self.hour_start = time.time()
 
-        # Ensure this callback doesn't interfere with LangSmith tracing
-        self.ignore_llm_start = False
-        self.ignore_llm_end = False
-        self.ignore_chain_start = True  # Ignore chain events to avoid duplicate traces
-        self.ignore_chain_end = True  # Ignore chain events to avoid duplicate traces
-
-    def on_llm_start(
-        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
-    ) -> None:
-        """
-        Handle LLM start event.
-
-        Args:
-            serialized: Serialized LLM data
-            prompts: List of prompts
-            **kwargs: Additional arguments
-        """
-        # We don't raise an exception here because we want to allow the LLM call to proceed
-        # The agent should check cooldown state before making calls
-        pass
-
-    def on_llm_end(self, response, **kwargs: Any) -> None:
-        """
-        Handle LLM end event.
-
-        Args:
-            response: LLM response
-            **kwargs: Additional arguments
-        """
-        # Extract token usage from the response
-        token_usage = None
-
-        # Try to get token usage from different response formats
-        if hasattr(response, "llm_output") and response.llm_output:
-            if (
-                isinstance(response.llm_output, dict)
-                and "token_usage" in response.llm_output
-            ):
-                token_usage = response.llm_output["token_usage"]
-
-        # For newer LangChain versions
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            token_usage = response.usage_metadata
-
-        if token_usage:
-            # Get total tokens (input + output)
-            total_tokens = token_usage.get("total_tokens", 0)
-            if total_tokens > 0:
-                self._add_tokens(total_tokens)
-
-    def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
-        """
-        Handle chain end event.
-
-        Args:
-            outputs: Chain outputs
-            **kwargs: Additional arguments
-        """
-        # We don't need to do anything here, but we need to implement this method
-        # to avoid warnings from LangChain
-        pass
-
-    def _add_tokens(self, token_count: int) -> None:
-        """
-        Add tokens to the current count and check for rate limits.
-
-        Args:
-            token_count: Number of tokens to add
-        """
-        current_time = time.time()
-
-        # Reset minute counters if needed
-        if current_time - self.last_minute_reset >= 60:
+    def add_tokens(self, token_count: int) -> InteractionState:
+        """Add ``token_count`` and return STOP when a cap is hit."""
+        now = time.time()
+        if now - self.minute_start >= 60:
             self.current_minute_tokens = 0
-            self.last_minute_reset = current_time
-
-        # Reset hour counters if needed
-        if current_time - self.last_hour_reset >= 3600:
+            self.minute_start = now
+        if now - self.hour_start >= 3600:
             self.current_hour_tokens = 0
-            self.last_hour_reset = current_time
-
-        # Add tokens to counters
+            self.hour_start = now
         self.current_minute_tokens += token_count
         self.current_hour_tokens += token_count
-
-        # Check if we need to enter cooldown
-        cooldown_duration = None
-
-        if self.current_minute_tokens >= self.max_tokens_per_minute:
-            cooldown_duration = max(60 - (current_time - self.last_minute_reset), 0)
-            logger.warning(
-                "Minute token limit reached. Cooldown for %s seconds",
-                int(cooldown_duration),
-            )
-
-        elif self.current_hour_tokens >= self.max_tokens_per_hour:
-            cooldown_duration = max(3600 - (current_time - self.last_hour_reset), 0)
-            logger.warning(
-                "Hour token limit reached. Cooldown for %s seconds",
-                int(cooldown_duration),
-            )
-
-        if cooldown_duration:
-            self.in_cooldown = True
-            self.cooldown_until = current_time + cooldown_duration
-
-            # Call the cooldown callback if provided
-            if self.cooldown_callback:
-                self.cooldown_callback(int(cooldown_duration))
-
-
-@dataclass
-class TokenConfig:
-    """
-    Configuration for token-based rate limiting.
-
-    Attributes:
-        max_tokens_per_minute: Maximum tokens allowed per minute
-        max_tokens_per_hour: Maximum tokens allowed per hour
-        current_minute_tokens: Current token count for the minute
-        current_hour_tokens: Current token count for the hour
-        last_minute_reset: Timestamp of the last minute reset
-        last_hour_reset: Timestamp of the last hour reset
-    """
-
-    max_tokens_per_minute: int
-    max_tokens_per_hour: int
-    current_minute_tokens: int = 0
-    current_hour_tokens: int = 0
-    last_minute_reset: float = time.time()
-    last_hour_reset: float = time.time()
-
-    def add_tokens(self, token_count: int) -> None:
-        """
-        Add tokens to the current count.
-
-        Args:
-            token_count: Number of tokens to add
-        """
-        current_time = time.time()
-
-        # Reset minute counters if needed
-        if current_time - self.last_minute_reset >= 60:
-            self.current_minute_tokens = 0
-            self.last_minute_reset = current_time
-
-        # Reset hour counters if needed
-        if current_time - self.last_hour_reset >= 3600:
-            self.current_hour_tokens = 0
-            self.last_hour_reset = current_time
-
-        self.current_minute_tokens += token_count
-        self.current_hour_tokens += token_count
-
-    def get_cooldown_duration(self) -> Optional[int]:
-        """
-        Get the cooldown duration in seconds if rate limits are exceeded.
-
-        Returns:
-            Cooldown duration in seconds, or None if no cooldown is needed
-        """
-        current_time = time.time()
-
-        if self.current_minute_tokens >= self.max_tokens_per_minute:
-            cooldown = max(60 - (current_time - self.last_minute_reset), 0)
-            logger.warning(
-                "Minute limit reached. Cooldown duration: %s seconds",
-                int(cooldown),
-            )
-            return int(cooldown)
-
-        if self.current_hour_tokens >= self.max_tokens_per_hour:
-            cooldown = max(3600 - (current_time - self.last_hour_reset), 0)
-            logger.warning(
-                "Hour limit reached. Cooldown duration: %s seconds",
-                int(cooldown),
-            )
-            return int(cooldown)
-
-        return None
-
-
-@dataclass
-class InteractionControl:
-    """
-    High-level control for agent interactions.
-
-    This class provides rate limiting, turn tracking, and conversation statistics
-    for agent interactions.
-
-    Attributes:
-        agent_id: The ID of the agent this control belongs to.
-        token_config: Configuration for token-based rate limiting
-        max_turns: Maximum number of turns in a conversation
-        current_turn: Current turn number
-        last_interaction_time: Timestamp of the last interaction
-        _cooldown_callback: Optional callback function to call when cooldown is triggered
-        _conversation_stats: Dictionary of conversation statistics
-    """
-
-    agent_id: str
-    token_config: TokenConfig
-    max_turns: int = 20
-    current_turn: int = 0
-    last_interaction_time: float = time.time()
-    _cooldown_callback: Optional[Callable[[int], None]] = None
-    _conversation_stats: Dict[str, Dict[str, Any]] = None
-
-    def __post_init__(self):
-        """Initialize conversation stats dictionary."""
-        self._conversation_stats = {}
-
-    async def process_interaction(
-        self, token_count: int, conversation_id: Optional[str] = None
-    ) -> InteractionState:
-        """
-        Process an interaction and return the state.
-
-        Args:
-            token_count: Number of tokens used in the interaction
-            conversation_id: Optional conversation ID for tracking stats
-
-        Returns:
-            InteractionState indicating whether to continue, stop, or wait
-        """
-        # Track conversation stats if ID provided
-        if conversation_id:
-            if conversation_id not in self._conversation_stats:
-                self._conversation_stats[conversation_id] = {
-                    "total_tokens": 0,
-                    "turn_count": 0,
-                    "start_time": time.time(),
-                }
-
-            self._conversation_stats[conversation_id]["total_tokens"] += token_count
-            self._conversation_stats[conversation_id]["turn_count"] += 1
-            self._conversation_stats[conversation_id]["last_time"] = time.time()
-
-        # Check if max turns reached before incrementing
-        if self.current_turn >= self.max_turns:
-            logger.info(
-                "Maximum interaction turns reached (%s). Stopping interaction",
-                self.max_turns,
-            )
-            return InteractionState.STOP
-
-        # No need to add tokens/turns for no response
-        if token_count == 0:
-            return InteractionState.CONTINUE
-
-        # Add tokens and increment turn counter
-        self.token_config.add_tokens(token_count)
-        self.current_turn += 1
-
-        # Get cooldown duration if needed
-        cooldown_duration = self.token_config.get_cooldown_duration()
-        if cooldown_duration:
-            logger.warning("Interaction cooldown %s seconds", cooldown_duration)
-
-            # Call the cooldown callback if provided
-            if self._cooldown_callback:
-                self._cooldown_callback(cooldown_duration)
+        if (
+            self.current_minute_tokens >= self.max_tokens_per_minute
+            or self.current_hour_tokens >= self.max_tokens_per_hour
+        ):
+            if self.on_limit is not None:
+                self.on_limit(60)
             return InteractionState.WAIT
         return InteractionState.CONTINUE
 
-    def set_cooldown_callback(self, callback: Callable[[int], None]) -> None:
-        """
-        Set a callback function to be called when cooldown is triggered.
 
-        Args:
-            callback: Function that takes cooldown duration in seconds as argument
-        """
-        self._cooldown_callback = callback
+class InteractionControl:
+    """Turn counter plus token caps for one Agent."""
+
+    def __init__(
+        self,
+        agent_id: str,
+        token_config: Optional[TokenConfig] = None,
+        max_turns: int = 20,
+    ) -> None:
+        """Bind ``agent_id`` and optional caps."""
+        self.agent_id = agent_id
+        self.token_config = token_config or TokenConfig()
+        self.max_turns = max_turns
+        self.turn_count = 0
+        self._cooldown: Optional[Callable[[int], None]] = None
+        self._limiter = RateLimitingCallbackHandler(
+            self.token_config.max_tokens_per_minute,
+            self.token_config.max_tokens_per_hour,
+        )
+        self._stats: Dict[str, Dict[str, int]] = {}
+
+    def set_cooldown_callback(self, callback: Callable[[int], None]) -> None:
+        """Called with a duration in seconds when a token cap is hit."""
+        self._cooldown = callback
+        self._limiter.on_limit = callback
+
+    def get_callback_handlers(self) -> List[Any]:
+        """Return the token limiter. Kept so older call sites still compile."""
+        return [self._limiter]
 
     def reset_turn_counter(self) -> None:
-        """Reset the turn counter to zero."""
-        self.current_turn = 0
+        """Set the turn count back to zero."""
+        self.turn_count = 0
 
-    def get_conversation_stats(
-        self, conversation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get statistics for a specific conversation or all conversations.
+    def get_conversation_stats(self) -> Dict[str, Dict[str, int]]:
+        """Return per-conversation token and turn counts."""
+        return dict(self._stats)
 
-        Args:
-            conversation_id: Optional ID of the conversation to get stats for
-
-        Returns:
-            Dictionary of conversation statistics
-        """
-        if conversation_id:
-            return self._conversation_stats.get(conversation_id, {})
-        return self._conversation_stats
-
-    def get_callback_handlers(self) -> List[BaseCallbackHandler]:
-        """
-        Create a list of callback handlers managed by InteractionControl (primarily rate limiting).
-
-        Returns:
-            List containing configured BaseCallbackHandler instances.
-        """
-        callbacks: List[BaseCallbackHandler] = []
-
-        # 1. Add rate limiting callback
-        rate_limiter = RateLimitingCallbackHandler(
-            max_tokens_per_minute=self.token_config.max_tokens_per_minute,
-            max_tokens_per_hour=self.token_config.max_tokens_per_hour,
-            cooldown_callback=self._cooldown_callback,
+    async def process_interaction(
+        self, token_count: int = 0, conversation_id: str = "default"
+    ) -> InteractionState:
+        """Record one turn. STOP when ``max_turns`` is reached."""
+        self.turn_count += 1
+        stats = self._stats.setdefault(
+            conversation_id, {"total_tokens": 0, "turn_count": 0}
         )
-        callbacks.append(rate_limiter)
-
-        # We're not adding a LangChain tracer here to avoid duplicate traces in LangSmith
-        # LangSmith will automatically trace the workflow if LANGCHAIN_TRACING is enabled
-
-        return callbacks
+        stats["total_tokens"] += int(token_count)
+        stats["turn_count"] += 1
+        state = self._limiter.add_tokens(int(token_count))
+        if self.turn_count >= self.max_turns:
+            return InteractionState.STOP
+        return state

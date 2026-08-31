@@ -72,14 +72,6 @@ def validate_cdp_environment() -> Tuple[bool, str]:
                 "AgentKit not installed. Install it with: pip install coinbase-agentkit",
             )
 
-        try:
-            import coinbase_agentkit_langchain  # noqa: F401
-        except ImportError:
-            return (
-                False,
-                "AgentKit LangChain integration not installed. Install it with: pip install coinbase-agentkit-langchain",
-            )
-
         return True, "CDP environment is properly configured"
     except Exception as exc:
         return False, f"Unexpected error validating CDP environment: {exc}"

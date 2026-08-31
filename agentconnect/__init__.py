@@ -13,8 +13,7 @@ Key components:
 - **mcp**: team tool surface
 - **gateway**: inbound work from outside the process
 - **index**: optional published-directory service and client
-- **prebuilt**: ready-made agents behind extras
-- **providers** / **prompts**: helper internals until the helper rebuild
+- **prebuilt**: optional helpers (``AIAgent``, ``HumanAgent``, Telegram) behind extras
 
 Key differentiators:
 

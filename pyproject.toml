@@ -23,31 +23,10 @@ classifiers = [
 urls = {Homepage = "https://github.com/AKKI0511/AgentConnect", Documentation = "https://AKKI0511.github.io/AgentConnect/"}
 packages = [{include = "agentconnect", from = "."}]
 dependencies = [
-    "openai (>=1.0.0)",
-    "anthropic (>=0.7.0)",
-    "groq (>=0.4.0)",
-    "google-generativeai (>=0.3.0)",
-    "langchain (>=0.3.18,<0.4.0)",
-    "langgraph (>=0.2.73,<0.3.0)",
-    "langsmith (>=0.3.8,<0.4.0)",
-    "langchain-community (>=0.3.17,<0.4.0)",
-    "langchain-anthropic (>=0.3.7,<0.4.0)",
-    "langchain-groq (>=0.2.4,<0.3.0)",
-    "langchain-google-genai (>=2.0.9,<3.0.0)",
     "python-dotenv (>=1.0.1,<2.0.0)",
     "typing-extensions (>=4.12.2,<5.0.0)",
-    "python-dateutil (>=2.9.0.post0,<3.0.0)",
     "cryptography (>=44.0.1,<45.0.0)",
-    "sentence-transformers (>=3.4.1,<4.0.0)",
-    "langchain-huggingface (>=0.1.2,<0.2.0)",
-    "pandas (>=2.2.3,<3.0.0)",
-    "colorama (>=0.4.6,<0.5.0)",
-    "accelerate (>=1.6.0,<2.0.0)",
-    "langchain-openai (>=0.3.14,<0.4.0)",
-    "qdrant-client (>=1.14.2,<2.0.0)",
-    "langchain-qdrant (>=0.2.0,<0.3.0)",
     "mcp[cli] (>=2.1.1,<3.0.0)",
-    "huggingface-hub[hf-xet] (>=0.31.2,<0.32.0)",
     "pydantic (>=2.10.4,<3.0.0)",
     "pydantic-settings (>=2.7.1,<3.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
@@ -60,11 +39,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+aiagent = [
+    "litellm (>=1.40.0,<3.0.0)",
+]
 telegram = [
     "aiogram (>=3.19.0,<4.0.0)",
+    "litellm (>=1.40.0,<3.0.0)",
 ]
 embeddings = [
     "fastembed (>=0.7.0,<0.9.0)",
+]
+index = [
+    "qdrant-client (>=1.14.2,<2.0.0)",
 ]
 payments = [
     "cdp-sdk (>=0.21.0,<0.22.0)",
@@ -156,8 +142,6 @@ forbidden_modules = [
     "agentconnect.cli",
     "agentconnect.config",
     "agentconnect.prebuilt",
-    "agentconnect.providers",
-    "agentconnect.prompts",
     "agentconnect.utils",
 ]
 
@@ -198,8 +182,6 @@ source_modules = [
     "agentconnect.index",
     "agentconnect.cli",
     "agentconnect.config",
-    "agentconnect.providers",
-    "agentconnect.prompts",
     "agentconnect.utils",
 ]
 forbidden_modules = ["agentconnect.prebuilt"]

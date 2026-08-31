@@ -61,8 +61,6 @@ from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.types import (
     AgentType,
     InteractionMode,
-    ModelName,
-    ModelProvider,
     NetworkMode,
     ProtocolVersion,
 )
@@ -115,8 +113,6 @@ __all__ = [
     "SPEC_VERSION",
     "AgentType",
     "InteractionMode",
-    "ModelName",
-    "ModelProvider",
     "NetworkMode",
     "ProtocolVersion",
 ]

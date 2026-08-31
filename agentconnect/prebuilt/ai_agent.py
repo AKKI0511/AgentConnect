@@ -1,881 +1,310 @@
-"""
-Independent AI Agent implementation for the AgentConnect decentralized framework.
+"""Model-backed Agent on a LiteLLM tool loop.
 
-This module provides an autonomous AI agent that can operate independently within a decentralized
-network, process messages, generate responses, discover other agents based on capabilities,
-and interact with those agents without pre-defined connections or central control.
-Each agent can potentially implement its own internal multi-agent structure while maintaining
-secure communication with other agents in the decentralized network.
+``AIAgent`` is a convenience on :class:`~agentconnect.agent.base.BaseAgent`.
+It is not the product. Subclass ``BaseAgent`` when you already have a model
+loop. Use this helper when you want a model string, Team tools, and optional
+custom tools without wiring LiteLLM yourself.
+
+Install the extra first::
+
+    pip install 'agentconnect[aiagent]'
+
+    from agentconnect.prebuilt import AIAgent, Tool
+    from agentconnect.team import Team
+
+    class Writer(AIAgent):
+        profile = {
+            "summary": "Writes short drafts from notes.",
+            "skills": [
+                {
+                    "name": "drafting",
+                    "description": "Turn notes into a two-paragraph draft.",
+                }
+            ],
+        }
+
+        def __init__(self, name: str = "writer"):
+            super().__init__(
+                name=name,
+                model="gpt-4o-mini",
+                instructions="Write short, plain drafts.",
+            )
+
+    team = await Team("content-squad").start()
+    await Writer().join(team)
+
+Conversation state for Team work comes from ``ctx.history``. Team tools
+(``find``, ``ask``, ``tell``, ``get_result``, ``get_history``) are attached
+from the Session, not as an ``AIAgent`` feature. Extra tools are yours.
+
+``model`` is a LiteLLM model id, for example ``gpt-4o-mini`` or
+``gemini/gemini-2.0-flash``. Provider keys stay in the environment.
 """
 
-# Standard library imports
-import asyncio
+from __future__ import annotations
+
+import json
 import logging
-from datetime import datetime
-from enum import Enum
-from typing import List, Optional, Union, Dict, Any
-from pathlib import Path
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional, TypedDict
 
-# Third-party imports
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import Runnable
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.tools import BaseTool
-
-# Absolute imports from agentconnect package
 from agentconnect.agent.base import BaseAgent
-from agentconnect.core.message import Message
-from agentconnect.config.models import PaymentsSettings
-from agentconnect.core.types import (
-    AgentIdentity,
-    AgentProfile,
-    AgentType,
-    Capability,
-    InteractionMode,
-    MessageKind,
-    ModelName,
-    ModelProvider,
+from agentconnect.agent.context import Context
+from agentconnect.agent.errors import SessionError
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.prebuilt.loop import (
+    CompletionFn,
+    DEFAULT_MAX_ROUNDS,
+    messages_from_thread,
+    run_tool_loop,
 )
-from agentconnect.prompts.agent_prompts import create_workflow_for_agent
-from agentconnect.prompts.templates.prompt_templates import (
-    PromptTemplates,
-    SystemPromptConfig,
-)
-from agentconnect.prompts.tools import PromptTools
-from agentconnect.utils.interaction_control import (
-    InteractionControl,
-    InteractionState,
-    TokenConfig,
-)
+from agentconnect.prebuilt.tools import Tool, merge_tools, tools_from_team
 from agentconnect.utils.payment_helper import validate_cdp_environment
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
 
-# Simple enum for memory types
-class MemoryType(str, Enum):
-    """Types of memory storage backends."""
+class CompletionOptions(TypedDict, total=False):
+    """Keyword arguments forwarded to LiteLLM ``acompletion``.
 
-    BUFFER = "buffer"  # In-memory buffer
+    Common fields:
+
+    - ``temperature``
+    - ``max_tokens``
+    - ``top_p``
+    """
+
+    temperature: float
+    max_tokens: int
+    top_p: float
+    api_base: str
 
 
 class AIAgent(BaseAgent):
-    """
-    Independent AI Agent implementation that operates autonomously in a decentralized network.
+    """``BaseAgent`` that answers with a LiteLLM model and a short tool loop.
 
-    This agent uses language models to generate responses, can discover and communicate with
-    other agents based on their capabilities (not pre-defined connections), and can implement
-    its own internal multi-agent structure if needed. It operates as a peer in a decentralized
-    system rather than as part of a centrally controlled hierarchy.
-
-    Key features:
-
-    - Autonomous operation with independent decision-making
-    - Capability-based discovery of other agents
-    - Secure identity verification and communication
-    - Potential for internal multi-agent structures
-    - Dynamic request routing based on capabilities
+    agent = AIAgent(name="assistant", model="gpt-4o-mini")
+    await agent.join(team)
+    reply = await agent.chat("What does this Team do?")
     """
 
     def __init__(
         self,
-        # Required parameters from BaseAgent
-        agent_id: str,
-        identity: AgentIdentity,
-        # Required AIAgent parameters
-        provider_type: ModelProvider,
-        model_name: ModelName,
-        api_key: str,
-        # AIAgent-specific parameters
-        profile: Optional[AgentProfile] = None,
         name: Optional[str] = None,
-        capabilities: List[Capability] = None,
-        personality: str = "helpful and professional",
-        interaction_modes: List[InteractionMode] = [
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
-        memory_type: MemoryType = MemoryType.BUFFER,
-        prompt_tools: Optional[PromptTools] = None,
-        prompt_templates: Optional[PromptTemplates] = None,
-        custom_tools: Optional[List[BaseTool]] = None,
-        agent_type: str = "ai",
-        model_config: Optional[Dict[str, Any]] = None,
-        # Extra configuration parameters
-        max_tokens_per_minute: int = 70000,
-        max_tokens_per_hour: int = 700000,
-        max_turns: int = 20,
-        is_ui_mode: bool = False,
+        *,
+        model: str,
+        profile: Any = None,
+        identity: Optional[AgentIdentity] = None,
+        instructions: str = (
+            "You are a helpful teammate. Use tools when they help you do the work."
+        ),
+        tools: Optional[Sequence[Tool]] = None,
+        max_tool_rounds: int = DEFAULT_MAX_ROUNDS,
+        completion: Optional[CompletionOptions] = None,
+        api_key: Optional[str] = None,
+        complete: Optional[CompletionFn] = None,
+        include_team_tools: bool = True,
         enable_payments: bool = False,
-        verbose: bool = False,
-        wallet_data_dir: Optional[Union[str, Path]] = None,
-        external_callbacks: Optional[List[BaseCallbackHandler]] = None,
-    ):
-        """Initialize the AI agent.
-
-        There are two ways to initialize an AIAgent:
-
-        1. Profile-based (recommended): Provide `agent_id`, `identity`, and `profile` parameters
-           along with any agent-specific settings.
-
-        2. Parameter-based (legacy): Provide individual parameters like `name`,
-           `capabilities`, etc.
-
-        NOTE: The `personality` parameter is provided in the system prompt config, not the profile.
+        wallet_data_dir: Any = None,
+        agent_id: Optional[str] = None,
+        instance_id: Optional[str] = None,
+        max_in_flight: int = 1,
+        join_token: Optional[str] = None,
+    ) -> None:
+        """Create a model-backed Agent. It has not joined a Team yet.
 
         Args:
-            agent_id: Unique identifier for the agent
-            identity: Identity information for the agent
-            provider_type: Type of model provider (e.g., OpenAI, Anthropic)
-            model_name: Name of the model to use
-            api_key: API key for the model provider
-            profile: Comprehensive agent profile (recommended approach) RECOMMENDED: Use this parameter to access richer profile options like summary, description, version, documentation_url, url, auth_schemes, default_input_modes, default_output_modes, skills, examples, and tags. Note that 'personality' is never included in this profile as it's internal.
-            name: Human-readable name for the agent
-            capabilities: List of agent capabilities
-            personality: Description of the agent's personality (Passed to the system prompt)
-            interaction_modes: List of supported interaction modes
-            memory_type: Type of memory storage to use
-            prompt_tools: Optional tools for the agent
-            prompt_templates: Optional prompt templates for the agent
-            custom_tools: Optional list of custom LangChain tools for the agent
-            agent_type: Type of agent workflow to create
-            model_config: Optional dict of default model parameters (e.g., temperature, max_tokens)
-            max_tokens_per_minute: Maximum tokens per minute for rate limiting
-            max_tokens_per_hour: Maximum tokens per hour for rate limiting
-            max_turns: Maximum number of terms in a conversation
-            is_ui_mode: Whether the agent is running in UI mode
-            enable_payments: Whether to enable payment capabilities
-            verbose: Whether to enable verbose logging
-            wallet_data_dir: Optional custom directory for wallet data storage
-            external_callbacks: Optional list of external callback handlers to include
+            name: Agent name, unique within the Team. ``agent_id`` is an alias.
+            model: LiteLLM model id, for example ``gpt-4o-mini``.
+            profile: Discovery Profile mapping or ``AgentProfile``. A class
+                attribute named ``profile`` is used when this is omitted.
+            instructions: System prompt for every model call.
+            tools: Extra tools besides the Session Team tools.
+            max_tool_rounds: Cap on model→tool→model cycles per turn.
+            completion: Extra LiteLLM kwargs such as ``temperature``.
+            api_key: Optional key. LiteLLM also reads provider env vars.
+            complete: Advanced. Replace LiteLLM with another async callable
+                of the same shape. Tests use this for a recorded model.
+            include_team_tools: When True (default), Session Team tools are
+                attached on Team turns. ``chat()`` never attaches them.
         """
-        # Validate CDP environment if payments are requested
+        if not model or not str(model).strip():
+            raise ValueError("model is required")
+        if max_tool_rounds < 1:
+            raise ValueError("max_tool_rounds must be at least 1")
         actual_enable_payments = enable_payments
         if enable_payments:
-            is_valid, message = validate_cdp_environment()
-            if not is_valid:
-                logger.warning(
-                    "Payment capabilities disabled due to invalid CDP environment agent_id=%s",
-                    agent_id,
-                )
+            valid, message = validate_cdp_environment()
+            if not valid:
+                logger.warning("payments disabled: %s", message)
                 actual_enable_payments = False
-            else:
-                # Keep payments success silent to avoid hot-path noise
-                pass
-
-        # Store the model config before initializing LLM
-        self.model_config = model_config or {}
-
-        # Create or use the provided profile
-        if profile is None:
-            # Ensure required parameters are available when not using profile
-            if name is None:
-                raise ValueError("name is required when not using profile")
-
-            # Construct the profile with basic information from individual parameters
-            profile = AgentProfile(
-                agent_id=agent_id,
-                agent_type=AgentType.AI,  # Hardcoded for AIAgent
-                name=name,
-                capabilities=capabilities or [],
-                # Leave description empty or provide a generic one - do NOT use personality
-                description="",
-            )
-
-        # Initialize base agent with profile
         super().__init__(
-            agent_id=agent_id,
-            identity=identity,
-            interaction_modes=interaction_modes,
+            name=name,
             profile=profile,
+            identity=identity,
+            instance_id=instance_id,
+            max_in_flight=max_in_flight,
+            join_token=join_token,
+            agent_id=agent_id,
             enable_payments=actual_enable_payments,
             wallet_data_dir=wallet_data_dir,
         )
-
-        # Store agent-specific attributes
-        self.personality = (
-            personality  # This is used only for the system prompt, not exposed
-        )
-        self.name = name or profile.name
-        self.last_processed_message_id = None
-        self.provider_type = provider_type
-        self.model_name = model_name
+        self.model = str(model).strip()
+        self.instructions = instructions
+        self.max_tool_rounds = int(max_tool_rounds)
+        self.completion: dict[str, Any] = dict(completion or {})
         self.api_key = api_key
-        self.is_ui_mode = is_ui_mode
-        self.memory_type = memory_type
-        self.workflow_agent_type = agent_type
-        self.verbose = verbose
-        self.custom_tools = custom_tools or []
-        self._prompt_tools = prompt_tools
-        self.external_callbacks = external_callbacks or []
-        self.prompt_templates = prompt_templates or PromptTemplates()
-        self.workflow = None
+        self.include_team_tools = include_team_tools
+        self.tools: list[Tool] = list(tools or [])
+        self._complete: CompletionFn = complete or _litellm_complete
+        self._chats: dict[str, list[dict[str, Any]]] = {}
+        if actual_enable_payments and self.agent_kit is not None:
+            self.tools = merge_tools(self.tools, _tools_from_agentkit(self.agent_kit))
 
-        # Initialize hub and registry references
-        self._hub = None
-        self._registry = None
+    async def process_message(
+        self, message: Mapping[str, Any], ctx: Optional[Context] = None
+    ) -> Any:
+        """Answer one Delivery with the model loop.
 
-        # Initialize token tracking and rate limiting
-        token_config = TokenConfig(
-            max_tokens_per_minute=max_tokens_per_minute,
-            max_tokens_per_hour=max_tokens_per_hour,
+        Thread history comes from ``ctx.history``. Team tools attach when a
+        Session exists and ``include_team_tools`` is True.
+        """
+        history = ctx.history if ctx is not None else []
+        address = self.address
+        user_text = _message_text(message)
+        return await self.complete(
+            user_text,
+            history=history,
+            current=message,
+            include_team_tools=self.include_team_tools,
+            self_address=address,
         )
 
-        self.interaction_control = InteractionControl(
-            agent_id=self.agent_id, token_config=token_config, max_turns=max_turns
-        )
-        self.interaction_control.set_cooldown_callback(self.set_cooldown)
-
-        # Initialize the LLM
-        self.llm = self._initialize_llm()
-
-    @property
-    def hub(self):
-        """Get the hub property."""
-        return self._hub
-
-    @hub.setter
-    def hub(self, value):
-        """Set the hub property."""
-        self._hub = value
-        self._initialize_workflow_if_ready()
-
-    @property
-    def registry(self):
-        """Get the registry property."""
-        return self._registry
-
-    @registry.setter
-    def registry(self, value):
-        """Set the registry property."""
-        self._registry = value
-        self._initialize_workflow_if_ready()
-
-    @property
-    def prompt_tools(self):
-        """Get the prompt_tools property."""
-        return self._prompt_tools
-
-    @prompt_tools.setter
-    def prompt_tools(self, value):
-        """Set the prompt_tools property."""
-        self._prompt_tools = value
-
-    def _initialize_workflow_if_ready(self):
-        """Initialize the workflow if both registry and hub are set."""
-        if (
-            hasattr(self, "_hub")
-            and self._hub is not None
-            and hasattr(self, "_registry")
-            and self._registry is not None
-            and self.workflow is None
-        ):
-            logger.debug("Initializing workflow agent_id=%s", self.agent_id)
-            self.workflow = self._initialize_workflow()
-
-    def _initialize_llm(self):
-        """Initialize the LLM based on the provider type and model name."""
-        from agentconnect.providers import ProviderFactory
-
-        provider = ProviderFactory.create_provider(self.provider_type, self.api_key)
-        return provider.get_langchain_llm(
-            model_name=self.model_name, **self.model_config or {}
-        )
-
-    def _initialize_workflow(self) -> Runnable:
-        """Initialize the workflow for the agent."""
-        # Determine if we're in standalone mode
-        is_standalone = (
-            not hasattr(self, "_registry")
-            or self._registry is None
-            or not hasattr(self, "_hub")
-            or self._hub is None
-        )
-
-        # Create a PromptTools instance if not already provided
-        if self._prompt_tools is None:
-            self._prompt_tools = PromptTools(
-                agent_registry=self._registry, communication_hub=self._hub, llm=self.llm
-            )
-            # Keep init logs minimal; no extra start here
-
-        # Set the current agent context for the tools
-        self._prompt_tools.set_current_agent(self.agent_id)
-
-        # Create system config if not already created
-        if not hasattr(self, "system_config"):
-            # Add standalone mode note to system config if in standalone mode
-            additional_context = {}
-            if is_standalone:
-                additional_context["standalone_mode"] = (
-                    "You are operating in standalone mode without connections to other agents. "
-                    "Focus on using your internal capabilities to help the user directly. "
-                    "If collaboration would normally be useful, explain why it's not available "
-                    "and offer the best alternative solutions you can provide on your own."
-                )
-
-            self.system_config = SystemPromptConfig(
-                name=self.profile.name,
-                capabilities=self.profile.capabilities,
-                personality=self.personality,
-                additional_context=additional_context,
-            )
-
-        # Initialize custom tools list
-        custom_tools_list = list(self.custom_tools) if self.custom_tools else []
-
-        # Add payment tools if enabled
-        if self.enable_payments and self.agent_kit is not None:
-            try:
-                from coinbase_agentkit_langchain import get_langchain_tools  # type: ignore
-
-                agentkit_tools = get_langchain_tools(self.agent_kit)
-                custom_tools_list.extend(agentkit_tools)
-                configured_symbol = PaymentsSettings().default_token_symbol
-                # Do not emit extra ok lines; keep workflow.init minimal
-
-                # Enable payment capabilities in the system prompt config
-                self.system_config.enable_payments = True
-                self.system_config.payment_token_symbol = configured_symbol
-            except ImportError as e:
-                logger.warning(
-                    "Could not import AgentKit LangChain tools agent_id=%s: %s",
-                    self.agent_id,
-                    e,
-                )
-                logger.warning(
-                    "Payment capabilities require coinbase-agentkit-langchain agent_id=%s",
-                    self.agent_id,
-                )
-            except Exception as e:
-                logger.error(
-                    "Error initializing AgentKit tools agent_id=%s: %s",
-                    self.agent_id,
-                    e,
-                )
-
-        # Create the workflow with all components
-        workflow = create_workflow_for_agent(
-            agent_type=self.workflow_agent_type,
-            system_config=self.system_config,
-            llm=self.llm,
-            tools=self._prompt_tools,
-            prompt_templates=self.prompt_templates,
-            agent_id=self.agent_id,
-            custom_tools=custom_tools_list,
-            verbose=self.verbose,
-        )
-
-        return workflow.compile()
-
-    def _create_error_response(
+    async def complete(
         self,
-        message: Message,
-        error_msg: str,
-        error_type: str,
-        is_collaboration_request: bool = False,
-    ) -> Message:
-        """Create a standardized error response message."""
-        message_type = (
-            MessageKind.RESPONSE if is_collaboration_request else MessageKind.ERROR
+        text: str,
+        *,
+        history: Optional[Sequence[Mapping[str, Any]]] = None,
+        current: Optional[Mapping[str, Any]] = None,
+        include_team_tools: Optional[bool] = None,
+        self_address: Optional[str] = None,
+    ) -> str:
+        """Run one model turn. Used by ``process_message``, ``chat``, and Telegram.
+
+        reply = await agent.complete("Summarize the notes.")
+        """
+        attach = (
+            self.include_team_tools
+            if include_team_tools is None
+            else include_team_tools
         )
-
-        metadata = {"error_type": error_type}
-        if is_collaboration_request:
-            metadata["original_message_type"] = "ERROR"
-
-        return Message.create(
-            sender_id=self.agent_id,
-            receiver_id=message.sender_id,
-            content=error_msg,
-            sender_identity=self.identity,
-            kind=message_type,
-            metadata=metadata,
+        messages = messages_from_thread(
+            history or [],
+            current if current is not None else text,
+            self_address=self_address or self.address,
+            instructions=self.instructions,
         )
-
-    async def process_message(self, message: Message, ctx=None) -> Optional[Message]:
-        """
-        Process an incoming message autonomously and generate a response.
-
-        This method represents the agent's autonomous decision loop, where it:
-
-        - Verifies message security independently
-        - Makes decisions on how to respond based on capabilities
-        - Can dynamically discover and collaborate with other agents as needed
-        - Maintains its own internal state and conversation tracking
-        - Operates without central coordination or control
-
-        The agent can leverage its internal workflow (which may include its own multi-agent system)
-        to generate appropriate responses and handle complex tasks that may require collaboration
-        with other independent agents in the decentralized network.
-        """
-        # Check if this is a collaboration request
-        is_collaboration_request = message.kind == MessageKind.REQUEST
-
-        # Call the superclass method to handle common message processing logic
-        response = await super().process_message(message)
-        if response:
-            return response
-
-        try:
-            # Initialize workflow if needed
-            if self.workflow is None:
-                if (
-                    hasattr(self, "_hub")
-                    and self._hub is not None
-                    and hasattr(self, "_registry")
-                    and self._registry is not None
-                ):
-                    self.workflow = self._initialize_workflow()
-                else:
-                    logger.error(
-                        "Cannot initialize workflow: registry or hub not set agent_id=%s",
-                        self.agent_id,
-                    )
-                    return self._create_error_response(
-                        message,
-                        "I'm sorry, I'm not fully initialized yet. Please try again later.",
-                        "initialization_error",
-                        is_collaboration_request,
-                    )
-
-            # If workflow is still None, return an error
-            if self.workflow is None:
-                logger.error(
-                    "Cannot process message: workflow not initialized agent_id=%s",
-                    self.agent_id,
-                )
-                return self._create_error_response(
-                    message,
-                    "I'm sorry, I'm not fully initialized yet. Please try again later.",
-                    "initialization_error",
-                    is_collaboration_request,
-                )
-
-            # Check if this is an error message that needs special handling
-            if message.kind == MessageKind.ERROR:
-                logger.warning(
-                    "Received error message agent_id=%s sender_id=%s type=%s",
-                    self.agent_id,
-                    message.sender_id,
-                    message.kind.value,
-                )
-
-                # If this is from a collaboration, we should handle it gracefully
-                if "error_type" in message.metadata:
-                    error_type = message.metadata["error_type"]
-
-                    # Find the original human in the conversation chain
-                    human_sender = await self._find_human_in_conversation_chain(
-                        message.sender_id
-                    )
-
-                    if human_sender and error_type in [
-                        "timeout",
-                        "max_retries_exceeded",
-                        "collaboration_failed",
-                    ]:
-                        # Create a helpful response to the human explaining the issue
-                        error_explanation = f"I encountered an issue while working with {message.sender_id}: {message.content}\n\n"
-                        error_explanation += "I'll try to answer your question with the information I have available."
-
-                        # Create a response message to the human
-                        return Message.create(
-                            sender_id=self.agent_id,
-                            receiver_id=human_sender,
-                            content=error_explanation,
-                            sender_identity=self.identity,
-                            kind=MessageKind.EVENT,
-                            metadata={"handled_error": error_type},
-                        )
-
-            # Get the conversation ID for this sender
-            conversation_id = self._get_conversation_id(message.sender_id)
-
-            # Setup callbacks - combine rate limiting callbacks with any external ones
-            callbacks = self.interaction_control.get_callback_handlers()
-            if self.external_callbacks:
-                callbacks.extend(self.external_callbacks)
-
-            # Ensure the prompt_tools has the correct agent_id set
-            if (
-                self._prompt_tools
-                and self._prompt_tools._current_agent_id != self.agent_id
-            ):
-                self._prompt_tools.set_current_agent(self.agent_id)
-
-            # Add context prefix based on sender/message type
-            sender_type = (
-                "Human" if message.sender_id.startswith("human") else "AI Agent"
-            )
-            is_collab_request = message.kind == MessageKind.REQUEST
-            is_collab_response = "response_to" in (message.metadata or {})
-
-            context_prefix = ""
-            if sender_type == "AI Agent":
-                if is_collab_request:
-                    context_prefix = f"[Incoming Collaboration Request from AI Agent {message.sender_id}]:\n"
-                elif is_collab_response:
-                    context_prefix = f"[Incoming Response from Collaborating AI Agent {message.sender_id}]:\n"
-                else:
-                    context_prefix = (
-                        f"[Incoming Message from AI Agent {message.sender_id}]:\n"
-                    )
-
-            workflow_input_content = f"{context_prefix}{message.content}"
-
-            # Create the initial state and config for the workflow
-            initial_state = {
-                "messages": [HumanMessage(content=workflow_input_content)],
-                "sender": message.sender_id,
-                "receiver": self.agent_id,
-                "kind": message.kind,
-                "metadata": message.metadata or {},
-                "max_retries": 2,
-                "retry_count": 0,
-            }
-
-            config = {
-                "configurable": {
-                    "thread_id": conversation_id,
-                    "run_name": f"Agent {self.agent_id} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                },
-                "callbacks": callbacks,
-            }
-
-            invoke_start = asyncio.get_event_loop().time()
-            # Invoke the workflow with a timeout
-            try:
-                response_state = await asyncio.wait_for(
-                    self.workflow.ainvoke(initial_state, config),
-                    timeout=180.0,  # 3 minute timeout
-                )
-                logger.debug(
-                    "Workflow invoke ok agent_id=%s request_id=%s type=%s duration=%dms",
-                    self.agent_id,
-                    (message.metadata or {}).get("request_id"),
-                    message.kind.value,
-                    int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
-                )
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "Workflow execution timed out agent_id=%s request_id=%s type=%s duration=%dms",
-                    self.agent_id,
-                    (message.metadata or {}).get("request_id"),
-                    message.kind.value,
-                    int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
-                )
-                return self._create_error_response(
-                    message,
-                    "I'm sorry, but this request is taking too long to process. Please try again with a simpler request or break it down into smaller parts.",
-                    "workflow_timeout",
-                    is_collaboration_request,
-                )
-            except Exception:
-                logger.error(
-                    "Workflow invoke failed agent_id=%s request_id=%s type=%s duration=%dms",
-                    self.agent_id,
-                    (message.metadata or {}).get("request_id"),
-                    message.kind.value,
-                    int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
-                    exc_info=True,
-                )
-                return self._create_error_response(
-                    message,
-                    "Internal error while invoking workflow.",
-                    "workflow_invoke_error",
-                    is_collaboration_request,
-                )
-
-            # Extract the last message from the workflow response state
-            if "messages" not in response_state or not response_state["messages"]:
-                logger.error(
-                    "Workflow returned empty or invalid messages agent_id=%s",
-                    self.agent_id,
-                )
-                return self._create_error_response(
-                    message,
-                    "Internal error: Could not retrieve response.",
-                    "empty_workflow_response",
-                    is_collaboration_request,
-                )
-
-            last_message = response_state["messages"][-1]
-
-            # Token counting and rate limiting
-            total_tokens = 0
-            if hasattr(last_message, "usage_metadata") and last_message.usage_metadata:
-                total_tokens = last_message.usage_metadata.get("total_tokens", 0)
-
-            # Update token count and handle rate limiting
-            state = await self.interaction_control.process_interaction(
-                token_count=total_tokens, conversation_id=conversation_id
-            )
-
-            # Handle different interaction states
-            if state == InteractionState.STOP:
-                logger.warning(
-                    "Maximum turns reached; ending conversation agent_id=%s receiver_id=%s",
-                    self.agent_id,
-                    message.sender_id,
-                )
-                self.end_conversation(message.sender_id)
-                last_message.content = f"{last_message.content}\n\nWe've reached the maximum number of turns for this conversation. If you need further assistance, please start a new conversation."
-
-            # Update conversation tracking
-            current_time = datetime.now()
-            if message.sender_id in self.active_conversations:
-                self.active_conversations[message.sender_id]["message_count"] += 1
-                self.active_conversations[message.sender_id][
-                    "last_message_time"
-                ] = current_time
-            else:
-                self.active_conversations[message.sender_id] = {
-                    "message_count": 1,
-                    "last_message_time": current_time,
-                }
-
-            # Determine the appropriate message type for the response
-            response_message_type = (
-                MessageKind.RESPONSE
-                if is_collaboration_request
-                else MessageKind.RESPONSE
-            )
-
-            # Create response metadata
-            response_metadata = {"token_count": total_tokens}
-
-            # Add response_to if this is a response to a request with an ID
-            if message.metadata and "request_id" in message.metadata:
-                response_metadata["response_to"] = message.metadata["request_id"]
-            elif (
-                hasattr(self, "pending_requests")
-                and message.sender_id in self.pending_requests
-            ):
-                request_id = self.pending_requests[message.sender_id].get("request_id")
-                if request_id:
-                    response_metadata["response_to"] = request_id
-
-            # Create and return the response message
-            response_message = Message.create(
-                sender_id=self.agent_id,
-                receiver_id=message.sender_id,
-                content=last_message.content,
-                sender_identity=self.identity,
-                kind=response_message_type,
-                metadata=response_metadata,
-            )
-            # Do not log response content; BaseAgent logs process ok
-            return response_message
-
-        except Exception as e:
-            logger.error(
-                "Error processing message agent_id=%s sender_id=%s type=%s",
-                self.agent_id,
-                message.sender_id,
-                message.kind.value,
-                exc_info=True,
-            )
-            return self._create_error_response(
-                message,
-                f"I encountered an unexpected error while processing your request: {str(e)}\n\nPlease try again with a different approach.",
-                "processing_error",
-                is_collaboration_request,
-            )
-
-    def reset_interaction_state(self) -> None:
-        """
-        Reset the interaction state of the agent. This resets both the cooldown state and the turn counter.
-        """
-        # Reset the cooldown state
-        self.reset_cooldown()
-
-        # Reset the turn counter in the interaction control
-        if hasattr(self, "interaction_control"):
-            self.interaction_control.reset_turn_counter()
-            logger.debug("Interaction state reset agent_id=%s", self.agent_id)
-
-        # Log conversation statistics
-        if hasattr(self, "interaction_control") and hasattr(
-            self.interaction_control, "get_conversation_stats"
-        ):
-            stats = self.interaction_control.get_conversation_stats()
-            if stats:
-                for conv_id, conv_stats in stats.items():
-                    logger.debug(
-                        "Conversation stats agent_id=%s conversation_id=%s total_tokens=%s turn_count=%s",
-                        self.agent_id,
-                        conv_id,
-                        conv_stats.get("total_tokens"),
-                        conv_stats.get("turn_count"),
-                    )
+        kwargs: dict[str, Any] = dict(self.completion)
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        return await run_tool_loop(
+            complete=self._complete,
+            model=self.model,
+            messages=messages,
+            tools=self._bound_tools(attach),
+            max_rounds=self.max_tool_rounds,
+            **kwargs,
+        )
 
     async def chat(
         self,
         query: str,
-        conversation_id: str = "standalone_chat",
-        metadata: Optional[Dict] = None,
+        *,
+        conversation_id: str = "chat",
     ) -> str:
+        """Talk to this Agent without a Team. History is local to ``conversation_id``.
+
+        reply = await agent.chat("What is a Ticket?")
+        follow = await agent.chat("Give an example.", conversation_id="chat")
         """
-        Allows direct interaction with the agent without joining a Team.
-
-        This method is useful for testing or using a single agent instance directly.
-        It simulates a user query and returns the agent's response, maintaining
-        conversation history based on the conversation_id if memory is configured.
-
-        Args:
-            query: The user's input/query to the agent.
-            conversation_id: An identifier for the conversation thread. Defaults to "standalone_chat".
-                             Use different IDs to maintain separate conversation histories.
-            metadata: Optional metadata to pass to the workflow.
-
-        Returns:
-            The agent's response as a string.
-
-        Raises:
-            RuntimeError: If the workflow cannot be initialized or fails unexpectedly.
-            asyncio.TimeoutError: If the workflow execution times out.
-        """
-        # Minimal: do not log chat request content or start marker
-
-        # Initialize workflow if not already done
-        if self.workflow is None:
-            try:
-                # Ensure hub and registry attributes exist (as None) for standalone mode
-                if not hasattr(self, "_registry"):
-                    self._registry = None
-                if not hasattr(self, "_hub"):
-                    self._hub = None
-
-                # Create PromptTools if needed for standalone mode
-                if not hasattr(self, "_prompt_tools") or self._prompt_tools is None:
-                    self._prompt_tools = PromptTools(
-                        agent_registry=None,
-                        communication_hub=None,
-                        llm=self._initialize_llm(),
-                    )
-                    # Keep minimal; no extra init log here
-
-                # Set current agent context
-                self._prompt_tools.set_current_agent(self.agent_id)
-
-                # Create standalone system config
-                self.system_config = SystemPromptConfig(
-                    name=self.profile.name,
-                    capabilities=self.profile.capabilities,
-                    personality=self.personality,
-                    additional_context={
-                        "standalone_mode": (
-                            "You are operating in standalone mode without connections to other agents. "
-                            "Focus on using your internal capabilities to help the user directly. "
-                            "If collaboration would normally be useful, explain why it's not available "
-                            "and offer the best alternative solutions you can provide on your own."
-                        )
-                    },
-                )
-
-                # Initialize workflow
-                self.workflow = self._initialize_workflow()
-                if self.workflow is None:
-                    raise RuntimeError("Workflow initialization failed.")
-
-                # Minimal: no extra init ok here; init boundaries already covered
-            except Exception as e:
-                logger.error(
-                    "Failed to initialize workflow for chat agent_id=%s: %s",
-                    self.agent_id,
-                    e,
-                )
-                raise RuntimeError(f"Failed to initialize agent workflow: {e}") from e
-
-        # Set up workflow input and configuration
-        initial_state = {
-            "messages": [HumanMessage(content=query)],
-            "sender": "user_standalone",
-            "receiver": self.agent_id,
-            "kind": MessageKind.EVENT,
-            "metadata": metadata or {},
-            "max_retries": 0,
-            "retry_count": 0,
-        }
-
-        # Prepare callbacks
-        callbacks = self.interaction_control.get_callback_handlers()
-        if self.external_callbacks:
-            callbacks.extend(self.external_callbacks)
-
-        # Create workflow configuration
-        config = {
-            "configurable": {
-                "thread_id": conversation_id,
-                "run_name": f"Agent {self.agent_id} - Standalone Chat - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            },
-            "callbacks": callbacks,
-        }
-
-        # Ensure prompt_tools has current agent context
-        if (
-            hasattr(self, "_prompt_tools")
-            and self._prompt_tools
-            and self._prompt_tools._current_agent_id != self.agent_id
-        ):
-            self._prompt_tools.set_current_agent(self.agent_id)
-
-        # Invoke workflow
-        invoke_start = asyncio.get_event_loop().time()
-        try:
-            response_state = await asyncio.wait_for(
-                self.workflow.ainvoke(initial_state, config),
-                timeout=180.0,
-            )
-            logger.debug(
-                "Chat workflow invoke ok agent_id=%s duration=%dms",
-                self.agent_id,
-                int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
-            )
-        except asyncio.TimeoutError as e:
-            logger.warning(
-                "Chat workflow execution timed out agent_id=%s duration=%dms",
-                self.agent_id,
-                int((asyncio.get_event_loop().time() - invoke_start) * 1000.0),
-            )
-            raise e
-        except Exception as e:
-            logger.error(
-                "Error during chat workflow invocation agent_id=%s: %s",
-                self.agent_id,
-                e,
-            )
-            raise RuntimeError(f"Agent workflow failed during chat: {e}") from e
-
-        # Extract response
-        if "messages" not in response_state or not response_state["messages"]:
-            logger.error(
-                "Chat workflow returned empty or invalid messages agent_id=%s",
-                self.agent_id,
-            )
-            raise RuntimeError("Agent workflow returned no response message.")
-
-        # Get response content
-        last_message = response_state["messages"][-1]
-        if hasattr(last_message, "content"):
-            response_content = last_message.content
-        else:
-            logger.error(
-                "Last message in chat response has no content agent_id=%s",
-                self.agent_id,
-            )
-            raise RuntimeError("Agent workflow returned unexpected message format.")
-
-        # Handle token tracking and rate limiting
-        total_tokens = 0
-        if hasattr(last_message, "usage_metadata") and last_message.usage_metadata:
-            total_tokens = last_message.usage_metadata.get("total_tokens", 0)
-
-        await self.interaction_control.process_interaction(
-            token_count=total_tokens, conversation_id=conversation_id
+        prior = self._chats.setdefault(conversation_id, [])
+        reply = await self.complete(
+            query,
+            history=prior,
+            include_team_tools=False,
         )
+        prior.append({"role": "user", "content": query})
+        prior.append({"role": "assistant", "content": reply})
+        return reply
 
-        # Do not log response content; prior invoke ok already emitted
-        return response_content
+    def _bound_tools(self, include_team_tools: bool) -> list[Tool]:
+        team: list[Tool] = []
+        if include_team_tools:
+            try:
+                team = tools_from_team(self.team_tools())
+            except SessionError:
+                team = []
+        return merge_tools(team, self.tools)
+
+
+def _message_text(message: Mapping[str, Any] | str) -> str:
+    if isinstance(message, str):
+        return message
+    return _stringify(message.get("content"))
+
+
+def _stringify(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, (dict, list)):
+        return json.dumps(content, default=str)
+    return str(content)
+
+
+async def _litellm_complete(**kwargs: Any) -> Any:
+    try:
+        import litellm
+    except ImportError as exc:
+        raise ImportError(
+            "AIAgent requires the aiagent extra. "
+            "Install with: pip install 'agentconnect[aiagent]'"
+        ) from exc
+    return await litellm.acompletion(**kwargs)
+
+
+def _tools_from_agentkit(agent_kit: Any) -> list[Tool]:
+    get_actions = getattr(agent_kit, "get_actions", None)
+    if get_actions is None:
+        return []
+    tools: list[Tool] = []
+    try:
+        actions = list(get_actions())
+    except Exception:
+        logger.warning("AgentKit get_actions failed", exc_info=True)
+        return []
+    for action in actions:
+        name = getattr(action, "name", None)
+        if not name:
+            continue
+        description = str(getattr(action, "description", None) or name)
+        schema = getattr(action, "args_schema", None) or {
+            "type": "object",
+            "properties": {},
+        }
+        if not isinstance(schema, dict):
+            dump = getattr(schema, "model_json_schema", None)
+            schema = dump() if callable(dump) else {"type": "object", "properties": {}}
+        invoke = getattr(action, "invoke", None) or getattr(action, "run", None)
+        if invoke is None:
+            continue
+        tools.append(
+            Tool(
+                name=str(name),
+                description=description,
+                parameters=schema,
+                handler=invoke,
+            )
+        )
+    return tools

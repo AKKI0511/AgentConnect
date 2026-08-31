@@ -1,364 +1,162 @@
-"""
-AgentConnect Telegram AI Agent implementation.
+"""Telegram bot that is also an ``AIAgent``.
 
-This module provides a Telegram bot interface for AgentConnect, allowing users to
-interact with an AI agent through Telegram.
+Join a Team like any other Agent, then ``run()`` to poll Telegram. Incoming
+Telegram text goes through the same LiteLLM loop as Team work. Telegram
+operations are extra tools.
+
+    from agentconnect.prebuilt import TelegramAIAgent
+    from agentconnect.team import Team
+
+    agent = TelegramAIAgent(
+        name="telegram-bot",
+        model="gpt-4o-mini",
+        telegram_token="...",
+    )
+    team = await Team("content-squad").start()
+    await agent.join(team)
+    await agent.run()
 """
+
+from __future__ import annotations
 
 import asyncio
 import logging
 import os
-from typing import Optional, List, Dict, Any, Union
-from pathlib import Path
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional
 
-from dotenv import load_dotenv
 from aiogram import types
-from langchain.tools import BaseTool
-from langchain_core.callbacks import BaseCallbackHandler
+from dotenv import load_dotenv
 
-from agentconnect.prebuilt.ai_agent import AIAgent, MemoryType
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.prebuilt.ai_agent import AIAgent, CompletionOptions
+from agentconnect.prebuilt.loop import CompletionFn
 from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
-from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
 from agentconnect.prebuilt.telegram.keyboards import (
-    PRIVATE_CHAT_KEYBOARD,
     GROUP_CHAT_KEYBOARD,
+    PRIVATE_CHAT_KEYBOARD,
 )
+from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
 from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
 from agentconnect.prebuilt.telegram._utils.file_utils import ensure_download_directory
-from agentconnect.core.message import Message
-from agentconnect.core.types import (
-    AgentIdentity,
-    InteractionMode,
-    Capability,
-    MessageKind,
-    ModelName,
-    ModelProvider,
-    AgentProfile,
-)
-from agentconnect.prompts.tools import PromptTools
-from agentconnect.prompts.templates.prompt_templates import PromptTemplates
+from agentconnect.prebuilt.tools import Tool, merge_tools
 
 logger = logging.getLogger(__name__)
 
+_TELEGRAM_HISTORY_CAP = 40
+
 
 class TelegramAIAgent(AIAgent):
-    """
-    An AgentConnect agent that interacts with users through Telegram.
+    """``AIAgent`` with a Telegram bot. Team deliveries use ``process_message``.
 
-    This agent extends AIAgent to provide Telegram integration, enabling:
-
-    - Natural language conversations with users via Telegram private chats
-    - Group chat interactions through bot mentions
-    - Media message handling (photos, documents, voice, etc.)
-    - Announcements to registered groups
-    - Integration with other AgentConnect agents via collaboration requests
-
-    The agent connects to the Telegram API and processes messages concurrently with
-    AgentConnect inter-agent communications, allowing it to serve as both a user interface
-    and a collaborative agent within the AgentConnect ecosystem.
-
-    Args:
-        agent_id (str): Unique identifier for the agent
-        name (str): Human-readable name for the agent (appears in Telegram)
-        provider_type (ModelProvider): Type of LLM provider (e.g., GOOGLE, OPENAI)
-        model_name (ModelName): Specific LLM to use (e.g., GEMINI2_FLASH, GPT4)
-        api_key (str): API key for the LLM provider
-        identity (AgentIdentity): Identity information for the agent
-        profile (Optional[AgentProfile], optional): Comprehensive agent profile. If provided, other individual parameters like name, capabilities, description might be overridden or supplemented by the profile's content.
-        model_config (Optional[Dict[str, Any]], optional): Optional dict of default model parameters (e.g., temperature, max_tokens).
-        capabilities (List[Capability], optional): Additional capabilities beyond Telegram-specific ones
-        personality (str, optional): Description of the agent's personality
-        interaction_modes (List[InteractionMode], optional): Supported interaction modes
-        max_tokens_per_minute (int, optional): Rate limiting for token usage per minute
-        max_tokens_per_hour (int, optional): Rate limiting for token usage per hour
-        max_turns (int, optional): Maximum number of turns in a conversation.
-        is_ui_mode (bool, optional): Whether the agent is running in UI mode.
-        memory_type (MemoryType, optional): Type of memory storage to use.
-        prompt_tools (Optional[PromptTools], optional): Optional tools for the agent.
-        prompt_templates (Optional[PromptTemplates], optional): Optional prompt templates for the agent.
-        agent_type (str, optional): Type of agent workflow to create (e.g., "ai", "structured_chat").
-        enable_payments (bool, optional): Whether to enable payments
-        verbose (bool, optional): Whether to enable verbose logging
-        wallet_data_dir (Optional[Union[str, Path]], optional): Directory to store wallet data. Can be a string path or a Path object.
-        external_callbacks (Optional[List[BaseCallbackHandler]], optional): List of external callbacks to use
-        groups_file (str, optional): File path to store registered group IDs
-        telegram_token (str, optional): Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
-
-    Note:
-        When running the agent, both the Telegram bot polling and AgentConnect message
-        processing loops run concurrently, allowing the agent to respond to both
-        Telegram users and other agents in the AgentConnect ecosystem.
-
-    Example:
-        .. code-block:: python
-
-            from agentconnect.prebuilt.telegram import TelegramAIAgent
-            from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
-
-            # Initialize the agent
-            agent = TelegramAIAgent(
-                agent_id="telegram_bot",
-                name="My Assistant",
-                provider_type=ModelProvider.GOOGLE,
-                model_name=ModelName.GEMINI2_FLASH,
-                api_key="your_google_api_key",
-                identity=AgentIdentity.create_key_based(),
-                telegram_token="your_telegram_token"
-            )
-
-            # Hosting a Telegram agent on a Team uses the session API
-            # (join, lease, reply). That lands with the agent session work.
-
-            await agent.run()
+    agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
+    await agent.join(team)
+    await agent.run()
     """
 
-    # Common message texts
     HELP_TEXT = (
-        "I'm an AgentConnect-powered conversational Telegram bot. Here's what I can do:\n\n"
-        "• Chat with you about any topic (just type normally)\n"
-        "• Create and send announcements to groups\n"
-        "• Process your messages using AI capabilities\n"
-        "• Collaborate with other agents when needed\n\n"
+        "I'm an AgentConnect Telegram bot. Chat normally, mention me in a group, "
+        "or send media.\n\n"
         "<b>Commands:</b>\n"
-        "/start - Restart the bot or get welcome message\n"
-        "/help - Show this help message\n"
-        "\nYou can also use the buttons below to access specific features."
+        "/start - Welcome\n"
+        "/help - This message\n"
     )
+
+    profile = {
+        "summary": "Talks with people on Telegram and with teammates on a Team.",
+        "skills": [
+            {
+                "name": "telegram_messaging",
+                "description": "Send and receive Telegram text, media, and group announcements.",
+            }
+        ],
+        "tags": ["telegram"],
+    }
 
     def __init__(
         self,
-        # Required parameters from BaseAgent
-        agent_id: str,
-        identity: AgentIdentity,
-        # Required AIAgent parameters
-        provider_type: ModelProvider,
-        model_name: ModelName,
-        api_key: str,
-        # AIAgent-specific parameters
-        profile: Optional[AgentProfile] = None,
-        name: Optional[str] = None,
-        capabilities: List[Capability] = None,
-        personality: str = "helpful and friendly",
-        interaction_modes: List[InteractionMode] = [
-            InteractionMode.HUMAN_TO_AGENT,
-            InteractionMode.AGENT_TO_AGENT,
-        ],
-        memory_type: MemoryType = MemoryType.BUFFER,
-        prompt_tools: Optional[PromptTools] = None,
-        prompt_templates: Optional[PromptTemplates] = None,
-        agent_type: str = "ai",
-        model_config: Optional[Dict[str, Any]] = None,
-        # Extra configuration parameters
-        max_tokens_per_minute: int = 5500,
-        max_tokens_per_hour: int = 100000,
-        max_turns: int = 20,
-        is_ui_mode: bool = False,
-        enable_payments: bool = False,
-        verbose: bool = False,
-        wallet_data_dir: Optional[Union[str, Path]] = None,
-        external_callbacks: Optional[List[BaseCallbackHandler]] = None,
-        # TelegramAIAgent-specific parameters
-        groups_file: str = "groups.txt",
+        name: str,
+        *,
+        model: str,
         telegram_token: Optional[str] = None,
-    ):
-        """
-        Initialize a Telegram AI Agent.
+        instructions: str = "You are a helpful Telegram assistant.",
+        tools: Optional[Sequence[Tool]] = None,
+        identity: Optional[AgentIdentity] = None,
+        profile: Any = None,
+        completion: Optional[CompletionOptions] = None,
+        api_key: Optional[str] = None,
+        complete: Optional[CompletionFn] = None,
+        max_tool_rounds: int = 8,
+        include_team_tools: bool = True,
+        enable_payments: bool = False,
+        wallet_data_dir: Any = None,
+        groups_file: str = "groups.txt",
+        join_token: Optional[str] = None,
+        instance_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+    ) -> None:
+        """Create a Telegram-backed Agent. It has not joined a Team or started polling.
 
         Args:
-            agent_id: Unique identifier for the agent
-            identity: Identity information for the agent
-            provider_type: Type of LLM provider (e.g., OpenAI, Anthropic)
-            model_name: Name of the model to use
-            api_key: API key for the model provider
-            profile: Comprehensive agent profile (recommended approach)
-            name: Human-readable name for the agent (appears in Telegram)
-            capabilities: List of agent capabilities
-            personality: Description of the agent's personality
-            interaction_modes: List of supported interaction modes
-            memory_type: Type of memory storage to use
-            prompt_tools: Optional tools for the agent
-            prompt_templates: Optional prompt templates for the agent
-            agent_type: Type of agent workflow to create
-            model_config: Optional dict of default model parameters (e.g., temperature, max_tokens)
-            max_tokens_per_minute: Maximum tokens per minute for rate limiting
-            max_tokens_per_hour: Maximum tokens per hour for rate limiting
-            max_turns: Maximum number of terms in a conversation
-            is_ui_mode: Whether the agent is running in UI mode
-            enable_payments: Whether to enable payment capabilities
-            verbose: Whether to enable verbose logging
-            wallet_data_dir: Optional custom directory for wallet data storage
-            external_callbacks: Optional list of external callback handlers to include
-            groups_file: File path to store registered group IDs
-            telegram_token: Telegram Bot API token (can also use TELEGRAM_BOT_TOKEN env var)
+            name: Agent name, unique within the Team.
+            model: LiteLLM model id.
+            telegram_token: BotFather token. ``TELEGRAM_BOT_TOKEN`` is used
+                when this is omitted.
+            groups_file: Path used to remember registered group chat ids.
         """
-        # Define Telegram-specific capabilities
-        telegram_capabilities = [
-            Capability(
-                name="telegram_messaging",
-                description="Ability to send and receive messages through Telegram, including text, photos, documents, voice messages, and locations",
-                input_schema={
-                    "message": "string",
-                    "chat_id": "int",
-                    "media_type": "string",
-                    "reply_to_message_id": "int",
-                },
-                output_schema={"success": "boolean", "message_id": "int"},
-            ),
-            Capability(
-                name="file_handling",
-                description="Ability to download and process files sent by Telegram users",
-                input_schema={"file_id": "string", "file_type": "string"},
-                output_schema={
-                    "success": "boolean",
-                    "file_path": "string",
-                    "file_size": "int",
-                },
-            ),
-            Capability(
-                name="announcement_management",
-                description="Ability to create and publish announcements to Telegram groups",
-                input_schema={
-                    "text": "string",
-                    "photo_url": "string",
-                    "groups": "list",
-                },
-                output_schema={"success": "boolean", "sent_to_groups": "list"},
-            ),
-            Capability(
-                name="group_management",
-                description="Ability to track and manage Telegram groups",
-                input_schema={"action": "string", "group_id": "int"},
-                output_schema={"success": "boolean", "groups": "list"},
-            ),
-            Capability(
-                name="location_handling",
-                description="Ability to receive and send location data through Telegram",
-                input_schema={
-                    "latitude": "float",
-                    "longitude": "float",
-                    "chat_id": "int",
-                },
-                output_schema={"success": "boolean", "message_id": "int"},
-            ),
-        ]
-
-        if profile:
-            if profile.capabilities:
-                profile.capabilities += telegram_capabilities
-            else:
-                profile.capabilities = telegram_capabilities
-
-        # Combine provided capabilities with Telegram-specific ones
-        all_capabilities = (capabilities or []) + telegram_capabilities
-
-        # Initialize Telegram-specific components
-        self.telegram_token = telegram_token or os.getenv("TELEGRAM_BOT_TOKEN")
+        token = telegram_token or os.getenv("TELEGRAM_BOT_TOKEN")
+        if not token:
+            raise ValueError("telegram_token is required (or set TELEGRAM_BOT_TOKEN)")
+        self.telegram_token = token
         self.groups_file = groups_file
-
-        # Initialize the downloads directory
         self.downloads_dir = ensure_download_directory(__file__)
-
-        # Create the bot manager
+        self._telegram_history: dict[int, list[dict[str, Any]]] = {}
+        self.telegram_polling_task: Optional[asyncio.Task] = None
         self.bot_manager = TelegramBotManager(
             token=self.telegram_token,
             groups_file=self.groups_file,
-            agent_id=agent_id,
+            agent_id=agent_id or name,
         )
-
-        # Initialize the bot and tools
         self._initialize_telegram_components()
-
-        # Initialize the message processor
-        self.message_processor = TelegramMessageProcessor(
-            agent_id=agent_id,
+        telegram_tools: list[Tool] = []
+        if self.bot_manager.telegram_tools:
+            telegram_tools = self.bot_manager.telegram_tools.get_tools()
+        super().__init__(
+            name=name,
+            model=model,
+            profile=profile,
             identity=identity,
+            instructions=instructions,
+            tools=merge_tools(telegram_tools, list(tools or [])),
+            max_tool_rounds=max_tool_rounds,
+            completion=completion,
+            api_key=api_key,
+            complete=complete,
+            include_team_tools=include_team_tools,
+            enable_payments=enable_payments,
+            wallet_data_dir=wallet_data_dir,
+            agent_id=agent_id,
+            instance_id=instance_id,
+            join_token=join_token,
+        )
+        self.message_processor = TelegramMessageProcessor(
+            agent_id=self.agent_id,
+            identity=self.identity,
             bot_manager=self.bot_manager,
         )
 
-        # Initialize processed message tracking
-        self._processed_message_ids = set()
-
-        # Initialize the telegram polling task
-        self.telegram_polling_task = None
-
-        # Initialize the AIAgent with all capabilities and custom tools
-        super().__init__(
-            agent_id=agent_id,
-            identity=identity,
-            provider_type=provider_type,
-            model_name=model_name,
-            api_key=api_key,
-            profile=profile,
-            name=name,
-            capabilities=all_capabilities,
-            personality=personality,
-            interaction_modes=interaction_modes,
-            memory_type=memory_type,
-            prompt_tools=prompt_tools,
-            prompt_templates=prompt_templates,
-            custom_tools=self._get_custom_tools(),
-            agent_type=agent_type,
-            model_config=model_config,
-            max_tokens_per_minute=max_tokens_per_minute,
-            max_tokens_per_hour=max_tokens_per_hour,
-            max_turns=max_turns,
-            is_ui_mode=is_ui_mode,
-            enable_payments=enable_payments,
-            verbose=verbose,
-            wallet_data_dir=wallet_data_dir,
-            external_callbacks=external_callbacks,
-        )
-
-    def _initialize_telegram_components(self):
-        """Initialize Telegram bot and tools."""
-        # Initialize the bot
+    def _initialize_telegram_components(self) -> None:
+        """Create the Bot, dispatcher, and Telegram tools."""
         if not self.bot_manager.initialize_bot():
-            logger.error("Failed to initialize Telegram bot agent_id=%s", self.agent_id)
-
-        # Initialize the tools
+            logger.error("Failed to initialize Telegram bot name=%s", self.name)
         if not self.bot_manager.initialize_tools():
-            logger.error(
-                "Failed to initialize Telegram tools agent_id=%s", self.agent_id
-            )
-
-        # Register the shutdown handler
+            logger.error("Failed to initialize Telegram tools name=%s", self.name)
         self.bot_manager.register_shutdown_handler(self._on_shutdown)
 
-    def _get_custom_tools(self) -> List[BaseTool]:
-        """
-        Get custom tools for the agent workflow.
-
-        Returns:
-            List of BaseTool instances
-        """
-        if self.bot_manager and self.bot_manager.telegram_tools:
-            return self.bot_manager.telegram_tools.get_langchain_tools()
-        return []
-
-    # The get_custom_tools method should be renamed to be private
-    # and aliased in __init__ to preserve the existing public API
-    get_custom_tools = _get_custom_tools
-
-    async def start_telegram_bot(self):
-        """
-        Start the Telegram bot polling.
-
-        This method initializes the bot's connection to the Telegram API and
-        registers all message handlers.
-
-        Returns:
-            None
-
-        Raises:
-            RuntimeError: If the Telegram bot cannot be started
-        """
+    async def start_telegram_bot(self) -> None:
+        """Connect to Telegram and register handlers."""
         if not await self.bot_manager.start_polling():
-            logger.error(
-                "Failed to start Telegram bot polling agent_id=%s", self.agent_id
-            )
-            return
-
-        # Register all handlers
+            raise RuntimeError("Failed to start Telegram bot polling")
         handler_registry = HandlerRegistry()
         callback_map = {
             "handle_start": self._handle_start,
@@ -371,237 +169,81 @@ class TelegramAIAgent(AIAgent):
             "get_help_text": lambda: self.HELP_TEXT,
             "get_bot_user": lambda: self.bot_manager.me,
         }
-
         await handler_registry.register_all(self.bot_manager.dp, callback_map)
 
-    async def stop_telegram_bot(self):
-        """
-        Stop the Telegram bot polling.
-
-        This method gracefully shuts down the Telegram bot, closing the connection
-        to the Telegram API and saving any persistent data like registered group IDs.
-        It should be called before shutting down the application to ensure clean termination.
-
-        Returns:
-            None
-        """
+    async def stop_telegram_bot(self) -> None:
+        """Stop polling and persist registered group ids."""
         await self.bot_manager.stop_polling()
 
-    # The internal _keep_alive method is kept for implementation purposes
-    # but is not part of the public API
+    async def run(self) -> None:
+        """Poll Telegram until cancelled. Join a Team first if teammates should reach you."""
+        await self.start_telegram_bot()
+        logger.info("Telegram agent polling name=%s", self.name)
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            await self.stop_telegram_bot()
+            logger.info("Telegram agent stopped name=%s", self.name)
 
-    async def process_message(self, message: Message, ctx=None) -> Message | None:
-        """
-        Process an incoming AgentConnect message.
-
-        This overrides the AIAgent.process_message method to handle
-        Telegram-specific message processing, including both direct Telegram messages
-        and collaboration requests from other agents.
-        """
-        # Check if this is a Telegram message (sent from ourselves to ourselves with Telegram metadata)
-        if (
-            message.sender_id == self.agent_id
-            and message.receiver_id == self.agent_id
-            and message.metadata
-            and message.metadata.get("is_telegram_message")
-        ):
-            try:
-                # Process the message through the agent workflow
-                response = await self.message_processor.process_agent_response(
-                    workflow=self.workflow,
-                    message=message,
-                    interaction_control=self.interaction_control,
-                )
-
-                if response:
-                    # Send the response back to Telegram
-                    await self.bot_manager.send_message(
-                        chat_id=response["chat_id"],
-                        text=response["content"],
-                        reply_to_message_id=response["reply_to_message_id"],
-                    )
-                else:
-                    logger.error(
-                        "Empty response from message processor agent_id=%s",
-                        self.agent_id,
-                    )
-
-                # Don't return anything since we've handled the response
-                return None
-            except Exception as e:
-                logger.error(
-                    "Error in Telegram message processing agent_id=%s: %s",
-                    self.agent_id,
-                    e,
-                )
-
-                # Try to send an error message to the user
-                try:
-                    telegram_chat_id = int(message.metadata.get("telegram_chat_id"))
-                    await self.bot_manager.send_message(
-                        chat_id=telegram_chat_id,
-                        text="I'm sorry, I encountered an error while processing your message. Please try again.",
-                    )
-                except Exception:
-                    logger.error(
-                        "Error sending error message to user agent_id=%s",
-                        self.agent_id,
-                        exc_info=True,
-                    )
-                    pass
-
-                # Don't pass to parent class for Telegram messages
-                return None
-
-        # For non-Telegram messages, let the parent class handle it
-        response = await super().process_message(message)
-
-        # If we got a response from the parent method, we need to handle it
-        if response:
-            # Only send back to Telegram if it's a regular response message
-            if (
-                response.kind == MessageKind.RESPONSE
-                and message.metadata
-                and message.metadata.get("is_telegram_message")
-            ):
-                try:
-                    # Extract the chat ID from the metadata
-                    telegram_chat_id = int(message.metadata.get("telegram_chat_id"))
-
-                    # Check if we should reply to a message ID
-                    reply_to_message_id = message.metadata.get("reply_to_message_id")
-
-                    # Send the response to Telegram
-                    await self.bot_manager.send_message(
-                        chat_id=telegram_chat_id,
-                        text=response.content,
-                        reply_to_message_id=reply_to_message_id,
-                    )
-
-                    # Return None because we've handled the response ourselves
-                    return None
-                except ValueError:
-                    logger.error(
-                        "Invalid telegram_chat_id format agent_id=%s",
-                        self.agent_id,
-                    )
-
-            # Return the original response for non-Telegram-related responses
-            return response
-
+    async def _on_shutdown(self) -> None:
+        """Hook for bot_manager shutdown. Group ids are saved by the manager."""
         return None
 
-    async def run(self):
-        """
-        Start the Telegram bot and the agent's message processing loop.
-
-        This method starts two concurrent processes:
-        1. The Telegram bot polling loop that listens for messages from Telegram users
-        2. The parent AIAgent's message processing loop that handles inter-agent communications
-
-        Both processes run concurrently, allowing the agent to serve as both a Telegram bot
-        and an AgentConnect collaborative agent simultaneously.
-
-        Returns:
-            None
-
-        Raises:
-            RuntimeError: If the Telegram bot cannot be started
-            ConnectionError: If there are network issues with the Telegram API
-            Exception: Any unhandled exceptions from either processing loop
-        """
-        # Mark agent as running
-        self.is_running = True
-        logger.info("Telegram agent starting agent_id=%s", self.agent_id)
-
-        try:
-            # Start the Telegram bot
-            await self.start_telegram_bot()
-
-            # Start the BaseAgent's message processing loop by calling the parent class run method
-            # This will process messages from other agents through the AgentConnect message queue
-            agent_processing_task = asyncio.create_task(super().run())
-
-            # Wait for either task to complete (or be cancelled)
-            done, pending = await asyncio.wait(
-                [agent_processing_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            # Cancel any pending tasks
-            for task in pending:
-                task.cancel()
-
-            # Wait for the cancelled tasks to finish
-            await asyncio.gather(*pending, return_exceptions=True)
-
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.error(
-                "Error in Telegram agent run agent_id=%s", self.agent_id, exc_info=True
-            )
-        finally:
-            # Clean up
-            self.is_running = False
-            await self.stop_telegram_bot()
-            logger.info("Telegram agent stopped agent_id=%s", self.agent_id)
-
-    async def _on_shutdown(self):
-        """
-        Handler for bot shutdown.
-        """
-        # This is called when the bot is shutting down
-        # There's no need to handle group IDs saving here as the bot_manager
-        # will handle it in stop_polling
-
-    # Rename the old method to be private, and then alias it to keep backward compatibility
     on_shutdown = _on_shutdown
 
-    # Handler methods should all be internal implementation details
-    async def _handle_start(self, message: types.Message):
-        """
-        Handle the /start command.
-        """
+    async def _answer_telegram(self, payload: Mapping[str, Any]) -> None:
+        """Run the model loop for one Telegram payload and send the reply."""
+        chat_id = int(payload["chat_id"])
+        content = str(payload.get("content") or "")
+        history = self._telegram_history.setdefault(chat_id, [])
+        reply = await self.complete(
+            content,
+            history=history,
+            include_team_tools=self.include_team_tools,
+        )
+        history.append({"role": "user", "content": content})
+        history.append({"role": "assistant", "content": reply})
+        if len(history) > _TELEGRAM_HISTORY_CAP:
+            del history[:-_TELEGRAM_HISTORY_CAP]
+        await self.bot_manager.send_message(
+            chat_id=chat_id,
+            text=reply,
+            reply_to_message_id=payload.get("reply_to_message_id"),
+        )
+        thinking_id = self.bot_manager.processing_messages.pop(chat_id, None)
+        if thinking_id is not None and self.bot_manager.bot is not None:
+            try:
+                await self.bot_manager.bot.delete_message(
+                    chat_id=chat_id, message_id=thinking_id
+                )
+            except Exception:
+                pass
+
+    async def _handle_start(self, message: types.Message) -> None:
+        """Handle /start."""
         if message.chat.type in ["group", "supergroup"]:
-            # Add group to registered list
             self.bot_manager.group_ids.add(message.chat.id)
             if self.bot_manager.telegram_tools:
                 self.bot_manager.telegram_tools.group_ids = self.bot_manager.group_ids
                 self.bot_manager.telegram_tools._save_group_ids()
-
             await message.answer(
-                "✅ Bot added! This group will receive announcements.",
+                "Bot added. This group can receive announcements.",
                 reply_markup=GROUP_CHAT_KEYBOARD,
             )
-            logger.debug(
-                "Group added agent_id=%s group_title=%s group_id=%s",
-                self.agent_id,
-                message.chat.title,
-                message.chat.id,
-            )
-        else:
-            # Send welcome message in private chat
-            await message.answer(
-                f"👋 Hi {message.from_user.first_name}! I'm an AgentConnect-powered Telegram bot. I can:\n\n"
-                "• Have normal conversations with you just like ChatGPT\n"
-                "• Create and send announcements to groups\n"
-                "• Collaborate with other agents when needed\n\n"
-                "Just start talking to me or use the buttons below!",
-                reply_markup=PRIVATE_CHAT_KEYBOARD,
-            )
+            return
+        first = ""
+        if message.from_user is not None:
+            first = message.from_user.first_name or ""
+        await message.answer(
+            f"Hi {first}. Chat normally, or use the buttons below.",
+            reply_markup=PRIVATE_CHAT_KEYBOARD,
+        )
 
-            # Also process through AgentConnect after a small delay
-            await asyncio.sleep(0.5)
-            await message.answer(
-                "You don't need to use any special commands - just chat with me naturally!"
-            )
-
-    async def _handle_help(self, message: types.Message):
-        """
-        Handle the /help command.
-        """
-        # Choose the appropriate keyboard based on chat type
+    async def _handle_help(self, message: types.Message) -> None:
+        """Handle /help."""
         keyboard = (
             PRIVATE_CHAT_KEYBOARD
             if message.chat.type == "private"
@@ -609,239 +251,111 @@ class TelegramAIAgent(AIAgent):
         )
         await message.answer(self.HELP_TEXT, reply_markup=keyboard)
 
-    async def _handle_about(self, message: types.Message):
-        """
-        Handle the About button.
-        """
-        about_text = (
-            "🤖 <b>AgentConnect Telegram Bot</b>\n\n"
-            "I'm powered by the AgentConnect framework, which enables me to process your messages "
-            "using AI capabilities and collaborate with other specialized agents when needed.\n\n"
-            "I can help with creating and sending announcements to Telegram groups, "
-            "answering questions, and having natural conversations with you.\n\n"
-            "For more information about the AgentConnect framework, visit: "
-            "https://github.com/AKKI0511/AgentConnect"
-        )
-        # Choose the appropriate keyboard based on chat type
+    async def _handle_about(self, message: types.Message) -> None:
+        """Handle the about button."""
         keyboard = (
             PRIVATE_CHAT_KEYBOARD
             if message.chat.type == "private"
             else GROUP_CHAT_KEYBOARD
         )
-        await message.answer(about_text, reply_markup=keyboard)
+        await message.answer(
+            "AgentConnect Telegram bot. Chat, mention me in a group, or send media.",
+            reply_markup=keyboard,
+        )
 
-    async def _handle_view_groups(self, message: types.Message):
-        """
-        Handle the View Groups button.
-        """
+    async def _handle_view_groups(self, message: types.Message) -> None:
+        """List registered group ids."""
         if not self.bot_manager.group_ids:
-            await message.answer("⚠ No groups registered yet.")
-        else:
-            group_list = "\n".join(
-                [
-                    f"• Group ID: <code>{gid}</code>"
-                    for gid in self.bot_manager.group_ids
-                ]
-            )
-            await message.answer(
-                f"✅ Registered Groups ({len(self.bot_manager.group_ids)}):\n{group_list}"
-            )
+            await message.answer("No groups registered yet.")
+            return
+        group_list = "\n".join(
+            f"• Group ID: <code>{gid}</code>" for gid in self.bot_manager.group_ids
+        )
+        await message.answer(
+            f"Registered groups ({len(self.bot_manager.group_ids)}):\n{group_list}"
+        )
 
-    async def _handle_group_mention(self, message: types.Message):
-        """
-        Handle mentions in group chats.
-        """
+    async def _handle_group_mention(self, message: types.Message) -> None:
+        """Handle an @mention in a group."""
         try:
-            # Process the message through the message processor
-            agent_message = await self.message_processor.process_group_mention(message)
-
-            # Process the message through AgentConnect
-            if agent_message:
-                await self.receive_message(agent_message)
+            payload = await self.message_processor.process_group_mention(message)
+            if payload:
+                await self._answer_telegram(payload)
         except Exception:
             logger.error("Error processing group mention", exc_info=True)
-            # Delete thinking message
-            try:
-                if message.chat.id in self.bot_manager.processing_messages:
-                    await self.bot_manager.bot.delete_message(
-                        chat_id=message.chat.id,
-                        message_id=self.bot_manager.processing_messages[
-                            message.chat.id
-                        ],
-                    )
-                    del self.bot_manager.processing_messages[message.chat.id]
-            except Exception:
-                pass
-
-            # For error messages, include the group chat keyboard
+            await self._clear_thinking(message.chat.id)
             await message.reply(
-                "❌ Sorry, I encountered an error while processing your message. Please try again later.",
+                "Sorry, I hit an error. Try again.",
                 reply_markup=GROUP_CHAT_KEYBOARD,
             )
 
-    async def _handle_media_message(self, message: types.Message, media_type: str):
-        """
-        Handle media messages.
-        """
+    async def _handle_media_message(
+        self, message: types.Message, media_type: str
+    ) -> None:
+        """Handle photos, documents, and other media."""
         try:
-            # Process the message through the message processor
-            agent_message = await self.message_processor.process_media_message(
+            payload = await self.message_processor.process_media_message(
                 message, media_type
             )
-
-            # Process the message through AgentConnect
-            if agent_message:
-                await self.receive_message(agent_message)
+            if payload:
+                await self._answer_telegram(payload)
         except Exception:
             logger.error("Error processing media message", exc_info=True)
-            # Delete thinking message
-            try:
-                if message.chat.id in self.bot_manager.processing_messages:
-                    await self.bot_manager.bot.delete_message(
-                        chat_id=message.chat.id,
-                        message_id=self.bot_manager.processing_messages[
-                            message.chat.id
-                        ],
-                    )
-                    del self.bot_manager.processing_messages[message.chat.id]
-            except Exception:
-                pass
-
-            # For error messages, include the appropriate keyboard
+            await self._clear_thinking(message.chat.id)
             keyboard = (
                 PRIVATE_CHAT_KEYBOARD
                 if message.chat.type == "private"
                 else GROUP_CHAT_KEYBOARD
             )
             await message.answer(
-                "❌ Sorry, I encountered an error while processing your media. Please try again later.",
+                "Sorry, I hit an error processing that media.",
                 reply_markup=keyboard,
             )
 
-    async def _handle_message(self, message: types.Message):
-        """
-        Handle text messages.
-        """
+    async def _handle_message(self, message: types.Message) -> None:
+        """Handle private-chat text."""
         try:
-            # Process the message through the message processor
-            agent_message = await self.message_processor.process_text_message(message)
-
-            # Process the message through AgentConnect
-            if agent_message:
-                await self.receive_message(agent_message)
+            payload = await self.message_processor.process_text_message(message)
+            if payload:
+                await self._answer_telegram(payload)
         except Exception:
             logger.error("Error processing text message", exc_info=True)
-            # Delete thinking message
-            try:
-                if message.chat.id in self.bot_manager.processing_messages:
-                    await self.bot_manager.bot.delete_message(
-                        chat_id=message.chat.id,
-                        message_id=self.bot_manager.processing_messages[
-                            message.chat.id
-                        ],
-                    )
-                    del self.bot_manager.processing_messages[message.chat.id]
-            except Exception:
-                pass
-
-            # For error messages, include the appropriate keyboard
+            await self._clear_thinking(message.chat.id)
             keyboard = (
                 PRIVATE_CHAT_KEYBOARD
                 if message.chat.type == "private"
                 else GROUP_CHAT_KEYBOARD
             )
             await message.answer(
-                "❌ Sorry, I encountered an error while processing your message. Please try again later.",
+                "Sorry, I hit an error. Try again.",
                 reply_markup=keyboard,
             )
+
+    async def _clear_thinking(self, chat_id: int) -> None:
+        thinking_id = self.bot_manager.processing_messages.pop(chat_id, None)
+        if thinking_id is None or self.bot_manager.bot is None:
+            return
+        try:
+            await self.bot_manager.bot.delete_message(
+                chat_id=chat_id, message_id=thinking_id
+            )
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
+    load_dotenv()
 
-    # Variables to track what needs to be cleaned up
-    agent = None
-    hub = None
+    async def _main() -> None:
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        model = os.getenv("AGENTCONNECT_MODEL", "gpt-4o-mini")
+        if not token:
+            raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+        agent = TelegramAIAgent(
+            name="telegram-bot",
+            model=model,
+            telegram_token=token,
+        )
+        await agent.run()
 
-    try:
-        # Load environment variables
-        load_dotenv()
-
-        # Get API keys
-        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        openai_api_key = os.getenv("GOOGLE_API_KEY")
-
-        if not telegram_token:
-            raise ValueError("TELEGRAM_BOT_TOKEN environment variable not set!")
-
-        if not openai_api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set!")
-
-        # Create async function to run everything
-        async def main():
-            # Use global instead of nonlocal since we're at module level
-            global agent, hub
-            try:
-                # Create agent registry and communication hub
-                # These need to be created inside the async function
-                hub = None
-                agent = None
-
-                # Create agent
-                agent = TelegramAIAgent(
-                    agent_id="telegram_ai_agent",
-                    name="AgentConnect Telegram Bot",
-                    provider_type=ModelProvider.GOOGLE,
-                    model_name=ModelName.GEMINI2_FLASH,
-                    api_key=openai_api_key,
-                    identity=AgentIdentity.create_key_based(),
-                    personality="helpful, friendly, and conversational",
-                    telegram_token=telegram_token,
-                )
-
-                # Team Runtime does not hold Agent objects. Hosting a Telegram
-                # agent through join/lease lands with the session API.
-                logger.error(
-                    "Telegram hosting is waiting on the agent session API; not starting."
-                )
-                return
-
-            except asyncio.CancelledError:
-                logger.info("Main task was cancelled")
-            except Exception:
-                logger.exception("Error in main function")
-            finally:
-                # We don't handle final cleanup here - it will be done in the outer try/finally
-                pass
-
-        # Create a main task we can cancel on keyboard interrupt
-        asyncio.run(main())
-
-    except KeyboardInterrupt:
-        logger.info("Telegram AI Agent stopped by keyboard interrupt.")
-    except Exception:
-        logger.error("Error running Telegram AI Agent", exc_info=True)
-    finally:
-        # Clean up resources
-        async def cleanup():
-            try:
-                # Cleanup the agent if it exists
-                if agent and hasattr(agent, "stop_telegram_bot"):
-                    logger.info("Stopping Telegram bot...")
-                    await agent.stop_telegram_bot()
-
-                # Unregister from hub if registered
-                if agent and hub and hasattr(agent, "hub") and agent.hub:
-                    logger.info("Unregistering agent %s from hub...", agent.agent_id)
-                    await hub.unregister_agent(agent.agent_id)
-                    logger.info("Unregistered agent %s from hub", agent.agent_id)
-
-            except Exception:
-                logger.error("Error during cleanup", exc_info=True)
-
-        # Run the cleanup
-        try:
-            asyncio.run(cleanup())
-        except Exception:
-            logger.error("Error during final cleanup", exc_info=True)
-
-        logger.info("Telegram AI Agent shutdown complete.")
+    asyncio.run(_main())

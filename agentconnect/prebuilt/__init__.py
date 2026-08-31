@@ -1,27 +1,38 @@
-"""
-Ready-made agents for the AgentConnect framework.
+"""Ready-made Agents on top of ``BaseAgent``.
 
-These helpers sit on top of ``BaseAgent``. They are optional conveniences.
+These helpers are optional. The product is ``BaseAgent`` plus a Team.
+``AIAgent`` needs ``pip install 'agentconnect[aiagent]'``. ``HumanAgent``
+needs ``pip install 'agentconnect[cli]'``. ``TelegramAIAgent`` needs
+``pip install 'agentconnect[telegram]'``.
 
-Key components:
+    from agentconnect.prebuilt import AIAgent, Tool
+    from agentconnect.team import Team
 
-- **AIAgent**: Independent AI-powered agent with potential for internal multi-agent structures
-- **HumanAgent**: Human-in-the-loop agent that can interact securely with the decentralized network
-- **TelegramAIAgent**: AI agent that integrates with Telegram for user interactions
-- **MemoryType**: Enum for different types of agent memory
+    agent = AIAgent(name="assistant", model="gpt-4o-mini")
+    team = await Team("content-squad").start()
+    await agent.join(team)
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .ai_agent import AIAgent, MemoryType
+from .ai_agent import AIAgent, CompletionOptions
+from .loop import CompletionFn
+from .tools import Tool
 
 if TYPE_CHECKING:
     from .human_agent import HumanAgent
     from .telegram import TelegramAIAgent
 
-__all__ = ["AIAgent", "HumanAgent", "TelegramAIAgent", "MemoryType"]
+__all__ = [
+    "AIAgent",
+    "CompletionFn",
+    "CompletionOptions",
+    "HumanAgent",
+    "TelegramAIAgent",
+    "Tool",
+]
 
 
 def __getattr__(name: str) -> Any:
@@ -30,7 +41,8 @@ def __getattr__(name: str) -> Any:
             from .human_agent import HumanAgent
         except ImportError as exc:
             raise ImportError(
-                "HumanAgent requires the cli extra. Install with: pip install 'agentconnect[cli]'"
+                "HumanAgent requires the cli extra. "
+                "Install with: pip install 'agentconnect[cli]'"
             ) from exc
         return HumanAgent
     if name == "TelegramAIAgent":
@@ -38,7 +50,8 @@ def __getattr__(name: str) -> Any:
             from .telegram import TelegramAIAgent
         except ImportError as exc:
             raise ImportError(
-                "TelegramAIAgent requires the telegram extra. Install with: pip install 'agentconnect[telegram]'"
+                "TelegramAIAgent requires the telegram extra. "
+                "Install with: pip install 'agentconnect[telegram]'"
             ) from exc
         return TelegramAIAgent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

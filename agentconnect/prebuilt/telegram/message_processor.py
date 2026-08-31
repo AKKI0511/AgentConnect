@@ -6,20 +6,15 @@ of Telegram messages through the AgentConnect framework.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from aiogram import types
-from langchain_core.messages import HumanMessage
 
-from agentconnect.core.message import Message
-from agentconnect.core.types import AgentIdentity, MessageKind
+from agentconnect.core.identity import AgentIdentity
 from agentconnect.prebuilt.telegram._utils.message_utils import (
-    get_telegram_conversation_id,
     remove_bot_mention_from_text,
 )
 from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
-from agentconnect.utils.interaction_control import InteractionControl
-from langchain_core.runnables import Runnable
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +98,7 @@ class TelegramMessageProcessor:
                 metadata["reply_text"] = reply_text
 
         # Process the message and return the AgentConnect message
-        return self._create_agentconnect_message(content, metadata)
+        return self._payload(content, metadata)
 
     async def process_media_message(self, message: types.Message, media_type: str):
         """
@@ -228,8 +223,7 @@ class TelegramMessageProcessor:
             )
             content_text += f'\n[This was sent in reply to: "{reply_text}"]'
 
-        # Process the message and return the AgentConnect message
-        return self._create_agentconnect_message(content_text, metadata)
+        return self._payload(content_text, metadata)
 
     async def process_text_message(self, message: types.Message):
         """
@@ -294,91 +288,17 @@ class TelegramMessageProcessor:
             else:
                 content = f"{content}\n[This was sent in reply to a previous message]"
 
-        # Process the message and return the AgentConnect message
-        return self._create_agentconnect_message(content, metadata)
+        return self._payload(content, metadata)
 
-    def _create_agentconnect_message(
-        self, content: str, metadata: Dict[str, Any]
-    ) -> Message:
-        """
-        Create an AgentConnect message from Telegram message content and metadata.
-
-        Args:
-            content: Message content
-            metadata: Message metadata
-
-        Returns:
-            AgentConnect message
-        """
-        return Message.create(
-            sender_id=self.agent_id,
-            receiver_id=self.agent_id,
-            content=content,
-            sender_identity=self.identity,
-            kind=MessageKind.EVENT,
-            metadata=metadata,
+    def _payload(self, content: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Return extracted Telegram content for the model loop."""
+        chat_raw = metadata.get("telegram_chat_id")
+        reply_to = metadata.get("reply_to_message_id") or metadata.get(
+            "original_reply_to_message_id"
         )
-
-    async def process_agent_response(
-        self,
-        workflow: Runnable,
-        message: Message,
-        interaction_control: InteractionControl,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Process an AgentConnect message through the agent workflow.
-
-        Args:
-            workflow: Agent workflow
-            message: AgentConnect message
-            interaction_control: Interaction control for token counting
-
-        Returns:
-            Response details or None if processing failed
-        """
-        try:
-            # Get the conversation ID for this message
-            conversation_id = get_telegram_conversation_id(message.metadata)
-
-            # Create the initial state for the workflow
-            initial_state = {
-                "messages": [HumanMessage(content=message.content)],
-                "sender": self.agent_id,
-                "receiver": self.agent_id,
-                "kind": message.kind.value,
-                "metadata": message.metadata,
-            }
-
-            # Set up the configuration for the workflow
-            config = {
-                "configurable": {
-                    "thread_id": conversation_id,
-                },
-                "callbacks": interaction_control.get_callback_handlers(),
-            }
-
-            # Process with our workflow (which includes Telegram tools)
-            response = await workflow.ainvoke(initial_state, config)
-
-            # Extract the last message from the response
-            last_message = response["messages"][-1]
-
-            # Check if we should reply to a message ID
-            reply_to_message_id = None
-            if message.metadata.get("reply_to_message_id"):
-                # If original message was a reply, we'll reply to the same message
-                reply_to_message_id = message.metadata.get("reply_to_message_id")
-
-            return {
-                "content": last_message.content,
-                "chat_id": int(message.metadata.get("telegram_chat_id")),
-                "reply_to_message_id": reply_to_message_id,
-            }
-
-        except Exception:
-            logger.error(
-                "Error processing Telegram message agent_id=%s",
-                self.agent_id,
-                exc_info=True,
-            )
-            return None
+        return {
+            "content": content,
+            "chat_id": int(chat_raw) if chat_raw is not None else 0,
+            "reply_to_message_id": reply_to,
+            "metadata": metadata,
+        }

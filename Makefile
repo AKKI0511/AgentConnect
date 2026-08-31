@@ -4,13 +4,13 @@ install-core:
 	poetry install
 
 install-dev:
-	poetry install --with dev --extras "telegram payments cli"
+	poetry install --with dev --extras "aiagent telegram payments cli embeddings index"
 
 install-demo:
-	poetry install --with demo --extras "telegram payments cli"
+	poetry install --with demo --extras "aiagent telegram payments cli embeddings index"
 
 install-all:
-	poetry install --with dev,demo,research --extras "telegram payments cli"
+	poetry install --with dev,demo,research --extras "aiagent telegram payments cli embeddings index"
 
 install-docs:
 	poetry install --with docs

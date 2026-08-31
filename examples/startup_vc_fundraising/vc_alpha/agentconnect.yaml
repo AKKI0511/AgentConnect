@@ -1,0 +1,11 @@
+# Start this Team with `agentconnect up` from this directory.
+
+team: vc-alpha
+store: memory
+embeddings: auto
+host: 127.0.0.1
+port: 9021
+require_join_auth: true
+agents:
+  - class: agents.firm:Firm
+    name: firm

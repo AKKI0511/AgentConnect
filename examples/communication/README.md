@@ -33,6 +33,13 @@ starts the Runtime and joins ``Writer``. ``agentconnect ask`` and
 
 `trace.py` fails a request on purpose, then prints the Trace timeline.
 
+`aiagent.py` is a model-backed Agent. It uses a recorded model by default
+so it runs without an API key. Set ``AGENTCONNECT_MODEL`` to use LiteLLM.
+
+```bash
+poetry run python examples/communication/aiagent.py
+```
+
 `join_auth.py` starts a Team with ``require_join_auth=True``. The operator
 issues a token bound to one Agent DID. A different Agent cannot use it.
 

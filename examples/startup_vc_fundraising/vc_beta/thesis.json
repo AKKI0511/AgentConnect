@@ -1,0 +1,7 @@
+{
+  "focus": ["climate", "robotics"],
+  "stages": ["seed", "series_b"],
+  "geo": ["global"],
+  "check_size": "1m-5m",
+  "speed": "moderate"
+}

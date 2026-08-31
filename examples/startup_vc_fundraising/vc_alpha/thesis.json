@@ -1,0 +1,7 @@
+{
+  "focus": ["ai", "crypto", "infra"],
+  "stages": ["seed", "series_a"],
+  "geo": ["us"],
+  "check_size": "500k-3m",
+  "speed": "fast"
+}

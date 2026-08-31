@@ -1,0 +1,20 @@
+# Start this Team with `agentconnect up` from this directory.
+# Secrets stay in the environment. Set AGENTCONNECT_MODEL and a provider key.
+
+team: startup-hub
+store: memory
+embeddings: auto
+host: 127.0.0.1
+port: 9020
+require_join_auth: true
+agents:
+  - class: agents.ceo:CEO
+    name: ceo
+  - class: agents.product:Product
+    name: product
+  - class: agents.sales:Sales
+    name: sales
+  - class: agents.legal:Legal
+    name: legal
+  - class: agents.finance:Finance
+    name: finance

@@ -1,0 +1,18 @@
+# Start this Team with `agentconnect up` from this directory.
+# Secrets stay in the environment. Set AGENTCONNECT_MODEL and a provider key.
+
+team: appointments
+store: memory
+embeddings: auto
+host: 127.0.0.1
+port: 9010
+require_join_auth: true
+agents:
+  - class: agents.coordinator:Coordinator
+    name: coordinator
+  - class: agents.coordinator:CalendarInspector
+    name: calendar
+  - class: agents.coordinator:Availability
+    name: availability
+  - class: agents.coordinator:Confirmation
+    name: confirmation

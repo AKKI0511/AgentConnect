@@ -116,8 +116,8 @@ subclass works. Useful for custom metrics rather than console output:
     agent = AIAgent(agent_id="my_agent", external_callbacks=[tracker], ...)
     # later: tracker.tool_counts
 
-For a hosted dashboard with full trace visualization instead of console output or custom
-counters, see :doc:`event_monitoring`.
+For a failed exchange, print the Team Trace timeline. See
+:doc:`event_monitoring`.
 
 Choosing an Approach
 ------------------------
@@ -135,19 +135,14 @@ Choosing an Approach
    * - Hub event handlers
      - Every message the hub routes
      - Tracing message flow across any agent type, including custom ``BaseAgent``
-   * - LangChain callbacks
-     - One ``AIAgent``'s tool calls and reasoning
-     - Console tracing or custom metrics scoped to a single agent's LLM loop
-   * - LangSmith (:doc:`event_monitoring`)
-     - Full trace visualization, hosted
-     - Debugging complex multi-step or multi-agent workflows visually
+   * - Team Trace (:doc:`event_monitoring`)
+     - One exchange: accepted, leased, completed, replied
+     - Diagnosing a failed ``ask`` without reading logs
 
-Most applications combine Python logging with one of the other three, rather than all
-four at once.
+Most applications combine Python logging with Team Trace.
 
 Next Steps
 -------------
 
-- :doc:`event_monitoring` — hosted trace visualization with LangSmith
-- :doc:`../core/communication/local_hub` — full hub observability reference
-- :doc:`../core/agents/ai_agent` — ``external_callbacks`` and other ``AIAgent`` parameters
+- :doc:`event_monitoring` — Team Trace timeline
+- :doc:`../core/agents/ai_agent` — ``AIAgent`` parameters

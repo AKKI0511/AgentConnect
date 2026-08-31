@@ -341,9 +341,8 @@ Per-agent handlers scope observations to a specific agent:
 
    hub.add_message_handler("researcher", log_flow)
 
-For structured observability with LangSmith or callback-based tracing, pass
-``external_callbacks`` when constructing an ``AIAgent``. See
-:doc:`../monitoring/event_monitoring` for the full setup.
+For a failed exchange, print the Team Trace timeline. See
+:doc:`../monitoring/event_monitoring`.
 
 A Complete Example
 -------------------

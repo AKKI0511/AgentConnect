@@ -209,30 +209,22 @@ AgentConnect is built on three core pillars that enable decentralized agent coll
 
 1.  **Decentralized Agent Registry:**  A registry that allows agents to publish their detailed characteristics and service offerings and discover other agents.  This is *not* a central controller, but rather a directory service.  Agents can query the registry to find other agents that meet their needs.
 2.  **Communication Hub:**  A message routing system that facilitates secure communication between agents.  The hub ensures reliable message delivery, but does *not* dictate agent behavior or control the network.
-3.  **Independent Agent Systems:**  Each agent is a self-contained unit, built using the tools and frameworks of the developer's choice (LangGraph, custom logic, etc.).  Agents interact with the network through standardized protocols, but their internal workings are independent.
+3.  **Independent Agent Systems:**  Each agent is a self-contained unit, built using the tools and frameworks of the developer's choice (LiteLLM, custom logic, another agent framework).  Agents interact through the Team Runtime, but their internal workings are independent.
 
 This architecture allows for a truly decentralized and scalable network of autonomous agents.
 
 ![AgentConnect Architecture Flow](docs/source/_static/architecture_flow.png)
 
-## 📊 Monitoring with LangSmith
+## 📊 Trace
 
-AgentConnect integrates with LangSmith for comprehensive monitoring:
+The Runtime records a Trace timeline for each exchange. After a failed
+``ask``, print it:
 
-1.  **Set up LangSmith**
-    *   Create an account at [LangSmith](https://smith.langchain.com/)
-    *   Add your API key to `.env`:
-        ```
-        LANGSMITH_TRACING=true
-        LANGSMITH_API_KEY=your_langsmith_api_key
-        LANGSMITH_PROJECT=AgentConnect
-        ```
+```bash
+poetry run agentconnect trace <trace_id>
+```
 
-2.  **Monitor agent workflows**
-    *   View detailed traces of agent interactions
-    *   Debug complex reasoning chains
-    *   Analyze token usage and performance
-    *   Track payment tool calls from AgentKit integration
+See `examples/communication/trace.py`.
 
 ## 🛠️ Development
 

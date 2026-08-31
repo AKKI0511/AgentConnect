@@ -110,7 +110,7 @@ Key Features
      <div class="feature-card">
        <h3>📊 Deep Observability</h3>
        <ul>
-         <li>LangSmith tracing</li>
+         <li>Team Trace timeline</li>
          <li>Monitor tools & payments</li>
          <li>Custom Callbacks</li>
        </ul>
@@ -194,7 +194,9 @@ For detailed installation instructions including environment setup and API confi
 Quick Start
 =============
 
-Here's a minimal example showcasing **Agent Discovery** and **Agent-to-Agent (A2A) Communication** using ``AIAgent.chat()``:
+Here's a minimal Team with two ``AIAgent`` members. The assistant asks the
+researcher through ``ask``. Team tools (``find``, ``ask``) attach from the
+Session after ``join``.
 
 .. code-block:: python
 
@@ -202,66 +204,50 @@ Here's a minimal example showcasing **Agent Discovery** and **Agent-to-Agent (A2
   import os
   from dotenv import load_dotenv
   from agentconnect.prebuilt import AIAgent
-  from agentconnect.team import CommunicationHub
-  from agentconnect.team.directory import AgentRegistry
-  from agentconnect.core.types import (
-      AgentIdentity,
-      AgentProfile,
-      AgentType,
-      Capability,
-      ModelProvider,
-      ModelName,
-  )
+  from agentconnect.team import Team
 
   async def main():
       load_dotenv()
-      registry = AgentRegistry()
-      hub = CommunicationHub(registry)
-
-      # Create a research agent
-      research = AIAgent(
-          agent_id="researcher_1",
-          identity=AgentIdentity.create_key_based(),
-          provider_type=ModelProvider.OPENAI,
-          model_name=ModelName.GPT4O_MINI,
-          api_key=os.getenv("OPENAI_API_KEY"),
-          profile=AgentProfile(
-              agent_id="researcher_1",
-              agent_type=AgentType.AI,
-              name="Researcher",
-              summary="Finds and summarizes sources",
-              capabilities=[Capability(name="research", description="Research topics")],
-          ),
+      model = os.getenv("AGENTCONNECT_MODEL", "gpt-4o-mini")
+      team = await Team("content-squad").start()
+      researcher = AIAgent(
+          name="researcher",
+          model=model,
+          instructions="Answer in three short bullets.",
+          profile={
+              "summary": "Researches a topic and returns a short summary.",
+              "skills": [
+                  {
+                      "name": "research",
+                      "description": "Research a topic and summarize it.",
+                  }
+              ],
+          },
       )
-      
-      # Create an assistant agent
       assistant = AIAgent(
-          agent_id="assistant_1",
-          identity=AgentIdentity.create_key_based(),
-          provider_type=ModelProvider.OPENAI,
-          model_name=ModelName.GPT4O,
-          api_key=os.getenv("OPENAI_API_KEY"),
-          profile=AgentProfile(
-              agent_id="assistant_1",
-              agent_type=AgentType.AI,
-              name="Assistant",
-              summary="General helper that can collaborate",
-              capabilities=[Capability(name="conversation", description="General conversation")],
-          ),
+          name="assistant",
+          model=model,
+          instructions="Ask the researcher, then return their reply.",
       )
-
-      # Register agents to enable discovery
-      await hub.register_agent(research)
-      await hub.register_agent(assistant)
-
-      # Agent Discovery: assistant finds the research agent
-      print(await assistant.chat("Find a research agent and show the agent's profile."))
+      await researcher.join(team)
+      await assistant.join(team)
+      try:
+          result = await assistant.ask(
+              "researcher",
+              "Summarize RAG in three short bullets.",
+          )
+          print(result["ticket"]["response"]["content"])
+      finally:
+          await assistant.leave()
+          await researcher.leave()
+          await team.stop()
 
   if __name__ == "__main__":
       asyncio.run(main())
 
 .. note::
-   **Connect before first chat** to enable Agent Discovery and A2A tools. For A2A delegation (sending tasks to other agents), start their ``run()`` loops. See the :doc:`quickstart` for delegation examples.
+   ``join`` starts a Session that pulls work. There is no ``run()`` loop on the
+   Agent. ``chat()`` talks to the model without a Team. See the :doc:`quickstart`.
 
 For more detailed examples and step-by-step instructions, see the :doc:`quickstart`, :doc:`examples/index` and the :doc:`guides/index`.
 

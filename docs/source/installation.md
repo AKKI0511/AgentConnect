@@ -40,15 +40,14 @@ GROQ_API_KEY=your_groq_api_key
 For monitoring and additional features, you can configure optional settings:
 
 ```
-# LangSmith for monitoring (recommended)
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=your_langsmith_api_key
-LANGSMITH_PROJECT=AgentConnect
+# LiteLLM model id used by AIAgent
+AGENTCONNECT_MODEL=gpt-4o-mini
 
 # Additional providers
 OPENAI_API_KEY=your_openai_api_key
 ANTHROPIC_API_KEY=your_anthropic_api_key
 GOOGLE_API_KEY=your_google_api_key
+GROQ_API_KEY=your_groq_api_key
 ```
 
 ### Payment Capabilities (Optional)

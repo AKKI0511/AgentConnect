@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Team MCP server mounted at `{origin}/mcp` by `Team.serve()`. Tools are `find`, `ask`, `tell`, `get_result`, and `get_history`. Loopback calls with no Authorization header run as the reserved `operator` Membership. Frameworks that do not speak MCP use `BaseAgent.team_tools()`.
 - Team file (`agentconnect.yaml`) generated from `TeamConfig`. `agentconnect up` starts the Runtime and hosted Agents. The CLI includes init, up, down, status, token, find, ask, trace, watch, and doctor.
 - Trace timeline stored with the Team. `get_trace` returns accept, lease, reply, and expiry events for one `trace_id`. `agentconnect trace` prints that timeline. Loopback HTTP with no Authorization header is the operator, the same Membership MCP uses.
+- LiteLLM tool loop for prebuilt helpers. `AIAgent(name=..., model="gpt-4o-mini")` runs a short call-model / run-tools cycle. Conversation state for Team work comes from `ctx.history`. Team tools attach from the Session. Tests inject `complete=` (a recorded model) so they never call a live API.
 
 ### Changed
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
@@ -29,12 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced SDK-wide `AgentConnectSettings` and the old `config`, `serve registry`, and `registry ping` commands with a Team file plus the operator CLI. Embedded `Team("name").start()` still needs no file.
 - Laid out the Team-based package tree: `core/` (nouns), `agent/` (client SDK), `team/` (runtime), `transport/`, `gateway/`, and `index/`. `BaseAgent` lives in `agent/`. Message `kind` is the closed set `request`, `response`, `error`, `event`.
 - Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, `agent/` and `mcp/` do not import each other, and nothing imports `prebuilt/`.
+- Rebuilt `AIAgent`, `HumanAgent`, and `TelegramAIAgent` on LiteLLM. Model choice is a string. Custom tools use `agentconnect.prebuilt.Tool`. `HumanAgent` needs `agentconnect[cli]`. Telegram needs `agentconnect[telegram]`.
+- Index embeddings default to hashed n-grams. `fastembed` stays behind `agentconnect[embeddings]`. `qdrant-client` stays behind `agentconnect[index]`.
+- Appointment scheduler and fundraising examples are hosted Teams. Cross-team talk is later work.
 
 ### Removed
 - Deleted unused `agentconnect.communication.protocols`.
 - Removed `pylint` and the PyPI `asyncio` backport from runtime dependencies.
 - Removed the `communication/`, `servers/`, and `clients/` packages after moving their code into `team/`, `transport/`, `gateway/`, `index/`, and `config/`.
 - Removed `communication_mcp_server`, `registry_mcp_server`, `token_verifier`, `BaseAgent.mint_mcp_access_token`, and the `agentconnect mcp` CLI group.
+- Removed `agentconnect.providers` and `agentconnect.prompts`. Model access goes through LiteLLM. Prompt templates existed only to drive LangChain.
+- Removed `openai`, `anthropic`, `groq`, `google-generativeai`, all `langchain*` packages, `langgraph`, `langsmith`, `sentence-transformers`, `accelerate`, `huggingface-hub`, `pandas`, `python-dateutil`, and `colorama` from runtime extras. `litellm` is `agentconnect[aiagent]`.
 
 ### Planned
 - A2A communication hardening: ResponseTracker, HTTP transport SPI, Inbox server, metrics, remote A2A support.

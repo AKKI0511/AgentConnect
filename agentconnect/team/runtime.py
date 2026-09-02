@@ -48,10 +48,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import secrets
 from datetime import timedelta
 from typing import Any, Callable, Mapping, NoReturn, Optional, Sequence, Union
+
+from pydantic import ValidationError
 
 from agentconnect.core.address import (
     ADDRESS_OUTSIDE_TEAM,
@@ -60,8 +61,31 @@ from agentconnect.core.address import (
     parse_team_name,
     resolve_address,
 )
-from agentconnect.core.identity import AgentIdentity, issue_identity_proof
-from agentconnect.core.profile import validate_discovery_profile
+
+from agentconnect.core.base import dump_public, validation_message
+from agentconnect.core.directory import DirectoryEntry
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.operations import (
+    CompleteResult,
+    HeartbeatResult,
+    JoinChallenge,
+    JoinResult,
+    JoinTokenIssued,
+    ReplyResult,
+    RuntimeLimits,
+    StatusResult,
+    TeamRoster,
+    TraceResult,
+    parse_history_result,
+    parse_join_request,
+    parse_lease_result,
+    parse_reply_request,
+    parse_send_request,
+    parse_send_result,
+)
+from agentconnect.core.error import ErrorObject
+from agentconnect.core.profile import AgentProfile
+from agentconnect.core.ticket import parse_ticket
 from agentconnect.team.directory import Directory, MAX_FIND_LIMIT
 from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
 import agentconnect.team.auth as auth_mod
@@ -98,7 +122,6 @@ from agentconnect.team.constants import (
     DEFAULT_WAIT_HOLD_SECONDS,
     MESSAGE_KINDS_SEND,
     OPERATOR_NAME,
-    OPERATOR_PROFILE,
     RESERVED_MCP_TOOL_NAMES,
     SWEEP_INTERVAL_SECONDS,
 )
@@ -109,12 +132,20 @@ from agentconnect.team.store.redis import RedisStore
 
 logger = logging.getLogger(__name__)
 
-_ERROR_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 StoreArg = Union[Store, str, None]
 
 
 def _fail(code: str, message: str, **kwargs: Any) -> NoReturn:
     raise TeamError(code, message, **kwargs)
+
+
+def _is_principal(member: Mapping[str, Any] | None) -> bool:
+    """Return True when ``member`` may act but must not be hired."""
+    if not isinstance(member, Mapping):
+        return False
+    if member.get("principal") is True:
+        return True
+    return member.get("name") == OPERATOR_NAME
 
 
 class Team:
@@ -231,14 +262,14 @@ class Team:
         return self._store.persistence
 
     @property
-    def limits(self) -> dict[str, int | float]:
+    def limits(self) -> RuntimeLimits:
         """Runtime limits reported on ``join``."""
-        return {
-            "max_message_bytes": self.max_message_bytes,
-            "max_mailbox_depth": self.max_mailbox_depth,
-            "delivery_history_limit": self.delivery_history_limit,
-            "wait_hold_seconds": self.wait_hold_seconds,
-        }
+        return RuntimeLimits(
+            max_message_bytes=self.max_message_bytes,
+            max_mailbox_depth=self.max_mailbox_depth,
+            delivery_history_limit=self.delivery_history_limit,
+            wait_hold_seconds=self.wait_hold_seconds,
+        )
 
     @property
     def identity(self) -> AgentIdentity:
@@ -261,6 +292,7 @@ class Team:
         self._started = True
         self._directory = Directory(self._store, self._embedder)
         await self._ensure_identity()
+        await self._reserve_operator()
         loop = asyncio.get_running_loop()
         self._sweep_task = loop.create_task(self._sweep_loop())
         return self
@@ -387,11 +419,12 @@ class Team:
         """
         store = self._ensure_started()
         async with self._lock:
-            return await auth_mod.create_join_challenge(
+            record = await auth_mod.create_join_challenge(
                 store,
                 self.name,
                 ttl_seconds=self.join_challenge_ttl_seconds,
             )
+            return JoinChallenge.model_validate(record)
 
     async def caller_address(self, session_token: str) -> str:
         """Return the qualified Address stamped on this Session."""
@@ -399,36 +432,39 @@ class Team:
             session = await self._require_session(session_token)
             return str(session["address"])
 
-    async def roster(self) -> dict[str, Any]:
-        """Return every Membership as a DirectoryEntry list.
+    async def roster(self) -> TeamRoster:
+        """Return every Agent Membership as a DirectoryEntry list.
 
-        Used by the MCP roster resource. Not an HTTP Runtime operation.
+        Principals, including ``operator``, are omitted. Used by the MCP
+        roster resource. Not an HTTP Runtime operation.
         """
         store = self._ensure_started()
         names = await store.set_members("members")
-        members: list[dict[str, Any]] = []
+        members: list[DirectoryEntry] = []
         for name in names:
             member = await self._get_member(name)
-            if member is None:
+            if member is None or _is_principal(member) or not member.get("profile"):
                 continue
             members.append(
-                {
-                    "address": member["address"],
-                    "agent_did": member["agent_did"],
-                    "profile": member["profile"],
-                }
+                DirectoryEntry.model_validate(
+                    {
+                        "address": member["address"],
+                        "agent_did": member["agent_did"],
+                        "profile": member["profile"],
+                    }
+                )
             )
-        members.sort(key=lambda item: str(item["address"]))
-        return {"team_name": self.name, "members": members}
+        members.sort(key=lambda item: str(item.address))
+        return TeamRoster(team_name=self.name, members=members)
 
     async def ensure_operator_session(self) -> str:
-        """Return a live Session token for the reserved ``operator`` Membership.
+        """Return a live Session token for the reserved ``operator`` principal.
 
         Loopback MCP and HTTP calls with no Authorization header use this
-        Session. The name ``operator`` is reserved. A different Agent
-        cannot join it.
+        Session. The name ``operator`` is reserved when the Runtime starts.
+        An Agent cannot join it.
         """
-        store = self._ensure_started()
+        self._ensure_started()
         if self._operator_token:
             try:
                 await self.heartbeat(self._operator_token)
@@ -437,44 +473,15 @@ class Team:
                 if exc.code != "unauthorized":
                     raise
                 self._operator_token = None
-
-        record = await store.get("team:operator")
-        if isinstance(record, dict) and record.get("private_key"):
-            identity = AgentIdentity.from_dict(record)
-            instance_id = record.get("instance_id")
-            if not isinstance(instance_id, str):
-                instance_id = new_uuid()
-        else:
-            identity = AgentIdentity.create_key_based()
-            instance_id = new_uuid()
-            payload = identity.to_secret_dict()
-            payload["instance_id"] = instance_id
-            await store.put("team:operator", payload)
-
-        join_kwargs: dict[str, Any] = {
-            "name": OPERATOR_NAME,
-            "agent_did": identity.did,
-            "profile": OPERATOR_PROFILE,
-            "instance_id": instance_id,
-        }
-        if self.require_join_auth:
-            issued = await self.issue_join_token(
-                name=OPERATOR_NAME, agent_did=identity.did
-            )
-            challenge = await self.join_challenge()
-            join_kwargs["join_token"] = issued["token"]
-            join_kwargs["identity_proof"] = issue_identity_proof(identity, challenge)
-        try:
-            result = await self.join(**join_kwargs)
-        except TeamError as exc:
-            if exc.code == "name_conflict":
-                _fail(
-                    "name_conflict",
-                    "The name operator is reserved for the MCP local operator",
-                )
-            raise
-        self._operator_token = str(result["session_token"])
-        return self._operator_token
+        async with self._lock:
+            if self._operator_token:
+                try:
+                    session = await self._get_session(self._operator_token)
+                    if session is not None:
+                        return self._operator_token
+                except TeamError:
+                    self._operator_token = None
+            return await self._open_operator_session_locked()
 
     async def serve(self, host: str = "127.0.0.1", port: int = 0) -> str:
         """Serve Runtime HTTP and the Team MCP server on a loopback address.
@@ -741,18 +748,18 @@ class Team:
 
     def _join_result(
         self, session: dict[str, Any], member: dict[str, Any]
-    ) -> dict[str, Any]:
-        return {
-            "session_token": session["token"],
-            "session_expires_at": session["expires_at"],
-            "address": member["address"],
-            "team_name": self.name,
-            "agent_did": member["agent_did"],
-            "instance_id": session["instance_id"],
-            "persistence": self.persistence,
-            "limits": self.limits,
-            "spec_version": SPEC_VERSION,
-        }
+    ) -> JoinResult:
+        return JoinResult(
+            session_token=session["token"],
+            session_expires_at=session["expires_at"],
+            address=member["address"],
+            team_name=self.name,
+            agent_did=member["agent_did"],
+            instance_id=session["instance_id"],
+            persistence=self.persistence,  # type: ignore[arg-type]
+            limits=self.limits,
+            spec_version=SPEC_VERSION,
+        )
 
     async def join(
         self,
@@ -779,17 +786,26 @@ class Team:
         ``name_conflict``.
         """
         if request is not None:
-            name = request.get("name", name)
-            agent_did = request.get("agent_did", agent_did)
-            profile = request.get("profile", profile)
-            spec_version = request.get("spec_version", spec_version)
-            instance_id = request.get("instance_id", instance_id)
-            if "max_in_flight" in request:
-                max_in_flight = request["max_in_flight"]
-            if "join_token" in request:
-                join_token = request.get("join_token")
-            if "identity_proof" in request:
-                identity_proof = request.get("identity_proof")
+            if not isinstance(request, Mapping):
+                _fail("invalid_request", "join body must be an object")
+            version = request.get("spec_version", spec_version)
+            if version != SPEC_VERSION:
+                _fail(
+                    "unsupported_version", "Client and Runtime contract drafts differ"
+                )
+            try:
+                parsed = parse_join_request(request)
+            except ValueError as exc:
+                _fail("invalid_request", str(exc))
+            name = parsed.name
+            agent_did = parsed.agent_did
+            profile = parsed.profile.to_public_dict()
+            spec_version = parsed.spec_version
+            instance_id = parsed.instance_id
+            if parsed.max_in_flight is not None:
+                max_in_flight = parsed.max_in_flight
+            join_token = parsed.join_token
+            identity_proof = parsed.identity_proof
         async with self._lock:
             return await self._join_locked(
                 name=name,
@@ -820,14 +836,21 @@ class Team:
         canonical_name = parse_agent_name(name or "")
         if canonical_name is None:
             _fail("invalid_request", "Agent name is invalid")
+        if canonical_name == OPERATOR_NAME:
+            _fail(
+                "name_conflict",
+                "The name operator is reserved for the local operator",
+            )
         try:
             did = require_did(agent_did)
         except ValueError:
             _fail("invalid_request", "agent_did must be a did:key identifier")
         try:
-            canonical_profile = validate_discovery_profile(profile or {})
-        except ValueError as exc:
-            _fail("invalid_request", str(exc))
+            canonical_profile = AgentProfile.model_validate(
+                profile or {}
+            ).to_public_dict()
+        except ValidationError as exc:
+            _fail("invalid_request", validation_message(exc))
         if instance_id is not None:
             try:
                 instance_id = require_uuid(instance_id, field="instance_id")
@@ -843,14 +866,6 @@ class Team:
             _fail("invalid_request", "max_in_flight must be between 1 and 100")
 
         store = self._ensure_started()
-        if canonical_name == OPERATOR_NAME:
-            record = await store.get("team:operator")
-            stored_did = record.get("did") if isinstance(record, dict) else None
-            if stored_did != did:
-                _fail(
-                    "name_conflict",
-                    "The name operator is reserved for the MCP local operator",
-                )
         now, now_ts = self._now_pair()
         token_record = await auth_mod.authenticate_join(
             store,
@@ -897,7 +912,7 @@ class Team:
         if attestation is not None:
             member["attestation"] = attestation
         await self._save_member(member)
-        if self._directory is not None:
+        if self._directory is not None and not _is_principal(member):
             await self._directory.upsert(member["name"], member["profile"])
 
         existing_token = await store.get(f"instance:{member['name']}:{instance_id}")
@@ -944,7 +959,7 @@ class Team:
                 now + timedelta(seconds=self.session_ttl_seconds)
             )
             await self._save_session(session)
-            return {"session_expires_at": session["expires_at"]}
+            return HeartbeatResult(session_expires_at=session["expires_at"])
 
     async def issue_join_token(
         self,
@@ -980,7 +995,7 @@ class Team:
         if ttl <= 0:
             _fail("invalid_request", "ttl_seconds must be positive")
         async with self._lock:
-            return await auth_mod.issue_join_token(
+            issued = await auth_mod.issue_join_token(
                 store,
                 self.name,
                 agent_did=agent_did,
@@ -988,6 +1003,7 @@ class Team:
                 ttl_seconds=ttl,
                 single_use=bool(single_use),
             )
+            return JoinTokenIssued.model_validate(issued)
 
     async def revoke_join_token(self, token: str) -> None:
         """Revoke ``token`` and drop every Session created from it.
@@ -1018,6 +1034,8 @@ class Team:
         canonical = parse_agent_name(name)
         if canonical is None:
             _fail("invalid_request", "Agent name is invalid")
+        if canonical == OPERATOR_NAME:
+            _fail("forbidden", "The operator Membership cannot be removed")
         store = self._ensure_started()
         async with self._lock:
             member = await self._get_member(canonical)
@@ -1063,6 +1081,77 @@ class Team:
         token = member.get("attestation")
         return token if isinstance(token, str) else None
 
+    async def _reserve_operator(self) -> None:
+        """Bind the reserved ``operator`` name as a principal Membership."""
+        store = self._ensure_started()
+        record = await store.get("team:operator")
+        if isinstance(record, dict) and record.get("private_key"):
+            identity = AgentIdentity.from_dict(record)
+            instance_id = record.get("instance_id")
+            if not isinstance(instance_id, str):
+                instance_id = new_uuid()
+                payload = dict(record)
+                payload["instance_id"] = instance_id
+                await store.put("team:operator", payload)
+        else:
+            identity = AgentIdentity.create_key_based()
+            instance_id = new_uuid()
+            payload = identity.to_secret_dict()
+            payload["instance_id"] = instance_id
+            await store.put("team:operator", payload)
+        existing = await self._get_member(OPERATOR_NAME)
+        if existing is not None:
+            old_did = existing.get("agent_did")
+            if isinstance(old_did, str) and old_did != identity.did:
+                await store.delete(f"did:{old_did}")
+            if self._directory is not None:
+                await self._directory.drop(OPERATOR_NAME)
+        address = f"{OPERATOR_NAME}@{self.name}"
+        await store.delete(mailbox_mod.mailbox_key(address))
+        await self._save_member(
+            {
+                "name": OPERATOR_NAME,
+                "address": address,
+                "agent_did": identity.did,
+                "principal": True,
+            }
+        )
+
+    async def _open_operator_session_locked(self) -> str:
+        """Create or replace the loopback operator Session. Caller holds the lock."""
+        store = self._ensure_started()
+        member = await self._get_member(OPERATOR_NAME)
+        if member is None or not _is_principal(member):
+            await self._reserve_operator()
+            member = await self._get_member(OPERATOR_NAME)
+        if member is None:
+            _fail("internal", "operator Membership was not reserved")
+        record = await store.get("team:operator")
+        instance_id = new_uuid()
+        if isinstance(record, dict) and isinstance(record.get("instance_id"), str):
+            instance_id = record["instance_id"]
+        now, now_ts = self._now_pair()
+        existing_token = await store.get(f"instance:{OPERATOR_NAME}:{instance_id}")
+        if isinstance(existing_token, str):
+            old = await self._get_session(existing_token)
+            if old is not None:
+                await self._release_session_leases(old, now_ts)
+                await self._delete_session(old)
+        expires = now + timedelta(seconds=self.session_ttl_seconds)
+        session = {
+            "token": secrets.token_urlsafe(32),
+            "membership_name": member["name"],
+            "address": member["address"],
+            "agent_did": member["agent_did"],
+            "instance_id": instance_id,
+            "max_in_flight": DEFAULT_MAX_IN_FLIGHT,
+            "expires_at": format_timestamp(expires),
+            "lease_ids": [],
+        }
+        await self._save_session(session)
+        self._operator_token = str(session["token"])
+        return self._operator_token
+
     async def _ensure_identity(self) -> AgentIdentity:
         store = self._ensure_started()
         record = await store.get("team:identity")
@@ -1084,6 +1173,11 @@ class Team:
         ``collect=wait`` holds until the Ticket is terminal or
         ``wait_hold_seconds`` elapses, then returns the current Ticket.
         """
+        try:
+            parsed_send = parse_send_request(request)
+        except ValueError as exc:
+            _fail("invalid_request", str(exc))
+        request = dump_public(parsed_send)
         waiter: asyncio.Event | None = None
         ticket_id: str | None = None
         deadline_dt = None
@@ -1103,7 +1197,10 @@ class Team:
             finally:
                 self._drop_waiter(ticket_id, waiter)
                 self._drop_session_wake(session_token, waiter)
-        return result
+        try:
+            return parse_send_result(result)
+        except ValueError as exc:
+            _fail("internal", str(exc))
 
     async def _send_locked(
         self, session_token: str, request: Mapping[str, Any]
@@ -1203,7 +1300,7 @@ class Team:
         store = self._ensure_started()
         recipient_name = recipient.split("@", 1)[0]
         recipient_member = await self._get_member(recipient_name)
-        if recipient_member is None:
+        if recipient_member is None or _is_principal(recipient_member):
             _fail("not_found", "Recipient Membership was not found")
 
         sender = session["address"]
@@ -1488,7 +1585,10 @@ class Team:
                 )
             await mailbox_mod.save_mailbox(store, address, kept)
             await self._save_session(session)
-            return {"deliveries": deliveries}
+            try:
+                return parse_lease_result({"deliveries": deliveries})
+            except ValueError as exc:
+                _fail("internal", str(exc))
 
     async def _expire_mailbox_leases(
         self, items: list[dict[str, Any]], now, now_ts: str
@@ -1549,7 +1649,7 @@ class Team:
                 _fail("not_found", "lease_id was not found")
             existing = await store.get(f"complete:{lease_id}")
             if existing is not None:
-                return dict(existing["result"])
+                return CompleteResult.model_validate(existing["result"])
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
             ticket = None
@@ -1582,12 +1682,17 @@ class Team:
                         detail=detail,
                     )
                 )
-            return result
+            return CompleteResult.model_validate(result)
 
     async def reply(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
         """Finish a reply-expected Delivery with content or an error."""
+        try:
+            parsed_reply = parse_reply_request(request)
+        except ValueError as exc:
+            _fail("invalid_request", str(exc))
+        request = dump_public(parsed_reply)
         async with self._lock:
             session = await self._require_session(session_token)
             if not isinstance(request, Mapping):
@@ -1724,25 +1829,13 @@ class Team:
                     },
                 )
             )
-            return result
+            return ReplyResult.model_validate(result)
 
     def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
-        code = error.get("code")
-        message = error.get("message")
-        if not isinstance(code, str) or _ERROR_CODE.fullmatch(code) is None:
-            _fail("invalid_request", "error.code is invalid")
-        if not isinstance(message, str) or message.strip() == "" or len(message) > 2000:
-            _fail("invalid_request", "error.message is invalid")
-        out: dict[str, Any] = {"code": code, "message": message}
-        if "details" in error:
-            if not isinstance(error["details"], dict):
-                _fail("invalid_request", "error.details must be an object")
-            out["details"] = error["details"]
-        if "retryable" in error:
-            if not isinstance(error["retryable"], bool):
-                _fail("invalid_request", "error.retryable must be a boolean")
-            out["retryable"] = error["retryable"]
-        return out
+        try:
+            return ErrorObject.model_validate(error).to_public_dict()
+        except ValidationError as exc:
+            _fail("invalid_request", validation_message(exc))
 
     async def _finish_delivery(
         self, session: dict[str, Any], lease: dict[str, Any], now_ts: str
@@ -1769,7 +1862,7 @@ class Team:
             ticket = await self._expire_ticket_if_due(ticket_id)
             if ticket is None or ticket.get("requester") != session["address"]:
                 _fail("not_found", "Ticket was not found")
-            return ticket
+            return parse_ticket(ticket)
 
     async def get_history(
         self,
@@ -1814,7 +1907,10 @@ class Team:
                 if stored is not None:
                     messages.append(stored)
             page, has_more = threads_mod.page_history(messages, before=before, limit=n)
-            return {"messages": page, "has_more": has_more}
+            try:
+                return parse_history_result({"messages": page, "has_more": has_more})
+            except ValueError as exc:
+                _fail("internal", str(exc))
 
     async def find(
         self,
@@ -1859,7 +1955,7 @@ class Team:
             members: list[dict[str, Any]] = []
             for name in names:
                 member = await self._get_member(name)
-                if member is not None:
+                if member is not None and not _is_principal(member):
                     members.append(member)
             exclude = session["address"]
             directory = self._directory
@@ -1886,13 +1982,15 @@ class Team:
                 _fail("address_outside_team", "Address does not name the current Team")
             name = resolved.split("@", 1)[0]
             member = await self._get_member(name)
-            if member is None:
+            if member is None or _is_principal(member) or not member.get("profile"):
                 _fail("not_found", "Membership was not found")
-            return {
-                "address": member["address"],
-                "agent_did": member["agent_did"],
-                "profile": member["profile"],
-            }
+            return DirectoryEntry.model_validate(
+                {
+                    "address": member["address"],
+                    "agent_did": member["agent_did"],
+                    "profile": member["profile"],
+                }
+            )
 
     async def status(self, session_token: str) -> dict[str, Any]:
         """Return members, online state, Mailbox depths, and open Tickets.
@@ -1953,7 +2051,7 @@ class Team:
             }
             if self._http_url:
                 result["origin"] = self._http_url
-            return result
+            return StatusResult.model_validate(result)
 
     async def get_trace(self, session_token: str, trace_id: str) -> dict[str, Any]:
         """Return the recorded timeline for one ``trace_id``.
@@ -1976,7 +2074,7 @@ class Team:
             if session["membership_name"] != OPERATOR_NAME:
                 if not trace_mod.caller_appears(events, str(session["address"])):
                     _fail("not_found", "Trace was not found")
-            return {"trace_id": trace_id, "events": events}
+            return TraceResult.model_validate({"trace_id": trace_id, "events": events})
 
     async def subscribe_trace_events(self, session_token: str) -> asyncio.Queue:
         """Attach a watch queue for new Trace events. Operator only."""

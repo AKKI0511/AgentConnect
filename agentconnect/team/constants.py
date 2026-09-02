@@ -39,14 +39,3 @@ OPERATOR_NAME = "operator"
 RESERVED_MCP_TOOL_NAMES = frozenset(
     {"find", "ask", "tell", "get_result", "get_history"}
 )
-
-OPERATOR_PROFILE = {
-    "summary": "Person using this Team from the CLI or an MCP client.",
-    "skills": [
-        {
-            "name": "operate",
-            "description": "Ask teammates to do work and collect their results.",
-        }
-    ],
-    "tags": ["operator"],
-}

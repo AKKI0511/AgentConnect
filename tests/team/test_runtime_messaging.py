@@ -7,6 +7,7 @@ import uuid
 
 import pytest
 
+from agentconnect.core.base import dump_public
 from agentconnect.team import Team, TeamError
 from tests.team.conftest import deadline, join_member, profile
 
@@ -458,7 +459,8 @@ async def test_complete_event_has_no_ticket(team: Team):
     )
     delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
     result = await team.complete(writer["session_token"], delivery["lease_id"])
-    assert result == {}
+    assert dump_public(result) == {}
+    assert result.ticket is None
     with pytest.raises(TeamError) as exc:
         await team.get_result(researcher["session_token"], delivery["message"]["id"])
     assert exc.value.code == "not_found"
@@ -590,7 +592,8 @@ async def test_reply_on_event_is_invalid_request(team: Team):
         )
     assert exc.value.code == "invalid_request"
     still = await team.complete(writer["session_token"], delivery["lease_id"])
-    assert still == {}
+    assert dump_public(still) == {}
+    assert still.ticket is None
 
 
 @pytest.mark.asyncio

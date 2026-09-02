@@ -1,67 +1,41 @@
-"""Shared enumerations that are not the public Message, Profile, or Address nouns.
+"""Re-exports of public schema primitives and the Profile and Message kinds.
 
-Identity, Profile, and Message kinds live in their own modules. This module
-re-exports them so existing ``core.types`` imports keep working.
-
-Model choice is a string passed to LiteLLM. There is no provider enum.
+Identity types load from ``agentconnect.core.identity``.
 """
 
 from __future__ import annotations
 
 import importlib
-from enum import Enum
 from typing import Any
 
-
-class AgentType(str, Enum):
-    """Kinds of Agent used by older registration objects."""
-
-    HUMAN = "human"
-    AI = "ai"
-
-
-class InteractionMode(str, Enum):
-    """Declared interaction modes on older helper registration objects."""
-
-    HUMAN_TO_AGENT = "human_to_agent"
-    AGENT_TO_AGENT = "agent_to_agent"
-
-
-class ProtocolVersion(str, Enum):
-    """Legacy version labels. Not the public specification version."""
-
-    V1_0 = "1.0"
-    V1_1 = "1.1"
-
-
-class NetworkMode(str, Enum):
-    """Legacy network-mode labels. Unused by the Team Runtime."""
-
-    STANDALONE = "standalone"
-    NETWORKED = "networked"
-
+from agentconnect.core.kinds import MessageKind
+from agentconnect.core.primitives import (
+    CollectMode,
+    ErrorCode,
+    PersistenceMode,
+    TicketState,
+)
+from agentconnect.core.profile import AgentProfile, Skill
 
 _LAZY_EXPORTS = {
     "AgentIdentity": ("agentconnect.core.identity", "AgentIdentity"),
-    "AgentMetadata": ("agentconnect.core.identity", "AgentMetadata"),
     "VerificationStatus": ("agentconnect.core.identity", "VerificationStatus"),
-    "AgentProfile": ("agentconnect.core.profile", "AgentProfile"),
-    "Capability": ("agentconnect.core.profile", "Capability"),
-    "Skill": ("agentconnect.core.profile", "Skill"),
-    "MessageKind": ("agentconnect.core.kinds", "MessageKind"),
 }
 
 __all__ = [
-    "AgentType",
-    "InteractionMode",
-    "ProtocolVersion",
-    "NetworkMode",
+    "AgentProfile",
+    "Skill",
+    "MessageKind",
+    "CollectMode",
+    "ErrorCode",
+    "PersistenceMode",
+    "TicketState",
     *sorted(_LAZY_EXPORTS),
 ]
 
 
 def __getattr__(name: str) -> Any:
-    """Load identity, profile, and kind types without an import cycle."""
+    """Load identity types without an import cycle."""
     target = _LAZY_EXPORTS.get(name)
     if target is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

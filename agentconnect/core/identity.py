@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Dict, List, Mapping, Optional, TypedDict
+from typing import Any, Dict, Mapping, Optional, TypedDict
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -30,8 +30,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
-from agentconnect.core.types import AgentType, InteractionMode
 
 # Multicodec prefix for ed25519-pub (varint of 0xed).
 _ED25519_MULTICODEC = b"\xed\x01"
@@ -51,18 +49,6 @@ class VerificationStatus(str, Enum):
     PENDING = "pending"
     VERIFIED = "verified"
     FAILED = "failed"
-
-
-class JoinChallenge(TypedDict):
-    """Short-lived challenge used to prove control of an Agent DID.
-
-    ``nonce`` is at least 128 bits of random data in base64url form.
-    ``audience`` is ``agentconnect:<team-name>``. ``expires_at`` is RFC 3339 UTC.
-    """
-
-    nonce: str
-    audience: str
-    expires_at: str
 
 
 class MembershipAttestationClaims(TypedDict):
@@ -371,20 +357,6 @@ class AgentIdentity:
             created_at=created,
             metadata=data.get("metadata", {}),
         )
-
-
-@dataclass
-class AgentMetadata:
-    """Registration metadata for an Agent, distinct from its discovery Profile."""
-
-    agent_id: str
-    agent_type: AgentType
-    identity: AgentIdentity
-    organization_id: Optional[str] = None
-    capabilities: List[str] = field(default_factory=list)
-    interaction_modes: List[InteractionMode] = field(default_factory=list)
-    payment_address: Optional[str] = None
-    metadata: Dict = field(default_factory=dict)
 
 
 def parse_rfc3339(value: str) -> datetime:

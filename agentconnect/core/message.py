@@ -1,159 +1,170 @@
+"""Immutable Message kinds and Delivery.
+
+A handler receives a MailboxMessage (request or event) with attribute
+access. Response and error Messages are created by the Runtime on reply.
 """
-Message handling for the AgentConnect framework.
 
-This module provides the Message class for creating, signing, and verifying
-messages exchanged between agents in the system.
-"""
+from __future__ import annotations
 
-import base64
-import hashlib
-import uuid
+from typing import Any, Literal, Mapping, Optional, Union
 
-# Standard library imports
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Dict, Optional
+from pydantic import Field, TypeAdapter, ValidationError
 
-# Absolute imports from agentconnect package
-from agentconnect.core.exceptions import SecurityError
-from agentconnect.core.identity import AgentIdentity, VerificationStatus
-from agentconnect.core.kinds import MessageKind
-from agentconnect.core.types import ProtocolVersion
+from agentconnect.core.base import (
+    JsonObject,
+    JsonValue,
+    SchemaModel,
+    validation_message,
+)
+from agentconnect.core.error import ErrorObject
+from agentconnect.core.primitives import QualifiedAddress, Timestamp, Uuid
+
+__all__ = [
+    "MessageBase",
+    "RequestMessageBase",
+    "NoReplyRequestMessage",
+    "ReplyExpectedRequestMessage",
+    "RequestMessage",
+    "EventMessage",
+    "MailboxMessage",
+    "ResponseMessage",
+    "ErrorMessage",
+    "Message",
+    "Delivery",
+    "parse_message",
+    "parse_delivery",
+    "is_reply_expected",
+]
 
 
-@dataclass
-class Message:
-    """
-    Message class for agent communication.
+class MessageBase(SchemaModel):
+    """Fields shared by every accepted Message."""
 
-    This class represents messages exchanged between agents, with support for
-    content, metadata, and cryptographic signatures for verification.
+    id: Uuid
+    sender: QualifiedAddress
+    recipient: QualifiedAddress
+    created_at: Timestamp
+    trace_id: Uuid
+    thread_id: Optional[Uuid] = None
+    parent_id: Optional[Uuid] = None
 
-    Attributes:
-        id: Unique identifier for the message
-        sender_id: ID of the sending agent
-        receiver_id: ID of the receiving agent
-        content: Message content
-        kind: Message kind (request, response, error, event)
-        timestamp: When the message was created
-        metadata: Additional information about the message
-        protocol_version: Version of the communication protocol
-        signature: Cryptographic signature for verification
-    """
 
-    id: str
-    sender_id: str
-    receiver_id: str
-    content: str
-    kind: MessageKind
-    timestamp: datetime
-    metadata: Dict = field(default_factory=dict)
-    protocol_version: ProtocolVersion = ProtocolVersion.V1_0
-    signature: Optional[str] = None
+class RequestMessageBase(MessageBase):
+    """Fields shared by request Messages."""
 
-    @property
-    def control(self) -> Optional[str]:
-        """Application control label stored in metadata, if any."""
-        return (self.metadata or {}).get("control")
+    kind: Literal["request"] = "request"
+    content: JsonValue
+    metadata: Optional[JsonObject] = None
 
-    @classmethod
-    def create(
-        cls,
-        sender_id: str,
-        receiver_id: str,
-        content: str,
-        sender_identity: AgentIdentity,
-        kind: MessageKind = MessageKind.EVENT,
-        metadata: Optional[Dict] = None,
-        control: Optional[str] = None,
-    ) -> "Message":
-        """
-        Create a new signed message.
 
-        Args:
-            sender_id: ID of the sending agent
-            receiver_id: ID of the receiving agent
-            content: Message content
-            sender_identity: Identity of the sending agent
-            kind: Kind of message being sent
-            metadata: Additional information about the message
+class NoReplyRequestMessage(RequestMessageBase):
+    """Request that expects no reply and creates no Ticket."""
 
-        Returns:
-            A signed Message object
 
-        Raises:
-            ValueError: If the sender identity doesn't have a private key for signing
-        """
-        metadata = dict(metadata or {})
-        if control:
-            metadata["control"] = control
-        msg = cls(
-            id=str(uuid.uuid4()),
-            sender_id=sender_id,
-            receiver_id=receiver_id,
-            content=content,
-            kind=kind,
-            timestamp=datetime.now(),
-            metadata=metadata,
-            protocol_version=ProtocolVersion.V1_0,
+class ReplyExpectedRequestMessage(RequestMessageBase):
+    """Request tracked by a Ticket until its deadline."""
+
+    deadline: Timestamp
+
+
+class EventMessage(MessageBase):
+    """Information sent without a reply or Ticket."""
+
+    kind: Literal["event"] = "event"
+    content: JsonValue
+    metadata: Optional[JsonObject] = None
+
+
+class ResponseMessage(MessageBase):
+    """Successful reply created by the Runtime."""
+
+    kind: Literal["response"] = "response"
+    content: JsonValue
+    parent_id: Uuid
+
+
+class ErrorMessage(MessageBase):
+    """Failed reply created by the Runtime."""
+
+    kind: Literal["error"] = "error"
+    error: ErrorObject
+    parent_id: Uuid
+
+
+RequestMessage = Union[NoReplyRequestMessage, ReplyExpectedRequestMessage]
+MailboxMessage = Union[RequestMessage, EventMessage]
+Message = Union[RequestMessage, EventMessage, ResponseMessage, ErrorMessage]
+
+
+class Delivery(SchemaModel):
+    """One exclusive attempt to handle a Message."""
+
+    lease_id: Uuid
+    lease_expires_at: Timestamp
+    attempt: int = Field(ge=1)
+    message: Union[NoReplyRequestMessage, ReplyExpectedRequestMessage, EventMessage]
+    history: list[Message]
+    history_complete: bool
+
+
+def is_reply_expected(message: Message) -> bool:
+    """Return True when ``message`` is a reply-expected request."""
+    return isinstance(message, ReplyExpectedRequestMessage)
+
+
+def parse_message(data: Any, *, validate: bool = True) -> Message:
+    """Parse a Message mapping. Overlapping request shapes use ``deadline``."""
+    del validate
+    if isinstance(
+        data,
+        (
+            NoReplyRequestMessage,
+            ReplyExpectedRequestMessage,
+            EventMessage,
+            ResponseMessage,
+            ErrorMessage,
+        ),
+    ):
+        return data
+    if not isinstance(data, Mapping):
+        raise ValueError("message must be an object")
+    kind = data.get("kind")
+    if kind == "request":
+        cls: type[SchemaModel] = (
+            ReplyExpectedRequestMessage if "deadline" in data else NoReplyRequestMessage
         )
-        msg.sign(sender_identity)
-        return msg
+    elif kind == "event":
+        cls = EventMessage
+    elif kind == "response":
+        cls = ResponseMessage
+    elif kind == "error":
+        cls = ErrorMessage
+    else:
+        raise ValueError("kind must be request, event, response, or error")
+    try:
+        return cls.model_validate(data)
+    except ValidationError as exc:
+        raise ValueError(validation_message(exc)) from exc
 
-    def sign(self, identity: AgentIdentity) -> None:
-        """
-        Sign message with sender's private key.
 
-        Args:
-            identity: The identity containing the private key for signing
+def parse_delivery(data: Any, *, validate: bool = True) -> Delivery:
+    """Parse a Delivery, including nested Messages."""
+    del validate
+    if isinstance(data, Delivery):
+        return data
+    if not isinstance(data, Mapping):
+        raise ValueError("delivery must be an object")
+    body = dict(data)
+    body["message"] = parse_message(body.get("message"))
+    history = body.get("history") or []
+    if not isinstance(history, list):
+        raise ValueError("history must be an array")
+    body["history"] = [parse_message(item) for item in history]
+    try:
+        return Delivery.model_validate(body)
+    except ValidationError as exc:
+        raise ValueError(validation_message(exc)) from exc
 
-        Raises:
-            ValueError: If the identity doesn't have a private key
-        """
-        if not identity.private_key:
-            raise ValueError("Private key required for signing")
 
-        # Create message digest
-        message_content = self._get_signable_content()
-        digest = hashlib.sha256(message_content.encode()).digest()
-
-        # For MVP, we'll use a simple signature scheme
-        # In production, use proper asymmetric encryption
-        signature = base64.b64encode(digest).decode()
-        self.signature = signature
-
-    def verify(self, sender_identity: AgentIdentity) -> bool:
-        """
-        Verify message signature using sender's public key.
-
-        Args:
-            sender_identity: The identity containing the public key for verification
-
-        Returns:
-            True if the signature is valid, False otherwise
-
-        Raises:
-            SecurityError: If the sender identity is not verified
-        """
-        if not self.signature:
-            return False
-
-        if sender_identity.verification_status != VerificationStatus.VERIFIED:
-            raise SecurityError("Sender identity not verified")
-
-        # Recreate message digest
-        message_content = self._get_signable_content()
-        current_digest = hashlib.sha256(message_content.encode()).digest()
-
-        # Compare with stored signature
-        stored_digest = base64.b64decode(self.signature)
-        return current_digest == stored_digest
-
-    def _get_signable_content(self) -> str:
-        """
-        Get message content for signing/verification.
-
-        Returns:
-            A string representation of the message content for signing
-        """
-        return f"{self.id}:{self.sender_id}:{self.receiver_id}:{self.content}:{self.timestamp.isoformat()}"
+MESSAGE_ADAPTER = TypeAdapter(Message)
+MAILBOX_MESSAGE_ADAPTER = TypeAdapter(MailboxMessage)

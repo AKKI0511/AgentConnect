@@ -38,10 +38,12 @@ __all__ = [
     "__version__",
     "BaseAgent",
     "Context",
+    "Message",
     "SessionError",
     "Team",
     "TeamError",
     "AgentIdentity",
+    "AgentProfile",
 ]
 
 import logging
@@ -53,10 +55,12 @@ logging.getLogger("agentconnect").addHandler(logging.NullHandler())
 _LAZY_EXPORTS = {
     "BaseAgent": ("agentconnect.agent.base", "BaseAgent"),
     "Context": ("agentconnect.agent.context", "Context"),
+    "Message": ("agentconnect.core.message", "Message"),
     "SessionError": ("agentconnect.agent.errors", "SessionError"),
     "Team": ("agentconnect.team.runtime", "Team"),
     "TeamError": ("agentconnect.team.errors", "TeamError"),
     "AgentIdentity": ("agentconnect.core.identity", "AgentIdentity"),
+    "AgentProfile": ("agentconnect.core.profile", "AgentProfile"),
 }
 
 

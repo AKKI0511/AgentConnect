@@ -65,7 +65,7 @@ Missing, malformed, expired, replaced, or revoked Session credentials return `40
 
 ### Loopback operator
 
-On a loopback listener, a call with no `Authorization` header is bound to the reserved `operator` Membership, the same Membership loopback MCP uses. A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
+On a loopback listener, a call with no `Authorization` header is bound to the reserved `operator` Membership, the same principal Membership loopback MCP uses. A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
 
 A non-loopback listener MUST NOT bind a missing header to `operator`. That request returns `401`.
 

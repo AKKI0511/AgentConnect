@@ -22,9 +22,9 @@ A missing, malformed, expired, replaced, or revoked Session token is an MCP-leve
 
 ### Loopback operator
 
-On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned Membership named `operator`. The Runtime creates that Membership on first use and keeps a Session for it. Loopback HTTP Runtime routes use the same Membership.
+On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned principal Membership named `operator`. The Runtime reserves that name when it starts and keeps a Session for it. Loopback HTTP Runtime routes use the same Membership. The operator has no Profile, Directory entry, or Mailbox.
 
-The name `operator` is reserved for this Membership. A join that reuses it with a different DID fails with `name_conflict`.
+The name `operator` is reserved for this Membership. A join that uses it fails with `name_conflict`.
 
 A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
 
@@ -194,7 +194,7 @@ Result: `HistoryResult`. Only a Thread participant may read it. Any other caller
 
 The server publishes the Team roster as an MCP resource at `agentconnect://team/roster`. The body is `TeamRoster`.
 
-The resource lists every current Membership, including `operator` when that Membership exists. It is not a search. Models that need ranking use `find`.
+The resource lists every current Agent Membership. Principals, including `operator`, are omitted. It is not a search. Models that need ranking use `find`.
 
 ## Reserved collection strategies
 

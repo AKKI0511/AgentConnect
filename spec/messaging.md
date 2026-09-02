@@ -179,7 +179,7 @@ A Client maps a handler outcome according to the delivered Message:
 
 Declining is a first-class, benign outcome. A recipient may read a request and choose not to answer, the way a person ignores a message that does not warrant a reply. The Ticket becomes `declined`, which is explicit to the requester and is not a failure. A Client declines by calling `complete` on a reply-expected Delivery, so an SDK that maps a handler returning nothing to `complete` produces `declined`. To answer with deliberately empty content instead, the Client replies with `outcome=completed` and `content=null`.
 
-A handler failure becomes an `ErrorObject` with `code=handler_failed`. The Client SHOULD include a safe message for the requester and MUST NOT expose secrets or an unfiltered stack trace.
+A handler failure becomes an `ErrorObject` with `code=handler_failed`. The Client SHOULD include a safe message for the requester and MUST NOT expose secrets or an unfiltered stack trace. An Agent application failure code belongs in that object's `details`, not in `code`.
 
 ## Ticket
 

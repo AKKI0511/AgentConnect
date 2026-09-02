@@ -240,7 +240,7 @@
         "handler_failed",
         "deadline_exceeded"
       ],
-      "description": "Well-known public error codes. `ErrorObject.code` remains a string so an Agent application may return a domain-specific failure code."
+      "description": "Well-known public error codes. `ErrorObject.code` is this closed set. An Agent application failure code belongs in `ErrorObject.details`."
     },
     "SkillExample": {
       "type": "string",
@@ -341,9 +341,8 @@
       "type": "object",
       "properties": {
         "code": {
-          "type": "string",
-          "description": "Well-known ErrorCode or a lowercase Agent application failure code.",
-          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          "$ref": "#/definitions/ErrorCode",
+          "description": "Well-known ErrorCode. An Agent application failure code belongs in `details` of a `handler_failed` error, whose shape the Agent owns."
         },
         "message": {
           "type": "string",
@@ -2009,7 +2008,7 @@
       "type": "object",
       "properties": {
         "team_name": {
-          "type": "string",
+          "$ref": "#/definitions/TeamName",
           "description": "Team this roster belongs to."
         },
         "members": {
@@ -2017,7 +2016,7 @@
           "items": {
             "$ref": "#/definitions/DirectoryEntry"
           },
-          "description": "Every current Membership, including `operator` when it exists."
+          "description": "Every current Agent Membership. Principals, including `operator`, are omitted."
         }
       },
       "required": [
@@ -2120,7 +2119,7 @@
         },
         "mailbox_depth": {
           "type": "number",
-          "description": "Queued plus leased Mailbox items.",
+          "description": "Queued plus leased Mailbox items. A principal has no Mailbox; this is 0.",
           "minimum": 0,
           "multipleOf": 1
         },
@@ -2167,7 +2166,7 @@
           "items": {
             "$ref": "#/definitions/StatusMember"
           },
-          "description": "Every Membership, including `operator`. Ordered by Address."
+          "description": "Every Membership, including principals such as `operator`. Ordered by Address."
         }
       },
       "required": [

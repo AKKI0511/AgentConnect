@@ -42,7 +42,7 @@ Every token MUST be:
 
 A token MAY also bind an Agent DID, Agent name, or both. If a bound value differs from `JoinRequest`, the join fails.
 
-The operator issues and revokes tokens through `issue_join_token` and `revoke_join_token`. The hosting process may call the same issuance on the Runtime object.
+The operator issues and revokes tokens through `issue_join_token` and `revoke_join_token` on HTTP and MCP. The hosting process may call the same issuance on the Runtime object without a Session.
 
 Revoking a token MUST prevent another join with it. Any active Session created from that token MUST become unauthorized no later than the Runtime's next Session-authentication check.
 
@@ -106,7 +106,11 @@ The Session is bound to one Instance of one Membership. It authorizes only that 
 - `get_profile`
 - `get_trace` for a Trace the Membership appears in
 
-The reserved `operator` Membership may also call `status`, `issue_join_token`, `revoke_join_token`, and `get_trace` for any Trace. A person talking to a loopback Runtime uses this Membership. See [bindings/http.md](bindings/http.md) and [bindings/mcp.md](bindings/mcp.md).
+The reserved `operator` is a principal Membership. It may also call `status`, `issue_join_token`, `revoke_join_token`, and `get_trace` for any Trace. A person talking to a loopback Runtime uses this Membership. See [bindings/http.md](bindings/http.md) and [bindings/mcp.md](bindings/mcp.md).
+
+Over HTTP and MCP, that operator authority is a property of the Session. The hosting process may call `issue_join_token` and `revoke_join_token` on the Runtime object without a Session; the process is the trust boundary.
+
+A loopback listener with no `Authorization` header is one shared local identity. Every local client that omits the header is the same `operator` Membership, so they share its Tickets, Trace access, and operator operations. That is acceptable because the machine is the trust boundary.
 
 The Runtime authenticates every operation. A Session cannot choose another sender, lease another Membership's Mailbox, complete or reply to a lease held by another Membership, read another Membership's Ticket, or read Thread history for a participant set it is not in.
 
@@ -158,3 +162,5 @@ The Runtime SHOULD avoid distinguishing authentication failures in public error 
 | member Session calls `status` | `forbidden` |
 | member Session calls `issue_join_token` | `forbidden` |
 | loopback HTTP with no Authorization | operations run as `operator` |
+| two loopback clients with no Authorization | the same `operator` Membership; they share Tickets, Trace, and operator operations |
+| `send` to `operator` | `not_found` |

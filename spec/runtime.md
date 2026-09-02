@@ -12,7 +12,7 @@ Exact request and result shapes are in [schema/schema.ts](schema/schema.ts). Mes
 | --- | --- | --- |
 | Membership | Runtime | until the Team removes it |
 | Session | Runtime | until disconnect, replacement, expiry, or token revocation |
-| Mailbox | Runtime | the Membership's lifetime |
+| Mailbox | Runtime | the Agent Membership's lifetime |
 | Delivery lease | Runtime | until reply, completion, or lease expiry |
 | Ticket | Runtime | open: at least until `deadline`; terminal: until the later of `deadline` and a documented interval after close |
 | Trace events | Runtime | at least while any Message or Ticket that carries that `trace_id` is retained; MAY persist longer; MAY drop the oldest events past a cap |
@@ -23,9 +23,15 @@ Membership is durable with respect to Client presence. An offline Agent keeps it
 
 ## Memberships, Instances, and Mailboxes
 
-A Membership is one Agent in one Team. It has one identity, one Address, one Profile, and one logical Mailbox.
+A Membership is one identity in one Team. It has one Address.
 
-A Membership may have several concurrent **Instances**, each a running copy of the Agent holding one Session. Instances share the Membership's Mailbox and compete for its Deliveries; each Delivery is leased to exactly one Instance. Consecutive turns of one Thread MAY land on different Instances; the retained transcript is what a later Instance reads. Correlation never lives in an Instance: a Ticket is a Runtime record, so any Instance can complete work another Instance was handling after a lease is released.
+A Membership that may be hired is an **Agent**. An Agent Membership has a Profile, a Directory entry, and one logical Mailbox.
+
+A **principal** Membership holds an identity and a Session and may `send`, `find`, `get_result`, `get_history`, and `get_trace`. It has no Profile, no Directory entry, and no Mailbox. A `send` naming it fails with `not_found`. It stays visible in `status`, so an operator can see who is acting. Sessions, attribution, and Ticket ownership are unchanged.
+
+The reserved `operator` is a principal. The Runtime reserves that name when it starts. A `join` that uses it fails with `name_conflict`. `remove_membership` refuses the operator.
+
+An Agent Membership may have several concurrent **Instances**, each a running copy of the Agent holding one Session. Instances share the Membership's Mailbox and compete for its Deliveries; each Delivery is leased to exactly one Instance. Consecutive turns of one Thread MAY land on different Instances; the retained transcript is what a later Instance reads. Correlation never lives in an Instance: a Ticket is a Runtime record, so any Instance can complete work another Instance was handling after a lease is released.
 
 The Mailbox is one logical queue. A Runtime MAY partition it internally to scale a single busy Agent. Partitioning changes no observable rule except that the Runtime does not promise a total order across the Mailbox.
 
@@ -69,13 +75,15 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 | `issue_join_token` | operator Session | a join token scoped to this Team |
 | `revoke_join_token` | operator Session | the token revoked; Sessions created from it unauthorized |
 
-All operations except `join` require a valid Session. A request with an expired, replaced, disconnected, or revoked Session MUST fail with `unauthorized` and MUST NOT change shared state.
+HTTP and MCP operations except `join` require a valid Session. A request with an expired, replaced, disconnected, or revoked Session MUST fail with `unauthorized` and MUST NOT change shared state.
 
 The reserved `operator` Membership may call every member operation and the operator operations above. A non-operator Session that calls `status`, `issue_join_token`, or `revoke_join_token` fails with `forbidden`.
 
+Over HTTP and MCP, operator authority is the Session. The hosting process may call `issue_join_token` and `revoke_join_token` on the Runtime object without a Session; the process is the trust boundary.
+
 ## `join`
 
-`join` creates a Membership or reconnects one, then opens a Session for one Instance.
+`join` creates a Membership or reconnects one, then opens a Session for one Instance. A join that uses the reserved name `operator` fails with `name_conflict`.
 
 The Runtime applies these rules atomically:
 
@@ -142,6 +150,7 @@ Before acceptance, the Runtime MUST:
 - reject a body larger than `max_message_bytes` with `payload_too_large`
 - reject `collect=callback` or `collect=stream` with `unsupported_collect_mode`
 - resolve the recipient within the Team
+- reject a principal recipient, including `operator`, with `not_found`
 - require a future `deadline` on any reply-expected request
 - validate any `parent_id` and pairwise Thread participation
 - reject a full recipient Mailbox with `busy`
@@ -259,12 +268,12 @@ Only a Membership in the Thread's participant set may read it. Any other caller 
 
 ## `find`
 
-`find` searches the current Team's Directory. It excludes the caller's own Membership.
+`find` searches the current Team's Directory. It excludes the caller's own Membership. Principals, including `operator`, are not in the Directory and MUST NOT appear in the result.
 
 The Runtime MUST:
 
 - accept a natural-language `query` containing 1 to 1,000 characters and at least one non-whitespace character
-- consider every other Membership in the Team
+- consider every other Agent Membership in the Team
 - order matches by relevance, best first
 - break equal-relevance ties by canonical Address
 - when `limit` is omitted, return every remaining member, at most 100
@@ -277,9 +286,15 @@ A future addition may widen `find` to reach beyond the local Team. That is an ad
 
 ## `get_profile`
 
-`get_profile` resolves an Address in the current Team and returns its full `DirectoryEntry`. It may return the caller's own entry.
+`get_profile` resolves an Address in the current Team and returns its full `DirectoryEntry`. It may return the caller's own entry. A principal, including `operator`, returns `not_found`.
 
 The Runtime MUST NOT place the returned Profile into another handler's input unless that handler explicitly called `find` or `get_profile` and passed the data itself.
+
+| Situation | Required observation |
+| --- | --- |
+| teammate `find` | the result contains no Address for `operator` |
+| `send` to `operator` | `not_found` |
+| `join` as `operator` on a fresh Store | `name_conflict`, in any call order |
 
 ## `status`
 
@@ -292,7 +307,7 @@ The result MUST include:
 - every Membership, including `operator`
 - the number of open Tickets in the Team
 
-Each member row MUST include the canonical name and Address, whether the Membership has at least one unexpired Session (`online`), current Mailbox depth, and the number of open Tickets whose recipient is that Membership.
+Each member row MUST include the canonical name and Address, whether the Membership has at least one unexpired Session (`online`), current Mailbox depth, and the number of open Tickets whose recipient is that Membership. A principal has no Mailbox; its `mailbox_depth` is `0`.
 
 Mailbox depth counts queued and leased items, matching the busy limit.
 
@@ -371,7 +386,7 @@ The result includes the secret `token`. It MUST NOT be written into Message cont
 
 ## Mailbox limits
 
-A Runtime MUST have a finite Mailbox limit reported as `max_mailbox_depth`. It MUST apply the same documented limit to every Membership unless Team configuration explicitly sets per-member limits.
+A Runtime MUST have a finite Mailbox limit reported as `max_mailbox_depth`. It MUST apply the same documented limit to every Agent Membership unless Team configuration explicitly sets per-member limits. Principals have no Mailbox.
 
 When acceptance would exceed the limit, `send` fails with `busy`. The Runtime MUST NOT create a Message, Delivery, or Ticket for the rejected request.
 
@@ -403,3 +418,5 @@ A Runtime MAY notify a Session that work is available so the Client can `lease` 
 | `deadline_exceeded` | Ticket expired before a reply was accepted. |
 
 `handler_failed` and `deadline_exceeded` normally appear inside a failed or expired Ticket. The other codes normally describe a failed Runtime operation.
+
+`ErrorObject.code` is always one of the codes above. An Agent application failure code belongs in `ErrorObject.details` of a `handler_failed` error, whose shape the Agent owns.

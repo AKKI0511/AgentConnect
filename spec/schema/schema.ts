@@ -117,8 +117,8 @@ export type TicketState =
   | "declined";
 
 /**
- * Well-known public error codes. `ErrorObject.code` remains a string so an
- * Agent application may return a domain-specific failure code.
+ * Well-known public error codes. `ErrorObject.code` is this closed set. An
+ * Agent application failure code belongs in `ErrorObject.details`.
  */
 export type ErrorCode =
   | "unsupported_version"
@@ -234,10 +234,10 @@ export interface AgentProfile {
  */
 export interface ErrorObject {
   /**
-   * Well-known ErrorCode or a lowercase Agent application failure code.
-   * @pattern ^[a-z][a-z0-9_]{0,63}$
+   * Well-known ErrorCode. An Agent application failure code belongs in
+   * `details` of a `handler_failed` error, whose shape the Agent owns.
    */
-  code: string;
+  code: ErrorCode;
   /**
    * Safe human-readable explanation.
    * @minLength 1
@@ -887,8 +887,8 @@ export interface TellToolRequest {
 /** MCP roster resource body at `agentconnect://team/roster`. */
 export interface TeamRoster {
   /** Team this roster belongs to. */
-  team_name: string;
-  /** Every current Membership, including `operator` when it exists. */
+  team_name: TeamName;
+  /** Every current Agent Membership. Principals, including `operator`, are omitted. */
   members: DirectoryEntry[];
 }
 
@@ -953,7 +953,7 @@ export interface StatusMember {
   /** True when the Membership has at least one unexpired Session. */
   online: boolean;
   /**
-   * Queued plus leased Mailbox items.
+   * Queued plus leased Mailbox items. A principal has no Mailbox; this is 0.
    * @minimum 0
    * @multipleOf 1
    */
@@ -983,7 +983,7 @@ export interface StatusResult {
    * @multipleOf 1
    */
   open_tickets: number;
-  /** Every Membership, including `operator`. Ordered by Address. */
+  /** Every Membership, including principals such as `operator`. Ordered by Address. */
   members: StatusMember[];
 }
 

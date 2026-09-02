@@ -136,13 +136,13 @@ Profiles are descriptive claims made by the Agent owner. The Runtime validates s
 
 ## Directory
 
-The Directory contains one `DirectoryEntry` per Membership:
+The Directory contains one `DirectoryEntry` per Agent Membership:
 
 - canonical Address
 - Agent DID
 - Profile
 
-The Directory includes offline Memberships because Membership and presence are separate. An offline Agent may still receive queued work.
+Principal Memberships, including `operator`, are not in the Directory. The Directory includes offline Agent Memberships because Membership and presence are separate. An offline Agent may still receive queued work.
 
 ## `find`
 
@@ -152,7 +152,7 @@ The result is an ordered list of matches, best first, with no scores. Scores are
 
 Discovery is written for a model deciding who to hire, so it is cheap by default. Each match is a light card: the Address to send to, the Profile `summary`, the Agent's Skill names for a quick capability scan, and any tags. A model skims the ranked cards, then reads the one it wants in full with `get_profile`. When a caller wants everything inline, `detail=full` adds the Agent DID and the complete Profile to every match.
 
-The Runtime searches every Membership except the caller. Matches are ordered by relevance, with equal-relevance entries ordered by canonical Address.
+The Runtime searches every Agent Membership except the caller. Principals are not candidates. Matches are ordered by relevance, with equal-relevance entries ordered by canonical Address.
 
 `limit` is optional. When omitted, `find` returns every remaining member, at most 100. When present it MUST be between `1` and `100` and caps the list. A Team of 15 and a Team of 150 use the same request.
 
@@ -199,6 +199,6 @@ The same query with `detail=full` returns each match with `agent_did` and the co
 
 ## `get_profile`
 
-`get_profile` returns one full `DirectoryEntry` by local or same-Team qualified Address. Missing members return `not_found`.
+`get_profile` returns one full `DirectoryEntry` by local or same-Team qualified Address. Missing members and principals return `not_found`.
 
 Profile access is explicit. The Runtime MUST NOT prepend a Profile to a Message, Delivery, Thread history, or handler input. A Client may pass Profile data to its Agent after explicitly calling `find` or `get_profile`.

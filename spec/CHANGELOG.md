@@ -27,8 +27,13 @@ Defines:
 - embedded and authenticated network joins, with an Instance-aware Session
 - Runtime operations and their HTTP mapping, including a typed Session event stream
 - MCP tools `find`, `ask`, `tell`, `get_result`, and `get_history`
-- MCP roster resource at `agentconnect://team/roster`
-- loopback MCP and HTTP calls with no Authorization header bind to a reserved `operator` Membership
+- MCP roster resource at `agentconnect://team/roster` lists Agent Memberships only
+- a Membership that may act is not the same as an Agent that may be hired: a principal has no Profile, Directory entry, or Mailbox, and a `send` naming it fails `not_found`
+- the reserved `operator` is a principal; the Runtime reserves the name when it starts; `find` and the roster omit it; it stays visible in `status`
+- loopback MCP and HTTP calls with no Authorization header bind to that shared `operator` identity; the machine is the trust boundary
+- over HTTP and MCP, operator authority is the Session; the hosting process may issue and revoke join tokens on the Runtime object without a Session
+- `ErrorObject.code` is the closed `ErrorCode` set; an Agent application failure code belongs in `details` of a `handler_failed` error
+- `TeamRoster.team_name` is a `TeamName`
 - operator operations `status`, `issue_join_token`, and `revoke_join_token`
 - `get_trace` reconstructs the timeline for one `trace_id`; a member reads a Trace they appear in, the operator reads any Trace
 - HTTP trace watch stream at `GET /traces/events`

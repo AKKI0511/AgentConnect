@@ -38,14 +38,14 @@ Anything not defined by these files is outside the current draft. Cross-team del
 
 | Term | Meaning |
 | --- | --- |
-| **Agent** | One logical specialist with an identity, Profile, Address, and Mailbox. |
+| **Agent** | One logical specialist with an identity, Profile, Address, and Mailbox. An Agent Membership may be hired. |
 | **Team** | The durable trust, naming, and delivery boundary that Agents join. |
 | **Runtime** | The software that serves one Team and owns its shared state. |
 | **Client** | The Agent-side software that joins a Runtime, leases work, and returns results. |
-| **Membership** | The durable relationship between one Agent and one Team. |
+| **Membership** | The durable relationship between one identity and one Team. An Agent Membership may be hired; a principal Membership may act but is not hireable. |
 | **Instance** | One running copy of an Agent holding one Session for a Membership. |
 | **Session** | Short-lived authority for one Instance to act as its Membership. |
-| **Mailbox** | The Membership's logical queue of accepted work. |
+| **Mailbox** | An Agent Membership's logical queue of accepted work. Principals have none. |
 | **Message** | An immutable request, event, response, or error accepted by the Runtime. |
 | **Delivery** | One leased attempt to handle a Message. |
 | **Ticket** | The requester's durable record for one reply-expected Message. |
@@ -53,13 +53,13 @@ Anything not defined by these files is outside the current draft. Cross-team del
 | **Thread** | Messages grouped under one `thread_id`, with retained history. |
 | **Profile** | Discovery information describing an Agent's Skills. |
 | **Address** | A human- and model-readable Agent name, optionally qualified by location. |
-| **Directory** | The Profiles and Addresses of a Team's Memberships. |
+| **Directory** | The Profiles and Addresses of a Team's Agent Memberships. |
 
 The boundaries are strict:
 
 - A Runtime stores shared communication state. It does not hold Agent objects or call Agent methods.
 - Clients pull Deliveries when they have capacity.
-- Membership survives Session loss. A Membership may have several concurrent Instances that share one Mailbox.
+- Membership survives Session loss. An Agent Membership may have several concurrent Instances that share one Mailbox.
 - The Mailbox is one logical queue. A Runtime MAY partition it across backends to scale a single busy Agent; partitioning changes no observable rule except that there is no total order across the Mailbox.
 - Session loss releases that Session's leases but does not delete the Membership, accepted Messages, Tickets, or retained Thread history.
 - The Runtime, not the sending payload, sets the verified sender and every other Runtime-owned field on an accepted Message.

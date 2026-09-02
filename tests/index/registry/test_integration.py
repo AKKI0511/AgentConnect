@@ -11,12 +11,12 @@ import pytest_asyncio
 
 from agentconnect.index.registry import AgentRegistry
 from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.core.types import (
-    AgentIdentity,
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.profile import Skill
+from agentconnect.index.types import (
     AgentType,
     Capability,
     InteractionMode,
-    Skill,
 )
 
 

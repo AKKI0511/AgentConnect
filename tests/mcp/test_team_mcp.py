@@ -30,9 +30,9 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message: dict[str, Any], ctx) -> Any:
-        if message.get("kind") == "request" and message.get("deadline"):
-            return {"echo": message.get("content")}
+    async def process_message(self, message, ctx) -> Any:
+        if message.kind == "request" and getattr(message, "deadline", None):
+            return {"echo": message.content}
         return None
 
 
@@ -197,7 +197,7 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
             ]
             assert body["team_name"] == "content-squad"
             assert "writer" in member_names
-            assert "operator" in member_names
+            assert "operator" not in member_names
 
             pinged = _body(await client.call_tool("ping", {}))
             assert pinged.get("status") == "ok" or "ok" in json.dumps(pinged)

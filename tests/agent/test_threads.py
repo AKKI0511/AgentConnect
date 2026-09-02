@@ -48,8 +48,8 @@ async def test_threaded_ask_exposes_history_and_paging(team: Team):
 
         async def process_message(self, message, ctx):
             self.seen_history = list(ctx.history)
-            if message.get("kind") == "request" and message.get("deadline"):
-                return {"echo": message.get("content"), "prior": len(ctx.history)}
+            if message.kind == "request" and getattr(message, "deadline", None):
+                return {"echo": message.content, "prior": len(ctx.history)}
             return None
 
     writer = Historian(name="writer")

@@ -24,9 +24,9 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message: dict[str, Any], ctx) -> Any:
-        if message.get("kind") == "request" and message.get("deadline"):
-            return {"echo": message.get("content")}
+    async def process_message(self, message, ctx) -> Any:
+        if message.kind == "request" and getattr(message, "deadline", None):
+            return {"echo": message.content}
         return None
 
 
@@ -48,7 +48,7 @@ class Coordinator(BaseAgent):
         super().__init__(name=name)
         self.tools = self.team_tools()
 
-    async def process_message(self, message: dict[str, Any], ctx) -> Any:
+    async def process_message(self, message, ctx) -> Any:
         return None
 
 

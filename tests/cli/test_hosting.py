@@ -29,10 +29,10 @@ class Echo(BaseAgent):
         ],
     }
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
-        if msg.get("kind") != "request":
+    async def process_message(self, msg, ctx: Any) -> Any:
+        if msg.kind != "request":
             return None
-        return msg.get("content")
+        return msg.content
 
 
 def test_import_symbol_and_team_from_config() -> None:

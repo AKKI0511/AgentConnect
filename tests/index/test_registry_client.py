@@ -17,7 +17,8 @@ import httpx
 
 from agentconnect.index.client import RegistryAPIClient
 from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.core.types import AgentType, InteractionMode, AgentIdentity
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.index.types import AgentType, InteractionMode
 
 
 @pytest.fixture

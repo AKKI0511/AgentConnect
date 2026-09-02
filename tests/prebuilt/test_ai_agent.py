@@ -26,8 +26,8 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message: dict[str, Any], ctx) -> Any:
-        if message.get("kind") != "request":
+    async def process_message(self, message, ctx) -> Any:
+        if message.kind != "request":
             return None
         return "Draft complete."
 
@@ -70,7 +70,7 @@ async def test_aiagent_process_message_reads_ctx_history():
         return turns.pop(0)
 
     class Silent(BaseAgent):
-        async def process_message(self, message: dict[str, Any], ctx) -> Any:
+        async def process_message(self, message, ctx) -> Any:
             return None
 
     team = await Team("content-squad").start()

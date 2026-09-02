@@ -15,12 +15,12 @@ from tests.core.utils import print_header, print_step, print_success, print_resu
 pytestmark = pytest.mark.slow
 
 # Core imports
-from agentconnect.core.types import (
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.profile import Skill
+from agentconnect.index.types import (
     AgentType,
-    AgentIdentity,
     Capability,
     InteractionMode,
-    Skill,
 )
 from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService

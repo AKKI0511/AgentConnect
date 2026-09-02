@@ -12,12 +12,12 @@ from datetime import datetime
 from typing import List
 
 # Import from agentconnect
-from agentconnect.core.types import (
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.profile import Skill
+from agentconnect.index.types import (
     AgentType,
-    AgentIdentity,
     Capability,
     InteractionMode,
-    Skill,
 )
 from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService

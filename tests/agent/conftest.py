@@ -13,23 +13,23 @@ from agentconnect.team import Team
 class EchoAgent(BaseAgent):
     """Replies to reply-expected requests by echoing ``content``."""
 
-    async def process_message(self, message: dict[str, Any], ctx) -> Any:
-        if message.get("kind") == "request" and message.get("deadline"):
-            return {"echo": message.get("content")}
+    async def process_message(self, message, ctx) -> Any:
+        if message.kind == "request" and getattr(message, "deadline", None):
+            return {"echo": message.content}
         return None
 
 
 class DeclineAgent(BaseAgent):
     """Reads every Delivery and answers nothing."""
 
-    async def process_message(self, message: dict[str, Any], ctx) -> None:
+    async def process_message(self, message, ctx) -> None:
         return None
 
 
 class BoomAgent(BaseAgent):
     """Raises on every Delivery."""
 
-    async def process_message(self, message: dict[str, Any], ctx) -> None:
+    async def process_message(self, message, ctx) -> None:
         raise RuntimeError("handler exploded")
 
 
@@ -41,7 +41,7 @@ class DeferredAgent(BaseAgent):
         self.handle = None
         self.seen = None
 
-    async def process_message(self, message: dict[str, Any], ctx):
+    async def process_message(self, message, ctx):
         self.seen = message
         self.handle = ctx.ticket()
         return None

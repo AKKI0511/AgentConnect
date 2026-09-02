@@ -78,13 +78,8 @@ def test_base_agent_does_not_import_coinbase_when_disabled(monkeypatch):
         sys.modules.pop(name, None)
 
     from agentconnect.agent.base import BaseAgent
-    from agentconnect.core.types import (
-        AgentIdentity,
-        AgentProfile,
-        AgentType,
-        InteractionMode,
-        Capability,
-    )
+    from agentconnect.core.identity import AgentIdentity
+    from agentconnect.core.profile import AgentProfile, Skill
 
     class DummyAgent(BaseAgent):
         def _initialize_llm(self):
@@ -93,20 +88,17 @@ def test_base_agent_does_not_import_coinbase_when_disabled(monkeypatch):
         def _initialize_workflow(self):
             return None
 
-        async def process_message(self, message):
+        async def process_message(self, message, ctx=None):
             return None
 
     profile = AgentProfile(
-        agent_id="test_agent",
-        agent_type=AgentType.AI,
-        name="Test",
-        capabilities=[Capability(name="x", description="y")],
+        summary="Test agent for import safety.",
+        skills=[Skill(name="x", description="Handles a tiny test skill.")],
     )
     identity = AgentIdentity.create_key_based()
     agent = DummyAgent(
         agent_id="test_agent",
         identity=identity,
-        interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         profile=profile,
         enable_payments=False,
     )
@@ -124,13 +116,8 @@ def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
         sys.modules.pop(name, None)
 
     from agentconnect.agent.base import BaseAgent
-    from agentconnect.core.types import (
-        AgentIdentity,
-        AgentProfile,
-        AgentType,
-        InteractionMode,
-        Capability,
-    )
+    from agentconnect.core.identity import AgentIdentity
+    from agentconnect.core.profile import AgentProfile, Skill
 
     class DummyAgent(BaseAgent):
         def _initialize_llm(self):
@@ -139,14 +126,12 @@ def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
         def _initialize_workflow(self):
             return None
 
-        async def process_message(self, message):
+        async def process_message(self, message, ctx=None):
             return None
 
     profile = AgentProfile(
-        agent_id="test_agent",
-        agent_type=AgentType.AI,
-        name="Test",
-        capabilities=[Capability(name="x", description="y")],
+        summary="Test agent for import safety.",
+        skills=[Skill(name="x", description="Handles a tiny test skill.")],
     )
     identity = AgentIdentity.create_key_based()
 
@@ -154,7 +139,6 @@ def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
     agent = DummyAgent(
         agent_id="test_agent",
         identity=identity,
-        interaction_modes=[InteractionMode.HUMAN_TO_AGENT],
         profile=profile,
         enable_payments=True,
     )

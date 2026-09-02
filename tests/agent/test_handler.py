@@ -104,7 +104,7 @@ async def test_event_does_not_open_ticket(team: Team):
 async def test_ctx_ask_mid_handling(team: Team):
     class Relay(EchoAgent):
         async def process_message(self, message, ctx):
-            if message.get("content") == "relay":
+            if message.content == "relay":
                 inner = await ctx.ask(
                     "writer", "from-relay", deadline_seconds=5, collect="wait"
                 )

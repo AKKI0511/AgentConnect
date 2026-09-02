@@ -9,9 +9,7 @@ decentralized identifiers (DIDs) and cryptographic signatures.
 import logging
 
 # Absolute imports from agentconnect package
-from agentconnect.core.types import (
-    AgentIdentity,
-)
+from agentconnect.core.identity import AgentIdentity
 
 # Set up logging
 logger = logging.getLogger(__name__)

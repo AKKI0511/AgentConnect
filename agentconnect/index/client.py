@@ -20,7 +20,7 @@ from agentconnect.index.registry.search import (
     AgentSearchOutput,
     AgentSearchResultItem,
 )
-from agentconnect.core.types import AgentType, InteractionMode
+from agentconnect.index.types import AgentType, InteractionMode
 
 logger = logging.getLogger(__name__)
 
@@ -571,7 +571,7 @@ class RegistryAPIClient:
 
 #         # Test register (requires a valid AgentRegistration object)
 #         from agentconnect.core.identity import IdentityProfile, VerificationMethod
-#         from agentconnect.core.types import Capability
+#         from agentconnect.index.types import Capability
 
 #         test_reg = AgentRegistration(
 #             agent_id="client-test-agent-002",

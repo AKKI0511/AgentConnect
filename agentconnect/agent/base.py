@@ -6,7 +6,7 @@ when the Team comes back.
 
     class Researcher(BaseAgent):
         async def process_message(self, msg, ctx):
-            return f"noted: {msg['content']}"
+            return f"noted: {msg.content}"
 
     team = await Team("content-squad").start()
     await Researcher(name="researcher").join(team)
@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 import uuid
 from pathlib import Path
@@ -39,6 +38,7 @@ from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union, cast
 
 from dotenv import load_dotenv
 
+from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import CollectMode, Session
 from agentconnect.agent.tools import TeamTools
@@ -50,8 +50,8 @@ from agentconnect.core.identity import (
     issue_identity_proof,
 )
 from agentconnect.core.kinds import MessageKind
+from agentconnect.core.message import Message
 from agentconnect.core.profile import AgentProfile
-from agentconnect.core.types import InteractionMode
 from agentconnect.utils import wallet_manager
 
 if TYPE_CHECKING:
@@ -59,8 +59,6 @@ if TYPE_CHECKING:
     from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider
 
 logger = logging.getLogger(__name__)
-
-_SKILL_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?$")
 
 
 class BaseAgent:
@@ -83,7 +81,7 @@ class BaseAgent:
         max_in_flight: int = 1,
         join_token: Optional[str] = None,
         agent_id: Optional[str] = None,
-        interaction_modes: Optional[List[InteractionMode]] = None,
+        interaction_modes: Optional[List[str]] = None,
         enable_payments: bool = False,
         wallet_data_dir: Optional[Union[str, Path]] = None,
         **kwargs: Any,
@@ -347,10 +345,12 @@ class BaseAgent:
         """
         return TeamTools(self._require_session)
 
-    async def process_message(self, message: Mapping[str, Any], ctx: Any = None) -> Any:
+    async def process_message(
+        self, message: Message, ctx: Context | None = None
+    ) -> Any:
         """Handle one Delivery.
 
-        Override this. ``message`` is the Runtime Message mapping
+        Override this. ``message`` is the delivered Runtime Message
         (``id``, ``sender``, ``recipient``, ``kind``, ``content``, ...).
         ``ctx`` is a :class:`~agentconnect.agent.context.Context`.
 
@@ -512,59 +512,14 @@ class BaseAgent:
             self.agent_kit = None
 
 
-def _skill_name(value: str, fallback: str) -> str:
-    lowered = re.sub(r"[^a-z0-9_-]+", "-", value.strip().lower()).strip("-_")
-    if _SKILL_NAME.fullmatch(lowered):
-        return lowered
-    return fallback
-
-
 def _discovery_profile(profile: Any, name: str) -> dict[str, Any]:
-    """Build the discovery Profile the Runtime accepts on join."""
-    if isinstance(profile, Mapping) and "summary" in profile and "skills" in profile:
-        out = {
-            "summary": profile["summary"],
-            "skills": list(profile["skills"]),
-        }
-        if profile.get("description"):
-            out["description"] = profile["description"]
-        if profile.get("tags"):
-            out["tags"] = list(profile["tags"])
-        return out
-    if isinstance(profile, AgentProfile):
-        summary = (
-            profile.summary
-            or profile.description
-            or f"{name} handles work for this team."
-        )
-        skills: list[dict[str, str]] = []
-        seen: set[str] = set()
-        for skill in profile.skills or []:
-            skill_name = _skill_name(skill.name, "generic")
-            if skill_name in seen:
-                continue
-            seen.add(skill_name)
-            desc = skill.description or skill.name
-            skills.append({"name": skill_name, "description": desc})
-        for cap in profile.capabilities or []:
-            skill_name = _skill_name(getattr(cap, "name", ""), "generic")
-            if skill_name in seen:
-                continue
-            seen.add(skill_name)
-            desc = getattr(cap, "description", None) or skill_name
-            skills.append({"name": skill_name, "description": desc})
-        if not skills:
-            skills = [
-                {
-                    "name": "generic",
-                    "description": f"Work handled by {name}.",
-                }
-            ]
-        out = {"summary": str(summary)[:200], "skills": skills}
-        if profile.tags:
-            out["tags"] = list(profile.tags)
-        return out
-    return {
+    """Return the discovery Profile the Runtime accepts on join."""
+    fallback = {
         "summary": f"{name} handles work for this team.",
         "skills": [{"name": "generic", "description": f"Work handled by {name}."}],
     }
+    if profile is None:
+        return AgentProfile.model_validate(fallback).to_public_dict()
+    if isinstance(profile, AgentProfile):
+        return profile.to_public_dict()
+    return AgentProfile.model_validate(profile).to_public_dict()

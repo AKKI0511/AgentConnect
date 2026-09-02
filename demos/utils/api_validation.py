@@ -12,8 +12,8 @@ from uuid import uuid4
 from .demo_logger import get_logger
 from .config_manager import get_config
 from .shared import shared
-from agentconnect.core.types import ModelProvider
-from demos.api.models.chat import WebSocketMessage, MessageType
+from demos.utils.model_types import ModelProvider
+from demos.api.models.chat import WebSocketMessage, MessageKind
 
 logger = get_logger(__name__)
 config = get_config()
@@ -227,7 +227,7 @@ async def validate_ws_message(message_data: str) -> Optional[WebSocketMessage]:
         if not message.content or not message.content.strip():
             logger.warning("Empty message content")
             return None
-        if message.type not in [MessageType.TEXT, MessageType.SYSTEM]:
+        if message.type not in [MessageKind.EVENT, MessageKind.EVENT]:
             logger.warning(f"Invalid message type: {message.type}")
             return None
         return message

@@ -2,12 +2,9 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from agentconnect.core.types import (
-    ModelProvider,
-    ModelName,
-    InteractionMode,
-    MessageKind,
-)
+from agentconnect.core.kinds import MessageKind
+from agentconnect.index.types import InteractionMode
+from demos.utils.model_types import ModelName, ModelProvider
 
 
 class AgentConfig(BaseModel):

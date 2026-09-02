@@ -376,12 +376,12 @@ def extract_capability_index(
 async def main():
     #  Test usage
     from agentconnect.index.registry.registration import AgentRegistration
-    from agentconnect.core.types import (
+    from agentconnect.core.identity import AgentIdentity
+    from agentconnect.core.profile import Skill
+    from agentconnect.index.types import (
         AgentType,
-        InteractionMode,
-        AgentIdentity,
-        Skill,
         Capability,
+        InteractionMode,
     )
 
     # Removed direct AsyncQdrantClient import here, will use our helper

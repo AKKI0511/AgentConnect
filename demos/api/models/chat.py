@@ -3,10 +3,11 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
-from agentconnect.core.types import ModelProvider, ModelName, InteractionMode
+from agentconnect.index.types import InteractionMode
+from demos.utils.model_types import ModelName, ModelProvider
 
 
-class MessageType(str, Enum):
+class MessageKind(str, Enum):
     TEXT = "text"
     PING = "ping"
     ERROR = "error"
@@ -68,7 +69,7 @@ class ChatMessage(BaseMessageModel):
 class WebSocketMessage(BaseMessageModel):
     """Model for WebSocket communication"""
 
-    type: MessageType = Field(..., description="Type of message")
+    type: MessageKind = Field(..., description="Type of message")
     content: Optional[str] = Field(None, description="Message content")
     sender: Optional[str] = Field(None, description="Sender identifier")
     receiver: Optional[str] = Field(None, description="Receiver identifier")
@@ -83,9 +84,9 @@ class WebSocketMessage(BaseMessageModel):
     @field_validator("type", mode="before")
     @classmethod
     def validate_message_type(cls, v):
-        if isinstance(v, MessageType):
+        if isinstance(v, MessageKind):
             return v
-        if not MessageType.has_value(v):
+        if not MessageKind.has_value(v):
             raise ValueError(f"Invalid message type: {v}")
         return v
 
@@ -166,7 +167,7 @@ class SessionResponse(BaseMessageModel):
     """Enhanced response model for session operations with detailed agent information"""
 
     session_id: str = Field(..., description="Unique session identifier")
-    type: MessageType = Field(..., description="Session type")
+    type: MessageKind = Field(..., description="Session type")
     created_at: datetime = Field(..., description="Session creation timestamp")
     status: str = Field(default="active", description="Session status")
     session_type: str = Field(
@@ -247,5 +248,5 @@ class MessageResponse(BaseModel):
     sender: str
     receiver: str
     timestamp: datetime
-    type: MessageType
+    type: MessageKind
     metadata: Optional[Dict[str, Any]] = None

@@ -110,8 +110,8 @@ async def run_tool_loop(
 
 
 def messages_from_thread(
-    history: Sequence[Mapping[str, Any]],
-    current: Mapping[str, Any] | str,
+    history: Sequence[Any],
+    current: Any,
     *,
     self_address: Optional[str] = None,
     instructions: Optional[str] = None,
@@ -135,14 +135,17 @@ def messages_from_thread(
 
 
 def _history_item(
-    item: Mapping[str, Any],
+    item: Any,
     *,
     self_address: Optional[str],
     as_user: bool = False,
 ) -> dict[str, Any]:
-    if "role" in item and "content" in item and "sender" not in item:
-        return {"role": str(item["role"]), "content": _content_text(item)}
-    sender = str(item.get("sender") or "")
+    if isinstance(item, Mapping) and "role" in item and "content" in item:
+        if "sender" not in item:
+            return {"role": str(item["role"]), "content": _content_text(item)}
+    sender = str(getattr(item, "sender", None) or "")
+    if not sender and isinstance(item, Mapping):
+        sender = str(item.get("sender") or "")
     role = "user"
     if not as_user and self_address and sender == self_address:
         role = "assistant"

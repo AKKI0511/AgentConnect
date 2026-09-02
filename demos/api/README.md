@@ -212,7 +212,7 @@ Authentication options:
 
 ### Message Types
 ```typescript
-enum MessageType {
+enum MessageKind {
     TEXT = "text",
     PING = "ping",
     ERROR = "error",
@@ -230,7 +230,7 @@ enum MessageRole {
 }
 
 interface WebSocketMessage {
-    type: MessageType;
+    type: MessageKind;
     content?: string;
     sender?: string;
     receiver?: string;
@@ -434,7 +434,7 @@ Authorization: Bearer <token>
 interface AgentMessageRequest {
     receiver_id: string;
     content: string;
-    message_type: MessageType;
+    message_type: MessageKind;
     structured_data?: Record<string, any>;
     metadata?: Record<string, any>;
 }

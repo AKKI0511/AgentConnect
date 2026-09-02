@@ -18,7 +18,7 @@ import hashlib
 import logging
 from typing import Any, Mapping, Sequence
 
-from agentconnect.core.profile import DirectoryMatch, FindResult
+from agentconnect.core.directory import DirectoryMatch, FindResult
 from agentconnect.team.codec import canonical_json
 from agentconnect.team.directory.embedder import Embedder, cosine, l2_normalize
 from agentconnect.team.store.base import Store
@@ -74,7 +74,7 @@ class Directory:
             if member.get("address") != exclude_address and member.get("profile")
         ]
         if not candidates:
-            return {"matches": []}
+            return FindResult(matches=[])
 
         query_vectors = await self._embedder.embed([query])
         query_vector = query_vectors[0]
@@ -91,7 +91,7 @@ class Directory:
         matches: list[DirectoryMatch] = [
             _match_card(member, detail=detail) for _, _, member in scored[:cap]
         ]
-        return {"matches": matches}
+        return FindResult(matches=matches)
 
     async def _vector_for(
         self,
@@ -168,15 +168,15 @@ def _fingerprint(profile: Mapping[str, Any], backend: str) -> str:
 
 def _match_card(member: Mapping[str, Any], *, detail: str) -> DirectoryMatch:
     profile = member["profile"]
-    match: DirectoryMatch = {
+    data: dict[str, Any] = {
         "address": str(member["address"]),
         "summary": str(profile["summary"]),
         "skill_names": [str(skill["name"]) for skill in profile.get("skills") or []],
     }
     tags = profile.get("tags")
     if tags:
-        match["tags"] = [str(tag) for tag in tags]
+        data["tags"] = [str(tag) for tag in tags]
     if detail == "full":
-        match["agent_did"] = str(member["agent_did"])
-        match["profile"] = dict(profile)
-    return match
+        data["agent_did"] = str(member["agent_did"])
+        data["profile"] = dict(profile)
+    return DirectoryMatch.model_validate(data)

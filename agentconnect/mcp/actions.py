@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Protocol
 
+from agentconnect.core.base import dump_public
 from agentconnect.mcp.ids import message_id_for_tool
 from agentconnect.team.errors import TeamError
 
@@ -155,10 +156,10 @@ async def wait_for_ticket(
 ) -> dict[str, Any]:
     """Poll ``get_result`` until the Ticket is terminal or ``wait_seconds`` elapses."""
     if wait_seconds <= 0:
-        return await runtime.get_result(session_token, ticket_id)
+        return dump_public(await runtime.get_result(session_token, ticket_id))
     deadline = time.monotonic() + float(wait_seconds)
     while True:
-        ticket = await runtime.get_result(session_token, ticket_id)
+        ticket = dump_public(await runtime.get_result(session_token, ticket_id))
         if ticket.get("state") != "open":
             return ticket
         remaining = deadline - time.monotonic()
@@ -185,7 +186,9 @@ async def find_action(
         cap = _int_in_range(limit, name="limit", minimum=1, maximum=100)
     if detail not in {"summary", "full"}:
         raise ValueError("detail must be summary or full")
-    return await runtime.find(session_token, query, limit=cap, detail=detail)
+    return dump_public(
+        await runtime.find(session_token, query, limit=cap, detail=detail)
+    )
 
 
 async def ask_action(
@@ -227,17 +230,19 @@ async def ask_action(
     )
     send_thread = arg_thread or str(uuid.uuid4())
     try:
-        result = await runtime.send(
-            session_token,
-            {
-                "id": message_id,
-                "recipient": recipient,
-                "kind": "request",
-                "content": content,
-                "collect": "ticket",
-                "deadline": deadline_rfc3339(deadline_s),
-                "thread_id": send_thread,
-            },
+        result = dump_public(
+            await runtime.send(
+                session_token,
+                {
+                    "id": message_id,
+                    "recipient": recipient,
+                    "kind": "request",
+                    "content": content,
+                    "collect": "ticket",
+                    "deadline": deadline_rfc3339(deadline_s),
+                    "thread_id": send_thread,
+                },
+            )
         )
     except TeamError as exc:
         if exc.code == "id_conflict" and key:
@@ -286,7 +291,7 @@ async def tell_action(
     if arg_thread is not None:
         body["thread_id"] = arg_thread
     try:
-        return await runtime.send(session_token, body)
+        return dump_public(await runtime.send(session_token, body))
     except TeamError as exc:
         if exc.code == "id_conflict" and key:
             return {
@@ -300,8 +305,10 @@ async def get_result_action(
     runtime: TeamRuntime, session_token: str, ticket_id: str
 ) -> dict[str, Any]:
     """Return the current Ticket owned by this Session."""
-    return await runtime.get_result(
-        session_token, _require_uuid(ticket_id, name="ticket_id")
+    return dump_public(
+        await runtime.get_result(
+            session_token, _require_uuid(ticket_id, name="ticket_id")
+        )
     )
 
 
@@ -317,4 +324,6 @@ async def get_history_action(
     thread = _require_uuid(thread_id, name="thread_id")
     before_id = _optional_uuid(before, name="before")
     cap = _int_in_range(limit, name="limit", minimum=1, maximum=200, default=50)
-    return await runtime.get_history(session_token, thread, before=before_id, limit=cap)
+    return dump_public(
+        await runtime.get_history(session_token, thread, before=before_id, limit=cap)
+    )

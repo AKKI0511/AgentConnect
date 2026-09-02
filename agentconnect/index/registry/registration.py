@@ -11,12 +11,12 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 # Absolute imports from agentconnect package
-from agentconnect.core.types import (
-    AgentIdentity,
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.profile import Skill
+from agentconnect.index.types import (
     AgentType,
     Capability,
     InteractionMode,
-    Skill,
 )
 
 

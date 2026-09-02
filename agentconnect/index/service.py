@@ -19,7 +19,8 @@ from agentconnect.index.registry.search import (
     AgentSearchOutput,
     populate_search_result_item,
 )
-from agentconnect.core.types import Capability, InteractionMode, AgentType, Skill
+from agentconnect.core.profile import Skill
+from agentconnect.index.types import AgentType, Capability, InteractionMode
 from agentconnect.config.servers import RegistryAPISettings
 
 logger = logging.getLogger("uvicorn.error.agentconnect.registry")

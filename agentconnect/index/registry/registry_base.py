@@ -13,10 +13,12 @@ from typing import Dict, List, Optional, Set, Tuple, Any, Union
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import (
+    VerificationStatus,
+)
+from agentconnect.index.types import (
     AgentType,
     Capability,
     InteractionMode,
-    VerificationStatus,
 )
 from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService

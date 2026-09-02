@@ -20,7 +20,19 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
+from agentconnect.core.directory import DirectoryEntry, FindResult
+from agentconnect.core.message import parse_delivery
+from agentconnect.core.operations import (
+    HeartbeatResult,
+    JoinResult,
+    TicketedSendResult,
+    parse_history_result,
+    parse_join_result,
+    parse_lease_result,
+    parse_send_result,
+)
 from agentconnect.core.spec import SPEC_VERSION
+from agentconnect.core.ticket import Ticket, parse_ticket
 from agentconnect.transport.agent_http import HttpRuntimeTransport
 from agentconnect.transport.inprocess import InProcessTransport
 from agentconnect.transport.runtime import TransportError
@@ -159,21 +171,24 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        result = await self._call("send", self._transport.send, self._token(), body)
-        if collect == "wait" and isinstance(result, dict):
-            ticket = result.get("ticket")
-            if isinstance(ticket, dict) and ticket.get("state") == "open":
-                ticket_id = ticket.get("id")
-                if isinstance(ticket_id, str):
-                    result = dict(result)
-                    result["ticket"] = await self._await_ticket(ticket_id)
+        result = parse_send_result(
+            await self._call("send", self._transport.send, self._token(), body)
+        )
+        if collect == "wait" and isinstance(result, TicketedSendResult):
+            if result.ticket.state == "open":
+                ticket = await self._await_ticket(result.ticket.id)
+                return TicketedSendResult(
+                    status="ticketed",
+                    message=result.message,
+                    ticket=ticket,
+                )
         return result
 
-    async def _await_ticket(self, ticket_id: str) -> dict[str, Any]:
+    async def _await_ticket(self, ticket_id: str) -> Ticket:
         """Poll ``get_result`` until the Ticket is no longer ``open``."""
         while True:
             ticket = await self.get_result(ticket_id)
-            if ticket.get("state") != "open":
+            if ticket.state != "open":
                 return ticket
             await asyncio.sleep(0.05)
 
@@ -203,7 +218,9 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        return await self._call("send", self._transport.send, self._token(), body)
+        return parse_send_result(
+            await self._call("send", self._transport.send, self._token(), body)
+        )
 
     async def find(
         self, query: str, *, limit: int | None = None, detail: str = "summary"
@@ -212,25 +229,31 @@ class Session:
 
         found = await session.find("someone who can draft a summary")
         """
-        return await self._call(
-            "find",
-            self._transport.find,
-            self._token(),
-            query,
-            limit=limit,
-            detail=detail,
+        return FindResult.model_validate(
+            await self._call(
+                "find",
+                self._transport.find,
+                self._token(),
+                query,
+                limit=limit,
+                detail=detail,
+            )
         )
 
     async def get_profile(self, address: str) -> dict[str, Any]:
         """Return one Directory entry."""
-        return await self._call(
-            "get_profile", self._transport.get_profile, self._token(), address
+        return DirectoryEntry.model_validate(
+            await self._call(
+                "get_profile", self._transport.get_profile, self._token(), address
+            )
         )
 
-    async def get_result(self, ticket_id: str) -> dict[str, Any]:
+    async def get_result(self, ticket_id: str) -> Ticket:
         """Return the current Ticket owned by this Membership."""
-        return await self._call(
-            "get_result", self._transport.get_result, self._token(), ticket_id
+        return parse_ticket(
+            await self._call(
+                "get_result", self._transport.get_result, self._token(), ticket_id
+            )
         )
 
     async def get_history(
@@ -245,13 +268,15 @@ class Session:
         Omit ``before`` for the newest page. A UUID that is not in the
         transcript returns that newest page.
         """
-        return await self._call(
-            "get_history",
-            self._transport.get_history,
-            self._token(),
-            thread_id,
-            before=before,
-            limit=limit,
+        return parse_history_result(
+            await self._call(
+                "get_history",
+                self._transport.get_history,
+                self._token(),
+                thread_id,
+                before=before,
+                limit=limit,
+            )
         )
 
     async def reply_delivery(
@@ -309,10 +334,10 @@ class Session:
                 await self._attach_join_credentials(body)
                 result = await self._transport.join(body)
                 if self._stopped:
-                    token = result.get("session_token")
-                    if token:
+                    parsed = parse_join_result(result)
+                    if parsed.session_token:
                         try:
-                            await self._transport.disconnect(token)
+                            await self._transport.disconnect(parsed.session_token)
                         except TransportError:
                             pass
                     return
@@ -350,14 +375,15 @@ class Session:
         if token:
             body["join_token"] = token
 
-    def _apply_join(self, result: Mapping[str, Any]) -> None:
-        self.session_token = str(result["session_token"])
-        self.address = str(result["address"])
-        self.team_name = str(result["team_name"])
-        self.instance_id = str(result.get("instance_id") or self.instance_id)
-        self.limits = dict(result.get("limits") or {})
-        self.persistence = result.get("persistence")
-        self.session_expires_at = result.get("session_expires_at")
+    def _apply_join(self, result: Mapping[str, Any] | JoinResult) -> None:
+        parsed = parse_join_result(result)
+        self.session_token = parsed.session_token
+        self.address = parsed.address
+        self.team_name = parsed.team_name
+        self.instance_id = parsed.instance_id
+        self.limits = parsed.limits.to_public_dict()
+        self.persistence = parsed.persistence
+        self.session_expires_at = parsed.session_expires_at
         self._connected = True
         self._wake.set()
         logger.info(
@@ -387,8 +413,10 @@ class Session:
                 await asyncio.sleep(interval)
                 if self._stopped or not self.session_token:
                     continue
-                result = await self._transport.heartbeat(self.session_token)
-                self.session_expires_at = result.get("session_expires_at")
+                result = HeartbeatResult.model_validate(
+                    await self._transport.heartbeat(self.session_token)
+                )
+                self.session_expires_at = result.session_expires_at
             except asyncio.CancelledError:
                 raise
             except TransportError as exc:
@@ -463,7 +491,9 @@ class Session:
                     await asyncio.sleep(0.05)
                 continue
             try:
-                leased = await self._transport.lease(self.session_token, room)
+                leased = parse_lease_result(
+                    await self._transport.lease(self.session_token, room)
+                )
             except TransportError as exc:
                 if self._stopped:
                     return
@@ -475,7 +505,7 @@ class Session:
                 )
                 await asyncio.sleep(0.2)
                 continue
-            deliveries = leased.get("deliveries") or []
+            deliveries = leased.deliveries
             if not deliveries:
                 try:
                     await asyncio.wait_for(self._wake.wait(), timeout=1.0)
@@ -485,7 +515,7 @@ class Session:
                 continue
             for delivery in deliveries:
                 task = asyncio.create_task(
-                    self._handle(delivery), name=f"delivery:{delivery.get('lease_id')}"
+                    self._handle(delivery), name=f"delivery:{delivery.lease_id}"
                 )
                 self._inflight.add(task)
                 task.add_done_callback(self._inflight.discard)
@@ -498,8 +528,10 @@ class Session:
                 return
             if self.session_token and self._connected:
                 try:
-                    result = await self._transport.heartbeat(self.session_token)
-                    self.session_expires_at = result.get("session_expires_at")
+                    result = HeartbeatResult.model_validate(
+                        await self._transport.heartbeat(self.session_token)
+                    )
+                    self.session_expires_at = result.session_expires_at
                     return
                 except TransportError:
                     self._connected = False
@@ -518,9 +550,10 @@ class Session:
                 logger.warning("reconnect failed address=%s", self.address)
                 await asyncio.sleep(0.2)
 
-    async def _handle(self, delivery: Mapping[str, Any]) -> None:
-        message = dict(delivery.get("message") or {})
-        ctx = await self._build_context(delivery)
+    async def _handle(self, delivery: Any) -> None:
+        parsed = parse_delivery(delivery)
+        message = parsed.message
+        ctx = await self._build_context(parsed)
         try:
             result = await _invoke_handler(self._agent, message, ctx)
         except asyncio.CancelledError:
@@ -529,36 +562,43 @@ class Session:
             logger.exception(
                 "handler failed address=%s message_id=%s",
                 self.address,
-                message.get("id"),
+                message.id,
             )
-            await self._fail_or_complete(delivery, exc)
+            await self._fail_or_complete(parsed, exc)
             return
         if ctx.ticket_taken:
             return
-        await self._finish_handler(delivery, result)
+        await self._finish_handler(parsed, result)
 
-    async def _build_context(self, delivery: Mapping[str, Any]) -> Context:
-        message = delivery.get("message") or {}
-        sender = str(message.get("sender") or "")
+    async def _build_context(self, delivery: Any) -> Context:
+        from agentconnect.core.message import Delivery as DeliveryModel
+
+        parsed = (
+            delivery
+            if isinstance(delivery, DeliveryModel)
+            else parse_delivery(delivery)
+        )
+        sender = str(parsed.message.sender)
         sender_did = self._sender_did_cache.get(sender, "")
         if sender and sender not in self._sender_did_cache:
             try:
                 entry = await self.get_profile(sender)
-                sender_did = str(entry.get("agent_did") or "")
+                sender_did = str(entry.agent_did)
                 self._sender_did_cache[sender] = sender_did
             except SessionError:
                 sender_did = ""
         return Context(
             self,
-            delivery,
+            parsed,
             sender_did=sender_did,
             origin=self.team_name or "",
             external=False,
         )
 
-    async def _finish_handler(self, delivery: Mapping[str, Any], result: Any) -> None:
-        message = delivery.get("message") or {}
-        reply_expected = message.get("kind") == "request" and message.get("deadline")
+    async def _finish_handler(self, delivery: Any, result: Any) -> None:
+        from agentconnect.core.message import is_reply_expected
+
+        reply_expected = is_reply_expected(delivery.message)
         content = _handler_content(result)
         try:
             if reply_expected:
@@ -575,11 +615,10 @@ class Session:
                 "finish delivery failed address=%s code=%s", self.address, exc.code
             )
 
-    async def _fail_or_complete(
-        self, delivery: Mapping[str, Any], exc: BaseException
-    ) -> None:
-        message = delivery.get("message") or {}
-        reply_expected = message.get("kind") == "request" and message.get("deadline")
+    async def _fail_or_complete(self, delivery: Any, exc: BaseException) -> None:
+        from agentconnect.core.message import is_reply_expected
+
+        reply_expected = is_reply_expected(delivery.message)
         safe = str(exc) or "handler failed"
         if len(safe) > 2000:
             safe = safe[:2000]
@@ -629,9 +668,7 @@ def _handler_content(result: Any) -> Any:
     return result
 
 
-async def _invoke_handler(
-    agent: "BaseAgent", message: dict[str, Any], ctx: Context
-) -> Any:
+async def _invoke_handler(agent: "BaseAgent", message: Any, ctx: Context) -> Any:
     method = agent.process_message
     if _accepts_ctx(method):
         return await method(message, ctx)

@@ -11,11 +11,11 @@ speak MCP.
             self.tools = self.team_tools()
 
         async def process_message(self, msg, ctx):
-            found = await self.tools.find(query=str(msg["content"]))
+            found = await self.tools.find(query=str(msg.content))
             peer = found["matches"][0]["address"]
             ticket = await self.tools.ask(
                 recipient=peer,
-                content=msg["content"],
+                content=msg.content,
                 deadline_seconds=30,
                 wait_seconds=10,
             )
@@ -36,6 +36,7 @@ from typing import Any, Optional
 
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import Session
+from agentconnect.core.base import dump_public
 
 _FIND_PARAMS = {
     "type": "object",
@@ -247,7 +248,9 @@ class TeamTools(Sequence[TeamTool]):
         found = await tools.find(query="someone who can draft a summary")
         found["matches"][0]["address"]
         """
-        return await self._session().find(query, limit=limit, detail=detail)
+        return dump_public(
+            await self._session().find(query, limit=limit, detail=detail)
+        )
 
     async def ask(
         self,
@@ -293,7 +296,7 @@ class TeamTools(Sequence[TeamTool]):
             if exc.code == "id_conflict" and idempotency_key:
                 return await _wait_for_ticket(session, message_id, int(wait_seconds))
             raise
-        ticket = result.get("ticket")
+        ticket = dump_public(result.get("ticket"))
         if not isinstance(ticket, dict) or not isinstance(ticket.get("id"), str):
             raise SessionError("internal", "ask did not return a Ticket")
         if int(wait_seconds) <= 0:
@@ -318,11 +321,13 @@ class TeamTools(Sequence[TeamTool]):
             idempotency_key=idempotency_key,
         )
         try:
-            return await session.tell(
-                recipient,
-                content,
-                thread_id=thread_id,
-                message_id=message_id,
+            return dump_public(
+                await session.tell(
+                    recipient,
+                    content,
+                    thread_id=thread_id,
+                    message_id=message_id,
+                )
             )
         except SessionError as exc:
             if exc.code == "id_conflict" and idempotency_key:
@@ -334,7 +339,7 @@ class TeamTools(Sequence[TeamTool]):
 
     async def get_result(self, ticket_id: str) -> dict[str, Any]:
         """Return the current Ticket this Agent opened."""
-        return await self._session().get_result(ticket_id)
+        return dump_public(await self._session().get_result(ticket_id))
 
     async def get_history(
         self,
@@ -344,7 +349,9 @@ class TeamTools(Sequence[TeamTool]):
         limit: int = 50,
     ) -> dict[str, Any]:
         """Return one page of retained Thread history."""
-        return await self._session().get_history(thread_id, before=before, limit=limit)
+        return dump_public(
+            await self._session().get_history(thread_id, before=before, limit=limit)
+        )
 
 
 def bind_team_tools(session: Session) -> TeamTools:
@@ -366,7 +373,7 @@ async def _wait_for_ticket(
 ) -> dict[str, Any]:
     deadline = time.monotonic() + float(wait_seconds)
     while True:
-        ticket = await session.get_result(ticket_id)
+        ticket = dump_public(await session.get_result(ticket_id))
         if ticket.get("state") != "open":
             return ticket
         remaining = deadline - time.monotonic()

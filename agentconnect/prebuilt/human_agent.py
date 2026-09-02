@@ -77,16 +77,19 @@ class HumanAgent(BaseAgent):
         self.prompt = prompt
         self._read_line = read_line or _ainput
 
-    async def process_message(
-        self, message: Mapping[str, Any], ctx: Optional[Context] = None
-    ) -> Any:
+    async def process_message(self, message: Any, ctx: Optional[Context] = None) -> Any:
         """Print the Delivery and wait for a typed reply.
 
         Empty input declines a request. ``exit``, ``quit``, or ``bye`` also
         declines.
         """
-        sender = message.get("sender") or "teammate"
-        content = message.get("content")
+        sender = getattr(message, "sender", None)
+        if sender is None and isinstance(message, Mapping):
+            sender = message.get("sender")
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, Mapping):
+            content = message.get("content")
+        sender = sender or "teammate"
         print(f"{sender}: {content}")
         print("-" * 40)
         try:

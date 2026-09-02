@@ -6,7 +6,7 @@ from fastapi import WebSocket, HTTPException, WebSocketDisconnect
 from demos.api.models.chat import (
     WebSocketMessage,
     ChatMessage,
-    MessageType,
+    MessageKind,
     MessageRole,
 )
 from demos.api.routes.chat.session_utils import end_session
@@ -15,9 +15,7 @@ from agentconnect.prebuilt.human_agent import HumanAgent
 from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.utils.shared import shared
-from agentconnect.core.message import Message
-from agentconnect.core.kinds import CONTROL_COOLDOWN, CONTROL_STOP
-from agentconnect.core.types import MessageKind
+from agentconnect.transport.envelope import CollaborationMessage as Message
 import json
 
 logger = get_logger("chat_handlers")
@@ -64,13 +62,9 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
             return
 
         # Handle cooldown and stop messages differently
-        if message.control in (CONTROL_COOLDOWN, CONTROL_STOP):
+        if message.kind in [MessageKind.EVENT, MessageKind.EVENT]:
             ws_message = WebSocketMessage(
-                type=(
-                    MessageType.COOLDOWN
-                    if message.control == CONTROL_COOLDOWN
-                    else MessageType.STOP
-                ),
+                type=message.kind,
                 content=message.content,
                 sender=message.sender_id,
                 receiver=message.receiver_id,
@@ -87,7 +81,7 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
             await broadcast_message(
                 session_id,
                 WebSocketMessage(
-                    type=MessageType.SYSTEM,
+                    type=MessageKind.EVENT,
                     content="Conversation limit reached. Starting new topic.",
                     timestamp=datetime.now().isoformat(),
                 ),
@@ -99,9 +93,9 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
         # Convert core Message to WebSocketMessage
         ws_message = WebSocketMessage(
             type=(
-                MessageType.TEXT
+                MessageKind.EVENT
                 if message.kind == MessageKind.RESPONSE
-                else MessageType.TEXT
+                else message.kind
             ),
             content=message.content,
             sender=message.sender_id,
@@ -110,7 +104,7 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
             metadata={
                 **(message.metadata or {}),
                 "conversation_type": session_data.get("session_type", "human_agent"),
-                "original_type": message.kind,  # Store original message kind
+                "original_type": message.kind,  # Store original message type
             },
         )
 
@@ -141,7 +135,7 @@ async def handle_agent_response(session_id: str, message: Message) -> None:
         logger.error(f"Error handling agent response: {str(e)}")
         # Send error message to clients
         error_message = WebSocketMessage(
-            type=MessageType.ERROR,
+            type=MessageKind.ERROR,
             content=f"Failed to process agent response: {str(e)}",
             timestamp=datetime.now().isoformat(),
         )
@@ -192,7 +186,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                     if websocket.client_state == WebSocketState.CONNECTED:
                         await websocket.send_json(
                             WebSocketMessage(
-                                type=MessageType.ERROR,
+                                type=MessageKind.ERROR,
                                 content=f"Invalid message format: {str(e)}",
                                 timestamp=datetime.now().isoformat(),
                             ).model_dump()
@@ -200,7 +194,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                     continue
 
                 # Ping message type
-                if message.type == MessageType.PING:
+                if message.type == MessageKind.PING:
                     continue
 
                 # Check session limits
@@ -214,7 +208,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                     if websocket.client_state == WebSocketState.CONNECTED:
                         await websocket.send_json(
                             WebSocketMessage(
-                                type=MessageType.ERROR,
+                                type=MessageKind.ERROR,
                                 content="Invalid session configuration",
                                 timestamp=datetime.now().isoformat(),
                             ).model_dump()
@@ -233,7 +227,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                         if websocket.client_state == WebSocketState.CONNECTED:
                             await websocket.send_json(
                                 WebSocketMessage(
-                                    type=MessageType.ERROR,
+                                    type=MessageKind.ERROR,
                                     content="Invalid session type",
                                     timestamp=datetime.now().isoformat(),
                                 ).model_dump()
@@ -248,7 +242,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                     if websocket.client_state == WebSocketState.CONNECTED:
                         await websocket.send_json(
                             WebSocketMessage(
-                                type=MessageType.ERROR,
+                                type=MessageKind.ERROR,
                                 content=f"Failed to process message: {str(e)}",
                                 timestamp=datetime.now().isoformat(),
                             ).model_dump()
@@ -263,7 +257,7 @@ async def handle_client_messages(websocket: WebSocket, session_id: str):
                     try:
                         await websocket.send_json(
                             WebSocketMessage(
-                                type=MessageType.ERROR,
+                                type=MessageKind.ERROR,
                                 content=f"WebSocket error: {str(e)}",
                                 timestamp=datetime.now().isoformat(),
                             ).model_dump()
@@ -292,7 +286,7 @@ async def check_session_limits(session_id: str, session_data: dict) -> bool:
         await broadcast_message(
             session_id,
             WebSocketMessage(
-                type=MessageType.SYSTEM,
+                type=MessageKind.EVENT,
                 content="Message limit reached. Please create a new session.",
                 timestamp=datetime.now().isoformat(),
             ),
@@ -310,7 +304,7 @@ async def check_session_limits(session_id: str, session_data: dict) -> bool:
         await broadcast_message(
             session_id,
             WebSocketMessage(
-                type=MessageType.SYSTEM,
+                type=MessageKind.EVENT,
                 content="Session inactive for too long. Please create a new session.",
                 timestamp=datetime.now().isoformat(),
             ),
@@ -360,7 +354,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
         core_message = await human_agent.send_message(
             receiver_id=ai_agent.agent_id,
             content=message.content,
-            kind=MessageKind.EVENT,
+            kind=message.type,
             metadata=message.metadata,
         )
 
@@ -384,7 +378,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
 
                             # Convert AI response to WebSocket message
                             ai_message = WebSocketMessage(
-                                type=MessageType.TEXT,
+                                type=MessageKind.EVENT,
                                 content=response.content,
                                 sender=ai_agent.agent_id,
                                 receiver=human_agent.agent_id,
@@ -406,7 +400,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
                         # Handle error messages
                         elif response.kind == MessageKind.ERROR:
                             error_message = WebSocketMessage(
-                                type=MessageType.ERROR,
+                                type=MessageKind.ERROR,
                                 content=f"AI agent error: {response.content}",
                                 timestamp=datetime.now().isoformat(),
                                 metadata=response.metadata,
@@ -428,7 +422,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
             )
             # Send timeout notification
             timeout_message = WebSocketMessage(
-                type=MessageType.SYSTEM,
+                type=MessageKind.EVENT,
                 content="The AI agent is taking longer than expected to respond. Please try again.",
                 timestamp=datetime.now().isoformat(),
             )
@@ -437,7 +431,7 @@ async def handle_human_agent_message(session_data: dict, message: WebSocketMessa
     except Exception as e:
         logger.error(f"Error in human-agent message handler: {str(e)}")
         error_message = WebSocketMessage(
-            type=MessageType.ERROR,
+            type=MessageKind.ERROR,
             content=f"Error processing message: {str(e)}",
             timestamp=datetime.now().isoformat(),
         )
@@ -478,9 +472,9 @@ async def handle_agent_agent_message(session_data: dict, message: WebSocketMessa
     sender = agent1 if sender_id == agent1.agent_id else agent2
     logger.debug(f"Got sender agent: {sender.agent_id}")
 
-    # Convert message type string to MessageType enum
+    # Convert message type string to MessageKind enum
     try:
-        message_type = MessageType(message.type)
+        message_type = MessageKind(message.type)
         logger.debug(f"Converted message type: {message_type}")
     except ValueError:
         raise ValueError(f"Invalid message type: {message.type}")
@@ -497,7 +491,7 @@ async def handle_agent_agent_message(session_data: dict, message: WebSocketMessa
     core_message = await sender.send_message(
         receiver_id=receiver_id,
         content=message.content,
-        kind=MessageKind.EVENT,
+        kind=message_type,
         metadata=metadata,
     )
 
@@ -584,7 +578,7 @@ async def handle_broadcasts(websocket: WebSocket, pubsub: PubSub):
 #             logger.warning(error)
 #             return error
 
-#         if message["type"] not in [t.value for t in MessageType]:
+#         if message["type"] not in [t.value for t in MessageKind]:
 #             error = f"Invalid message type: {message['type']}"
 #             logger.warning(error)
 #             return error

@@ -52,6 +52,7 @@ from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.message import Message
 from agentconnect.prebuilt.loop import (
     CompletionFn,
     DEFAULT_MAX_ROUNDS,
@@ -162,7 +163,7 @@ class AIAgent(BaseAgent):
             self.tools = merge_tools(self.tools, _tools_from_agentkit(self.agent_kit))
 
     async def process_message(
-        self, message: Mapping[str, Any], ctx: Optional[Context] = None
+        self, message: Message, ctx: Optional[Context] = None
     ) -> Any:
         """Answer one Delivery with the model loop.
 
@@ -184,8 +185,8 @@ class AIAgent(BaseAgent):
         self,
         text: str,
         *,
-        history: Optional[Sequence[Mapping[str, Any]]] = None,
-        current: Optional[Mapping[str, Any]] = None,
+        history: Optional[Sequence[Any]] = None,
+        current: Optional[Any] = None,
         include_team_tools: Optional[bool] = None,
         self_address: Optional[str] = None,
     ) -> str:
@@ -247,10 +248,13 @@ class AIAgent(BaseAgent):
         return merge_tools(team, self.tools)
 
 
-def _message_text(message: Mapping[str, Any] | str) -> str:
+def _message_text(message: Any) -> str:
     if isinstance(message, str):
         return message
-    return _stringify(message.get("content"))
+    content = getattr(message, "content", None)
+    if content is None and isinstance(message, Mapping):
+        content = message.get("content")
+    return _stringify(content)
 
 
 def _stringify(content: Any) -> str:

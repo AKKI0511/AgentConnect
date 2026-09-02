@@ -5,7 +5,8 @@ import asyncio
 
 from agentconnect.prebuilt.ai_agent import AIAgent
 from agentconnect.agent.base import BaseAgent
-from agentconnect.core.types import AgentIdentity, ModelProvider, ModelName
+from agentconnect.core.identity import AgentIdentity
+from demos.utils.model_types import ModelName, ModelProvider
 from demos.utils.demo_logger import get_logger
 from demos.utils.config_manager import get_config
 from demos.api.models.agents import AgentConfig

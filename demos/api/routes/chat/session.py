@@ -3,7 +3,7 @@ import asyncio
 from fastapi import HTTPException, status
 from demos.api.models.chat import (
     WebSocketMessage,
-    MessageType,
+    MessageKind,
 )
 
 from demos.utils.demo_logger import get_logger
@@ -87,7 +87,7 @@ async def cleanup_inactive_sessions() -> None:
                                         await broadcast_message(
                                             session_id,
                                             WebSocketMessage(
-                                                type=MessageType.SYSTEM,
+                                                type=MessageKind.EVENT,
                                                 content=f"{cleanup_reason}. Session will be closed.",
                                                 timestamp=current_time.isoformat(),
                                             ),
@@ -140,7 +140,7 @@ async def end_session(session_id: str, current_user: str):
                 await broadcast_message(
                     session_id,
                     WebSocketMessage(
-                        type=MessageType.SYSTEM,
+                        type=MessageKind.EVENT,
                         content="Session is being closed by the owner.",
                         timestamp=datetime.now(),
                     ),

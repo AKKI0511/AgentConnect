@@ -8,15 +8,12 @@ from demos.api.models.chat import (
     CreateSessionRequest,
     SessionResponse,
     AgentMetadata,
-    MessageType,
+    MessageKind,
 )
 from agentconnect.agent.base import BaseAgent
-from agentconnect.core.types import (
-    InteractionMode,
-    AgentIdentity,
-    ModelName,
-    ModelProvider,
-)
+from demos.utils.model_types import ModelName, ModelProvider
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.index.types import InteractionMode
 from agentconnect.prebuilt.ai_agent import AIAgent
 from agentconnect.prebuilt.human_agent import HumanAgent
 from demos.utils.demo_logger import get_logger
@@ -98,7 +95,7 @@ class SessionManager:
             # Create base session data
             session_data = {
                 "session_id": session_id,
-                "type": MessageType.SYSTEM,
+                "type": MessageKind.EVENT,
                 "created_at": datetime.now().isoformat(),
                 "last_activity": datetime.now().isoformat(),
                 "created_by": current_user,
@@ -436,7 +433,7 @@ async def create_new_session(
         # Create response
         response = SessionResponse(
             session_id=session_id,
-            type=MessageType.SYSTEM,
+            type=MessageKind.EVENT,
             created_at=datetime.fromisoformat(session_info["created_at"]),
             status="active",
             session_type=request.session_type,

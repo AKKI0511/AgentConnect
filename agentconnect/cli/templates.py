@@ -30,11 +30,11 @@ class Assistant(BaseAgent):
         "tags": ["assistant"],
     }
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
+    async def process_message(self, msg: Any, ctx: Any) -> Any:
         """Reply to a request with the received content."""
-        if msg.get("kind") != "request":
+        if getattr(msg, "kind", None) != "request":
             return None
-        return {"echo": msg.get("content")}
+        return {"echo": getattr(msg, "content", None)}
 '''
 
 AGENTS_INIT_PY = '''"""Hosted Agents for this Team."""

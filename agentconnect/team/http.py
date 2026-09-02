@@ -3,7 +3,7 @@
 Routes match ``spec/bindings/http.md``. This is the Session binding, not
 the later gateway. Embedded serving binds loopback only. The Team MCP
 server is mounted at ``/mcp``. Loopback calls with no Authorization
-header run as the reserved ``operator`` Membership.
+header run as the reserved ``operator`` principal Membership.
 """
 
 from __future__ import annotations
@@ -17,10 +17,12 @@ from typing import Any, Optional
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+from agentconnect.core.base import dump_public
 from agentconnect.team.errors import TeamError
 from agentconnect.team.runtime import Team
 
 HTTP_PREFIX = "/agentconnect/v1"
+_NO_STORE = {"Cache-Control": "no-store"}
 
 _STATUS = {
     "unsupported_version": 400,
@@ -41,7 +43,12 @@ _STATUS = {
     "unavailable": 503,
 }
 
-_NO_STORE = {"Cache-Control": "no-store"}
+
+def _json(body: Any, **kwargs: Any) -> JSONResponse:
+    """Serialize a public schema object or mapping as JSON."""
+    return JSONResponse(dump_public(body), **kwargs)
+
+
 _TOKEN_ISSUE_FIELDS = {"name", "agent_did", "ttl_seconds", "single_use"}
 
 
@@ -80,14 +87,14 @@ def create_runtime_app(team: Team) -> FastAPI:
     async def join_challenge() -> JSONResponse:
         """Return a one-time join challenge for an identity proof."""
         body = await team.join_challenge()
-        return JSONResponse(body, headers=_NO_STORE)
+        return _json(body, headers=_NO_STORE)
 
     @app.post(HTTP_PREFIX + "/join")
     async def join(request: Request) -> JSONResponse:
         """Open a Session."""
         body = await _json_object(request)
         result = await team.join(request=body)
-        return JSONResponse(result, headers=_NO_STORE)
+        return _json(result, headers=_NO_STORE)
 
     @app.post(HTTP_PREFIX + "/session/disconnect")
     async def disconnect(
@@ -107,7 +114,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Refresh Session expiry."""
         token = await _session_token(team, request, authorization)
         result = await team.heartbeat(token)
-        return JSONResponse(result, headers=_NO_STORE)
+        return _json(result, headers=_NO_STORE)
 
     @app.post(HTTP_PREFIX + "/messages")
     async def send(
@@ -117,7 +124,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         token = await _session_token(team, request, authorization)
         body = await _json_object(request)
         result = await team.send(token, body)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.post(HTTP_PREFIX + "/mailbox/lease")
     async def lease(
@@ -128,7 +135,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         body = await _json_object(request, empty_ok=True)
         max_items = body.get("max_items", 1)
         result = await team.lease(token, max_items)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.post(HTTP_PREFIX + "/deliveries/complete")
     async def complete(
@@ -141,7 +148,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         if not isinstance(lease_id, str):
             raise TeamError("invalid_request", "lease_id is required")
         result = await team.complete(token, lease_id)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.post(HTTP_PREFIX + "/deliveries/reply")
     async def reply(
@@ -151,7 +158,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         token = await _session_token(team, request, authorization)
         body = await _json_object(request)
         result = await team.reply(token, body)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.get(HTTP_PREFIX + "/tickets/{ticket_id}")
     async def get_result(
@@ -162,7 +169,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Return a Ticket this Session's Membership owns."""
         token = await _session_token(team, request, authorization)
         result = await team.get_result(token, ticket_id)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.get(HTTP_PREFIX + "/threads/{thread_id}/history")
     async def get_history(
@@ -175,7 +182,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Return one page of retained Thread history."""
         token = await _session_token(team, request, authorization)
         result = await team.get_history(token, thread_id, before=before, limit=limit)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.post(HTTP_PREFIX + "/directory/find")
     async def find(
@@ -193,7 +200,7 @@ def create_runtime_app(team: Team) -> FastAPI:
             limit=body.get("limit"),
             detail=body.get("detail", "summary"),
         )
-        return JSONResponse(result)
+        return _json(result)
 
     @app.get(HTTP_PREFIX + "/directory/members/{address}")
     async def get_profile(
@@ -204,7 +211,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Return one Directory entry."""
         token = await _session_token(team, request, authorization)
         result = await team.get_profile(token, address)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.get(HTTP_PREFIX + "/status")
     async def status(
@@ -213,7 +220,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Return members, online state, Mailbox depths, and open Tickets."""
         token = await _session_token(team, request, authorization)
         result = await team.status(token)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.get(HTTP_PREFIX + "/traces/events")
     async def trace_events(
@@ -256,7 +263,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Return the recorded timeline for one ``trace_id``."""
         token = await _session_token(team, request, authorization)
         result = await team.get_trace(token, trace_id)
-        return JSONResponse(result)
+        return _json(result)
 
     @app.post(HTTP_PREFIX + "/tokens")
     async def issue_join_token(
@@ -290,7 +297,7 @@ def create_runtime_app(team: Team) -> FastAPI:
             ttl_seconds=ttl_seconds,
             single_use=single_use,
         )
-        return JSONResponse(dict(result), headers=_NO_STORE)
+        return _json(result, headers=_NO_STORE)
 
     @app.post(HTTP_PREFIX + "/tokens/revoke")
     async def revoke_join_token(
@@ -407,4 +414,4 @@ def _error_response(exc: TeamError) -> JSONResponse:
     if "retryable" not in body:
         body["retryable"] = status in {429, 503}
     headers = dict(_NO_STORE) if status in {401} else None
-    return JSONResponse(body, status_code=status, headers=headers)
+    return JSONResponse(dump_public(body), status_code=status, headers=headers)

@@ -29,6 +29,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_PARAMS, ToolAnnotations
 
+from agentconnect.core.base import dump_public
 from agentconnect.mcp.actions import (
     TeamRuntime,
     ask_action,
@@ -229,7 +230,7 @@ def create_team_mcp(
             raise _tool_error(exc) from exc
 
     async def roster() -> str:
-        body = await runtime.roster()
+        body = dump_public(await runtime.roster())
         return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
     mcp.add_tool(
@@ -282,7 +283,7 @@ def create_team_mcp(
         "agentconnect://team/roster",
         name="roster",
         title="Team roster",
-        description="Every current Membership on this Team.",
+        description="Agent Memberships on this Team. Principals such as operator are omitted.",
         mime_type="application/json",
     )(roster)
 

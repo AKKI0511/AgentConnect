@@ -21,8 +21,8 @@ class Echo(BaseAgent):
     """Returns whatever ``content`` arrived on a reply-expected request."""
 
     async def process_message(self, msg, ctx):
-        if msg.get("kind") == "request" and msg.get("deadline"):
-            return {"echo": msg.get("content")}
+        if msg.kind == "request" and getattr(msg, "deadline", None):
+            return {"echo": msg.content}
         return None
 
 

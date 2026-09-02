@@ -44,7 +44,7 @@ class CalendarInspector(BaseAgent):
         self.data_path = _DATA / "calendar.json"
 
     async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
-        if msg.get("kind") != "request":
+        if msg.kind != "request":
             return None
         busy = []
         if self.data_path.exists():
@@ -73,7 +73,7 @@ class Availability(BaseAgent):
         self.data_path = _DATA / "availability.json"
 
     async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
-        if msg.get("kind") != "request":
+        if msg.kind != "request":
             return None
         slots = []
         if self.data_path.exists():

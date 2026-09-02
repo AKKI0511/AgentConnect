@@ -26,8 +26,8 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
+    async def process_message(self, msg, ctx) -> Any:
         """Reply to a request with a draft line."""
-        if msg.get("kind") != "request":
+        if msg.kind != "request":
             return None
-        return f"Draft complete for {msg.get('content')!r}."
+        return f"Draft complete for {msg.content!r}."

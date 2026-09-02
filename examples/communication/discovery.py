@@ -50,7 +50,7 @@ class Writer(BaseAgent):
     }
 
     async def process_message(self, msg, ctx):
-        return f"Draft complete for {msg.get('content')!r}."
+        return f"Draft complete for {msg.content!r}."
 
 
 class Researcher(BaseAgent):

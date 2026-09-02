@@ -34,10 +34,10 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
-        if msg.get("kind") != "request":
+    async def process_message(self, msg, ctx) -> Any:
+        if msg.kind != "request":
             return None
-        return f"Draft complete for {msg.get('content')!r}."
+        return f"Draft complete for {msg.content!r}."
 
 
 def _recorded_complete():

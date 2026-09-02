@@ -28,7 +28,7 @@ class Writer(BaseAgent):
     }
 
     async def process_message(self, msg, ctx):
-        if msg.get("kind") == "request":
+        if msg.kind == "request":
             raise TeamError("handler_failed", "the draft could not be written")
         return None
 

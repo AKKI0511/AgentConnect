@@ -28,8 +28,8 @@ class Finance(BaseAgent):
     def __init__(self, name: str = "finance"):
         super().__init__(name=name)
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
-        if msg.get("kind") != "request":
+    async def process_message(self, msg, ctx) -> Any:
+        if msg.kind != "request":
             return None
         if _DATA.exists():
             return json.loads(_DATA.read_text(encoding="utf-8"))

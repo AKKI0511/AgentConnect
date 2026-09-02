@@ -33,9 +33,9 @@ class Writer(BaseAgent):
     }
 
     async def process_message(self, msg, ctx):
-        if msg.get("kind") != "request":
+        if msg.kind != "request":
             return None
-        return f"Draft complete for {msg.get('content')!r}."
+        return f"Draft complete for {msg.content!r}."
 
 
 async def main() -> None:

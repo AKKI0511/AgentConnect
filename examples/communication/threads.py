@@ -23,10 +23,10 @@ class Writer(BaseAgent):
     """Replies with the prior Thread contents it was given on this Delivery."""
 
     async def process_message(self, msg, ctx):
-        if msg.get("kind") != "request":
+        if msg.kind != "request":
             return None
-        prior = [item.get("content") for item in ctx.history]
-        return {"this": msg.get("content"), "prior": prior}
+        prior = [getattr(item, "content", None) for item in ctx.history]
+        return {"this": msg.content, "prior": prior}
 
 
 class Researcher(BaseAgent):

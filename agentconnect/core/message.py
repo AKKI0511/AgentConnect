@@ -1,7 +1,13 @@
 """Immutable Message kinds and Delivery.
 
 A handler receives a MailboxMessage (request or event) with attribute
-access. Response and error Messages are created by the Runtime on reply.
+access. A request always expects a reply. Fire-and-forget work is an
+event. Response and error Messages are created by the Runtime on reply.
+
+    msg.kind
+    msg.content
+    msg.deadline   # requests only
+    msg.seq        # present when the Message belongs to a Thread
 """
 
 from __future__ import annotations
@@ -21,9 +27,6 @@ from agentconnect.core.primitives import QualifiedAddress, Timestamp, Uuid
 
 __all__ = [
     "MessageBase",
-    "RequestMessageBase",
-    "NoReplyRequestMessage",
-    "ReplyExpectedRequestMessage",
     "RequestMessage",
     "EventMessage",
     "MailboxMessage",
@@ -38,7 +41,11 @@ __all__ = [
 
 
 class MessageBase(SchemaModel):
-    """Fields shared by every accepted Message."""
+    """Fields shared by every accepted Message.
+
+    ``seq`` is present exactly when ``thread_id`` is present. History
+    and ``before`` cursors order by ``seq``, not by ``created_at``.
+    """
 
     id: Uuid
     sender: QualifiedAddress
@@ -47,28 +54,30 @@ class MessageBase(SchemaModel):
     trace_id: Uuid
     thread_id: Optional[Uuid] = None
     parent_id: Optional[Uuid] = None
+    seq: Optional[int] = Field(default=None, ge=1)
 
 
-class RequestMessageBase(MessageBase):
-    """Fields shared by request Messages."""
+class RequestMessage(MessageBase):
+    """Request that always expects a reply and opens a Ticket.
+
+    ``deadline`` is required. Fire-and-forget work is an ``event``.
+
+        msg.kind      # "request"
+        msg.deadline
+        msg.seq       # set when the Message belongs to a Thread
+    """
 
     kind: Literal["request"] = "request"
     content: JsonValue
     metadata: Optional[JsonObject] = None
-
-
-class NoReplyRequestMessage(RequestMessageBase):
-    """Request that expects no reply and creates no Ticket."""
-
-
-class ReplyExpectedRequestMessage(RequestMessageBase):
-    """Request tracked by a Ticket until its deadline."""
-
     deadline: Timestamp
 
 
 class EventMessage(MessageBase):
-    """Information sent without a reply or Ticket."""
+    """Information sent without a reply or Ticket.
+
+    await agent.tell("writer", {"note": "source changed"})
+    """
 
     kind: Literal["event"] = "event"
     content: JsonValue
@@ -91,35 +100,40 @@ class ErrorMessage(MessageBase):
     parent_id: Uuid
 
 
-RequestMessage = Union[NoReplyRequestMessage, ReplyExpectedRequestMessage]
 MailboxMessage = Union[RequestMessage, EventMessage]
 Message = Union[RequestMessage, EventMessage, ResponseMessage, ErrorMessage]
 
 
 class Delivery(SchemaModel):
-    """One exclusive attempt to handle a Message."""
+    """One exclusive attempt to handle a Message.
+
+    ``history`` is the bounded recent Thread window, ordered by ``seq``
+    and excluding ``message``.
+    """
 
     lease_id: Uuid
     lease_expires_at: Timestamp
     attempt: int = Field(ge=1)
-    message: Union[NoReplyRequestMessage, ReplyExpectedRequestMessage, EventMessage]
+    message: Union[RequestMessage, EventMessage]
     history: list[Message]
     history_complete: bool
 
 
 def is_reply_expected(message: Message) -> bool:
-    """Return True when ``message`` is a reply-expected request."""
-    return isinstance(message, ReplyExpectedRequestMessage)
+    """Return True when ``message`` is a request.
+
+    Every request expects a reply. An event does not.
+    """
+    return isinstance(message, RequestMessage)
 
 
 def parse_message(data: Any, *, validate: bool = True) -> Message:
-    """Parse a Message mapping. Overlapping request shapes use ``deadline``."""
+    """Parse a Message mapping. A request requires ``deadline``."""
     del validate
     if isinstance(
         data,
         (
-            NoReplyRequestMessage,
-            ReplyExpectedRequestMessage,
+            RequestMessage,
             EventMessage,
             ResponseMessage,
             ErrorMessage,
@@ -130,9 +144,7 @@ def parse_message(data: Any, *, validate: bool = True) -> Message:
         raise ValueError("message must be an object")
     kind = data.get("kind")
     if kind == "request":
-        cls: type[SchemaModel] = (
-            ReplyExpectedRequestMessage if "deadline" in data else NoReplyRequestMessage
-        )
+        cls: type[SchemaModel] = RequestMessage
     elif kind == "event":
         cls = EventMessage
     elif kind == "response":

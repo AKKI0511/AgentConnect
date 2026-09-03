@@ -18,8 +18,7 @@ from agentconnect.core.message import (
     Delivery,
     EventMessage,
     Message,
-    NoReplyRequestMessage,
-    ReplyExpectedRequestMessage,
+    RequestMessage,
     parse_delivery,
     parse_message,
 )
@@ -54,12 +53,9 @@ __all__ = [
     "JoinResult",
     "HeartbeatResult",
     "SendBase",
-    "RequestSendBase",
-    "NoReplySendRequest",
     "AddressCallbackTarget",
     "UrlCallbackTarget",
     "CallbackTarget",
-    "CollectedSendRequest",
     "RequestSendRequest",
     "EventSendRequest",
     "SendRequest",
@@ -163,16 +159,6 @@ class SendBase(SchemaModel):
     metadata: Optional[JsonObject] = None
 
 
-class RequestSendBase(SendBase):
-    """Fields shared by request sends."""
-
-    kind: Literal["request"] = "request"
-
-
-class NoReplySendRequest(RequestSendBase):
-    """Send a request that expects no reply."""
-
-
 class AddressCallbackTarget(SchemaModel):
     """Callback target that delivers the result as a Message."""
 
@@ -188,15 +174,25 @@ class UrlCallbackTarget(SchemaModel):
 CallbackTarget = Union[AddressCallbackTarget, UrlCallbackTarget]
 
 
-class CollectedSendRequest(RequestSendBase):
-    """Send a reply-expected request tracked by a Ticket."""
+class RequestSendRequest(SendBase):
+    """Send a request. Always opens a Ticket.
 
+    ``collect`` and ``deadline`` are required. Fire-and-forget work is
+    :class:`EventSendRequest`.
+
+        RequestSendRequest(
+            id=message_id,
+            recipient="writer",
+            content={"task": "draft this"},
+            collect="ticket",
+            deadline="2026-08-18T15:10:00Z",
+        )
+    """
+
+    kind: Literal["request"] = "request"
     collect: CollectMode
     deadline: Timestamp
     callback: Optional[CallbackTarget] = None
-
-
-RequestSendRequest = Union[NoReplySendRequest, CollectedSendRequest]
 
 
 class EventSendRequest(SendBase):
@@ -209,17 +205,17 @@ SendRequest = Union[RequestSendRequest, EventSendRequest]
 
 
 class AcceptedSendResult(SchemaModel):
-    """Result for an event or a no-reply request."""
+    """Result for an event."""
 
     status: Literal["accepted"] = "accepted"
-    message: Union[NoReplyRequestMessage, EventMessage]
+    message: EventMessage
 
 
 class TicketedSendResult(SchemaModel):
-    """Result for a reply-expected request."""
+    """Result for a request."""
 
     status: Literal["ticketed"] = "ticketed"
-    message: ReplyExpectedRequestMessage
+    message: RequestMessage
     ticket: Ticket
 
 
@@ -242,7 +238,10 @@ class LeaseResult(SchemaModel):
 
 
 class CompleteRequest(SchemaModel):
-    """Finish one Delivery without a response."""
+    """Finish one Delivery without a response.
+
+    An event just ends. A request is declined.
+    """
 
     lease_id: Uuid
 
@@ -301,7 +300,7 @@ class GetHistoryRequest(SchemaModel):
 
 
 class HistoryResult(SchemaModel):
-    """One page of retained Thread history."""
+    """One page of retained Thread history, ordered by ``seq`` ascending."""
 
     messages: list[Message]
     has_more: bool
@@ -439,8 +438,8 @@ def parse_join_result(data: Any) -> JoinResult:
 
 
 def parse_send_request(data: Any) -> SendRequest:
-    """Parse send input. Reply-expected requests carry ``collect`` and ``deadline``."""
-    if isinstance(data, (NoReplySendRequest, CollectedSendRequest, EventSendRequest)):
+    """Parse send input. A request requires ``collect`` and ``deadline``."""
+    if isinstance(data, (RequestSendRequest, EventSendRequest)):
         return data
     if not isinstance(data, Mapping):
         raise ValueError("send body must be an object")
@@ -448,10 +447,7 @@ def parse_send_request(data: Any) -> SendRequest:
     if kind == "event":
         cls: type[SchemaModel] = EventSendRequest
     elif kind == "request":
-        if "collect" in data or "deadline" in data:
-            cls = CollectedSendRequest
-        else:
-            cls = NoReplySendRequest
+        cls = RequestSendRequest
     else:
         raise ValueError("kind must be request or event")
     try:

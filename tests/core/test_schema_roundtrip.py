@@ -16,7 +16,7 @@ import jsonschema
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from agentconnect.core.base import SchemaModel, dump_public
-from agentconnect.core.message import NoReplyRequestMessage
+from agentconnect.core.message import RequestMessage
 from agentconnect.core.projection import PUBLIC_SCHEMA_TYPES, SCHEMA_WRAPPER_NAME
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -72,9 +72,9 @@ def test_schema_definition_names_match_python_projection():
     defs = set(_definitions(_load_schema()))
     defs.discard(SCHEMA_WRAPPER_NAME)
     python = set(PUBLIC_SCHEMA_TYPES)
-    assert defs == python, (
-        f"schema-only={sorted(defs - python)} python-only={sorted(python - defs)}"
-    )
+    assert (
+        defs == python
+    ), f"schema-only={sorted(defs - python)} python-only={sorted(python - defs)}"
 
 
 def test_object_properties_match_pydantic_fields():
@@ -114,11 +114,15 @@ def test_closed_unions_match_enum_values():
     assert mismatches == []
 
 
-def _sample(name: str, node: dict[str, Any], defs: dict[str, Any], depth: int = 0) -> Any:
+def _sample(
+    name: str, node: dict[str, Any], defs: dict[str, Any], depth: int = 0
+) -> Any:
     if depth > 12:
         return None
     if "$ref" in node:
-        return _sample(_ref_name(node["$ref"]), defs[_ref_name(node["$ref"])], defs, depth + 1)
+        return _sample(
+            _ref_name(node["$ref"]), defs[_ref_name(node["$ref"])], defs, depth + 1
+        )
     if "const" in node:
         return node["const"]
     if "enum" in node:
@@ -263,19 +267,20 @@ def test_generated_instances_round_trip_schema_and_python():
 
 
 def test_required_null_content_survives_python_dump():
-    message = NoReplyRequestMessage(
+    message = RequestMessage(
         id=_UUID,
         sender="writer@content-squad",
         recipient="researcher@content-squad",
         created_at=_TIMESTAMP,
         trace_id=_UUID,
         content=None,
+        deadline=_TIMESTAMP,
     )
     dumped = message.to_public_dict()
     assert dumped["content"] is None
     jsonschema.Draft7Validator(
         {
-            "$ref": "#/definitions/NoReplyRequestMessage",
+            "$ref": "#/definitions/RequestMessage",
             "definitions": _definitions(_load_schema()),
         }
     ).validate(dumped)

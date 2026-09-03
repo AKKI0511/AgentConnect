@@ -25,7 +25,7 @@ The current draft defines one Team and the Agents that belong to it:
 - Team membership, authenticated Sessions, and concurrent Instances of one Membership
 - Agent names, Addresses, Profiles, and local discovery
 - Messages, Mailboxes, pull delivery, and exclusive leases
-- reply-expected requests, collection strategies, and Tickets
+- reply-expected work, collection strategies, and Tickets
 - Threads, bounded delivered history, and paged history retrieval
 - the Session event stream
 - embedded and HTTP Runtime access
@@ -48,7 +48,7 @@ Anything not defined by these files is outside the current draft. Cross-team del
 | **Mailbox** | An Agent Membership's logical queue of accepted work. Principals have none. |
 | **Message** | An immutable request, event, response, or error accepted by the Runtime. |
 | **Delivery** | One leased attempt to handle a Message. |
-| **Ticket** | The requester's durable record for one reply-expected Message. |
+| **Ticket** | The requester's durable record for one request Message. |
 | **Trace** | Ordered events the Runtime recorded for one `trace_id`. |
 | **Thread** | Messages grouped under one `thread_id`, with retained history. |
 | **Profile** | Discovery information describing an Agent's Skills. |

@@ -62,10 +62,10 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 | `join` | unauthenticated Client with join credentials, or embedded Client | Membership plus Session for one Instance |
 | `disconnect` | member Session | Session closed; Membership retained |
 | `heartbeat` | member Session | renewed Session expiry |
-| `send` | member Session | accepted Message and, when reply-expected, a Ticket |
+| `send` | member Session | accepted Message and, when the Message is a request, a Ticket |
 | `lease` | member Session | zero or more exclusive Deliveries |
-| `complete` | member Session | an event or no-reply Delivery finished, or a reply-expected request declined |
-| `reply` | member Session | a reply-expected Delivery finished with a response or error |
+| `complete` | member Session | an event Delivery finished, or a request declined |
+| `reply` | member Session | a request Delivery finished with a response or error |
 | `get_result` | Ticket owner | current Ticket |
 | `get_history` | Thread participant | one page of Thread history |
 | `find` | member Session | ordered Directory matches |
@@ -151,8 +151,8 @@ Before acceptance, the Runtime MUST:
 - reject `collect=callback` or `collect=stream` with `unsupported_collect_mode`
 - resolve the recipient within the Team
 - reject a principal recipient, including `operator`, with `not_found`
-- require a future `deadline` on any reply-expected request
-- validate any `parent_id` and pairwise Thread participation
+- require a future `deadline` on any request
+- validate any `parent_id` and Thread participation
 - reject a full recipient Mailbox with `busy`
 - apply the Message idempotency rules below
 
@@ -161,6 +161,7 @@ After acceptance, the Runtime MUST:
 - set the verified `sender`
 - canonicalize `sender` and `recipient` as qualified Addresses
 - set `created_at`
+- set `seq` when `thread_id` is present
 - set `trace_id` by the propagation rules in [messaging.md](messaging.md)
 - store the immutable Message
 - append it to retained Thread history when `thread_id` is present
@@ -171,11 +172,10 @@ The result depends on the request:
 | Input | Ticket | Return behavior |
 | --- | --- | --- |
 | event | none | return after acceptance |
-| no-reply request | none | return after acceptance |
-| reply-expected request with `collect=ticket` | created | return the current Ticket immediately |
-| reply-expected request with `collect=wait` | created | hold `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket |
+| request with `collect=ticket` | created | return the current Ticket immediately |
+| request with `collect=wait` | created | hold `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket |
 
-Every reply-expected request MUST include a future `deadline`. A missing or past deadline fails with `invalid_request`. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid.
+Every request MUST include `collect` and a future `deadline`. A missing or past deadline, or a missing `collect`, fails with `invalid_request`. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid.
 
 `wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. The Client collects the terminal result with `get_result`.
 
@@ -187,7 +187,7 @@ Transport disconnect after acceptance does not undo the send. The Client recover
 
 Message ids are unique across the Team. The Runtime applies these rules:
 
-- replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event or no-reply request returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
+- replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
 - using an existing id from another Membership fails with `id_conflict`
 - replaying the original sender's id with different content, recipient, kind, deadline, collection strategy, Thread, parent, or metadata fails with `id_conflict`
 - a replay MUST NOT create another Delivery
@@ -216,22 +216,22 @@ First attempts are offered in Message acceptance order per partition. Recovered 
 
 `complete` finishes a Delivery without creating a response Message. Its effect depends on the delivered Message:
 
-- for an event or no-reply request, the Delivery just ends and no Ticket exists
-- for a reply-expected request, the Runtime declines it, moves the Ticket to `declined`, and returns that Ticket in `CompleteResult`
+- for an event, the Delivery just ends and no Ticket exists
+- for a request, the Runtime declines it, moves the Ticket to `declined`, and returns that Ticket in `CompleteResult`
 
 Declining is a benign, explicit outcome, not a failure. It is how a recipient states that it read the request and chose not to answer, distinct from a handler failure and from a deadline expiring.
 
 The Runtime first verifies that the retained lease belongs to the caller's Membership. An unknown lease or a lease owned by another Membership returns `not_found`. It then applies these checks in order:
 
 1. A replay of an already accepted `CompleteRequest` returns its stored result.
-2. A reply-expected request whose Ticket is already terminal returns `ticket_closed`.
+2. A request whose Ticket is already terminal returns `ticket_closed`.
 3. An inactive lease returns `lease_expired`.
 
 ## `reply`
 
-`reply` finishes a reply-expected Delivery with either successful content or an `ErrorObject`. The Runtime creates an immutable response or error Message whose `parent_id` is the request Message id, whose `thread_id` matches the request, and whose `trace_id` is copied from the request.
+`reply` finishes a request Delivery with either successful content or an `ErrorObject`. The Runtime creates an immutable response or error Message whose `parent_id` is the request Message id, whose `thread_id` matches the request, whose `seq` is the next Thread sequence when the request has a `thread_id`, and whose `trace_id` is copied from the request.
 
-Only a reply-expected request accepts `reply`. Calling `reply` for an event or a no-reply request fails with `invalid_request` and leaves the Delivery active.
+Only a request accepts `reply`. Calling `reply` for an event fails with `invalid_request` and leaves the Delivery active.
 
 `ReplyRequest.id` is the response Message id and is unique across the Team. Replaying the accepted reply with the same id and semantic data returns the existing result. Reusing it for different reply data or from another Membership fails with `id_conflict`.
 
@@ -256,7 +256,7 @@ The operation is read-only. Reading an open or terminal Ticket any number of tim
 
 ## `get_history`
 
-`get_history` returns one page of a Thread's retained history, ordered by `created_at` then Message id, ascending.
+`get_history` returns one page of a Thread's retained history, ordered by `seq` ascending.
 
 - `before` names a Message id; the page contains the Messages immediately older than it. Omit `before` to read the newest page.
 - a `before` value that is a UUID and is not in the retained transcript, including an evicted id, returns the newest page
@@ -372,7 +372,7 @@ Events for one `trace_id` are retained at least while any Message or Ticket that
 | --- | --- |
 | accepted request, never leased, then expired | events `accepted`, `ticket_opened`, `ticket_closed` with `detail.state=expired`; no `leased` |
 | handler returns an error | `leased` then `replied` with `detail.outcome=failed` |
-| recipient `complete`s a reply-expected request | `completed` then the Ticket is `declined` |
+| recipient `complete`s a request | `completed` then the Ticket is `declined` |
 | member Session reads a Trace it does not appear in | `not_found` |
 | operator Session reads that same Trace | `TraceResult` |
 

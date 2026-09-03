@@ -6,7 +6,7 @@ Exact structures are in [schema/schema.ts](schema/schema.ts). Runtime operations
 
 ## Message
 
-A Message is created only after `send` or `reply` succeeds. The Client supplies the Message `id`; the Runtime sets the verified Addresses, `created_at`, and `trace_id`, then stores the Message as immutable data.
+A Message is created only after `send` or `reply` succeeds. The Client supplies the Message `id`; the Runtime sets the verified Addresses, `created_at`, `trace_id`, and `seq` when `thread_id` is present, then stores the Message as immutable data.
 
 A request or event created by `send` enters the recipient's Mailbox. A response or error created by `reply` resolves the requester's Ticket and enters retained Thread history when the request had a `thread_id`. It does not enter the requester's Mailbox.
 
@@ -14,14 +14,16 @@ Four Message kinds exist:
 
 | Kind | Created by | Meaning |
 | --- | --- | --- |
-| `request` | `send` | asks the recipient to handle work |
-| `event` | `send` | delivers information without a response |
+| `request` | `send` | asks the recipient to handle work and expects a reply |
+| `event` | `send` | delivers information without a reply |
 | `response` | successful `reply` | completes the parent request |
 | `error` | failed `reply` | fails the parent request |
 
 `kind` is a closed set. Application-level typing belongs in `content` or `metadata`, not in a custom kind.
 
-`sender` and `recipient` on an accepted Message are canonical qualified Addresses. Clients do not set `sender`, `created_at`, or `trace_id` in `SendRequest`.
+A request always expects a reply. It carries a `deadline`, opens a Ticket, and ends in a terminal Ticket state. An event never expects a reply and creates no Ticket.
+
+`sender` and `recipient` on an accepted Message are canonical qualified Addresses. Clients do not set `sender`, `created_at`, `trace_id`, or `seq` in `SendRequest`.
 
 `content` is any JSON value. Message `metadata` is sender-controlled application data. The Runtime MUST NOT use `metadata` for authentication, routing, leases, Ticket state, or sender attribution.
 
@@ -39,11 +41,12 @@ Four Message kinds exist:
   "created_at": "2026-08-18T15:00:00Z",
   "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
   "deadline": "2026-08-18T15:10:00Z",
-  "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20"
+  "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20",
+  "seq": 1
 }
 ```
 
-A request is **reply-expected** exactly when it carries a `deadline`. A request without a `deadline` expects no reply and creates no Ticket, the same as an event.
+A request without a `deadline` is `invalid_request` and creates nothing.
 
 ## Message identity and relationships
 
@@ -51,14 +54,19 @@ Every Message id is an RFC 9562 UUID and is unique within the Team. The id has t
 
 - it identifies the immutable Message
 - it is the idempotency key for `send` or `reply`
-- for a reply-expected request, it is also the Ticket id
+- for a request, it is also the Ticket id
 
-`parent_id` names the Message that directly caused another Message. A response or error MUST use the request Message id as `parent_id`. A follow-up request or event MAY use a prior Message id as `parent_id`.
+`parent_id` names the Message this one replies to or continues. The field is singular, so the Message relation is a tree:
+
+- a response or error MUST use the request Message id
+- a follow-up request or event MAY name a prior Message in the same Thread
+
+A Message produced from several answers names one of those Messages as `parent_id` and records the rest through the shared `trace_id`. Fan-in is expressed by the Trace, not by the parent link.
 
 `thread_id` groups related Messages. It does not replace `parent_id`:
 
 - `thread_id` answers which conversation contains this Message
-- `parent_id` answers which Message directly caused it
+- `parent_id` answers which Message this one replies to or continues
 
 `trace_id` correlates one causal operation. The Runtime assigns it:
 
@@ -77,11 +85,11 @@ They coincide in the simple case and diverge the moment work fans out:
 
 > `researcher` asks `writer` in conversation `T1`; that request opens trace `X`. To answer, `writer` asks `editor` in a new conversation `T2`; because that request is caused by the first, it copies trace `X` while living in thread `T2`, so trace `X` now spans `T1` and `T2`. Later `researcher` asks `writer` something unrelated in `T1`, opening trace `Y`. One Thread holds several traces, and one trace spans several Threads.
 
-So `thread_id` groups history for the participants, `trace_id` groups a debugging timeline for one operation, and `parent_id` is the single direct cause. A Delivery's Message carries `thread_id` and `trace_id` so a handler knows both which conversation it is in and which operation it serves. A Ticket carries only `thread_id`, because the conversation is what a requester continues; the request's `trace_id` is read from the request or from the stored response, not duplicated onto the Ticket.
+So `thread_id` groups history for the participants, `trace_id` groups a debugging timeline for one operation, and `parent_id` is the reply or continuation target. A Delivery's Message carries `thread_id` and `trace_id` so a handler knows both which conversation it is in and which operation it serves. A Ticket carries only `thread_id`, because the conversation is what a requester continues; the request's `trace_id` is read from the request or from the stored response, not duplicated onto the Ticket.
 
 `get_trace` reconstructs that timeline as `TraceEvent` values, in the order the Runtime recorded them. Event `type` is one of `accepted`, `ticket_opened`, `leased`, `completed`, `replied`, and `ticket_closed`. `completed` is a `complete` that finished the Delivery. `ticket_closed` is recorded when a Ticket expires without a `reply` or `complete`.
 
-The Runtime MUST NOT invent a global sequence number. Ordering is scoped to retained Thread history. There is no total order across a Mailbox, which is what lets a Mailbox be partitioned for scale.
+The Runtime assigns a per-Thread sequence on acceptance. That sequence is not a global order. It is scoped to one Thread, which already has a fixed participant set and is already a serialization point. There is no total order across a Mailbox, which is what lets a Mailbox be partitioned for scale.
 
 ## Message size
 
@@ -89,9 +97,9 @@ The Runtime reports `max_message_bytes` in `JoinResult`. A `send` whose body exc
 
 ## Sending and collecting
 
-Whether a reply is expected is a property of the Message. How the sender collects the result is a property of the `send` call and is not stored on the Message; the recipient never observes it.
+A request always expects a reply. How the sender collects that reply is a property of the `send` call and is not stored on the Message; the recipient never observes it.
 
-A reply-expected request selects one `collect` strategy:
+A request selects one `collect` strategy:
 
 | `collect` | Ticket | Result of `send` |
 | --- | --- | --- |
@@ -100,7 +108,7 @@ A reply-expected request selects one `collect` strategy:
 | `callback` | yes | reserved; fails with `unsupported_collect_mode` in this draft |
 | `stream` | yes | reserved; fails with `unsupported_collect_mode` in this draft |
 
-An event, and a request with neither `collect` nor `deadline`, creates no Ticket and returns the accepted Message.
+An event creates no Ticket and returns the accepted Message.
 
 `wait` changes how long `send` stays open. It does not change the underlying Message, Delivery, or Ticket.
 
@@ -146,7 +154,8 @@ The first attempt is `1`. Every recovery after lease release or expiry increment
     "created_at": "2026-08-18T15:00:00Z",
     "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
     "deadline": "2026-08-18T15:10:00Z",
-    "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20"
+    "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20",
+    "seq": 1
   },
   "history": [],
   "history_complete": true
@@ -172,12 +181,12 @@ A Client maps a handler outcome according to the delivered Message:
 
 | Delivered Message and outcome | Runtime operation | Ticket effect |
 | --- | --- | --- |
-| reply-expected request returns content | `reply` with `outcome=completed` | `completed` |
-| reply-expected request is declined | `complete` | `declined` |
-| reply-expected request raises a safe error | `reply` with `outcome=failed` | `failed` |
-| event or no-reply request finishes | `complete` | no Ticket exists |
+| request returns content | `reply` with `outcome=completed` | `completed` |
+| request is declined | `complete` | `declined` |
+| request raises a safe error | `reply` with `outcome=failed` | `failed` |
+| event finishes | `complete` | no Ticket exists |
 
-Declining is a first-class, benign outcome. A recipient may read a request and choose not to answer, the way a person ignores a message that does not warrant a reply. The Ticket becomes `declined`, which is explicit to the requester and is not a failure. A Client declines by calling `complete` on a reply-expected Delivery, so an SDK that maps a handler returning nothing to `complete` produces `declined`. To answer with deliberately empty content instead, the Client replies with `outcome=completed` and `content=null`.
+Declining is a first-class, benign outcome. A recipient may read a request and choose not to answer, the way a person ignores a message that does not warrant a reply. The Ticket becomes `declined`, which is explicit to the requester and is not a failure. A Client declines by calling `complete` on a request Delivery, so an SDK that maps a handler returning nothing to `complete` produces `declined`. To answer with deliberately empty content instead, the Client replies with `outcome=completed` and `content=null`.
 
 A handler failure becomes an `ErrorObject` with `code=handler_failed`. The Client SHOULD include a safe message for the requester and MUST NOT expose secrets or an unfiltered stack trace. An Agent application failure code belongs in that object's `details`, not in `code`.
 
@@ -248,25 +257,28 @@ Count and age limits on Thread history apply only to Messages that no open Ticke
     "created_at": "2026-08-18T15:00:08Z",
     "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
     "parent_id": "15c44926-4c2a-4a01-a13b-95152da9a859",
-    "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20"
+    "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20",
+    "seq": 2
   }
 }
 ```
 
 ## Thread and history
 
-A Thread is an opaque UUID shared by related Messages among a fixed participant set. The set contains the first Message's sender and recipient, so it has one Membership for a self-send or two Memberships otherwise. The Runtime stores retained Messages under `thread_id`.
+A Thread is an opaque UUID shared by related Messages among a fixed participant set. The set contains one or more Memberships. The first accepted Message using a `thread_id` creates the Thread and seeds the set from that Message's sender and recipient. Later Messages may travel only among those Memberships. A send that names a sender or recipient outside the set fails with `forbidden` and reveals no history.
 
-The first accepted Message using a `thread_id` fixes that participant set. Later Messages may travel only within it. A send that introduces another sender or recipient fails with `forbidden` and reveals no history.
+This draft never adds a Membership after creation. A two-party Thread stays two-party because it is seeded from two Addresses.
 
 When `parent_id` and `thread_id` are both present, the parent MUST exist in the same Thread. A sender may name only a parent Message it was authorized to receive or created itself. A missing or unauthorized parent returns `not_found`; a visible parent from another Thread returns `invalid_request`.
+
+On acceptance the Runtime assigns `seq`, an integer that starts at `1` for the first Message in the Thread and increases by one for each later Message, including a response or error. `seq` is present exactly when `thread_id` is present. Two Messages accepted in the same tick still receive distinct values in acceptance order.
 
 ### Delivered history window
 
 A Delivery carries a bounded recent window of its Thread, not the whole transcript:
 
 - `history` contains Messages accepted before the delivered Message
-- it is ordered by `created_at`, then Message id
+- it is ordered by `seq` ascending
 - it excludes the currently delivered Message
 - it holds at most `delivery_history_limit` Messages, reported in `JoinResult`
 - its UTF-8 JSON encoding MUST NOT exceed `max_message_bytes`; the Runtime drops oldest Messages from the window until both caps hold
@@ -279,7 +291,7 @@ This keeps every Delivery bounded no matter how long a Thread grows.
 
 ### Reading older history
 
-`get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `created_at` then Message id, and `has_more` states whether older retained Messages remain. Only a Thread participant may read its history; a non-participant receives `not_found`.
+`get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `seq` ascending, and `has_more` states whether older retained Messages remain. Only a Membership in the Thread's participant set may read its history; a non-participant receives `not_found`.
 
 `before` is a Message id. Omit it to read the newest page.
 
@@ -305,9 +317,14 @@ These vectors are normative summaries. An implementation test may express them i
 | two replies race | one terminal result; loser receives `ticket_closed`; `late_reply_count` increases |
 | deadline wins a race | Ticket is `expired`; later reply cannot replace it |
 | `get_result` twice with no intervening write | identical stored Ticket |
-| reply-expected request declined via `complete` | Ticket `declined`; not a failure |
+| request declined via `complete` | Ticket `declined`; not a failure |
 | reply with `content=null` | Ticket `completed` with null content |
-| `complete` for an event or no-reply request | Delivery finished; no Ticket |
+| `complete` for an event | Delivery finished; no Ticket |
+| request without `deadline` or `collect` | `invalid_request`; no Message, Delivery, or Ticket |
+| Client includes `seq` on send | `invalid_request` |
+| unthreaded Message | `seq` is absent |
+| two Messages in one Thread with the same `created_at` | ordered by `seq`; the earlier accepted Message has the smaller `seq` |
+| a follow-up produced from several answers | one `parent_id`; those answers share the follow-up's `trace_id` |
 | Thread longer than the window | Delivery `history_complete=false`; `get_history` pages the remainder |
 | Thread window exceeds `max_message_bytes` | Delivery `history` truncated by size; `history_complete=false` |
 | `get_history` for a non-participant | `not_found`; no history revealed |
@@ -318,3 +335,4 @@ These vectors are normative summaries. An implementation test may express them i
 | two Instances handle consecutive turns of one Thread | each Delivery is leased to one Instance; the later Delivery's `history` contains the earlier turn |
 | another Membership submits a retained `lease_id` | `not_found`; no Delivery or Ticket state changes |
 | `collect=callback` or `collect=stream` | `unsupported_collect_mode`; nothing created |
+| send that would add a third Membership to an existing Thread | `forbidden` |

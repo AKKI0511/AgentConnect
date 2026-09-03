@@ -92,10 +92,10 @@ export type JsonObject = { [key: string]: JsonValue };
 export type PersistenceMode = "volatile" | "durable";
 
 /**
- * How the sender collects the result of a reply-expected request. It is a
- * choice made on the `send` call and is not stored on the immutable Message;
- * the recipient never observes it. A request without a `collect` value and
- * without a `deadline` expects no reply and creates no Ticket.
+ * How the sender collects the result of a request. It is a choice made on
+ * the `send` call and is not stored on the immutable Message; the recipient
+ * never observes it. Every request carries `collect` and a `deadline` and
+ * opens a Ticket. An event is the fire-and-forget kind and names neither.
  *
  * - `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.
  * - `ticket`: return a Ticket immediately and collect the result later.
@@ -258,9 +258,10 @@ export interface DeadlineExceededError extends ErrorObject {
 }
 
 /**
- * Fields shared by every accepted Message. The Runtime sets `id` acceptance is
- * keyed on, the canonical Addresses, `created_at`, and `trace_id`. A Client
- * cannot set the Runtime-owned fields.
+ * Fields shared by every accepted Message. The Runtime sets the Message `id`
+ * (acceptance is keyed on it), the canonical Addresses, `created_at`,
+ * `trace_id`, and `seq` when `thread_id` is present. A Client cannot set the
+ * Runtime-owned fields.
  */
 export interface MessageBase {
   /** Immutable Message id and idempotency key. */
@@ -279,40 +280,41 @@ export interface MessageBase {
   trace_id: Uuid;
   /** Optional Thread grouping id. */
   thread_id?: Uuid;
-  /** Message that directly caused this Message. */
+  /**
+   * Message this one replies to or continues. Singular: the Message relation
+   * is a tree. A response or error MUST name the request. A follow-up request
+   * or event MAY name a prior Message in the same Thread. A result merged
+   * from several answers names one parent and records the other inputs
+   * through the shared `trace_id`.
+   */
   parent_id?: Uuid;
+  /**
+   * Position of this Message in its Thread, assigned on acceptance. Present
+   * exactly when `thread_id` is present. The first accepted Message in a
+   * Thread is `1`. Each later Message, including a response or error,
+   * receives the next integer. History, the delivered window, and `before`
+   * cursors order by this value, not by `created_at`.
+   * @minimum 1
+   * @multipleOf 1
+   */
+  seq?: number;
 }
 
-/** Fields shared by request Messages. */
-export interface RequestMessageBase extends MessageBase {
+/**
+ * Request that always expects a reply. It carries a `deadline`, opens a
+ * Ticket, and ends in a terminal Ticket state. Fire-and-forget work is an
+ * `event`.
+ */
+export interface RequestMessage extends MessageBase {
   /** Identifies work sent to an Agent. */
   kind: "request";
   /** Sender-controlled work input. */
   content: JsonValue;
   /** Sender-controlled application data. Never used for Runtime decisions. */
   metadata?: JsonObject;
-}
-
-/**
- * Request that expects no reply and creates no Ticket. It carries no
- * `deadline`; because every object rejects undeclared fields, a `deadline`
- * present on a request selects the reply-expected shape below.
- */
-export interface NoReplyRequestMessage extends RequestMessageBase {}
-
-/**
- * Request tracked by a Ticket until its deadline. The presence of `deadline`
- * is what marks a request as reply-expected.
- */
-export interface ReplyExpectedRequestMessage extends RequestMessageBase {
   /** Absolute time after which an open Ticket expires. */
   deadline: Timestamp;
 }
-
-/** Accepted request Message. */
-export type RequestMessage =
-  | NoReplyRequestMessage
-  | ReplyExpectedRequestMessage;
 
 /** Information sent without a reply or Ticket. */
 export interface EventMessage extends MessageBase {
@@ -357,8 +359,8 @@ export type Message =
 /**
  * One exclusive attempt to handle a Message.
  *
- * `history` is a bounded recent window of the Thread, ordered by `created_at`
- * then Message id and excluding `message`. The window is capped by
+ * `history` is a bounded recent window of the Thread, ordered by `seq`
+ * ascending and excluding `message`. The window is capped by
  * `delivery_history_limit` and by `max_message_bytes`. When
  * `history_complete` is false, older retained Messages exist and can be paged
  * with `get_history`. This keeps a Delivery's size bounded no matter how long
@@ -617,7 +619,7 @@ export interface SendBase {
   content: JsonValue;
   /** Optional conversation grouping id. */
   thread_id?: Uuid;
-  /** Optional Message that directly caused this send. */
+  /** Optional Message this send replies to or continues. */
   parent_id?: Uuid;
   /** Sender-controlled data that never changes Runtime decisions. */
   metadata?: JsonObject;
@@ -637,21 +639,13 @@ export type CallbackTarget =
       url: string;
     };
 
-/** Fields shared by request sends. */
-export interface RequestSendBase extends SendBase {
+/**
+ * Send a request. Always opens a Ticket. `collect` and `deadline` are
+ * required. Fire-and-forget work is `EventSendRequest`.
+ */
+export interface RequestSendRequest extends SendBase {
   /** Send work to be handled. */
   kind: "request";
-}
-
-/**
- * Send a request that expects no reply. It names no `collect` and no
- * `deadline`, so it creates no Ticket. A send that carries `collect` and
- * `deadline` selects the reply-expected shape below.
- */
-export interface NoReplySendRequest extends RequestSendBase {}
-
-/** Send a reply-expected request tracked by a Ticket. */
-export interface CollectedSendRequest extends RequestSendBase {
   /** How the sender collects the result. */
   collect: CollectMode;
   /** Future absolute deadline for the Ticket. */
@@ -659,9 +653,6 @@ export interface CollectedSendRequest extends RequestSendBase {
   /** Required only when `collect` is `callback`. */
   callback?: CallbackTarget;
 }
-
-/** Input for sending a request. */
-export type RequestSendRequest = NoReplySendRequest | CollectedSendRequest;
 
 /** Send information without a reply. */
 export interface EventSendRequest extends SendBase {
@@ -672,20 +663,20 @@ export interface EventSendRequest extends SendBase {
 /** Input to Runtime `send`. */
 export type SendRequest = RequestSendRequest | EventSendRequest;
 
-/** Result for an event or a no-reply request. */
+/** Result for an event. */
 export interface AcceptedSendResult {
   /** Discriminator for a send that created no Ticket. */
   status: "accepted";
-  /** Accepted and Runtime-stamped Message. */
-  message: NoReplyRequestMessage | EventMessage;
+  /** Accepted and Runtime-stamped event. */
+  message: EventMessage;
 }
 
-/** Result for a reply-expected request. */
+/** Result for a request. */
 export interface TicketedSendResult {
-  /** Discriminator for a reply-expected send. */
+  /** Discriminator for a request send. */
   status: "ticketed";
   /** Accepted and Runtime-stamped request. */
-  message: ReplyExpectedRequestMessage;
+  message: RequestMessage;
   /** Current Ticket. Terminal unless `collect=wait` ended at the wait hold. */
   ticket: Ticket;
 }
@@ -711,10 +702,9 @@ export interface LeaseResult {
 }
 
 /**
- * Finish one Delivery without a response. For an event or no-reply request
- * this just ends the Delivery. For a reply-expected request it declines the
- * request: the recipient chose not to answer, and the Ticket becomes
- * `declined`.
+ * Finish one Delivery without a response. For an event this just ends the
+ * Delivery. For a request it declines the request: the recipient chose not
+ * to answer, and the Ticket becomes `declined`.
  */
 export interface CompleteRequest {
   /** Active lease to finish. */
@@ -723,7 +713,7 @@ export interface CompleteRequest {
 
 /** Result of `complete`. */
 export interface CompleteResult {
-  /** Present only when completing a reply-expected request, which declines it. */
+  /** Present only when completing a request, which declines it. */
   ticket?: DeclinedTicket;
 }
 
@@ -788,7 +778,7 @@ export interface GetHistoryRequest {
 
 /** One page of retained Thread history. */
 export interface HistoryResult {
-  /** Requested page ordered by `created_at` then Message id, ascending. */
+  /** Requested page ordered by `seq` ascending. */
   messages: Message[];
   /** True when older retained Messages remain before this page. */
   has_more: boolean;
@@ -1067,8 +1057,6 @@ export interface AgentConnectPublicSchema {
   tag?: Tag;
   error?: ErrorObject;
   deadline_exceeded_error?: DeadlineExceededError;
-  no_reply_request_message?: NoReplyRequestMessage;
-  reply_expected_request_message?: ReplyExpectedRequestMessage;
   request_message?: RequestMessage;
   event_message?: EventMessage;
   mailbox_message?: MailboxMessage;

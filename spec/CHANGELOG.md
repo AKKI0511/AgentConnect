@@ -16,7 +16,10 @@ Defines:
 - `find` with no `limit` returns every other member of a small Team, ordered, and caps a large Team at 100
 - Skills as natural-language claims with examples and tags, without input or output schemas
 - request, event, response, and error Messages, with `trace_id` correlating one causal operation while `thread_id` groups a conversation
-- reply expectation on the Message and the collection strategy (`wait`, `ticket`, and reserved `callback` and `stream`) on the `send`
+- a request always expects a reply, carries a `deadline`, and opens a Ticket; an event is the fire-and-forget kind
+- collection strategy (`wait`, `ticket`, and reserved `callback` and `stream`) on the `send`, not on the Message
+- Thread history ordered by a per-Thread `seq` assigned on acceptance; `parent_id` names the reply or continuation target
+- a Thread participant set of one or more Memberships, fixed at creation and seeded from the first Message
 - `wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket
 - pull delivery with exclusive leases, at-least-once handling, and a reported message-size limit
 - requester-owned Tickets with five states, including an explicit `declined` when a recipient chooses not to answer

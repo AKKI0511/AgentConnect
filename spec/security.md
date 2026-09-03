@@ -134,7 +134,7 @@ This is the kill switch: cutting a compromised member off from sending and recei
 
 `reply` follows the same rule. The Runtime derives the response sender from the Membership that owns the lease and the response recipient from the request Message.
 
-Inside a Team, Messages are not signed individually. Attribution comes from Session authentication plus Runtime stamping. A Client-supplied `sender`, recipient override on reply, `created_at`, `trace_id`, `attempt`, lease fact, or Instance stamp MUST be rejected as an unknown or invalid field.
+Inside a Team, Messages are not signed individually. Attribution comes from Session authentication plus Runtime stamping. A Client-supplied `sender`, recipient override on reply, `created_at`, `trace_id`, `seq`, `attempt`, lease fact, or Instance stamp MUST be rejected as an unknown or invalid field.
 
 ## Transport security
 
@@ -156,6 +156,7 @@ The Runtime SHOULD avoid distinguishing authentication failures in public error 
 | new join for a new Instance | prior Instances keep their Sessions |
 | Membership removed while a `send` waits | the waiting `send` returns `unauthorized` |
 | Client includes `sender` in send input | `invalid_request` |
+| Client includes `seq` in send input | `invalid_request` |
 | one member reads another member's Ticket | `not_found` |
 | non-participant calls `get_history` | `not_found` |
 | Session expires while holding leases | leases are released; Membership and Ticket state remain |

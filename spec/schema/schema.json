@@ -44,12 +44,6 @@
         "deadline_exceeded_error": {
           "$ref": "#/definitions/DeadlineExceededError"
         },
-        "no_reply_request_message": {
-          "$ref": "#/definitions/NoReplyRequestMessage"
-        },
-        "reply_expected_request_message": {
-          "$ref": "#/definitions/ReplyExpectedRequestMessage"
-        },
         "request_message": {
           "$ref": "#/definitions/RequestMessage"
         },
@@ -205,7 +199,7 @@
         "callback",
         "stream"
       ],
-      "description": "How the sender collects the result of a reply-expected request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. A request without a `collect` value and without a `deadline` expects no reply and creates no Ticket.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
+      "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request carries `collect` and a `deadline` and opens a Ticket. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
     },
     "TicketState": {
       "type": "string",
@@ -434,75 +428,7 @@
       "additionalProperties": false,
       "description": "Error stored by an expired Ticket."
     },
-    "NoReplyRequestMessage": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Immutable Message id and idempotency key."
-        },
-        "sender": {
-          "$ref": "#/definitions/QualifiedAddress",
-          "description": "Canonical qualified Address set by the Runtime."
-        },
-        "recipient": {
-          "$ref": "#/definitions/QualifiedAddress",
-          "description": "Canonical qualified Address set by the Runtime."
-        },
-        "created_at": {
-          "$ref": "#/definitions/Timestamp",
-          "description": "Runtime acceptance time."
-        },
-        "trace_id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Correlation id shared by every Message in one causal exchange. The Runtime assigns a new value to a root Message and copies it onto every Message caused by it, so one `trace_id` reconstructs a whole timeline."
-        },
-        "thread_id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Optional Thread grouping id."
-        },
-        "parent_id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Message that directly caused this Message."
-        },
-        "kind": {
-          "type": "string",
-          "const": "request",
-          "description": "Identifies work sent to an Agent."
-        },
-        "content": {
-          "$ref": "#/definitions/JsonValue",
-          "description": "Sender-controlled work input."
-        },
-        "metadata": {
-          "$ref": "#/definitions/JsonObject",
-          "description": "Sender-controlled application data. Never used for Runtime decisions."
-        }
-      },
-      "required": [
-        "content",
-        "created_at",
-        "id",
-        "kind",
-        "recipient",
-        "sender",
-        "trace_id"
-      ],
-      "description": "Request that expects no reply and creates no Ticket. It carries no `deadline`; because every object rejects undeclared fields, a `deadline` present on a request selects the reply-expected shape below."
-    },
-    "Uuid": {
-      "type": "string",
-      "description": "RFC 9562 UUID used for Messages, Threads, leases, traces, and Instances.",
-      "format": "uuid"
-    },
-    "Timestamp": {
-      "type": "string",
-      "description": "UTC RFC 3339 timestamp with a trailing `Z`. Example: `2026-08-18T15:00:00Z`.",
-      "format": "date-time",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
-    },
-    "ReplyExpectedRequestMessage": {
+    "RequestMessage": {
       "type": "object",
       "properties": {
         "id": {
@@ -531,7 +457,13 @@
         },
         "parent_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Message that directly caused this Message."
+          "description": "Message this one replies to or continues. Singular: the Message relation is a tree. A response or error MUST name the request. A follow-up request or event MAY name a prior Message in the same Thread. A result merged from several answers names one parent and records the other inputs through the shared `trace_id`."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Position of this Message in its Thread, assigned on acceptance. Present exactly when `thread_id` is present. The first accepted Message in a Thread is `1`. Each later Message, including a response or error, receives the next integer. History, the delivered window, and `before` cursors order by this value, not by `created_at`.",
+          "minimum": 1,
+          "multipleOf": 1
         },
         "kind": {
           "type": "string",
@@ -562,18 +494,18 @@
         "trace_id"
       ],
       "additionalProperties": false,
-      "description": "Request tracked by a Ticket until its deadline. The presence of `deadline` is what marks a request as reply-expected."
+      "description": "Request that always expects a reply. It carries a `deadline`, opens a Ticket, and ends in a terminal Ticket state. Fire-and-forget work is an `event`."
     },
-    "RequestMessage": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/NoReplyRequestMessage"
-        },
-        {
-          "$ref": "#/definitions/ReplyExpectedRequestMessage"
-        }
-      ],
-      "description": "Accepted request Message."
+    "Uuid": {
+      "type": "string",
+      "description": "RFC 9562 UUID used for Messages, Threads, leases, traces, and Instances.",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "UTC RFC 3339 timestamp with a trailing `Z`. Example: `2026-08-18T15:00:00Z`.",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
     },
     "EventMessage": {
       "type": "object",
@@ -604,7 +536,13 @@
         },
         "parent_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Message that directly caused this Message."
+          "description": "Message this one replies to or continues. Singular: the Message relation is a tree. A response or error MUST name the request. A follow-up request or event MAY name a prior Message in the same Thread. A result merged from several answers names one parent and records the other inputs through the shared `trace_id`."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Position of this Message in its Thread, assigned on acceptance. Present exactly when `thread_id` is present. The first accepted Message in a Thread is `1`. Each later Message, including a response or error, receives the next integer. History, the delivered window, and `before` cursors order by this value, not by `created_at`.",
+          "minimum": 1,
+          "multipleOf": 1
         },
         "kind": {
           "type": "string",
@@ -674,6 +612,12 @@
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id."
         },
+        "seq": {
+          "type": "number",
+          "description": "Position of this Message in its Thread, assigned on acceptance. Present exactly when `thread_id` is present. The first accepted Message in a Thread is `1`. Each later Message, including a response or error, receives the next integer. History, the delivered window, and `before` cursors order by this value, not by `created_at`.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
         "kind": {
           "type": "string",
           "const": "response",
@@ -727,6 +671,12 @@
         "parent_id": {
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Position of this Message in its Thread, assigned on acceptance. Present exactly when `thread_id` is present. The first accepted Message in a Thread is `1`. Each later Message, including a response or error, receives the next integer. History, the delivered window, and `before` cursors order by this value, not by `created_at`.",
+          "minimum": 1,
+          "multipleOf": 1
         },
         "kind": {
           "type": "string",
@@ -810,7 +760,7 @@
         "history_complete"
       ],
       "additionalProperties": false,
-      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `created_at` then Message id and excluding `message`. The window is capped by `delivery_history_limit` and by `max_message_bytes`. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`. This keeps a Delivery's size bounded no matter how long a Thread grows."
+      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `seq` ascending and excluding `message`. The window is capped by `delivery_history_limit` and by `max_message_bytes`. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`. This keeps a Delivery's size bounded no matter how long a Thread grows."
     },
     "Ticket": {
       "anyOf": [
@@ -1446,59 +1396,6 @@
       "description": "Input to Runtime `send`."
     },
     "RequestSendRequest": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/NoReplySendRequest"
-        },
-        {
-          "$ref": "#/definitions/CollectedSendRequest"
-        }
-      ],
-      "description": "Input for sending a request."
-    },
-    "NoReplySendRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Client-generated Message id and idempotency key."
-        },
-        "recipient": {
-          "$ref": "#/definitions/Address",
-          "description": "Local or same-Team qualified Address."
-        },
-        "content": {
-          "$ref": "#/definitions/JsonValue",
-          "description": "Sender-controlled work or event data."
-        },
-        "thread_id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Optional conversation grouping id."
-        },
-        "parent_id": {
-          "$ref": "#/definitions/Uuid",
-          "description": "Optional Message that directly caused this send."
-        },
-        "metadata": {
-          "$ref": "#/definitions/JsonObject",
-          "description": "Sender-controlled data that never changes Runtime decisions."
-        },
-        "kind": {
-          "type": "string",
-          "const": "request",
-          "description": "Send work to be handled."
-        }
-      },
-      "required": [
-        "content",
-        "id",
-        "kind",
-        "recipient"
-      ],
-      "description": "Send a request that expects no reply. It names no `collect` and no `deadline`, so it creates no Ticket. A send that carries `collect` and `deadline` selects the reply-expected shape below."
-    },
-    "CollectedSendRequest": {
       "type": "object",
       "properties": {
         "id": {
@@ -1519,7 +1416,7 @@
         },
         "parent_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Optional Message that directly caused this send."
+          "description": "Optional Message this send replies to or continues."
         },
         "metadata": {
           "$ref": "#/definitions/JsonObject",
@@ -1552,7 +1449,7 @@
         "recipient"
       ],
       "additionalProperties": false,
-      "description": "Send a reply-expected request tracked by a Ticket."
+      "description": "Send a request. Always opens a Ticket. `collect` and `deadline` are required. Fire-and-forget work is `EventSendRequest`."
     },
     "EventSendRequest": {
       "type": "object",
@@ -1575,7 +1472,7 @@
         },
         "parent_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Optional Message that directly caused this send."
+          "description": "Optional Message this send replies to or continues."
         },
         "metadata": {
           "$ref": "#/definitions/JsonObject",
@@ -1616,15 +1513,8 @@
           "description": "Discriminator for a send that created no Ticket."
         },
         "message": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/NoReplyRequestMessage"
-            },
-            {
-              "$ref": "#/definitions/EventMessage"
-            }
-          ],
-          "description": "Accepted and Runtime-stamped Message."
+          "$ref": "#/definitions/EventMessage",
+          "description": "Accepted and Runtime-stamped event."
         }
       },
       "required": [
@@ -1632,7 +1522,7 @@
         "message"
       ],
       "additionalProperties": false,
-      "description": "Result for an event or a no-reply request."
+      "description": "Result for an event."
     },
     "TicketedSendResult": {
       "type": "object",
@@ -1640,10 +1530,10 @@
         "status": {
           "type": "string",
           "const": "ticketed",
-          "description": "Discriminator for a reply-expected send."
+          "description": "Discriminator for a request send."
         },
         "message": {
-          "$ref": "#/definitions/ReplyExpectedRequestMessage",
+          "$ref": "#/definitions/RequestMessage",
           "description": "Accepted and Runtime-stamped request."
         },
         "ticket": {
@@ -1657,7 +1547,7 @@
         "ticket"
       ],
       "additionalProperties": false,
-      "description": "Result for a reply-expected request."
+      "description": "Result for a request."
     },
     "LeaseRequest": {
       "type": "object",
@@ -1702,14 +1592,14 @@
         "lease_id"
       ],
       "additionalProperties": false,
-      "description": "Finish one Delivery without a response. For an event or no-reply request this just ends the Delivery. For a reply-expected request it declines the request: the recipient chose not to answer, and the Ticket becomes `declined`."
+      "description": "Finish one Delivery without a response. For an event this just ends the Delivery. For a request it declines the request: the recipient chose not to answer, and the Ticket becomes `declined`."
     },
     "CompleteResult": {
       "type": "object",
       "properties": {
         "ticket": {
           "$ref": "#/definitions/DeclinedTicket",
-          "description": "Present only when completing a reply-expected request, which declines it."
+          "description": "Present only when completing a request, which declines it."
         }
       },
       "additionalProperties": false,
@@ -1854,7 +1744,7 @@
           "items": {
             "$ref": "#/definitions/Message"
           },
-          "description": "Requested page ordered by `created_at` then Message id, ascending."
+          "description": "Requested page ordered by `seq` ascending."
         },
         "has_more": {
           "type": "boolean",

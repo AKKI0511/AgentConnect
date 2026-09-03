@@ -455,6 +455,9 @@ def _print_trace_event(event: dict[str, Any]) -> None:
         extra = f"state={detail.get('state')}"
     elif kind == "completed" and detail.get("declined"):
         extra = "declined"
+    parent = event.get("parent_id")
+    if parent:
+        extra = f"{extra} parent={parent}".strip()
     typer.echo(f"  {stamp}  {kind:14}  {actor}  {extra}".rstrip())
 
 

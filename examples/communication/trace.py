@@ -59,7 +59,10 @@ async def main() -> None:
         trace_id = result["message"]["trace_id"]
         operator = await team.ensure_operator_session()
         timeline = await team.get_trace(operator, trace_id)
-        print("trace:", [event["type"] for event in timeline["events"]])
+        print(
+            "trace:",
+            [(event["type"], event.get("parent_id")) for event in timeline["events"]],
+        )
     finally:
         await researcher.leave()
         await writer.leave()

@@ -32,6 +32,7 @@ starts the Runtime and joins ``Writer``. ``agentconnect ask`` and
 ``agentconnect trace`` then talk to it as the operator.
 
 `trace.py` fails a request on purpose, then prints the Trace timeline.
+Each event may carry ``parent_id`` of the Message it names.
 
 `aiagent.py` is a model-backed Agent. It uses a recorded model by default
 so it runs without an API key. Set ``AGENTCONNECT_MODEL`` to use LiteLLM.

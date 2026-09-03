@@ -115,19 +115,17 @@ Omitting `thread_id` starts a fresh conversation. The server mints a Thread and 
 
 ### Idempotency
 
-A model tool call may be retried by the framework. The server MUST NOT let a retry create a second request.
+A model tool call may be retried by the framework. Retry collapsing is opt-in.
 
 When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key returns the original Ticket.
 
-When `idempotency_key` is omitted, the request Message id is UUID5 of `ask|<caller_address>|<recipient>|<thread_id or empty>|<canonical JSON of content>|<mcp_request_id>`. `mcp_request_id` is the JSON-RPC request id of this tool call, stringified. The omitted `thread_id` is hashed as empty even if the server later mints a Thread for the send.
-
-A retried MCP request reuses the JSON-RPC id and therefore the same Message id. A second distinct tool call, even with identical arguments, has a different request id and MUST open a second Ticket.
+When `idempotency_key` is omitted, the server mints a fresh UUID. Two clients, or one client on two connections, that send identical arguments open two Tickets.
 
 ```json
 {"recipient": "writer", "content": "same", "deadline_seconds": 30}
 ```
 
-Two such `ask` calls with different JSON-RPC ids produce two Tickets.
+Two such `ask` calls produce two Tickets, even when their JSON-RPC request ids are both `1`.
 
 ```json
 {"recipient": "writer", "content": "same", "deadline_seconds": 30, "idempotency_key": "draft-1"}
@@ -152,7 +150,7 @@ Arguments:
 }
 ```
 
-`recipient` and `content` are required. `thread_id` and `idempotency_key` are optional, with the same idempotency behavior as `ask` (`tell|` in the UUID5 material instead of `ask|`).
+`recipient` and `content` are required. `thread_id` and `idempotency_key` are optional, with the same idempotency behavior as `ask`. A keyed `tell` uses `tell|` in the UUID5 material instead of `ask|`.
 
 Result: `AcceptedSendResult`.
 

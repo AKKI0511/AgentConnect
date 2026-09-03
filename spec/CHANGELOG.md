@@ -38,9 +38,10 @@ Defines:
 - `ErrorObject.code` is the closed `ErrorCode` set; an Agent application failure code belongs in `details` of a `handler_failed` error
 - `TeamRoster.team_name` is a `TeamName`
 - operator operations `status`, `issue_join_token`, and `revoke_join_token`
-- `get_trace` reconstructs the timeline for one `trace_id`; a member reads a Trace they appear in, the operator reads any Trace
+- `get_trace` reconstructs the timeline for one `trace_id`; a member reads only events that name that Membership, the operator reads any Trace
 - HTTP trace watch stream at `GET /traces/events`
-- MCP `ask`/`tell` without `idempotency_key` include the JSON-RPC request id so two deliberate identical calls stay distinct
+- MCP `ask`/`tell` mint a fresh Message id unless the caller supplies `idempotency_key`
+- `TraceEvent.parent_id` copies the named Message's parent so a Client can draw the request tree
 - documented TypeScript structures and generated JSON Schema
 
 This is a draft. No implementation may claim conformance yet.

@@ -71,7 +71,7 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 | `find` | member Session | ordered Directory matches |
 | `get_profile` | member Session | one Directory entry |
 | `status` | operator Session | members, online state, Mailbox depths, open Tickets |
-| `get_trace` | operator Session, or a member Session that appears in the trace | ordered Trace events for one `trace_id` |
+| `get_trace` | operator Session (full list), or a member Session that appears in the trace (events that name that member) | ordered Trace events for one `trace_id` |
 | `issue_join_token` | operator Session | a join token scoped to this Team |
 | `revoke_join_token` | operator Session | the token revoked; Sessions created from it unauthorized |
 
@@ -335,7 +335,11 @@ Mailbox depth counts queued and leased items, matching the busy limit.
 
 The Runtime records a Trace event when it accepts a Message, opens a Ticket, leases a Delivery, finishes a Delivery with `complete` or `reply`, or expires a Ticket. A replay of an already accepted `send`, `complete`, or `reply` MUST NOT append another event. A `send` that fails before acceptance creates no Trace.
 
+When the Message named by an event has a `parent_id`, the event copies it. A Client rebuilds the request tree from that field. The result stays an ordered list.
+
 An unknown `trace_id`, and a non-operator caller that does not appear in the Trace, both return `not_found`. Appearing in the Trace means the caller's Address is an event `actor` or a Message `sender` or `recipient` named by an event.
+
+A member Session that appears in the Trace receives only the events that name that Membership: the event `actor`, a `sender` or `recipient` in `detail`, or the sender or recipient of the Message named by `message_id`. An operator Session receives the full list.
 
 Events for one `trace_id` are retained at least while any Message or Ticket that carries that id is retained. A Runtime MAY keep them longer. A Runtime MAY cap the stored list; when the cap is reached it drops the oldest events.
 
@@ -374,7 +378,9 @@ Events for one `trace_id` are retained at least while any Message or Ticket that
 | handler returns an error | `leased` then `replied` with `detail.outcome=failed` |
 | recipient `complete`s a request | `completed` then the Ticket is `declined` |
 | member Session reads a Trace it does not appear in | `not_found` |
-| operator Session reads that same Trace | `TraceResult` |
+| operator Session reads that same Trace | `TraceResult` with every event |
+| member at the tail of a fan-out Trace | only events that name that member; the head-leg `accepted` is absent |
+| fan-out request with `parent_id` | the child `accepted` event carries that `parent_id` |
 
 ## `issue_join_token` and `revoke_join_token`
 

@@ -87,7 +87,7 @@ They coincide in the simple case and diverge the moment work fans out:
 
 So `thread_id` groups history for the participants, `trace_id` groups a debugging timeline for one operation, and `parent_id` is the reply or continuation target. A Delivery's Message carries `thread_id` and `trace_id` so a handler knows both which conversation it is in and which operation it serves. A Ticket carries only `thread_id`, because the conversation is what a requester continues; the request's `trace_id` is read from the request or from the stored response, not duplicated onto the Ticket.
 
-`get_trace` reconstructs that timeline as `TraceEvent` values, in the order the Runtime recorded them. Event `type` is one of `accepted`, `ticket_opened`, `leased`, `completed`, `replied`, and `ticket_closed`. `completed` is a `complete` that finished the Delivery. `ticket_closed` is recorded when a Ticket expires without a `reply` or `complete`.
+`get_trace` reconstructs that timeline as `TraceEvent` values, in the order the Runtime recorded them. Event `type` is one of `accepted`, `ticket_opened`, `leased`, `completed`, `replied`, and `ticket_closed`. `completed` is a `complete` that finished the Delivery. `ticket_closed` is recorded when a Ticket expires without a `reply` or `complete`. When the Message named by an event has a `parent_id`, the event copies it so a Client can draw the request tree from the list.
 
 The Runtime assigns a per-Thread sequence on acceptance. That sequence is not a global order. It is scoped to one Thread, which already has a fixed participant set and is already a serialization point. There is no total order across a Mailbox, which is what lets a Mailbox be partitioned for scale.
 

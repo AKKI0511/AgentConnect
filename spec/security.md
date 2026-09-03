@@ -104,7 +104,7 @@ The Session is bound to one Instance of one Membership. It authorizes only that 
 - `get_history` for Threads the Membership participates in
 - `find`
 - `get_profile`
-- `get_trace` for a Trace the Membership appears in
+- `get_trace` for a Trace the Membership appears in, receiving only events that name that Membership
 
 The reserved `operator` is a principal Membership. It may also call `status`, `issue_join_token`, `revoke_join_token`, and `get_trace` for any Trace. A person talking to a loopback Runtime uses this Membership. See [bindings/http.md](bindings/http.md) and [bindings/mcp.md](bindings/mcp.md).
 
@@ -159,6 +159,7 @@ The Runtime SHOULD avoid distinguishing authentication failures in public error 
 | Client includes `seq` in send input | `invalid_request` |
 | one member reads another member's Ticket | `not_found` |
 | non-participant calls `get_history` | `not_found` |
+| member at the tail of a fan-out Trace | only events that name that member |
 | Session expires while holding leases | leases are released; Membership and Ticket state remain |
 | member Session calls `status` | `forbidden` |
 | member Session calls `issue_join_token` | `forbidden` |

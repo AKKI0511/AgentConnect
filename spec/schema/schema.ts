@@ -847,10 +847,8 @@ export interface AskToolRequest {
   thread_id?: Uuid;
   /**
    * Stable key so a retried tool call does not create a second request. When
-   * present, the Message id is UUID5 of caller plus this key. When omitted,
-   * the server includes the MCP JSON-RPC request id so a second distinct call
-   * with the same arguments is a new Ticket, while a retry of the same request
-   * is not.
+   * present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`.
+   * When omitted, the server mints a fresh UUID. Retry collapsing is opt-in.
    * @minLength 1
    * @maxLength 200
    */
@@ -915,6 +913,12 @@ export interface TraceEvent {
   actor: QualifiedAddress;
   /** Message this step is about, when there is one. */
   message_id?: Uuid;
+  /**
+   * Parent Message of `message_id`, copied from that Message when recorded.
+   * Absent when that Message has no parent. A Client rebuilds the request
+   * tree from this field. `get_trace` still returns an ordered list.
+   */
+  parent_id?: Uuid;
   /** Ticket this step is about, when there is one. */
   ticket_id?: Uuid;
   /**

@@ -14,9 +14,9 @@ poetry run python examples/communication/basic_communication.py
 by describing the work. Semantic ranking is on with no extra setup.
 
 `threads.py` continues a conversation with ``thread_id``. The handler reads
-``ctx.history``. Older turns are paged with ``get_history``.
-``collect="ticket"`` returns a handle; ``collect="wait"`` returns the
-terminal Ticket.
+``ctx.history``. Older turns are paged with ``get_history``, ordered by
+per-Thread ``seq``. ``collect="ticket"`` returns a handle; ``collect="wait"``
+returns the terminal Ticket.
 
 `http_session.py` serves the same Team over loopback HTTP. Agents join by URL.
 Loopback serving still accepts a join without a token; the Session sends an

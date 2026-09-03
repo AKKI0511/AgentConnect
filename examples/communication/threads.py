@@ -65,7 +65,7 @@ async def main() -> None:
         print("second:", ticket["response"]["content"])
 
         page = await researcher.get_history(thread_id)
-        print("history kinds:", [msg["kind"] for msg in page["messages"]])
+        print("history:", [(msg["kind"], msg["seq"]) for msg in page["messages"]])
         print("has_more:", page["has_more"])
     finally:
         await researcher.leave()

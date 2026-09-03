@@ -202,12 +202,11 @@ async def ask_action(
     wait_seconds: int = 0,
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
-    request_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Send a reply-expected request with ``collect=ticket``.
 
     Returns the current Ticket. ``wait_seconds`` may hold for a terminal
-    state. An omitted ``thread_id`` is minted for the send but not hashed.
+    state. An omitted ``thread_id`` is minted for the send.
     """
     if not isinstance(recipient, str) or not recipient.strip():
         raise ValueError("recipient is required")
@@ -223,10 +222,6 @@ async def ask_action(
         "ask",
         caller_address,
         idempotency_key=key,
-        recipient=recipient,
-        thread_id=arg_thread,
-        content=content,
-        request_id=request_id,
     )
     send_thread = arg_thread or str(uuid.uuid4())
     try:
@@ -266,7 +261,6 @@ async def tell_action(
     *,
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
-    request_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Send an event. Returns ``AcceptedSendResult``."""
     if not isinstance(recipient, str) or not recipient.strip():
@@ -277,10 +271,6 @@ async def tell_action(
         "tell",
         caller_address,
         idempotency_key=key,
-        recipient=recipient,
-        thread_id=arg_thread,
-        content=content,
-        request_id=request_id,
     )
     body: dict[str, Any] = {
         "id": message_id,

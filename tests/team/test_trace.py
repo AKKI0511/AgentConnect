@@ -164,3 +164,86 @@ async def test_unknown_trace_is_not_found(team):
     with pytest.raises(Exception) as exc:
         await team.get_trace(operator, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
     assert exc.value.code == "not_found"
+
+
+async def test_fanout_member_sees_own_leg_and_parent_id(team):
+    writer = await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    editor = await join_member(team, "editor")
+    root = await team.send(
+        researcher["session_token"],
+        {
+            "id": "aaaa1111-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            "recipient": "writer",
+            "kind": "request",
+            "content": "outline",
+            "collect": "ticket",
+            "deadline": deadline(20),
+        },
+    )
+    writer_delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    child = await team.send(
+        writer["session_token"],
+        {
+            "id": "bbbb2222-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+            "recipient": "editor",
+            "kind": "request",
+            "content": "review",
+            "collect": "ticket",
+            "deadline": deadline(20),
+            "parent_id": root["message"]["id"],
+        },
+    )
+    assert child["message"]["trace_id"] == root["message"]["trace_id"]
+    assert child["message"]["parent_id"] == root["message"]["id"]
+    editor_delivery = (await team.lease(editor["session_token"]))["deliveries"][0]
+    await team.reply(
+        editor["session_token"],
+        {
+            "id": "cccc3333-cccc-4ccc-8ccc-ccccccccccc1",
+            "lease_id": editor_delivery["lease_id"],
+            "outcome": "completed",
+            "content": "looks good",
+        },
+    )
+    await team.reply(
+        writer["session_token"],
+        {
+            "id": "dddd4444-dddd-4ddd-8ddd-ddddddddddd1",
+            "lease_id": writer_delivery["lease_id"],
+            "outcome": "completed",
+            "content": "done",
+        },
+    )
+    trace_id = root["message"]["trace_id"]
+    operator = await team.ensure_operator_session()
+    full = await team.get_trace(operator, trace_id)
+    accepted = [event for event in full["events"] if event["type"] == "accepted"]
+    assert [event["message_id"] for event in accepted] == [
+        root["message"]["id"],
+        child["message"]["id"],
+    ]
+    assert "parent_id" not in accepted[0]
+    assert accepted[1]["parent_id"] == root["message"]["id"]
+
+    editor_view = await team.get_trace(editor["session_token"], trace_id)
+    editor_ids = {event.get("message_id") for event in editor_view["events"]}
+    assert root["message"]["id"] not in editor_ids
+    assert child["message"]["id"] in editor_ids
+    editor_accepted = [
+        event for event in editor_view["events"] if event["type"] == "accepted"
+    ]
+    assert editor_accepted[0]["parent_id"] == root["message"]["id"]
+
+    researcher_view = await team.get_trace(researcher["session_token"], trace_id)
+    researcher_ids = {event.get("message_id") for event in researcher_view["events"]}
+    researcher_types = [event["type"] for event in researcher_view["events"]]
+    assert root["message"]["id"] in researcher_ids
+    assert child["message"]["id"] not in researcher_ids
+    assert "leased" in researcher_types
+    assert "replied" in researcher_types
+
+    writer_view = await team.get_trace(writer["session_token"], trace_id)
+    writer_ids = {event.get("message_id") for event in writer_view["events"]}
+    assert root["message"]["id"] in writer_ids
+    assert child["message"]["id"] in writer_ids

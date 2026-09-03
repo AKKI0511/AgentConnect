@@ -96,16 +96,6 @@ def create_team_mcp(
                 raise MCPError(INVALID_PARAMS, exc.message) from exc
             raise _tool_error(exc) from exc
 
-    def _rpc_id(ctx: Context) -> str:
-        try:
-            value = ctx.request_id
-        except Exception:
-            return ""
-        text = str(value)
-        if not text or text == "None":
-            return ""
-        return text
-
     async def find(
         ctx: Context,
         query: str,
@@ -156,7 +146,6 @@ def create_team_mcp(
                 wait_seconds=wait_seconds,
                 thread_id=thread_id,
                 idempotency_key=idempotency_key,
-                request_id=_rpc_id(ctx),
             )
         except ValueError as exc:
             raise MCPError(INVALID_PARAMS, str(exc)) from exc
@@ -187,7 +176,6 @@ def create_team_mcp(
                 content,
                 thread_id=thread_id,
                 idempotency_key=idempotency_key,
-                request_id=_rpc_id(ctx),
             )
         except ValueError as exc:
             raise MCPError(INVALID_PARAMS, str(exc)) from exc

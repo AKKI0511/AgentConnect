@@ -96,29 +96,10 @@ async def test_operator_name_is_reserved():
         await team.stop()
 
 
-@pytest.mark.asyncio
-async def test_message_id_includes_rpc_id_when_key_omitted():
-    first = message_id_for_tool(
-        "ask",
-        "operator@content-squad",
-        recipient="writer",
-        content="same",
-        request_id="1",
-    )
-    retry = message_id_for_tool(
-        "ask",
-        "operator@content-squad",
-        recipient="writer",
-        content="same",
-        request_id="1",
-    )
-    other = message_id_for_tool(
-        "ask",
-        "operator@content-squad",
-        recipient="writer",
-        content="same",
-        request_id="2",
-    )
+def test_omitted_key_mints_fresh_ids():
+    first = message_id_for_tool("ask", "operator@content-squad")
+    second = message_id_for_tool("ask", "operator@content-squad")
+    assert first != second
     keyed = message_id_for_tool(
         "ask",
         "operator@content-squad",
@@ -128,11 +109,14 @@ async def test_message_id_includes_rpc_id_when_key_omitted():
         "ask",
         "operator@content-squad",
         idempotency_key="draft-1",
-        recipient="other",
     )
-    assert first == retry
-    assert first != other
     assert keyed == keyed_again
+    tell_keyed = message_id_for_tool(
+        "tell",
+        "operator@content-squad",
+        idempotency_key="draft-1",
+    )
+    assert tell_keyed != keyed
 
 
 @pytest.mark.asyncio
@@ -219,13 +203,15 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
         "wait_seconds": 8,
     }
     try:
-        async with Client(mcp) as client:
-            first = _body(await client.call_tool("ask", args))
-            second = _body(await client.call_tool("ask", args))
-            assert first["id"] != second["id"]
+        async with Client(mcp) as client_a:
+            first = _body(await client_a.call_tool("ask", args))
+        async with Client(mcp) as client_b:
+            second = _body(await client_b.call_tool("ask", args))
+        assert first["id"] != second["id"]
 
-            keyed = dict(args)
-            keyed["idempotency_key"] = "draft-1"
+        keyed = dict(args)
+        keyed["idempotency_key"] = "draft-1"
+        async with Client(mcp) as client:
             one = _body(await client.call_tool("ask", keyed))
             two = _body(await client.call_tool("ask", keyed))
             assert one["id"] == two["id"]

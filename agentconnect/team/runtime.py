@@ -1403,6 +1403,7 @@ class Team:
                 trace_id=trace_id,
                 actor=sender,
                 message_id=message_id,
+                parent_id=trace_mod.parent_id_of(message),
                 detail={
                     "kind": kind,
                     "sender": sender,
@@ -1440,6 +1441,7 @@ class Team:
                 trace_id=trace_id,
                 actor=sender,
                 message_id=message_id,
+                parent_id=trace_mod.parent_id_of(message),
                 ticket_id=message_id,
             )
         )
@@ -1580,6 +1582,7 @@ class Team:
                         trace_id=str(message["trace_id"]),
                         actor=address,
                         message_id=message["id"],
+                        parent_id=trace_mod.parent_id_of(message),
                         ticket_id=(message["id"] if message.get("deadline") else None),
                         detail={"attempt": attempt},
                     )
@@ -1679,6 +1682,7 @@ class Team:
                         trace_id=str(message["trace_id"]),
                         actor=session["address"],
                         message_id=str(lease["message_id"]),
+                        parent_id=trace_mod.parent_id_of(message),
                         ticket_id=ticket["id"] if ticket is not None else None,
                         detail=detail,
                     )
@@ -1816,6 +1820,7 @@ class Team:
                     trace_id=str(message["trace_id"]),
                     actor=session["address"],
                     message_id=message["id"],
+                    parent_id=trace_mod.parent_id_of(message),
                     ticket_id=ticket["id"],
                     detail={
                         "outcome": ("failed" if outcome == "failed" else "completed"),
@@ -2050,8 +2055,8 @@ class Team:
     async def get_trace(self, session_token: str, trace_id: str) -> dict[str, Any]:
         """Return the recorded timeline for one ``trace_id``.
 
-        The operator may read any Trace. A member may read a Trace they
-        appear in. Anyone else gets ``not_found``.
+        The operator receives every event. A member receives only events
+        that name that Membership. Anyone else gets ``not_found``.
 
             token = await team.ensure_operator_session()
             timeline = await team.get_trace(token, message["trace_id"])
@@ -2062,11 +2067,14 @@ class Team:
                 trace_id = require_uuid(trace_id, field="trace_id")
             except ValueError:
                 _fail("invalid_request", "trace_id must be a UUID")
-            events = await trace_mod.load_events(self._ensure_started(), trace_id)
+            store = self._ensure_started()
+            events = await trace_mod.load_events(store, trace_id)
             if not events:
                 _fail("not_found", "Trace was not found")
             if session["membership_name"] != OPERATOR_NAME:
-                if not trace_mod.caller_appears(events, str(session["address"])):
+                address = str(session["address"])
+                events = await trace_mod.visible_events(store, events, address)
+                if not events:
                     _fail("not_found", "Trace was not found")
             return TraceResult.model_validate({"trace_id": trace_id, "events": events})
 
@@ -2110,6 +2118,7 @@ class Team:
                         trace_id=str(message["trace_id"]),
                         actor=str(ticket["recipient"]),
                         message_id=ticket_id,
+                        parent_id=trace_mod.parent_id_of(message),
                         ticket_id=ticket_id,
                         detail={"state": "expired"},
                     )

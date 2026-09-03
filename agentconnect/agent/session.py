@@ -23,6 +23,7 @@ from agentconnect.agent.errors import SessionError
 from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.message import parse_delivery
 from agentconnect.core.operations import (
+    AcceptedSendResult,
     HeartbeatResult,
     JoinResult,
     TicketedSendResult,
@@ -144,7 +145,7 @@ class Session:
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> TicketedSendResult:
         """Send a reply-expected request.
 
         ``collect="wait"`` (default) returns a terminal Ticket. If the
@@ -174,14 +175,15 @@ class Session:
         result = parse_send_result(
             await self._call("send", self._transport.send, self._token(), body)
         )
-        if collect == "wait" and isinstance(result, TicketedSendResult):
-            if result.ticket.state == "open":
-                ticket = await self._await_ticket(result.ticket.id)
-                return TicketedSendResult(
-                    status="ticketed",
-                    message=result.message,
-                    ticket=ticket,
-                )
+        if not isinstance(result, TicketedSendResult):
+            raise SessionError("internal", "request send did not return a Ticket")
+        if collect == "wait" and result.ticket.state == "open":
+            ticket = await self._await_ticket(result.ticket.id)
+            return TicketedSendResult(
+                status="ticketed",
+                message=result.message,
+                ticket=ticket,
+            )
         return result
 
     async def _await_ticket(self, ticket_id: str) -> Ticket:
@@ -197,19 +199,19 @@ class Session:
         recipient: str,
         content: Any,
         *,
-        kind: str = "event",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Send an event or a no-reply request. No Ticket is created."""
-        if kind not in {"event", "request"}:
-            raise ValueError("tell kind must be event or request")
+    ) -> AcceptedSendResult:
+        """Send an event. No Ticket is created.
+
+        await session.tell("writer", {"note": "source changed"})
+        """
         body: dict[str, Any] = {
             "id": message_id or str(uuid.uuid4()),
             "recipient": recipient,
-            "kind": kind,
+            "kind": "event",
             "content": content,
         }
         if thread_id is not None:
@@ -218,9 +220,12 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        return parse_send_result(
+        result = parse_send_result(
             await self._call("send", self._transport.send, self._token(), body)
         )
+        if not isinstance(result, AcceptedSendResult):
+            raise SessionError("internal", "event send did not return accepted")
+        return result
 
     async def find(
         self, query: str, *, limit: int | None = None, detail: str = "summary"
@@ -263,7 +268,7 @@ class Session:
         before: Optional[str] = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Return one page of retained Thread history.
+        """Return one page of retained Thread history, ordered by ``seq``.
 
         Omit ``before`` for the newest page. A UUID that is not in the
         transcript returns that newest page.

@@ -79,7 +79,7 @@ def mark_failed(
 
 
 def mark_declined(ticket: dict[str, Any], now_ts: str) -> dict[str, Any]:
-    """Mark the Ticket declined after complete on a reply-expected request."""
+    """Mark the Ticket declined after complete on a request."""
     ticket = dict(ticket)
     ticket["state"] = "declined"
     ticket["updated_at"] = now_ts

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from agentconnect.core.message import Delivery, MailboxMessage, Message
+from agentconnect.core.operations import AcceptedSendResult, TicketedSendResult
 
 if TYPE_CHECKING:
     from agentconnect.agent.session import CollectMode, Session
@@ -75,7 +76,7 @@ class TicketHandle:
         return result
 
     async def decline(self) -> dict[str, Any]:
-        """Decline a reply-expected request, or finish an event / no-reply."""
+        """Decline a request, or finish an event."""
         self._ensure_open()
         result = await self._session.complete_delivery(self._delivery)
         self._done = True
@@ -129,7 +130,7 @@ class Context:
 
     @property
     def deadline(self) -> Optional[str]:
-        """Request deadline, or None when no reply is expected."""
+        """Request deadline, or None for an event."""
         message = self._delivery.message
         return getattr(message, "deadline", None)
 
@@ -182,7 +183,7 @@ class Context:
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-    ) -> dict[str, Any]:
+    ) -> TicketedSendResult:
         """Send a reply-expected request and collect the result.
 
         Same contract as :meth:`agentconnect.agent.base.BaseAgent.ask`.
@@ -205,11 +206,11 @@ class Context:
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-        reply_expected: bool = False,
-        deadline_seconds: float = 30.0,
-    ) -> dict[str, Any]:
-        """Send an event, or a no-reply request when ``reply_expected`` is false."""
-        del reply_expected, deadline_seconds
+    ) -> AcceptedSendResult:
+        """Send an event.
+
+        Same contract as :meth:`agentconnect.agent.base.BaseAgent.tell`.
+        """
         return await self._session.tell(
             recipient,
             content,

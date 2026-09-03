@@ -389,3 +389,190 @@ async def test_thread_turns_can_move_across_instances(team: Team):
     assert second_delivery["message"]["id"] == follow["message"]["id"]
     assert second_delivery["history"][0]["id"] == opening["message"]["id"]
     await team.complete(second["session_token"], second_delivery["lease_id"])
+
+
+@pytest.mark.asyncio
+async def test_thread_orders_by_seq_when_created_at_ties(team: Team):
+    from agentconnect.team.codec import format_timestamp, utc_now
+
+    frozen = utc_now()
+    frozen_ts = format_timestamp(frozen)
+    team._now_pair = lambda: (frozen, frozen_ts)
+    writer = await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    thread_id = _id()
+    first_id = "ffffffff-ffff-4fff-bfff-ffffffffffff"
+    second_id = "00000000-0000-4000-8000-000000000001"
+    first = await team.send(
+        researcher["session_token"],
+        {
+            "id": first_id,
+            "recipient": "writer",
+            "kind": "event",
+            "content": "first",
+            "thread_id": thread_id,
+        },
+    )
+    second = await team.send(
+        researcher["session_token"],
+        {
+            "id": second_id,
+            "recipient": "writer",
+            "kind": "event",
+            "content": "second",
+            "thread_id": thread_id,
+        },
+    )
+    assert first["message"]["created_at"] == second["message"]["created_at"]
+    assert first["message"]["seq"] == 1
+    assert second["message"]["seq"] == 2
+    page = await team.get_history(researcher["session_token"], thread_id)
+    assert [msg["id"] for msg in page["messages"]] == [first_id, second_id]
+    delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    await team.complete(writer["session_token"], delivery["lease_id"])
+
+
+@pytest.mark.asyncio
+async def test_unthreaded_message_omits_seq(team: Team):
+    await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    sent = await team.send(
+        researcher["session_token"],
+        {"id": _id(), "recipient": "writer", "kind": "event", "content": "note"},
+    )
+    assert "seq" not in sent["message"]
+    assert "thread_id" not in sent["message"]
+
+
+@pytest.mark.asyncio
+async def test_reply_assigns_next_seq(team: Team):
+    writer = await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    thread_id = _id()
+    sent = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "request",
+            "content": "work",
+            "collect": "ticket",
+            "deadline": deadline(20),
+            "thread_id": thread_id,
+        },
+    )
+    assert sent["message"]["seq"] == 1
+    delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    replied = await team.reply(
+        writer["session_token"],
+        {
+            "id": _id(),
+            "lease_id": delivery["lease_id"],
+            "outcome": "completed",
+            "content": "done",
+        },
+    )
+    assert replied["ticket"]["response"]["seq"] == 2
+    history = await team.get_history(researcher["session_token"], thread_id)
+    assert [msg["seq"] for msg in history["messages"]] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_follow_up_names_one_parent_and_keeps_trace(team: Team):
+    writer = await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    thread_id = _id()
+    first = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "request",
+            "content": "one",
+            "collect": "ticket",
+            "deadline": deadline(20),
+            "thread_id": thread_id,
+        },
+    )
+    delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    await team.reply(
+        writer["session_token"],
+        {
+            "id": _id(),
+            "lease_id": delivery["lease_id"],
+            "outcome": "completed",
+            "content": "answer-one",
+        },
+    )
+    follow = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "event",
+            "content": "merged",
+            "thread_id": thread_id,
+            "parent_id": first["message"]["id"],
+        },
+    )
+    assert follow["message"]["parent_id"] == first["message"]["id"]
+    assert follow["message"]["trace_id"] == first["message"]["trace_id"]
+    assert "parent_ids" not in follow["message"]
+    leftover = (await team.lease(writer["session_token"]))["deliveries"][0]
+    await team.complete(writer["session_token"], leftover["lease_id"])
+
+
+@pytest.mark.asyncio
+async def test_three_member_thread_authorizes_every_participant(team: Team):
+    from agentconnect.team import threads as threads_mod
+
+    writer = await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    editor = await join_member(team, "editor")
+    thread_id = _id()
+    msg_id = _id()
+    store = team._store
+    assert store is not None
+    message = {
+        "id": msg_id,
+        "sender": researcher["address"],
+        "recipient": writer["address"],
+        "kind": "event",
+        "content": "seed",
+        "created_at": "2026-08-18T15:00:00.000000Z",
+        "trace_id": _id(),
+        "thread_id": thread_id,
+        "seq": 1,
+    }
+    await store.put(f"msg:{msg_id}", message)
+    await threads_mod.save_thread(
+        store,
+        {
+            "id": thread_id,
+            "participants": sorted(
+                [
+                    researcher["address"],
+                    writer["address"],
+                    editor["address"],
+                ]
+            ),
+            "message_ids": [msg_id],
+            "next_seq": 2,
+        },
+    )
+    page = await team.get_history(editor["session_token"], thread_id)
+    assert page["messages"][0]["id"] == msg_id
+    sent = await team.send(
+        editor["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "event",
+            "content": "from-editor",
+            "thread_id": thread_id,
+        },
+    )
+    assert sent["message"]["seq"] == 2
+    leftover = (await team.lease(writer["session_token"], max_items=10))["deliveries"]
+    for item in leftover:
+        await team.complete(writer["session_token"], item["lease_id"])

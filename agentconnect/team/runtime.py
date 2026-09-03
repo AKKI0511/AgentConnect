@@ -1242,11 +1242,11 @@ class Team:
                     "unsupported_collect_mode",
                     f"collect={collect} is not implemented yet",
                 )
-        if kind == "request" and (collect is not None or deadline_raw is not None):
+        if kind == "request":
             if collect is None or deadline_raw is None:
                 _fail(
                     "invalid_request",
-                    "a reply-expected request needs collect and a future deadline",
+                    "a request needs collect and a future deadline",
                 )
             try:
                 deadline_dt = parse_timestamp(deadline_raw)
@@ -1383,6 +1383,15 @@ class Team:
         if metadata is not None:
             message["metadata"] = metadata
 
+        if thread_id is not None:
+            await threads_mod.append_message(
+                store,
+                thread_id=thread_id,
+                message=message,
+                sender=sender,
+                recipient=recipient,
+            )
+
         await store.put(f"msg:{message_id}", message)
         mailbox_mod.enqueue_item(items, message_id, now_ts)
         await mailbox_mod.save_mailbox(store, recipient, items)
@@ -1401,14 +1410,6 @@ class Team:
                 },
             )
         )
-        if thread_id is not None:
-            await threads_mod.append_message(
-                store,
-                thread_id=thread_id,
-                message=message,
-                sender=sender,
-                recipient=recipient,
-            )
 
         if deadline_dt is None:
             result = {"status": "accepted", "message": message}
@@ -1529,7 +1530,7 @@ class Team:
                 message = await store.get(f"msg:{item['message_id']}")
                 if message is None:
                     continue
-                if message.get("kind") == "request" and message.get("deadline"):
+                if message.get("kind") == "request":
                     ticket = await self._expire_ticket_if_due(message["id"])
                     if ticket is None or ticket["state"] != "open":
                         continue
@@ -1631,8 +1632,8 @@ class Team:
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
         """Finish a Delivery without a response Message.
 
-        An event or no-reply request just ends. A reply-expected request is
-        declined: the Ticket becomes ``declined``, which is not a failure.
+        An event just ends. A request is declined: the Ticket becomes
+        ``declined``, which is not a failure.
         """
         async with self._lock:
             session = await self._require_session(session_token)
@@ -1653,7 +1654,7 @@ class Team:
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
             ticket = None
-            if message and message.get("kind") == "request" and message.get("deadline"):
+            if message and message.get("kind") == "request":
                 ticket = await self._expire_ticket_if_due(message["id"])
                 if ticket is not None and tickets_mod.is_terminal(ticket):
                     _fail("ticket_closed", "Ticket is already terminal")
@@ -1745,14 +1746,10 @@ class Team:
 
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
-            if (
-                message is None
-                or message.get("kind") != "request"
-                or not message.get("deadline")
-            ):
+            if message is None or message.get("kind") != "request":
                 _fail(
                     "invalid_request",
-                    "reply is only valid for a reply-expected request",
+                    "reply is only valid for a request",
                 )
             ticket = await self._expire_ticket_if_due(message["id"])
             if ticket is not None and tickets_mod.is_terminal(ticket):
@@ -1769,20 +1766,16 @@ class Team:
                 _fail("ticket_closed", "Ticket is already terminal")
 
             if outcome == "failed":
-                error_obj = self._validate_error_object(payload["error"])
                 reply_message: dict[str, Any] = {
                     "id": reply_id,
                     "sender": session["address"],
                     "recipient": message["sender"],
                     "kind": "error",
-                    "error": error_obj,
+                    "error": self._validate_error_object(payload["error"]),
                     "created_at": now_ts,
                     "trace_id": message["trace_id"],
                     "parent_id": message["id"],
                 }
-                if message.get("thread_id"):
-                    reply_message["thread_id"] = message["thread_id"]
-                ticket = tickets_mod.mark_failed(ticket, error_obj, now_ts)
             else:
                 reply_message = {
                     "id": reply_id,
@@ -1794,12 +1787,8 @@ class Team:
                     "trace_id": message["trace_id"],
                     "parent_id": message["id"],
                 }
-                if message.get("thread_id"):
-                    reply_message["thread_id"] = message["thread_id"]
-                ticket = tickets_mod.mark_completed(ticket, reply_message, now_ts)
-
-            await store.put(f"msg:{reply_id}", reply_message)
             if message.get("thread_id"):
+                reply_message["thread_id"] = message["thread_id"]
                 await threads_mod.append_message(
                     store,
                     thread_id=message["thread_id"],
@@ -1807,6 +1796,11 @@ class Team:
                     sender=reply_message["sender"],
                     recipient=reply_message["recipient"],
                 )
+            if outcome == "failed":
+                ticket = tickets_mod.mark_failed(ticket, reply_message["error"], now_ts)
+            else:
+                ticket = tickets_mod.mark_completed(ticket, reply_message, now_ts)
+            await store.put(f"msg:{reply_id}", reply_message)
             await tickets_mod.save_ticket(store, ticket)
             await self._finish_delivery(session, lease, now_ts)
             result = {"ticket": ticket}
@@ -1872,7 +1866,7 @@ class Team:
         before: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Return one page of a Thread's retained history.
+        """Return one page of a Thread's retained history, ordered by ``seq``.
 
         Omit ``before`` for the newest page. A UUID that is not in the
         retained transcript, including one retention has removed, returns

@@ -126,9 +126,59 @@ async def test_unsupported_collect_mode_creates_nothing(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_address_outside_team(team: Team):
+async def test_request_without_collect_or_deadline_is_invalid(team: Team):
+    writer = await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
+    missing_both = {
+        "id": _id(),
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+    }
+    missing_deadline = {
+        "id": _id(),
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+        "collect": "ticket",
+    }
+    missing_collect = {
+        "id": _id(),
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+        "deadline": deadline(10),
+    }
+    for body in (missing_both, missing_deadline, missing_collect):
+        with pytest.raises(TeamError) as exc:
+            await team.send(researcher["session_token"], body)
+        assert exc.value.code == "invalid_request"
+    assert (await team.lease(writer["session_token"]))["deliveries"] == []
+
+
+@pytest.mark.asyncio
+async def test_send_rejects_client_seq(team: Team):
     await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    with pytest.raises(TeamError) as exc:
+        await team.send(
+            researcher["session_token"],
+            {
+                "id": _id(),
+                "recipient": "writer",
+                "kind": "event",
+                "content": "note",
+                "thread_id": _id(),
+                "seq": 1,
+            },
+        )
+    assert exc.value.code == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_send_outside_team_is_address_outside_team(team: Team):
+    await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
     with pytest.raises(TeamError) as exc:
         await team.send(
             researcher["session_token"],

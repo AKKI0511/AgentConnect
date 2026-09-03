@@ -1,18 +1,18 @@
 """Thread transcript storage.
 
 A Thread is an opaque UUID shared by related Messages among a fixed
-participant set. The first accepted Message using a ``thread_id`` fixes
-that set. The Runtime stores retained Messages under the Thread id and
-serves a bounded window on each Delivery. The window is capped by count
-and by UTF-8 JSON bytes. ``get_history`` pages older turns; a ``before``
-id that is gone from the transcript returns the newest page.
+participant set of one or more Memberships. The first accepted Message
+using a ``thread_id`` seeds that set from its sender and recipient.
+Later Messages may travel only among those Memberships. The Runtime
+assigns a per-Thread ``seq`` on acceptance. History, the delivered
+window, and ``before`` cursors order by that value.
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from agentconnect.team.codec import json_size, parse_timestamp
+from agentconnect.team.codec import json_size
 from agentconnect.team.store.base import Store
 
 THREAD_KEY_PREFIX = "thread:"
@@ -25,7 +25,7 @@ def thread_key(thread_id: str) -> str:
 
 
 def _sort_key(message: dict[str, Any]) -> tuple:
-    return (parse_timestamp(message["created_at"]), message["id"])
+    return (int(message["seq"]),)
 
 
 def _participants_for(sender: str, recipient: str) -> list[str]:
@@ -62,12 +62,30 @@ def ensure_thread(
         "id": thread_id,
         "participants": _participants_for(sender, recipient),
         "message_ids": [],
+        "next_seq": 1,
     }
 
 
 def participant_set(thread: dict[str, Any]) -> set[str]:
     """Return the Addresses allowed to send in this Thread."""
     return set(thread.get("participants") or [])
+
+
+def allocate_seq(thread: dict[str, Any], message: dict[str, Any]) -> int:
+    """Assign the next Thread sequence onto ``message`` when it is new.
+
+    Replaying an already listed Message leaves its ``seq`` unchanged.
+    """
+    if message["id"] in thread["message_ids"]:
+        seq = message.get("seq")
+        if seq is not None:
+            return int(seq)
+        listed = thread["message_ids"]
+        return listed.index(message["id"]) + 1
+    seq = int(thread.get("next_seq") or (len(thread["message_ids"]) + 1))
+    message["seq"] = seq
+    thread["next_seq"] = seq + 1
+    return seq
 
 
 async def append_message(
@@ -85,6 +103,7 @@ async def append_message(
         sender=sender,
         recipient=recipient,
     )
+    allocate_seq(thread, message)
     if message["id"] not in thread["message_ids"]:
         thread["message_ids"].append(message["id"])
     await save_thread(store, thread)
@@ -100,9 +119,9 @@ def history_window(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Return the bounded recent window of Messages before ``delivered_id``.
 
-    ``limit`` is the count cap. ``max_bytes`` is an additional UTF-8 JSON
-    budget so a Delivery cannot grow with Message size even when the count
-    cap has not been reached.
+    Ordered by ``seq``. ``limit`` is the count cap. ``max_bytes`` is an
+    additional UTF-8 JSON budget so a Delivery cannot grow with Message
+    size even when the count cap has not been reached.
     """
     ordered = sorted(messages, key=_sort_key)
     earlier: list[dict[str, Any]] = []
@@ -114,7 +133,6 @@ def history_window(
     if limit <= 0:
         return [], complete_count == 0
     window = earlier[-limit:]
-    # Trim from the oldest end until the byte budget fits.
     while window and json_size(window) > max_bytes:
         window = window[1:]
     complete = len(window) == complete_count
@@ -129,16 +147,15 @@ def page_history(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Return one page of retained history, oldest of the page first.
 
-    Omit ``before`` to read the newest page. A ``before`` id that is not
-    in the retained transcript, including one retention has removed,
-    returns that newest page. ``has_more`` is True when older retained
-    Messages remain before this page.
+    Ordered by ``seq``. Omit ``before`` to read the newest page. A
+    ``before`` id that is not in the retained transcript, including one
+    retention has removed, returns that newest page. ``has_more`` is
+    True when older retained Messages remain before this page.
     """
     ordered = sorted(messages, key=_sort_key)
     if before is not None:
         index = next((i for i, msg in enumerate(ordered) if msg["id"] == before), None)
         if index is None:
-            # Unknown or evicted cursor: return the newest page.
             slice_end = len(ordered)
         else:
             slice_end = index

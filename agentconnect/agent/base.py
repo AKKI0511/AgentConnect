@@ -18,7 +18,7 @@ The same class joins a Team in another process with a join token:
 
 Handler outcomes:
 
-- return a JSON value to reply to a reply-expected request
+- return a JSON value to reply to a request
 - return None to decline that request, or to finish an event
 - raise to fail the request (the requester sees ``handler_failed``)
 - call ``ctx.ticket()`` and answer later through the returned handle
@@ -51,6 +51,7 @@ from agentconnect.core.identity import (
 )
 from agentconnect.core.kinds import MessageKind
 from agentconnect.core.message import Message
+from agentconnect.core.operations import AcceptedSendResult, TicketedSendResult
 from agentconnect.core.profile import AgentProfile
 from agentconnect.utils import wallet_manager
 
@@ -234,7 +235,7 @@ class BaseAgent:
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-    ) -> dict[str, Any]:
+    ) -> TicketedSendResult:
         """Send a reply-expected request through this Session.
 
         ``collect="wait"`` (default) returns when the Ticket is terminal.
@@ -265,16 +266,17 @@ class BaseAgent:
         recipient: str,
         content: Any,
         *,
-        kind: str = "event",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """Send an event or a no-reply request through this Session."""
+    ) -> AcceptedSendResult:
+        """Send an event through this Session. No Ticket is created.
+
+        await agent.tell("writer", {"note": "source changed"})
+        """
         return await self._require_session().tell(
             recipient,
             content,
-            kind=kind,
             thread_id=thread_id,
             parent_id=parent_id,
             metadata=metadata,
@@ -370,9 +372,7 @@ class BaseAgent:
         if kind == MessageKind.REQUEST:
             return await self.ask(receiver_id, content, metadata=metadata)
         if kind == MessageKind.EVENT:
-            return await self.tell(
-                receiver_id, content, kind="event", metadata=metadata
-            )
+            return await self.tell(receiver_id, content, metadata=metadata)
         raise ValueError("send_message only sends request or event")
 
     def _require_session(self) -> Session:

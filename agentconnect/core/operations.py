@@ -307,7 +307,11 @@ class HistoryResult(SchemaModel):
 
 
 class AskToolRequest(SchemaModel):
-    """MCP ``ask`` arguments."""
+    """MCP ``ask`` arguments.
+
+    Omit ``idempotency_key`` to mint a fresh Message id. Pass a key only
+    when a retry must collapse onto the same Ticket.
+    """
 
     recipient: Address
     content: JsonValue
@@ -318,7 +322,11 @@ class AskToolRequest(SchemaModel):
 
 
 class TellToolRequest(SchemaModel):
-    """MCP ``tell`` arguments."""
+    """MCP ``tell`` arguments.
+
+    Omit ``idempotency_key`` to mint a fresh Message id. Pass a key only
+    when a retry must collapse onto the same event.
+    """
 
     recipient: Address
     content: JsonValue
@@ -334,13 +342,20 @@ class TeamRoster(SchemaModel):
 
 
 class TraceEvent(SchemaModel):
-    """One recorded step of a causal operation."""
+    """One recorded step of a causal operation.
+
+    ``parent_id`` is the parent of ``message_id`` when that Message has
+    one. ``get_trace`` still returns an ordered list.
+
+        event.parent_id  # absent on a root Message
+    """
 
     at: Timestamp
     type: TraceEventType
     trace_id: Uuid
     actor: QualifiedAddress
     message_id: Optional[Uuid] = None
+    parent_id: Optional[Uuid] = None
     ticket_id: Optional[Uuid] = None
     detail: JsonObject
 

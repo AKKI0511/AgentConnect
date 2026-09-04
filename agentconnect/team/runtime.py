@@ -41,7 +41,8 @@ are kept for 24 hours after they close, or until that deadline if it is
 later. Thread history is trimmed by count once no open Ticket still
 needs an older Message. A ``collect=wait`` send holds until the Ticket
 is terminal or ``wait_hold_seconds`` elapses, then returns the current
-Ticket.
+Ticket. One Membership may hold at most ``max_held_waits`` of those
+sends at once.
 """
 
 from __future__ import annotations
@@ -83,6 +84,7 @@ from agentconnect.core.operations import (
     parse_send_request,
     parse_send_result,
 )
+from agentconnect.core.primitives import DeliveryHistoryForm
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.profile import AgentProfile
 from agentconnect.core.ticket import parse_ticket
@@ -112,6 +114,7 @@ from agentconnect.team.constants import (
     DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
     DEFAULT_JOIN_TOKEN_TTL_SECONDS,
     DEFAULT_LEASE_TTL_SECONDS,
+    DEFAULT_MAX_HELD_WAITS,
     DEFAULT_MAX_IN_FLIGHT,
     DEFAULT_MAX_INSTANCES,
     DEFAULT_MAX_MAILBOX_DEPTH,
@@ -169,6 +172,7 @@ class Team:
         max_mailbox_depth: int = DEFAULT_MAX_MAILBOX_DEPTH,
         delivery_history_limit: int = DEFAULT_DELIVERY_HISTORY_LIMIT,
         wait_hold_seconds: float = DEFAULT_WAIT_HOLD_SECONDS,
+        max_held_waits: int = DEFAULT_MAX_HELD_WAITS,
         session_ttl_seconds: float = DEFAULT_SESSION_TTL_SECONDS,
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
         terminal_ticket_retention_seconds: float = DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
@@ -191,6 +195,8 @@ class Team:
             wait_hold_seconds: How long ``collect=wait`` may keep ``send``
                 open. After this the current Ticket is returned even if it
                 is still open; collect the rest with ``get_result``.
+            max_held_waits: How many ``collect=wait`` sends one Membership
+                may hold at once. Further waits fail with ``wait_limit``.
             embeddings: How Profiles are turned into vectors for ``find``.
                 ``"auto"`` uses a hosted embedding API when a key is
                 already configured, a local ONNX model when
@@ -212,6 +218,7 @@ class Team:
         self.max_mailbox_depth = int(max_mailbox_depth)
         self.delivery_history_limit = int(delivery_history_limit)
         self.wait_hold_seconds = float(wait_hold_seconds)
+        self.max_held_waits = int(max_held_waits)
         self.session_ttl_seconds = float(session_ttl_seconds)
         self.lease_ttl_seconds = float(lease_ttl_seconds)
         self.terminal_ticket_retention_seconds = float(
@@ -269,6 +276,7 @@ class Team:
             max_mailbox_depth=self.max_mailbox_depth,
             delivery_history_limit=self.delivery_history_limit,
             wait_hold_seconds=self.wait_hold_seconds,
+            max_held_waits=self.max_held_waits,
         )
 
     @property
@@ -371,8 +379,7 @@ class Team:
             name = session["membership_name"]
             self._work_waiters.setdefault(name, []).append(event)
             store = self._ensure_started()
-            items = await mailbox_mod.load_mailbox(store, session["address"])
-            if mailbox_mod.has_available_item(items, utc_now()):
+            if await mailbox_mod.has_ready(store, session["address"], utc_now()):
                 event.set()
         try:
             await asyncio.wait_for(event.wait(), timeout)
@@ -737,11 +744,9 @@ class Team:
             lease = await mailbox_mod.get_lease(store, lease_id)
             if lease is None:
                 continue
-            items = await mailbox_mod.load_mailbox(store, lease["address"])
-            item = mailbox_mod.find_item(items, lease["message_id"])
-            if item is not None and item.get("lease_id") == lease_id:
-                mailbox_mod.release_lease_on_item(item, now_ts)
-                await mailbox_mod.save_mailbox(store, lease["address"], items)
+            await mailbox_mod.return_item(
+                store, lease["address"], lease["message_id"], lease_id, now_ts
+            )
             await mailbox_mod.deactivate_lease(store, lease_id)
         session["lease_ids"] = []
         self._signal_work(session["membership_name"])
@@ -772,6 +777,7 @@ class Team:
         max_in_flight: int = DEFAULT_MAX_IN_FLIGHT,
         join_token: str | None = None,
         identity_proof: str | None = None,
+        delivery_history: DeliveryHistoryForm | None = None,
         request: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create or reconnect a Membership and open a Session.
@@ -783,7 +789,8 @@ class Team:
 
         ``name`` is canonicalized to lowercase. A name and DID that already
         belong together reconnect; any other clash fails with
-        ``name_conflict``.
+        ``name_conflict``. ``delivery_history="ids"`` puts earlier Message
+        ids on each Delivery instead of Message bodies.
         """
         if request is not None:
             if not isinstance(request, Mapping):
@@ -806,6 +813,7 @@ class Team:
                 max_in_flight = parsed.max_in_flight
             join_token = parsed.join_token
             identity_proof = parsed.identity_proof
+            delivery_history = parsed.delivery_history
         async with self._lock:
             return await self._join_locked(
                 name=name,
@@ -816,6 +824,7 @@ class Team:
                 max_in_flight=max_in_flight,
                 join_token=join_token,
                 identity_proof=identity_proof,
+                delivery_history=delivery_history,
             )
 
     async def _join_locked(
@@ -829,6 +838,7 @@ class Team:
         max_in_flight: int,
         join_token: str | None,
         identity_proof: str | None,
+        delivery_history: DeliveryHistoryForm | None,
     ) -> dict[str, Any]:
         self._ensure_started()
         if spec_version != SPEC_VERSION:
@@ -864,6 +874,9 @@ class Team:
             _fail("invalid_request", "max_in_flight must be an integer")
         if in_flight < 1 or in_flight > 100:
             _fail("invalid_request", "max_in_flight must be between 1 and 100")
+        history_form = delivery_history or "bodies"
+        if history_form not in {"bodies", "ids"}:
+            _fail("invalid_request", "delivery_history must be bodies or ids")
 
         store = self._ensure_started()
         now, now_ts = self._now_pair()
@@ -887,6 +900,18 @@ class Team:
                 "agent_did": did,
                 "profile": canonical_profile,
             }
+            if not await store.insert(f"member:{canonical_name}", member):
+                _fail(
+                    "name_conflict",
+                    "Agent name and DID do not identify the same Membership",
+                )
+            if not await store.insert(f"did:{did}", canonical_name):
+                await store.delete(f"member:{canonical_name}")
+                _fail(
+                    "name_conflict",
+                    "Agent name and DID do not identify the same Membership",
+                )
+            await store.set_add("members", canonical_name)
         elif (
             by_name is not None
             and by_did is not None
@@ -932,6 +957,7 @@ class Team:
             "agent_did": member["agent_did"],
             "instance_id": instance_id,
             "max_in_flight": in_flight,
+            "delivery_history": history_form,
             "expires_at": format_timestamp(expires),
             "lease_ids": [],
         }
@@ -1107,7 +1133,7 @@ class Team:
             if self._directory is not None:
                 await self._directory.drop(OPERATOR_NAME)
         address = f"{OPERATOR_NAME}@{self.name}"
-        await store.delete(mailbox_mod.mailbox_key(address))
+        await mailbox_mod.drop_mailbox(store, address)
         await self._save_member(
             {
                 "name": OPERATOR_NAME,
@@ -1165,6 +1191,24 @@ class Team:
 
     # --- send ---
 
+    def _held_wait_ttl(self) -> float:
+        return max(60.0, float(self.wait_hold_seconds) * 2)
+
+    async def _acquire_held_wait(self, membership_name: str) -> bool:
+        store = self._ensure_started()
+        return await store.increment_if_below(
+            f"held_waits:{membership_name}",
+            self.max_held_waits,
+            ttl_seconds=self._held_wait_ttl(),
+        )
+
+    async def _release_held_wait(self, membership_name: str) -> None:
+        store = self._ensure_started()
+        await store.decrement_floor(
+            f"held_waits:{membership_name}",
+            ttl_seconds=self._held_wait_ttl(),
+        )
+
     async def send(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
@@ -1181,29 +1225,37 @@ class Team:
         waiter: asyncio.Event | None = None
         ticket_id: str | None = None
         deadline_dt = None
-        async with self._lock:
-            result, wait_for = await self._send_locked(session_token, request)
-            if wait_for is not None:
-                ticket_id, deadline_dt = wait_for
-                waiter = self._register_waiter(ticket_id)
-                self._register_session_wake(session_token, waiter)
-        if waiter is not None and ticket_id is not None and deadline_dt is not None:
-            try:
-                ticket = await self._wait_until_terminal(
-                    session_token, ticket_id, deadline_dt, waiter
-                )
-                result = dict(result)
-                result["ticket"] = ticket
-            finally:
-                self._drop_waiter(ticket_id, waiter)
-                self._drop_session_wake(session_token, waiter)
+        hold = {"acquired": False, "name": ""}
         try:
-            return parse_send_result(result)
-        except ValueError as exc:
-            _fail("internal", str(exc))
+            async with self._lock:
+                result, wait_for = await self._send_locked(session_token, request, hold)
+                if wait_for is not None:
+                    ticket_id, deadline_dt = wait_for
+                    waiter = self._register_waiter(ticket_id)
+                    self._register_session_wake(session_token, waiter)
+            if waiter is not None and ticket_id is not None and deadline_dt is not None:
+                try:
+                    ticket = await self._wait_until_terminal(
+                        session_token, ticket_id, deadline_dt, waiter
+                    )
+                    result = dict(result)
+                    result["ticket"] = ticket
+                finally:
+                    self._drop_waiter(ticket_id, waiter)
+                    self._drop_session_wake(session_token, waiter)
+            try:
+                return parse_send_result(result)
+            except ValueError as exc:
+                _fail("internal", str(exc))
+        finally:
+            if hold["acquired"] and hold["name"]:
+                await self._release_held_wait(hold["name"])
 
     async def _send_locked(
-        self, session_token: str, request: Mapping[str, Any]
+        self,
+        session_token: str,
+        request: Mapping[str, Any],
+        hold: dict[str, Any],
     ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
         session = await self._require_session(session_token)
         if not isinstance(request, Mapping):
@@ -1340,29 +1392,79 @@ class Team:
             "metadata": metadata,
         }
         request_hash = semantic_hash(semantic)
+        send_key = f"send:{message_id}"
+        membership_name = session["membership_name"]
 
-        existing_msg = await store.get(f"msg:{message_id}")
-        existing_send = await store.get(f"send:{message_id}")
-        if existing_msg is not None or existing_send is not None:
-            if existing_send is None or existing_send.get("sender") != sender:
+        existing_send = await store.get(send_key)
+        created_send = False
+        if existing_send is not None:
+            if existing_send.get("sender") != sender:
                 _fail("id_conflict", "Message id is already used")
             if existing_send.get("hash") != request_hash:
                 _fail("id_conflict", "Message id is already used with different data")
-            result = dict(existing_send["result"])
-            if result.get("status") == "ticketed":
-                ticket = await self._expire_ticket_if_due(message_id)
-                if ticket is not None:
-                    result["ticket"] = ticket
-                if (
-                    collect == "wait"
-                    and ticket is not None
-                    and ticket["state"] == "open"
-                ):
-                    return result, (message_id, parse_timestamp(ticket["deadline"]))
-            return result, None
+            result = existing_send.get("result")
+            if isinstance(result, dict):
+                result = dict(result)
+                if result.get("status") == "ticketed":
+                    ticket = await self._expire_ticket_if_due(message_id)
+                    if ticket is not None:
+                        result["ticket"] = ticket
+                    if (
+                        collect == "wait"
+                        and ticket is not None
+                        and ticket["state"] == "open"
+                    ):
+                        if await self._hold_wait_slot(
+                            collect, membership_name, hold, required=False
+                        ):
+                            return result, (
+                                message_id,
+                                parse_timestamp(ticket["deadline"]),
+                            )
+                return result, None
+        else:
+            created_send = await store.insert(
+                send_key,
+                {
+                    "sender": sender,
+                    "hash": request_hash,
+                    "collect": collect,
+                },
+            )
+            if not created_send:
+                existing_send = await store.get(send_key)
+                if existing_send is None or existing_send.get("sender") != sender:
+                    _fail("id_conflict", "Message id is already used")
+                if existing_send.get("hash") != request_hash:
+                    _fail(
+                        "id_conflict",
+                        "Message id is already used with different data",
+                    )
+                result = existing_send.get("result")
+                if isinstance(result, dict):
+                    return dict(result), None
 
-        items = await mailbox_mod.load_mailbox(store, recipient)
-        if mailbox_mod.mailbox_depth(items) >= self.max_mailbox_depth:
+        if collect == "wait":
+            if not await self._hold_wait_slot(
+                collect, membership_name, hold, required=False
+            ):
+                if created_send:
+                    await store.delete(send_key)
+                    _fail(
+                        "wait_limit",
+                        "this Membership already holds the maximum number of waits",
+                    )
+
+        enqueued = await mailbox_mod.enqueue(
+            store,
+            recipient,
+            message_id,
+            now_ts,
+            max_depth=self.max_mailbox_depth,
+        )
+        if enqueued == "busy":
+            if created_send:
+                await store.delete(send_key)
             _fail("busy", "Recipient Mailbox is full")
 
         message: dict[str, Any] = {
@@ -1392,9 +1494,7 @@ class Team:
                 recipient=recipient,
             )
 
-        await store.put(f"msg:{message_id}", message)
-        mailbox_mod.enqueue_item(items, message_id, now_ts)
-        await mailbox_mod.save_mailbox(store, recipient, items)
+        await store.insert(f"msg:{message_id}", message)
         self._signal_work(recipient_name)
         await self._record_trace(
             trace_mod.make_event(
@@ -1415,7 +1515,7 @@ class Team:
         if deadline_dt is None:
             result = {"status": "accepted", "message": message}
             await store.put(
-                f"send:{message_id}",
+                send_key,
                 {
                     "sender": sender,
                     "hash": request_hash,
@@ -1433,7 +1533,7 @@ class Team:
             deadline=deadline_raw,
             thread_id=thread_id,
         )
-        await tickets_mod.save_ticket(store, ticket)
+        await tickets_mod.insert_ticket(store, ticket)
         await self._record_trace(
             trace_mod.make_event(
                 at=now_ts,
@@ -1447,7 +1547,7 @@ class Team:
         )
         result = {"status": "ticketed", "message": message, "ticket": ticket}
         await store.put(
-            f"send:{message_id}",
+            send_key,
             {
                 "sender": sender,
                 "hash": request_hash,
@@ -1455,9 +1555,30 @@ class Team:
                 "result": result,
             },
         )
-        if collect == "wait":
+        if collect == "wait" and hold.get("acquired"):
             return result, (message_id, deadline_dt)
         return result, None
+
+    async def _hold_wait_slot(
+        self,
+        collect: Any,
+        membership_name: str,
+        hold: dict[str, Any],
+        *,
+        required: bool,
+    ) -> bool:
+        if collect != "wait" or hold.get("acquired"):
+            return bool(hold.get("acquired"))
+        if await self._acquire_held_wait(membership_name):
+            hold["acquired"] = True
+            hold["name"] = membership_name
+            return True
+        if required:
+            _fail(
+                "wait_limit",
+                "This Membership already holds the maximum number of collect=wait sends",
+            )
+        return False
 
     async def _wait_until_terminal(
         self, session_token: str, ticket_id: str, deadline_dt, event: asyncio.Event
@@ -1484,12 +1605,14 @@ class Team:
                         _fail("not_found", "Ticket was not found")
                     return ticket
             try:
-                await asyncio.wait_for(
-                    event.wait(), timeout=min(0.2, max(remaining, 0.01))
-                )
+                await asyncio.wait_for(event.wait(), timeout=remaining)
                 event.clear()
             except asyncio.TimeoutError:
-                continue
+                async with self._lock:
+                    ticket = await self._expire_ticket_if_due(ticket_id)
+                    if ticket is None:
+                        _fail("not_found", "Ticket was not found")
+                    return ticket
 
     # --- lease / complete / reply ---
 
@@ -1506,8 +1629,6 @@ class Team:
             store = self._ensure_started()
             now, now_ts = self._now_pair()
             address = session["address"]
-            items = await mailbox_mod.load_mailbox(store, address)
-            await self._expire_mailbox_leases(items, now, now_ts)
             active = [
                 lease_id
                 for lease_id in session.get("lease_ids") or []
@@ -1517,24 +1638,21 @@ class Team:
             room = max(0, int(session["max_in_flight"]) - len(active))
             take = min(n, room)
             deliveries: list[dict[str, Any]] = []
-            kept: list[dict[str, Any]] = []
-            for item in items:
+            ready = await mailbox_mod.ready_ids(
+                store, address, now, limit=max(take * 3, take)
+            )
+            history_form = session.get("delivery_history") or "bodies"
+            for message_id in ready:
                 if take <= 0:
-                    kept.append(item)
-                    continue
-                if item.get("state") == "leased":
-                    kept.append(item)
-                    continue
-                available = parse_timestamp(item["available_at"])
-                if available > now:
-                    kept.append(item)
-                    continue
-                message = await store.get(f"msg:{item['message_id']}")
+                    break
+                message = await store.get(f"msg:{message_id}")
                 if message is None:
+                    await mailbox_mod.drop_item(store, address, message_id)
                     continue
                 if message.get("kind") == "request":
                     ticket = await self._expire_ticket_if_due(message["id"])
                     if ticket is None or ticket["state"] != "open":
+                        await mailbox_mod.drop_item(store, address, message_id)
                         continue
                     lease_until = min(
                         now + timedelta(seconds=self.lease_ttl_seconds),
@@ -1545,12 +1663,19 @@ class Team:
                 if lease_until <= now:
                     continue
                 lease_id = mailbox_mod.new_lease_id()
-                attempt = int(item.get("attempt") or 0) + 1
                 expires_at = format_timestamp(lease_until)
-                item["state"] = "leased"
-                item["attempt"] = attempt
-                item["lease_id"] = lease_id
-                item["lease_expires_at"] = expires_at
+                item = await mailbox_mod.claim(
+                    store,
+                    address,
+                    message_id,
+                    lease_id,
+                    expires_at,
+                    now,
+                    now_ts,
+                )
+                if item is None:
+                    continue
+                attempt = int(item.get("attempt") or 1)
                 await mailbox_mod.put_lease(
                     store,
                     lease_id=lease_id,
@@ -1562,18 +1687,18 @@ class Team:
                     expires_at=expires_at,
                 )
                 session.setdefault("lease_ids", []).append(lease_id)
-                history, complete = await self._delivery_history(message)
+                payload = await self._delivery_payload(
+                    message, history_form=str(history_form)
+                )
                 deliveries.append(
                     {
                         "lease_id": lease_id,
                         "lease_expires_at": expires_at,
                         "attempt": attempt,
                         "message": message,
-                        "history": history,
-                        "history_complete": complete,
+                        **payload,
                     }
                 )
-                kept.append(item)
                 take -= 1
                 await self._record_trace(
                     trace_mod.make_event(
@@ -1587,21 +1712,11 @@ class Team:
                         detail={"attempt": attempt},
                     )
                 )
-            await mailbox_mod.save_mailbox(store, address, kept)
             await self._save_session(session)
             try:
                 return parse_lease_result({"deliveries": deliveries})
             except ValueError as exc:
                 _fail("internal", str(exc))
-
-    async def _expire_mailbox_leases(
-        self, items: list[dict[str, Any]], now, now_ts: str
-    ) -> None:
-        store = self._ensure_started()
-        for item in items:
-            lease_id = mailbox_mod.expire_item_if_needed(item, now, now_ts)
-            if lease_id:
-                await mailbox_mod.deactivate_lease(store, lease_id)
 
     async def _lease_still_active(self, lease_id: str, now) -> bool:
         store = self._ensure_started()
@@ -1610,27 +1725,46 @@ class Team:
             return False
         return mailbox_mod.lease_is_active(record, now)
 
-    async def _delivery_history(
-        self, message: dict[str, Any]
-    ) -> tuple[list[dict[str, Any]], bool]:
-        thread_id = message.get("thread_id")
-        if not thread_id:
-            return [], True
+    async def _thread_messages(self, thread_id: str) -> list[dict[str, Any]]:
         store = self._ensure_started()
         thread = await threads_mod.load_thread(store, thread_id)
         if thread is None:
-            return [], True
+            return []
         messages: list[dict[str, Any]] = []
         for message_id in thread.get("message_ids") or []:
             stored = await store.get(f"msg:{message_id}")
             if stored is not None:
                 messages.append(stored)
-        return threads_mod.history_window(
+        return messages
+
+    async def _delivery_payload(
+        self, message: dict[str, Any], *, history_form: str
+    ) -> dict[str, Any]:
+        thread_id = message.get("thread_id")
+        if not thread_id:
+            payload: dict[str, Any] = {"history": [], "history_complete": True}
+            if history_form == "ids":
+                payload["history_ids"] = []
+            return payload
+        messages = await self._thread_messages(str(thread_id))
+        if history_form == "ids":
+            ids, complete = threads_mod.history_id_window(
+                messages,
+                delivered_id=message["id"],
+                limit=self.delivery_history_limit,
+            )
+            return {
+                "history": [],
+                "history_ids": ids,
+                "history_complete": complete,
+            }
+        history, complete = threads_mod.history_window(
             messages,
             delivered_id=message["id"],
             limit=self.delivery_history_limit,
             max_bytes=self.max_message_bytes,
         )
+        return {"history": history, "history_complete": complete}
 
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
         """Finish a Delivery without a response Message.
@@ -1665,10 +1799,21 @@ class Team:
                 _fail("lease_expired", "Delivery lease is no longer active")
             result: dict[str, Any] = {}
             if ticket is not None and ticket["state"] == "open":
-                ticket = tickets_mod.mark_declined(ticket, now_ts)
-                await tickets_mod.save_ticket(store, ticket)
-                result["ticket"] = ticket
-                self._notify(ticket["id"])
+                record = await tickets_mod.load_ticket_record(store, ticket["id"])
+                declined = tickets_mod.mark_declined(dict(ticket), now_ts)
+                if record is not None and await tickets_mod.cas_ticket(
+                    store, declined, record.version
+                ):
+                    ticket = declined
+                    result["ticket"] = ticket
+                    self._notify(ticket["id"])
+                else:
+                    current = await tickets_mod.load_ticket(store, ticket["id"])
+                    if current is not None and tickets_mod.is_terminal(current):
+                        _fail("ticket_closed", "Ticket is already terminal")
+                    ticket = current or ticket
+                    result["ticket"] = ticket
+                    self._notify(ticket["id"])
             await self._finish_delivery(session, lease, now_ts)
             await store.put(f"complete:{lease_id}", {"result": result})
             if isinstance(message, dict) and message.get("trace_id"):
@@ -1761,8 +1906,12 @@ class Team:
                     mailbox_mod.lease_is_active(lease, now)
                     or lease.get("membership_name") == session["membership_name"]
                 ):
-                    ticket = tickets_mod.observe_late_reply(ticket, now_ts)
-                    await tickets_mod.save_ticket(store, ticket)
+                    record = await tickets_mod.load_ticket_record(store, ticket["id"])
+                    if record is not None:
+                        late = tickets_mod.observe_late_reply(
+                            dict(record.value), now_ts
+                        )
+                        await tickets_mod.cas_ticket(store, late, record.version)
                 _fail("ticket_closed", "Ticket is already terminal")
             if not mailbox_mod.lease_is_active(lease, now):
                 _fail("lease_expired", "Delivery lease is no longer active")
@@ -1801,11 +1950,28 @@ class Team:
                     recipient=reply_message["recipient"],
                 )
             if outcome == "failed":
-                ticket = tickets_mod.mark_failed(ticket, reply_message["error"], now_ts)
+                next_ticket = tickets_mod.mark_failed(
+                    dict(ticket), reply_message["error"], now_ts
+                )
             else:
-                ticket = tickets_mod.mark_completed(ticket, reply_message, now_ts)
-            await store.put(f"msg:{reply_id}", reply_message)
-            await tickets_mod.save_ticket(store, ticket)
+                next_ticket = tickets_mod.mark_completed(
+                    dict(ticket), reply_message, now_ts
+                )
+            record = await tickets_mod.load_ticket_record(store, ticket["id"])
+            if record is None or record.value.get("state") != "open":
+                _fail("ticket_closed", "Ticket is already terminal")
+            inserted_reply = await store.insert(f"msg:{reply_id}", reply_message)
+            if not inserted_reply:
+                _fail("id_conflict", "Message id is already used")
+            if not await tickets_mod.cas_ticket(store, next_ticket, record.version):
+                current = await tickets_mod.load_ticket(store, ticket["id"])
+                if current is not None and tickets_mod.is_terminal(current):
+                    late = tickets_mod.observe_late_reply(dict(current), now_ts)
+                    late_rec = await tickets_mod.load_ticket_record(store, ticket["id"])
+                    if late_rec is not None:
+                        await tickets_mod.cas_ticket(store, late, late_rec.version)
+                _fail("ticket_closed", "Ticket is already terminal")
+            ticket = next_ticket
             await self._finish_delivery(session, lease, now_ts)
             result = {"ticket": ticket}
             await store.put(
@@ -1840,9 +2006,9 @@ class Team:
         self, session: dict[str, Any], lease: dict[str, Any], now_ts: str
     ) -> None:
         store = self._ensure_started()
-        items = await mailbox_mod.load_mailbox(store, lease["address"])
-        mailbox_mod.remove_item(items, lease["message_id"])
-        await mailbox_mod.save_mailbox(store, lease["address"], items)
+        await mailbox_mod.acknowledge(
+            store, lease["address"], lease["message_id"], lease["lease_id"]
+        )
         await mailbox_mod.deactivate_lease(store, lease["lease_id"])
         lease_ids = list(session.get("lease_ids") or [])
         if lease["lease_id"] in lease_ids:
@@ -2021,7 +2187,10 @@ class Team:
                 if member is None:
                     continue
                 address = str(member["address"])
-                items = await mailbox_mod.load_mailbox(store, address)
+                if _is_principal(member):
+                    mailbox_depth = 0
+                else:
+                    mailbox_depth = await mailbox_mod.depth(store, address)
                 online = False
                 for token in list(
                     self._session_tokens_by_member.get(str(member["name"])) or ()
@@ -2037,7 +2206,7 @@ class Team:
                         "name": member["name"],
                         "address": address,
                         "online": online,
-                        "mailbox_depth": mailbox_mod.mailbox_depth(items),
+                        "mailbox_depth": mailbox_depth,
                         "open_tickets": by_recipient.get(address, 0),
                     }
                 )
@@ -2098,31 +2267,32 @@ class Team:
 
     async def _expire_ticket_if_due(self, ticket_id: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
-        ticket = await tickets_mod.load_ticket(store, ticket_id)
-        if ticket is None:
+        record = await tickets_mod.load_ticket_record(store, ticket_id)
+        if record is None:
             return None
+        ticket = dict(record.value)
         now, now_ts = self._now_pair()
         if ticket["state"] == "open" and tickets_mod.deadline_passed(ticket, now):
-            ticket = tickets_mod.mark_expired(ticket, now_ts)
-            await tickets_mod.save_ticket(store, ticket)
-            items = await mailbox_mod.load_mailbox(store, ticket["recipient"])
-            mailbox_mod.remove_item(items, ticket["id"])
-            await mailbox_mod.save_mailbox(store, ticket["recipient"], items)
-            self._notify(ticket["id"])
-            message = await store.get(f"msg:{ticket_id}")
-            if isinstance(message, dict) and message.get("trace_id"):
-                await self._record_trace(
-                    trace_mod.make_event(
-                        at=now_ts,
-                        type="ticket_closed",
-                        trace_id=str(message["trace_id"]),
-                        actor=str(ticket["recipient"]),
-                        message_id=ticket_id,
-                        parent_id=trace_mod.parent_id_of(message),
-                        ticket_id=ticket_id,
-                        detail={"state": "expired"},
+            expired = tickets_mod.mark_expired(ticket, now_ts)
+            if await tickets_mod.cas_ticket(store, expired, record.version):
+                await mailbox_mod.drop_item(store, str(expired["recipient"]), ticket_id)
+                self._notify(expired["id"])
+                message = await store.get(f"msg:{ticket_id}")
+                if isinstance(message, dict) and message.get("trace_id"):
+                    await self._record_trace(
+                        trace_mod.make_event(
+                            at=now_ts,
+                            type="ticket_closed",
+                            trace_id=str(message["trace_id"]),
+                            actor=str(expired["recipient"]),
+                            message_id=ticket_id,
+                            parent_id=trace_mod.parent_id_of(message),
+                            ticket_id=ticket_id,
+                            detail={"state": "expired"},
+                        )
                     )
-                )
+                return expired
+            return await tickets_mod.load_ticket(store, ticket_id)
         return ticket
 
     async def _sweep_loop(self) -> None:
@@ -2156,12 +2326,10 @@ class Team:
                 continue
             if mailbox_mod.lease_is_active(lease, now):
                 continue
-            items = await mailbox_mod.load_mailbox(store, lease["address"])
-            item = mailbox_mod.find_item(items, lease["message_id"])
-            if item is not None and item.get("lease_id") == lease_id:
-                mailbox_mod.release_lease_on_item(item, now_ts)
-                await mailbox_mod.save_mailbox(store, lease["address"], items)
-                self._signal_work(lease["membership_name"])
+            await mailbox_mod.return_item(
+                store, lease["address"], lease["message_id"], lease_id, now_ts
+            )
+            self._signal_work(lease["membership_name"])
             await mailbox_mod.deactivate_lease(store, lease_id)
         keep_ids: set[str] = set()
         for ticket_id in list(await store.set_members(tickets_mod.OPEN_TICKETS_SET)):

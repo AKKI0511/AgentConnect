@@ -38,6 +38,7 @@ _STATUS = {
     "ticket_closed": 409,
     "payload_too_large": 413,
     "busy": 429,
+    "wait_limit": 429,
     "internal": 500,
     "unsupported_collect_mode": 501,
     "unavailable": 503,

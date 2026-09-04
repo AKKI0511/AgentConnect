@@ -9,8 +9,9 @@ class TeamError(Exception):
     """A Runtime operation failed with a public error code.
 
     ``code`` is one of the well-known codes in the AgentConnect Runtime
-    contract (for example ``not_found``, ``busy``, ``id_conflict``). Callers
-    should branch on ``code``, not on the exception message.
+    contract (for example ``not_found``, ``busy``, ``wait_limit``,
+    ``id_conflict``). Callers should branch on ``code``, not on the
+    exception message.
     """
 
     def __init__(

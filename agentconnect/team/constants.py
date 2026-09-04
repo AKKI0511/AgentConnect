@@ -10,6 +10,7 @@ DEFAULT_DELIVERY_HISTORY_LIMIT = 50
 # returns the current Ticket (possibly still open) and the caller uses
 # get_result. Proxies drop idle HTTP well before a 24h deadline.
 DEFAULT_WAIT_HOLD_SECONDS = 25.0
+DEFAULT_MAX_HELD_WAITS = 16
 
 DEFAULT_SESSION_TTL_SECONDS = 300
 DEFAULT_LEASE_TTL_SECONDS = 60

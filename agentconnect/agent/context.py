@@ -154,6 +154,21 @@ class Context:
         return list(self._delivery.history)
 
     @property
+    def history_ids(self) -> Optional[list[str]]:
+        """Earlier Message ids when this Session joined with ``delivery_history="ids"``.
+
+        ``None`` when the Delivery carries Message bodies. Page those
+        ids with :meth:`get_history` when you need the bodies.
+
+            ctx.history_ids
+            page = await ctx.get_history()
+        """
+        ids = self._delivery.history_ids
+        if ids is None:
+            return None
+        return list(ids)
+
+    @property
     def history_complete(self) -> bool:
         """True when ``history`` already contains every earlier retained Message."""
         return self._delivery.history_complete

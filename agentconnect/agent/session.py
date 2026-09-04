@@ -32,6 +32,7 @@ from agentconnect.core.operations import (
     parse_lease_result,
     parse_send_result,
 )
+from agentconnect.core.primitives import DeliveryHistoryForm
 from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.ticket import Ticket, parse_ticket
 from agentconnect.transport.agent_http import HttpRuntimeTransport
@@ -73,6 +74,7 @@ class Session:
         agent_did: str,
         profile: Mapping[str, Any],
         max_in_flight: int,
+        delivery_history: DeliveryHistoryForm = "bodies",
     ) -> None:
         """Bind this copy to a Team object or a Runtime URL."""
         self._agent = agent
@@ -81,6 +83,7 @@ class Session:
         self.agent_did = agent_did
         self._profile = dict(profile)
         self.max_in_flight = max_in_flight
+        self.delivery_history = delivery_history
         self._transport = bind_transport(target)
         self.session_token: Optional[str] = None
         self.address: Optional[str] = None
@@ -322,7 +325,7 @@ class Session:
         return token
 
     def _join_body(self) -> dict[str, Any]:
-        return {
+        body: dict[str, Any] = {
             "spec_version": SPEC_VERSION,
             "name": self._agent._agent_name,
             "agent_did": self.agent_did,
@@ -330,6 +333,9 @@ class Session:
             "instance_id": self.instance_id,
             "max_in_flight": self.max_in_flight,
         }
+        if self.delivery_history != "bodies":
+            body["delivery_history"] = self.delivery_history
+        return body
 
     async def _connect_with_retry(self) -> None:
         delay = 0.05

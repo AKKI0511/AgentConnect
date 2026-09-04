@@ -99,3 +99,43 @@ async def test_unsupported_collect_fails_loudly(team: Team):
     finally:
         await writer.leave()
         await researcher.leave()
+
+
+@pytest.mark.asyncio
+async def test_ids_history_exposes_history_ids(team: Team):
+    class IdWriter(EchoAgent):
+        def __init__(self):
+            super().__init__(name="writer", delivery_history="ids")
+            self.seen_ids = None
+            self.seen_history = None
+
+        async def process_message(self, message, ctx):
+            self.seen_ids = ctx.history_ids
+            self.seen_history = list(ctx.history)
+            if message.kind == "request" and getattr(message, "deadline", None):
+                return {
+                    "echo": message.content,
+                    "prior_ids": list(ctx.history_ids or []),
+                }
+            return None
+
+    writer = IdWriter()
+    researcher = EchoAgent(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        thread_id = str(uuid.uuid4())
+        await researcher.ask(
+            "writer", "turn-0", deadline_seconds=5, thread_id=thread_id
+        )
+        second = await researcher.ask(
+            "writer", "turn-1", deadline_seconds=5, thread_id=thread_id
+        )
+        assert writer.seen_history == []
+        assert writer.seen_ids
+        assert second["ticket"]["response"]["content"]["prior_ids"]
+        page = await researcher.get_history(thread_id, limit=10)
+        assert page["messages"]
+    finally:
+        await writer.leave()
+        await researcher.leave()

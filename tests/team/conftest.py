@@ -47,6 +47,7 @@ async def join_member(team: Team, name: str, **kwargs: Any) -> dict[str, Any]:
         profile=kwargs.get("profile") or profile(),
         instance_id=kwargs.get("instance_id"),
         max_in_flight=kwargs.get("max_in_flight", 1),
+        delivery_history=kwargs.get("delivery_history"),
     )
 
 

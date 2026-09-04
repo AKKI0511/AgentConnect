@@ -9,7 +9,7 @@ import pytest
 
 from agentconnect.core.base import dump_public
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import deadline, join_member, profile
+from tests.team.conftest import deadline, join_member
 
 
 def _id() -> str:
@@ -232,6 +232,16 @@ async def test_numbers_compare_by_value_for_idempotency(team: Team):
         },
     )
     assert replay["status"] == "accepted"
+    scientific = await team.send(
+        researcher["session_token"],
+        {
+            "id": message_id,
+            "recipient": "writer",
+            "kind": "event",
+            "content": {"n": 1e0},
+        },
+    )
+    assert scientific["status"] == "accepted"
 
 
 @pytest.mark.asyncio
@@ -736,3 +746,134 @@ async def test_wait_hold_returns_open_ticket():
         assert ticket["state"] == "open"
     finally:
         await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_mailbox_busy_counts_leased_items():
+    small = Team("content-squad", max_mailbox_depth=1)
+    await small.start()
+    try:
+        writer = await join_member(small, "writer")
+        researcher = await join_member(small, "researcher")
+        await small.send(
+            researcher["session_token"],
+            {"id": _id(), "recipient": "writer", "kind": "event", "content": "one"},
+        )
+        delivery = (await small.lease(writer["session_token"]))["deliveries"][0]
+        with pytest.raises(TeamError) as exc:
+            await small.send(
+                researcher["session_token"],
+                {"id": _id(), "recipient": "writer", "kind": "event", "content": "two"},
+            )
+        assert exc.value.code == "busy"
+        await small.complete(writer["session_token"], delivery["lease_id"])
+        third = await small.send(
+            researcher["session_token"],
+            {"id": _id(), "recipient": "writer", "kind": "event", "content": "three"},
+        )
+        assert third["status"] == "accepted"
+    finally:
+        await small.stop()
+
+
+@pytest.mark.asyncio
+async def test_wait_limit_rejects_extra_held_wait():
+    runtime = Team(
+        "content-squad",
+        max_held_waits=1,
+        wait_hold_seconds=3.0,
+        session_ttl_seconds=30,
+    )
+    await runtime.start()
+    try:
+        await join_member(runtime, "writer")
+        researcher = await join_member(runtime, "researcher")
+        first = asyncio.create_task(
+            runtime.send(
+                researcher["session_token"],
+                {
+                    "id": _id(),
+                    "recipient": "writer",
+                    "kind": "request",
+                    "content": "held",
+                    "collect": "wait",
+                    "deadline": deadline(20),
+                },
+            )
+        )
+        operator = await runtime.ensure_operator_session()
+        for _ in range(100):
+            snapshot = await runtime.status(operator)
+            by_name = {row["name"]: row for row in snapshot["members"]}
+            if by_name["writer"]["mailbox_depth"] == 1:
+                break
+            await asyncio.sleep(0.02)
+        else:
+            first.cancel()
+            pytest.fail("first collect=wait was not accepted")
+        with pytest.raises(TeamError) as exc:
+            await runtime.send(
+                researcher["session_token"],
+                {
+                    "id": _id(),
+                    "recipient": "writer",
+                    "kind": "request",
+                    "content": "extra",
+                    "collect": "wait",
+                    "deadline": deadline(20),
+                },
+            )
+        assert exc.value.code == "wait_limit"
+        ticketed = await runtime.send(
+            researcher["session_token"],
+            {
+                "id": _id(),
+                "recipient": "writer",
+                "kind": "request",
+                "content": "ticket-ok",
+                "collect": "ticket",
+                "deadline": deadline(20),
+            },
+        )
+        assert ticketed["status"] == "ticketed"
+        first.cancel()
+        await asyncio.gather(first, return_exceptions=True)
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_delivery_history_ids_omits_bodies(team: Team):
+    writer = await join_member(team, "writer", delivery_history="ids")
+    researcher = await join_member(team, "researcher")
+    thread_id = _id()
+    first = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "event",
+            "content": "turn-0",
+            "thread_id": thread_id,
+        },
+    )
+    first_delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    assert first_delivery["history"] == []
+    assert first_delivery["history_ids"] == []
+    await team.complete(writer["session_token"], first_delivery["lease_id"])
+    second = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "event",
+            "content": "turn-1",
+            "thread_id": thread_id,
+        },
+    )
+    delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    assert delivery["message"]["id"] == second["message"]["id"]
+    assert delivery["history"] == []
+    assert delivery["history_ids"] == [first["message"]["id"]]
+    assert delivery["history_complete"] is True
+    assert "history_ids" not in first_delivery or first_delivery["history_ids"] == []

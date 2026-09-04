@@ -318,7 +318,7 @@ The result MUST include:
 - every Membership, including `operator`
 - the number of open Tickets in the Team
 
-Each member row MUST include the canonical name and Address, whether the Membership has at least one unexpired Session (`online`), current Mailbox depth, and the number of open Tickets whose recipient is that Membership. A principal has no Mailbox; its `mailbox_depth` is `0`.
+Each member row MUST include `kind`, the canonical name and Address, and whether the Membership has at least one unexpired Session (`online`). An Agent row (`kind` `agent`) also includes current Mailbox depth and the number of open Tickets whose recipient is that Membership. A principal row (`kind` `principal`) MUST omit those counts.
 
 Mailbox depth counts queued and leased items, matching the busy limit.
 
@@ -330,6 +330,13 @@ Mailbox depth counts queued and leased items, matching the busy limit.
   "open_tickets": 1,
   "members": [
     {
+      "kind": "principal",
+      "name": "operator",
+      "address": "operator@content-squad",
+      "online": true
+    },
+    {
+      "kind": "agent",
       "name": "writer",
       "address": "writer@content-squad",
       "online": true,
@@ -339,6 +346,10 @@ Mailbox depth counts queued and leased items, matching the busy limit.
   ]
 }
 ```
+
+| Situation | Required observation |
+| --- | --- |
+| `status` with `operator` and an idle Agent | the operator row has `kind` `principal` and no `mailbox_depth`; the Agent row has `kind` `agent` and `mailbox_depth` `0` |
 
 ## `get_trace`
 

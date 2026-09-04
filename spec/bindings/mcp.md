@@ -77,7 +77,7 @@ The tool searches only the caller's Team and excludes the caller.
 
 ## `ask`
 
-`ask` sends a reply-expected request with `collect=ticket`. The server generates the request Message id and converts `deadline_seconds` into an absolute UTC deadline.
+`ask` sends a reply-expected request. The server generates the request Message id and converts `deadline_seconds` into an absolute UTC deadline. `collect` has the same meaning as on Runtime `send` and on Client `ask`.
 
 Arguments:
 
@@ -88,7 +88,7 @@ Arguments:
     "task": "Draft a short summary"
   },
   "deadline_seconds": 600,
-  "wait_seconds": 10,
+  "collect": "wait",
   "thread_id": "4364a17f-80af-4db8-93e2-6ab85d174a20",
   "idempotency_key": "draft-summary-1"
 }
@@ -99,14 +99,14 @@ Arguments:
 | `recipient` | required Address |
 | `content` | required JSON value |
 | `deadline_seconds` | required integer from `1` to `86400` |
-| `wait_seconds` | optional integer from `0` to `30`, default `0` |
+| `collect` | optional `wait` or `ticket`, default `wait` |
 | `thread_id` | optional UUID |
 | `idempotency_key` | optional string, 1 to 200 characters |
 
 The server returns the current `Ticket`, and the Ticket carries its `thread_id`.
 
-- With `wait_seconds=0`, it returns immediately.
-- With a positive value, it waits up to that many seconds for the Ticket to become terminal, then returns its current state.
+- `collect=wait` (default) returns a terminal Ticket.
+- `collect=ticket` returns immediately with the current Ticket.
 - A pending result is an `open` Ticket, not hidden MCP session state. The model keeps `ticket.id` and passes it to `get_result`.
 
 ### Conversation continuity
@@ -196,7 +196,7 @@ The resource lists every current Agent Membership. Principals, including `operat
 
 ## Reserved collection strategies
 
-`ask` always uses `collect=ticket`, which covers the model cases. Send work, optionally wait briefly, otherwise poll `get_result`. The `callback` and `stream` strategies are not exposed as MCP tools in this draft. When they are added, they will be additional arguments or tools, not a change to the five names above.
+`ask` exposes `wait` and `ticket`. The `callback` and `stream` strategies are not MCP arguments in this draft. When they are added, they will be additional arguments or tools, not a change to the five names above.
 
 ## Errors
 

@@ -117,6 +117,9 @@ export type DeliveryHistoryForm = "bodies" | "ids";
  */
 export type CollectMode = "wait" | "ticket" | "callback" | "stream";
 
+/** Membership kind reported by `status`. */
+export type MembershipKind = "agent" | "principal";
+
 /** Closed set of Ticket states. */
 export type TicketState =
   | "open"
@@ -868,12 +871,10 @@ export interface AskToolRequest {
    */
   deadline_seconds: number;
   /**
-   * Local wait from 0 to 30 seconds. Defaults to 0.
-   * @minimum 0
-   * @maximum 30
-   * @multipleOf 1
+   * Collection strategy for this send. Defaults to `wait`.
+   * `wait` returns a terminal Ticket. `ticket` returns immediately.
    */
-  wait_seconds?: number;
+  collect?: CollectMode;
   /**
    * Conversation to continue. Omit to start a fresh Thread; the server mints
    * one and the returned Ticket carries it.
@@ -972,8 +973,9 @@ export interface TraceResult {
   events: TraceEvent[];
 }
 
-/** One Membership row in `status`. */
-export interface StatusMember {
+/** Agent Membership row in `status`. */
+export interface StatusAgent {
+  kind: "agent";
   /** Canonical Agent name. */
   name: AgentName;
   /** Canonical qualified Address. */
@@ -981,7 +983,7 @@ export interface StatusMember {
   /** True when the Membership has at least one unexpired Session. */
   online: boolean;
   /**
-   * Queued plus leased Mailbox items. A principal has no Mailbox; this is 0.
+   * Queued plus leased Mailbox items.
    * @minimum 0
    * @multipleOf 1
    */
@@ -993,6 +995,23 @@ export interface StatusMember {
    */
   open_tickets: number;
 }
+
+/**
+ * Principal Membership row in `status`. A principal has no Mailbox, so the
+ * row omits Mailbox depth and open-Ticket counts rather than reporting zero.
+ */
+export interface StatusPrincipal {
+  kind: "principal";
+  /** Canonical Agent name. */
+  name: AgentName;
+  /** Canonical qualified Address. */
+  address: QualifiedAddress;
+  /** True when the Membership has at least one unexpired Session. */
+  online: boolean;
+}
+
+/** One Membership row in `status`. */
+export type StatusMember = StatusAgent | StatusPrincipal;
 
 /** Result of `status`. */
 export interface StatusResult {
@@ -1087,6 +1106,7 @@ export interface AgentConnectPublicSchema {
   address?: Address;
   qualified_address?: QualifiedAddress;
   collect_mode?: CollectMode;
+  membership_kind?: MembershipKind;
   delivery_history_form?: DeliveryHistoryForm;
   ticket_state?: TicketState;
   error_code?: ErrorCode;
@@ -1131,6 +1151,8 @@ export interface AgentConnectPublicSchema {
   team_roster?: TeamRoster;
   trace_event?: TraceEvent;
   trace_result?: TraceResult;
+  status_agent?: StatusAgent;
+  status_principal?: StatusPrincipal;
   status_member?: StatusMember;
   status_result?: StatusResult;
   issue_join_token_request?: IssueJoinTokenRequest;

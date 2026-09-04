@@ -37,6 +37,8 @@ Defines:
 - MCP roster resource at `agentconnect://team/roster` lists Agent Memberships only
 - a Membership that may act is not the same as an Agent that may be hired: a principal has no Profile, Directory entry, or Mailbox, and a `send` naming it fails `not_found`
 - the reserved `operator` is a principal; the Runtime reserves the name when it starts; `find` and the roster omit it; it stays visible in `status`
+- `status` member rows are a discriminated union on `kind`; a principal omits Mailbox depth and open-Ticket counts
+- MCP `ask` uses `collect` (`wait` or `ticket`) with the same meaning as Client `ask`; there is no `wait_seconds`
 - loopback MCP and HTTP calls with no Authorization header bind to that shared `operator` identity; the machine is the trust boundary
 - over HTTP and MCP, operator authority is the Session; the hosting process may issue and revoke join tokens on the Runtime object without a Session
 - `ErrorObject.code` is the closed `ErrorCode` set; an Agent application failure code belongs in `details` of a `handler_failed` error

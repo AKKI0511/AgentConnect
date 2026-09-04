@@ -20,6 +20,9 @@
         "collect_mode": {
           "$ref": "#/definitions/CollectMode"
         },
+        "membership_kind": {
+          "$ref": "#/definitions/MembershipKind"
+        },
         "delivery_history_form": {
           "$ref": "#/definitions/DeliveryHistoryForm"
         },
@@ -152,6 +155,12 @@
         "trace_result": {
           "$ref": "#/definitions/TraceResult"
         },
+        "status_agent": {
+          "$ref": "#/definitions/StatusAgent"
+        },
+        "status_principal": {
+          "$ref": "#/definitions/StatusPrincipal"
+        },
         "status_member": {
           "$ref": "#/definitions/StatusMember"
         },
@@ -203,6 +212,14 @@
         "stream"
       ],
       "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request carries `collect` and a `deadline` and opens a Ticket. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
+    },
+    "MembershipKind": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "principal"
+      ],
+      "description": "Membership kind reported by `status`."
     },
     "DeliveryHistoryForm": {
       "type": "string",
@@ -1869,12 +1886,9 @@
           "maximum": 86400,
           "multipleOf": 1
         },
-        "wait_seconds": {
-          "type": "number",
-          "description": "Local wait from 0 to 30 seconds. Defaults to 0.",
-          "minimum": 0,
-          "maximum": 30,
-          "multipleOf": 1
+        "collect": {
+          "$ref": "#/definitions/CollectMode",
+          "description": "Collection strategy for this send. Defaults to `wait`. `wait` returns a terminal Ticket. `ticket` returns immediately."
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
@@ -2026,9 +2040,13 @@
       "additionalProperties": false,
       "description": "Result of `get_trace`."
     },
-    "StatusMember": {
+    "StatusAgent": {
       "type": "object",
       "properties": {
+        "kind": {
+          "type": "string",
+          "const": "agent"
+        },
         "name": {
           "$ref": "#/definitions/AgentName",
           "description": "Canonical Agent name."
@@ -2043,7 +2061,7 @@
         },
         "mailbox_depth": {
           "type": "number",
-          "description": "Queued plus leased Mailbox items. A principal has no Mailbox; this is 0.",
+          "description": "Queued plus leased Mailbox items.",
           "minimum": 0,
           "multipleOf": 1
         },
@@ -2055,6 +2073,7 @@
         }
       },
       "required": [
+        "kind",
         "name",
         "address",
         "online",
@@ -2062,6 +2081,46 @@
         "open_tickets"
       ],
       "additionalProperties": false,
+      "description": "Agent Membership row in `status`."
+    },
+    "StatusPrincipal": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "principal"
+        },
+        "name": {
+          "$ref": "#/definitions/AgentName",
+          "description": "Canonical Agent name."
+        },
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address."
+        },
+        "online": {
+          "type": "boolean",
+          "description": "True when the Membership has at least one unexpired Session."
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "address",
+        "online"
+      ],
+      "additionalProperties": false,
+      "description": "Principal Membership row in `status`. A principal has no Mailbox, so the row omits Mailbox depth and open-Ticket counts rather than reporting zero."
+    },
+    "StatusMember": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/StatusAgent"
+        },
+        {
+          "$ref": "#/definitions/StatusPrincipal"
+        }
+      ],
       "description": "One Membership row in `status`."
     },
     "StatusResult": {

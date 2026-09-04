@@ -72,6 +72,7 @@ SkillExample = Annotated[str, Field(min_length=1, max_length=500, pattern=r"\S")
 
 PersistenceMode = Literal["volatile", "durable"]
 CollectMode = Literal["wait", "ticket", "callback", "stream"]
+MembershipKind = Literal["agent", "principal"]
 TicketState = Literal["open", "completed", "failed", "expired", "declined"]
 ErrorCode = Literal[
     "unsupported_version",
@@ -108,3 +109,4 @@ ReplyOutcome = Literal["completed", "failed"]
 SendStatus = Literal["accepted", "ticketed"]
 ERROR_CODES: tuple[str, ...] = get_args(ErrorCode)
 COLLECT_MODES: tuple[str, ...] = get_args(CollectMode)
+MEMBERSHIP_KINDS: tuple[str, ...] = get_args(MembershipKind)

@@ -80,6 +80,8 @@ __all__ = [
     "TeamRoster",
     "TraceEvent",
     "TraceResult",
+    "StatusAgent",
+    "StatusPrincipal",
     "StatusMember",
     "StatusResult",
     "IssueJoinTokenRequest",
@@ -328,7 +330,7 @@ class AskToolRequest(SchemaModel):
     recipient: Address
     content: JsonValue
     deadline_seconds: int = Field(ge=1, le=86400)
-    wait_seconds: Optional[float] = Field(default=None, ge=0, le=30)
+    collect: CollectMode = "wait"
     thread_id: Optional[Uuid] = None
     idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
@@ -379,14 +381,30 @@ class TraceResult(SchemaModel):
     events: list[TraceEvent]
 
 
-class StatusMember(SchemaModel):
-    """One Membership row in ``status``."""
+class StatusAgent(SchemaModel):
+    """Agent Membership row in ``status``."""
 
+    kind: Literal["agent"] = "agent"
     name: AgentName
     address: QualifiedAddress
     online: bool
     mailbox_depth: int = Field(ge=0)
     open_tickets: int = Field(ge=0)
+
+
+class StatusPrincipal(SchemaModel):
+    """Principal Membership row in ``status``. No Mailbox or Ticket counts."""
+
+    kind: Literal["principal"] = "principal"
+    name: AgentName
+    address: QualifiedAddress
+    online: bool
+
+
+StatusMember = Annotated[
+    Union[StatusAgent, StatusPrincipal],
+    Field(discriminator="kind"),
+]
 
 
 class StatusResult(SchemaModel):

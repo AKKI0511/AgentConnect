@@ -67,7 +67,12 @@ class SchemaModel(BaseModel):
 
 
 def dump_public(value: Any) -> Any:
-    """Recursively convert schema models to JSON-ready data."""
+    """Convert schema models to JSON-ready data.
+
+    MCP tools and Session-bound tools serialize through this helper. A
+    tool result is context for a model, and the MCP SDK rejects a typed
+    return. Session and ``BaseAgent`` methods return typed objects.
+    """
     if isinstance(value, SchemaModel):
         return value.to_public_dict()
     if isinstance(value, dict):

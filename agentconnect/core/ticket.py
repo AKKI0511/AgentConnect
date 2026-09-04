@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal, Mapping, Optional, Union
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from agentconnect.core.base import SchemaModel, validation_message
+from agentconnect.core.base import JsonValue, SchemaModel, validation_message
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
 from agentconnect.core.message import ResponseMessage
 from agentconnect.core.primitives import QualifiedAddress, Timestamp, Uuid
@@ -35,6 +35,22 @@ class TicketBase(SchemaModel):
     deadline: Timestamp
     late_reply_count: int = Field(ge=0)
 
+    @property
+    def content(self) -> JsonValue | None:
+        """Response body when this Ticket is completed, otherwise None.
+
+        Client SDK sugar. Wire dumps use schema fields only.
+        """
+        return None
+
+    @property
+    def trace_id(self) -> str | None:
+        """Causal id of the request that opened this Ticket.
+
+        Set on Tickets returned by ``ask``. ``get_result`` does not stamp it.
+        """
+        return getattr(self, "_client_trace_id", None)
+
 
 class OpenTicket(TicketBase):
     """Ticket waiting for its first accepted reply."""
@@ -47,6 +63,11 @@ class CompletedTicket(TicketBase):
 
     state: Literal["completed"] = "completed"
     response: ResponseMessage
+
+    @property
+    def content(self) -> JsonValue:
+        """The response body."""
+        return self.response.content
 
 
 class FailedTicket(TicketBase):

@@ -30,7 +30,7 @@ class Assistant(BaseAgent):
         "tags": ["assistant"],
     }
 
-    async def process_message(self, msg: Any, ctx: Any) -> Any:
+    async def handle(self, msg: Any, ctx: Any) -> Any:
         """Reply to a request with the received content."""
         if getattr(msg, "kind", None) != "request":
             return None

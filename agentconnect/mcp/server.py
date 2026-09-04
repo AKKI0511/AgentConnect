@@ -121,7 +121,7 @@ def create_team_mcp(
         recipient: str,
         content: Any,
         deadline_seconds: int,
-        wait_seconds: int = 0,
+        collect: str = "wait",
         thread_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
@@ -130,7 +130,7 @@ def create_team_mcp(
         recipient: Local Address such as "writer".
         content: The work, text or JSON.
         deadline_seconds: How long the recipient has, from 1 to 86400.
-        wait_seconds: Local wait from 0 to 30 before returning the current Ticket.
+        collect: "wait" (default) returns a terminal Ticket. "ticket" returns immediately.
         thread_id: Continue this conversation. Omit to start a new one.
         idempotency_key: Stable key so a retry does not create a second request.
         """
@@ -143,7 +143,7 @@ def create_team_mcp(
                 recipient,
                 content,
                 deadline_seconds=deadline_seconds,
-                wait_seconds=wait_seconds,
+                collect=collect,
                 thread_id=thread_id,
                 idempotency_key=idempotency_key,
             )

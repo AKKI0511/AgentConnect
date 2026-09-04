@@ -1,41 +1,42 @@
 """Session-bound callables for frameworks that do not speak MCP.
 
 A model calls tools. ``team_tools()`` is find, ask, tell, get_result, and
-get_history bound to this Agent's Session. Wire them into LangGraph, ADK, or
-any other tool loop. The Team MCP server is the other door, for clients that
-speak MCP.
+get_history bound to this Agent's Session. Results are JSON via
+:func:`~agentconnect.core.base.dump_public`. Wire them into LangGraph, ADK,
+or any other tool loop. The Team MCP server is the other door, for clients
+that speak MCP.
 
     class Researcher(BaseAgent):
         def __init__(self, name: str):
             super().__init__(name=name)
             self.tools = self.team_tools()
 
-        async def process_message(self, msg, ctx):
+        async def handle(self, msg, ctx):
             found = await self.tools.find(query=str(msg.content))
             peer = found["matches"][0]["address"]
             ticket = await self.tools.ask(
                 recipient=peer,
                 content=msg.content,
                 deadline_seconds=30,
-                wait_seconds=10,
             )
-            return ticket
+            return ticket["response"]["content"]
 
 Callables look up the Session at call time, so ``self.team_tools()`` is safe
-in ``__init__`` before ``join``.
+in ``__init__`` before ``join``. ``ask`` and ``tell`` share their argument
+names with :meth:`~agentconnect.agent.base.BaseAgent.ask` and
+:meth:`~agentconnect.agent.base.BaseAgent.tell`. Tools also accept
+``idempotency_key`` and mint a Thread when ``thread_id`` is omitted.
 """
 
 from __future__ import annotations
 
-import asyncio
-import time
 import uuid
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from agentconnect.agent.errors import SessionError
-from agentconnect.agent.session import Session
+from agentconnect.agent.session import CollectMode, Session
 from agentconnect.core.base import dump_public
 
 _FIND_PARAMS = {
@@ -72,13 +73,12 @@ _ASK_PARAMS = {
             "type": "integer",
             "minimum": 1,
             "maximum": 86400,
-            "description": "How long the recipient has.",
+            "description": "How long the recipient has. Defaults to 30.",
         },
-        "wait_seconds": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 30,
-            "description": "Local wait before returning the current Ticket. Default 0.",
+        "collect": {
+            "type": "string",
+            "enum": ["wait", "ticket"],
+            "description": "wait (default) returns a terminal Ticket. ticket returns immediately.",
         },
         "thread_id": {
             "type": "string",
@@ -91,7 +91,7 @@ _ASK_PARAMS = {
             "description": "Stable key so a retry does not create a second request.",
         },
     },
-    "required": ["recipient", "content", "deadline_seconds"],
+    "required": ["recipient", "content"],
 }
 
 _TELL_PARAMS = {
@@ -169,8 +169,8 @@ class TeamTool:
 class TeamTools(Sequence[TeamTool]):
     """find, ask, tell, get_result, and get_history bound to one Session.
 
-    ``ask`` matches the MCP tool: ``collect=ticket``, a minted Thread when
-    ``thread_id`` is omitted, and ``wait_seconds`` for a short local wait.
+    ``ask`` matches :meth:`~agentconnect.agent.base.BaseAgent.ask` and the
+    MCP ``ask`` tool. Results are JSON.
     """
 
     def __init__(self, session_getter: Callable[[], Session]) -> None:
@@ -256,27 +256,35 @@ class TeamTools(Sequence[TeamTool]):
         self,
         recipient: str,
         content: Any,
-        deadline_seconds: int,
-        wait_seconds: int = 0,
+        *,
+        deadline_seconds: float = 30.0,
+        collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Send reply-expected work and return a Ticket.
+        """Send reply-expected work and return a Ticket as JSON.
 
-        Same contract as the MCP ``ask`` tool. ``wait_seconds`` may hold for a
-        terminal Ticket. An omitted ``thread_id`` starts a new conversation.
+        Same argument names as :meth:`~agentconnect.agent.base.BaseAgent.ask`.
+        An omitted ``thread_id`` starts a new conversation. Pass
+        ``idempotency_key`` so a retry reuses the same Ticket.
 
             ticket = await tools.ask(
                 recipient="writer",
                 content={"task": "draft this"},
                 deadline_seconds=30,
-                wait_seconds=10,
             )
         """
         session = self._session()
         address = session.address
         if not address:
             raise SessionError("unauthorized", "Agent has not joined a Team")
+        if collect not in {"wait", "ticket"}:
+            raise SessionError(
+                "unsupported_collect_mode",
+                "ask collect must be wait or ticket",
+            )
         message_id = _message_id(
             "ask",
             address,
@@ -284,30 +292,33 @@ class TeamTools(Sequence[TeamTool]):
         )
         send_thread = thread_id or str(uuid.uuid4())
         try:
-            result = await session.ask(
+            ticket = await session.ask(
                 recipient,
                 content,
                 deadline_seconds=float(deadline_seconds),
-                collect="ticket",
+                collect=collect,
                 thread_id=send_thread,
+                parent_id=parent_id,
+                metadata=metadata,
                 message_id=message_id,
             )
         except SessionError as exc:
             if exc.code == "id_conflict" and idempotency_key:
-                return await _wait_for_ticket(session, message_id, int(wait_seconds))
+                ticket = await session.get_result(message_id)
+                if collect == "wait" and ticket.state == "open":
+                    ticket = await session._await_ticket(message_id)
+                return dump_public(ticket)
             raise
-        ticket = dump_public(result.get("ticket"))
-        if not isinstance(ticket, dict) or not isinstance(ticket.get("id"), str):
-            raise SessionError("internal", "ask did not return a Ticket")
-        if int(wait_seconds) <= 0:
-            return ticket
-        return await _wait_for_ticket(session, ticket["id"], int(wait_seconds))
+        return dump_public(ticket)
 
     async def tell(
         self,
         recipient: str,
         content: Any,
+        *,
         thread_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
         """Send an event. No Ticket is created."""
@@ -326,6 +337,8 @@ class TeamTools(Sequence[TeamTool]):
                     recipient,
                     content,
                     thread_id=thread_id,
+                    parent_id=parent_id,
+                    metadata=metadata,
                     message_id=message_id,
                 )
             )
@@ -366,17 +379,3 @@ def _message_id(
         material = f"{kind}|{caller_address}|{idempotency_key}"
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentconnect:{material}"))
     return str(uuid.uuid4())
-
-
-async def _wait_for_ticket(
-    session: Session, ticket_id: str, wait_seconds: int
-) -> dict[str, Any]:
-    deadline = time.monotonic() + float(wait_seconds)
-    while True:
-        ticket = dump_public(await session.get_result(ticket_id))
-        if ticket.get("state") != "open":
-            return ticket
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return ticket
-        await asyncio.sleep(min(0.05, remaining))

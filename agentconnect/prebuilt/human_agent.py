@@ -57,7 +57,6 @@ class HumanAgent(BaseAgent):
         read_line: Optional[Callable[[str], Awaitable[str]]] = None,
         instance_id: Optional[str] = None,
         join_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
     ) -> None:
         """Create a human member. It has not joined a Team yet.
 
@@ -72,12 +71,11 @@ class HumanAgent(BaseAgent):
             identity=identity,
             instance_id=instance_id,
             join_token=join_token,
-            agent_id=agent_id,
         )
         self.prompt = prompt
         self._read_line = read_line or _ainput
 
-    async def process_message(self, message: Any, ctx: Optional[Context] = None) -> Any:
+    async def handle(self, message: Any, ctx: Optional[Context] = None) -> Any:
         """Print the Delivery and wait for a typed reply.
 
         Empty input declines a request. ``exit``, ``quit``, or ``bye`` also
@@ -119,11 +117,8 @@ class HumanAgent(BaseAgent):
                 continue
             if text.lower() in _EXIT:
                 return
-            result = await self.ask(recipient, text)
-            ticket = result.get("ticket") if isinstance(result, dict) else None
-            response = ticket.get("response") if isinstance(ticket, dict) else None
-            content = response.get("content") if isinstance(response, dict) else ticket
-            print(f"{recipient}: {content}")
+            ticket = await self.ask(recipient, text)
+            print(f"{recipient}: {ticket.content}")
             print("-" * 40)
 
 

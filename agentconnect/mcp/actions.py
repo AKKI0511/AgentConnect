@@ -8,7 +8,6 @@ resolves the caller, then calls here. Session-bound callables in
 from __future__ import annotations
 
 import asyncio
-import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Protocol
@@ -148,24 +147,17 @@ def _optional_key(value: Any) -> Optional[str]:
     return value
 
 
-async def wait_for_ticket(
+async def await_ticket(
     runtime: TeamRuntime,
     session_token: str,
     ticket_id: str,
-    wait_seconds: float,
 ) -> dict[str, Any]:
-    """Poll ``get_result`` until the Ticket is terminal or ``wait_seconds`` elapses."""
-    if wait_seconds <= 0:
-        return dump_public(await runtime.get_result(session_token, ticket_id))
-    deadline = time.monotonic() + float(wait_seconds)
+    """Poll ``get_result`` until the Ticket is no longer ``open``."""
     while True:
         ticket = dump_public(await runtime.get_result(session_token, ticket_id))
         if ticket.get("state") != "open":
             return ticket
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return ticket
-        await asyncio.sleep(min(0.05, remaining))
+        await asyncio.sleep(0.05)
 
 
 async def find_action(
@@ -199,23 +191,22 @@ async def ask_action(
     content: Any,
     *,
     deadline_seconds: int,
-    wait_seconds: int = 0,
+    collect: str = "wait",
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Send a reply-expected request with ``collect=ticket``.
+    """Send a reply-expected request and return a Ticket.
 
-    Returns the current Ticket. ``wait_seconds`` may hold for a terminal
-    state. An omitted ``thread_id`` is minted for the send.
+    ``collect`` matches Client ``ask``. An omitted ``thread_id`` is minted
+    for the send.
     """
     if not isinstance(recipient, str) or not recipient.strip():
         raise ValueError("recipient is required")
     deadline_s = _int_in_range(
         deadline_seconds, name="deadline_seconds", minimum=1, maximum=86400
     )
-    wait_s = _int_in_range(
-        wait_seconds, name="wait_seconds", minimum=0, maximum=30, default=0
-    )
+    if collect not in {"wait", "ticket"}:
+        raise ValueError("collect must be wait or ticket")
     arg_thread = _optional_uuid(thread_id, name="thread_id")
     key = _optional_key(idempotency_key)
     message_id = message_id_for_tool(
@@ -233,7 +224,7 @@ async def ask_action(
                     "recipient": recipient,
                     "kind": "request",
                     "content": content,
-                    "collect": "ticket",
+                    "collect": collect,
                     "deadline": deadline_rfc3339(deadline_s),
                     "thread_id": send_thread,
                 },
@@ -241,7 +232,9 @@ async def ask_action(
         )
     except TeamError as exc:
         if exc.code == "id_conflict" and key:
-            return await wait_for_ticket(runtime, session_token, message_id, wait_s)
+            if collect == "wait":
+                return await await_ticket(runtime, session_token, message_id)
+            return dump_public(await runtime.get_result(session_token, message_id))
         raise
     ticket = result.get("ticket")
     if not isinstance(ticket, dict):
@@ -249,7 +242,9 @@ async def ask_action(
     ticket_id = ticket.get("id")
     if not isinstance(ticket_id, str):
         raise TeamError("internal", "ask did not return a Ticket")
-    return await wait_for_ticket(runtime, session_token, ticket_id, wait_s)
+    if collect == "wait" and ticket.get("state") == "open":
+        return await await_ticket(runtime, session_token, ticket_id)
+    return ticket
 
 
 async def tell_action(

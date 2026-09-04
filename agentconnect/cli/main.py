@@ -292,6 +292,10 @@ def status(
         typer.echo(f"origin {origin}")
     for member in snapshot.get("members") or []:
         flag = "online" if member.get("online") else "offline"
+        kind = member.get("kind") or "agent"
+        if kind == "principal":
+            typer.echo(f"  {member['address']:28} {flag:7}  principal")
+            continue
         typer.echo(
             f"  {member['address']:28} {flag:7}  "
             f"mailbox={member['mailbox_depth']}  tickets={member['open_tickets']}"

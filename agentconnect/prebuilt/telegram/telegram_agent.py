@@ -47,7 +47,7 @@ _TELEGRAM_HISTORY_CAP = 40
 
 
 class TelegramAIAgent(AIAgent):
-    """``AIAgent`` with a Telegram bot. Team deliveries use ``process_message``.
+    """``AIAgent`` with a Telegram bot. Team deliveries use ``handle``.
 
     agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
     await agent.join(team)
@@ -88,12 +88,9 @@ class TelegramAIAgent(AIAgent):
         complete: Optional[CompletionFn] = None,
         max_tool_rounds: int = 8,
         include_team_tools: bool = True,
-        enable_payments: bool = False,
-        wallet_data_dir: Any = None,
         groups_file: str = "groups.txt",
         join_token: Optional[str] = None,
         instance_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
     ) -> None:
         """Create a Telegram-backed Agent. It has not joined a Team or started polling.
 
@@ -115,7 +112,7 @@ class TelegramAIAgent(AIAgent):
         self.bot_manager = TelegramBotManager(
             token=self.telegram_token,
             groups_file=self.groups_file,
-            agent_id=agent_id or name,
+            agent_id=name,
         )
         self._initialize_telegram_components()
         telegram_tools: list[Tool] = []
@@ -133,14 +130,11 @@ class TelegramAIAgent(AIAgent):
             api_key=api_key,
             complete=complete,
             include_team_tools=include_team_tools,
-            enable_payments=enable_payments,
-            wallet_data_dir=wallet_data_dir,
-            agent_id=agent_id,
             instance_id=instance_id,
             join_token=join_token,
         )
         self.message_processor = TelegramMessageProcessor(
-            agent_id=self.agent_id,
+            agent_id=self.name,
             identity=self.identity,
             bot_manager=self.bot_manager,
         )

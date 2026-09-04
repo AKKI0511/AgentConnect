@@ -44,7 +44,6 @@ from the Session, not as an ``AIAgent`` feature. Extra tools are yours.
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional, TypedDict
 
@@ -60,9 +59,6 @@ from agentconnect.prebuilt.loop import (
     run_tool_loop,
 )
 from agentconnect.prebuilt.tools import Tool, merge_tools, tools_from_team
-from agentconnect.utils.payment_helper import validate_cdp_environment
-
-logger = logging.getLogger(__name__)
 
 
 class CompletionOptions(TypedDict, total=False):
@@ -91,7 +87,7 @@ class AIAgent(BaseAgent):
 
     def __init__(
         self,
-        name: Optional[str] = None,
+        name: str,
         *,
         model: str,
         profile: Any = None,
@@ -105,9 +101,6 @@ class AIAgent(BaseAgent):
         api_key: Optional[str] = None,
         complete: Optional[CompletionFn] = None,
         include_team_tools: bool = True,
-        enable_payments: bool = False,
-        wallet_data_dir: Any = None,
-        agent_id: Optional[str] = None,
         instance_id: Optional[str] = None,
         max_in_flight: int = 1,
         join_token: Optional[str] = None,
@@ -115,7 +108,7 @@ class AIAgent(BaseAgent):
         """Create a model-backed Agent. It has not joined a Team yet.
 
         Args:
-            name: Agent name, unique within the Team. ``agent_id`` is an alias.
+            name: Agent name, unique within the Team.
             model: LiteLLM model id, for example ``gpt-4o-mini``.
             profile: Discovery Profile mapping or ``AgentProfile``. A class
                 attribute named ``profile`` is used when this is omitted.
@@ -133,12 +126,6 @@ class AIAgent(BaseAgent):
             raise ValueError("model is required")
         if max_tool_rounds < 1:
             raise ValueError("max_tool_rounds must be at least 1")
-        actual_enable_payments = enable_payments
-        if enable_payments:
-            valid, message = validate_cdp_environment()
-            if not valid:
-                logger.warning("payments disabled: %s", message)
-                actual_enable_payments = False
         super().__init__(
             name=name,
             profile=profile,
@@ -146,9 +133,6 @@ class AIAgent(BaseAgent):
             instance_id=instance_id,
             max_in_flight=max_in_flight,
             join_token=join_token,
-            agent_id=agent_id,
-            enable_payments=actual_enable_payments,
-            wallet_data_dir=wallet_data_dir,
         )
         self.model = str(model).strip()
         self.instructions = instructions
@@ -159,12 +143,8 @@ class AIAgent(BaseAgent):
         self.tools: list[Tool] = list(tools or [])
         self._complete: CompletionFn = complete or _litellm_complete
         self._chats: dict[str, list[dict[str, Any]]] = {}
-        if actual_enable_payments and self.agent_kit is not None:
-            self.tools = merge_tools(self.tools, _tools_from_agentkit(self.agent_kit))
 
-    async def process_message(
-        self, message: Message, ctx: Optional[Context] = None
-    ) -> Any:
+    async def handle(self, message: Message, ctx: Optional[Context] = None) -> Any:
         """Answer one Delivery with the model loop.
 
         Thread history comes from ``ctx.history``. Team tools attach when a
@@ -190,7 +170,7 @@ class AIAgent(BaseAgent):
         include_team_tools: Optional[bool] = None,
         self_address: Optional[str] = None,
     ) -> str:
-        """Run one model turn. Used by ``process_message``, ``chat``, and Telegram.
+        """Run one model turn. Used by ``handle``, ``chat``, and Telegram.
 
         reply = await agent.complete("Summarize the notes.")
         """
@@ -276,39 +256,3 @@ async def _litellm_complete(**kwargs: Any) -> Any:
             "Install with: pip install 'agentconnect[aiagent]'"
         ) from exc
     return await litellm.acompletion(**kwargs)
-
-
-def _tools_from_agentkit(agent_kit: Any) -> list[Tool]:
-    get_actions = getattr(agent_kit, "get_actions", None)
-    if get_actions is None:
-        return []
-    tools: list[Tool] = []
-    try:
-        actions = list(get_actions())
-    except Exception:
-        logger.warning("AgentKit get_actions failed", exc_info=True)
-        return []
-    for action in actions:
-        name = getattr(action, "name", None)
-        if not name:
-            continue
-        description = str(getattr(action, "description", None) or name)
-        schema = getattr(action, "args_schema", None) or {
-            "type": "object",
-            "properties": {},
-        }
-        if not isinstance(schema, dict):
-            dump = getattr(schema, "model_json_schema", None)
-            schema = dump() if callable(dump) else {"type": "object", "properties": {}}
-        invoke = getattr(action, "invoke", None) or getattr(action, "run", None)
-        if invoke is None:
-            continue
-        tools.append(
-            Tool(
-                name=str(name),
-                description=description,
-                parameters=schema,
-                handler=invoke,
-            )
-        )
-    return tools

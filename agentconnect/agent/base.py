@@ -1,11 +1,11 @@
-"""BaseAgent: subclass, give a Profile, implement ``process_message``.
+"""BaseAgent: subclass, give a Profile, implement ``handle``.
 
 Join a running Team in-process or by URL. The Session pulls work, maps
 handler outcomes onto Runtime ``reply`` / ``complete``, and reconnects
 when the Team comes back.
 
     class Researcher(BaseAgent):
-        async def process_message(self, msg, ctx):
+        async def handle(self, msg, ctx):
             return f"noted: {msg.content}"
 
     team = await Team("content-squad").start()
@@ -31,34 +31,21 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 import uuid
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union, cast
-
-from dotenv import load_dotenv
+from typing import Any, Mapping, Optional
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import CollectMode, Session
 from agentconnect.agent.tools import TeamTools
 from agentconnect.core.address import parse_agent_name
-from agentconnect.core.exceptions import SecurityError
-from agentconnect.core.identity import (
-    AgentIdentity,
-    VerificationStatus,
-    issue_identity_proof,
-)
-from agentconnect.core.kinds import MessageKind
+from agentconnect.core.directory import DirectoryEntry, FindResult
+from agentconnect.core.identity import AgentIdentity, issue_identity_proof
 from agentconnect.core.message import Message
-from agentconnect.core.operations import AcceptedSendResult, TicketedSendResult
+from agentconnect.core.operations import AcceptedSendResult, HistoryResult
 from agentconnect.core.primitives import DeliveryHistoryForm
 from agentconnect.core.profile import AgentProfile
-from agentconnect.utils import wallet_manager
-
-if TYPE_CHECKING:
-    from coinbase_agentkit import AgentKit as _AgentKit
-    from coinbase_agentkit import CdpWalletProvider as _CdpWalletProvider
+from agentconnect.core.ticket import Ticket
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +62,7 @@ class BaseAgent:
 
     def __init__(
         self,
-        name: Optional[str] = None,
+        name: str,
         *,
         profile: Any = None,
         identity: Optional[AgentIdentity] = None,
@@ -83,16 +70,11 @@ class BaseAgent:
         max_in_flight: int = 1,
         delivery_history: DeliveryHistoryForm = "bodies",
         join_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        interaction_modes: Optional[List[str]] = None,
-        enable_payments: bool = False,
-        wallet_data_dir: Optional[Union[str, Path]] = None,
-        **kwargs: Any,
     ) -> None:
         """Create an Agent that has not yet joined a Team.
 
         Args:
-            name: Agent name, unique within the Team. ``agent_id`` is an alias.
+            name: Agent name, unique within the Team.
             profile: Discovery Profile (mapping or ``AgentProfile``). A class
                 attribute named ``profile`` is used when this is omitted.
             identity: Optional keypair. A valid ``did:key`` on it is reused;
@@ -106,16 +88,11 @@ class BaseAgent:
                 Team that has ``require_join_auth=True``. Also read from
                 ``AGENTCONNECT_JOIN_TOKEN``.
         """
-        del kwargs
-        raw_name = name or agent_id
-        if not raw_name:
-            raise ValueError("name is required")
-        canonical = parse_agent_name(raw_name)
+        canonical = parse_agent_name(name)
         if canonical is None:
             raise ValueError("name is not a valid Agent name")
         self._agent_name = canonical
         self.name = canonical
-        self.agent_id = canonical
         self.identity = identity or AgentIdentity.create_key_based()
         try:
             if not self.identity.matches_did():
@@ -130,11 +107,6 @@ class BaseAgent:
         env_token = os.environ.get("AGENTCONNECT_JOIN_TOKEN")
         self.join_token = join_token if join_token is not None else env_token
         self.profile = profile if profile is not None else type(self).profile
-        self.interaction_modes = interaction_modes or []
-        if self.profile is not None and hasattr(self.profile, "capabilities"):
-            self.capabilities = self.profile.capabilities
-        else:
-            self.capabilities = []
         if instance_id is None:
             self.instance_id = str(uuid.uuid4())
         else:
@@ -154,17 +126,6 @@ class BaseAgent:
         self.delivery_history = delivery_history
         self._session: Optional[Session] = None
         self._session_ttl_hint = 300.0
-        self.hub = None
-        self.registry = None
-        self.active_conversations: dict[str, Any] = {}
-        self.cooldown_until = 0.0
-        self.pending_requests: dict[str, Any] = {}
-        self._verified_logged_once = False
-        self.enable_payments = enable_payments
-        self.wallet_provider: Optional[_CdpWalletProvider] = None
-        self.agent_kit: Optional[_AgentKit] = None
-        if enable_payments:
-            self._init_payments(wallet_data_dir)
 
     @property
     def address(self) -> Optional[str]:
@@ -177,16 +138,6 @@ class BaseAgent:
     def connected(self) -> bool:
         """True while this copy holds a live Session."""
         return self._session is not None and self._session.connected
-
-    @property
-    def is_running(self) -> bool:
-        """True while the Session supervisor is running."""
-        return self._session is not None and not self._session._stopped
-
-    @property
-    def payments_enabled(self) -> bool:
-        """True when payment capabilities initialized successfully."""
-        return self.enable_payments and self.wallet_provider is not None
 
     async def join(
         self, team_or_url: Any, *, join_token: Optional[str] = None
@@ -226,14 +177,6 @@ class BaseAgent:
         if session is not None:
             await session.close(disconnect=True)
 
-    async def stop(self) -> None:
-        """Disconnect and drop local payment handles. Same as ``leave`` for the Session."""
-        await self.leave()
-        self.wallet_provider = None
-        self.agent_kit = None
-        self.reset_cooldown()
-        self.pending_requests.clear()
-
     async def ask(
         self,
         recipient: str,
@@ -244,17 +187,18 @@ class BaseAgent:
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-    ) -> TicketedSendResult:
+    ) -> Ticket:
         """Send a reply-expected request through this Session.
 
         ``collect="wait"`` (default) returns when the Ticket is terminal.
-        ``collect="ticket"`` returns a handle immediately.
+        ``collect="ticket"`` returns a handle immediately. Read a completed
+        reply as ``ticket.content``.
 
-            result = await agent.ask("writer", {"task": "draft this"})
-            print(result["ticket"]["response"]["content"])
+            ticket = await agent.ask("writer", {"task": "draft this"})
+            print(ticket.content)
 
             pending = await agent.ask("writer", "long job", collect="ticket")
-            ticket = await agent.get_result(pending["ticket"]["id"])
+            ticket = await agent.get_result(pending.id)
 
             thread_id = str(uuid.uuid4())
             await agent.ask("writer", "outline this", thread_id=thread_id)
@@ -293,26 +237,26 @@ class BaseAgent:
 
     async def find(
         self, query: str, *, limit: int | None = None, detail: str = "summary"
-    ) -> dict[str, Any]:
+    ) -> FindResult:
         """Search this Team's Directory, excluding this Agent.
 
         found = await agent.find("someone who can review a contract")
-        found["matches"][0]["address"]
+        found.matches[0].address
         """
         return await self._require_session().find(query, limit=limit, detail=detail)
 
-    async def get_profile(self, address: str) -> dict[str, Any]:
+    async def get_profile(self, address: str) -> DirectoryEntry:
         """Return the Directory entry for ``address``.
 
         entry = await agent.get_profile("writer")
-        entry["profile"]["summary"]
+        entry.profile.summary
         """
         return await self._require_session().get_profile(address)
 
-    async def get_result(self, ticket_id: str) -> dict[str, Any]:
+    async def get_result(self, ticket_id: str) -> Ticket:
         """Return a Ticket this Agent opened.
 
-        ticket = await agent.get_result(pending["ticket"]["id"])
+        ticket = await agent.get_result(pending.id)
         """
         return await self._require_session().get_result(ticket_id)
 
@@ -322,7 +266,7 @@ class BaseAgent:
         *,
         before: Optional[str] = None,
         limit: int = 50,
-    ) -> dict[str, Any]:
+    ) -> HistoryResult:
         """Return one page of retained Thread history.
 
         Omit ``before`` for the newest page. A UUID that is not in the
@@ -330,9 +274,9 @@ class BaseAgent:
         newest page.
 
             page = await agent.get_history(thread_id)
-            if page["has_more"]:
+            if page.has_more:
                 older = await agent.get_history(
-                    thread_id, before=page["messages"][0]["id"]
+                    thread_id, before=page.messages[0].id
                 )
         """
         return await self._require_session().get_history(
@@ -343,22 +287,21 @@ class BaseAgent:
         """Return find, ask, tell, get_result, and get_history for this Agent.
 
         Safe to call before ``join``. The callables fail until a Session
-        exists. Use these when the host does not speak MCP.
+        exists. Use these when the host does not speak MCP. Results are
+        JSON via :func:`~agentconnect.core.base.dump_public`.
 
             tools = self.team_tools()
             found = await tools.find(query="someone who can draft a summary")
             ticket = await tools.ask(
                 recipient=found["matches"][0]["address"],
-                content=msg["content"],
+                content=msg.content,
                 deadline_seconds=30,
-                wait_seconds=10,
             )
+            return ticket["response"]["content"]
         """
         return TeamTools(self._require_session)
 
-    async def process_message(
-        self, message: Message, ctx: Context | None = None
-    ) -> Any:
+    async def handle(self, message: Message, ctx: Context | None = None) -> Any:
         """Handle one Delivery.
 
         Override this. ``message`` is the delivered Runtime Message
@@ -370,19 +313,11 @@ class BaseAgent:
         """
         return None
 
-    async def send_message(
-        self,
-        receiver_id: str,
-        content: Any,
-        kind: MessageKind = MessageKind.EVENT,
-        metadata: Optional[dict] = None,
-    ) -> dict[str, Any]:
-        """Send through the Session. Prefer ``ask`` / ``tell`` in new code."""
-        if kind == MessageKind.REQUEST:
-            return await self.ask(receiver_id, content, metadata=metadata)
-        if kind == MessageKind.EVENT:
-            return await self.tell(receiver_id, content, metadata=metadata)
-        raise ValueError("send_message only sends request or event")
+    async def process_message(
+        self, message: Message, ctx: Context | None = None
+    ) -> Any:
+        """Alias for :meth:`handle`. Override ``handle`` in new code."""
+        return await self.handle(message, ctx)
 
     def _require_session(self) -> Session:
         if self._session is None or not self._session.session_token:
@@ -393,132 +328,12 @@ class BaseAgent:
         """Return an EdDSA JWT proving control of this Agent's DID.
 
         Pass the result as ``identity_proof`` on join. The Session does
-        this automatically when joining by URL or with a join token.
+        this automatically when joining a URL or with a join token.
 
             challenge = await team.join_challenge()
             proof = agent.prove_join(challenge)
         """
         return issue_identity_proof(self.identity, challenge)
-
-    async def verify_identity(self) -> bool:
-        """Return True when this Agent's DID matches its Ed25519 public key."""
-        if self.identity.verification_status == VerificationStatus.VERIFIED:
-            return True
-        try:
-            verified = self.identity.matches_did()
-            self.identity.verification_status = (
-                VerificationStatus.VERIFIED if verified else VerificationStatus.FAILED
-            )
-            if verified and not self._verified_logged_once:
-                logger.info("Identity verified agent_id=%s", self.agent_id)
-                self._verified_logged_once = True
-            return verified
-        except Exception:
-            self.identity.verification_status = VerificationStatus.FAILED
-            raise SecurityError("Identity verification failed")
-
-    def set_cooldown(self, duration: int) -> None:
-        """Block sending and receiving for ``duration`` seconds."""
-        self.cooldown_until = time.time() + duration
-
-    def is_in_cooldown(self) -> bool:
-        """Return True while a cooldown is active."""
-        return time.time() < self.cooldown_until
-
-    def reset_cooldown(self) -> None:
-        """Clear any cooldown."""
-        self.cooldown_until = 0.0
-
-    def end_conversation(self, other_agent_id: str) -> None:
-        """Drop local conversation bookkeeping with ``other_agent_id``."""
-        self.active_conversations.pop(other_agent_id, None)
-
-    async def can_send_message(self, receiver_id: str) -> bool:
-        """Return False during cooldown. Opens local conversation bookkeeping."""
-        if self.is_in_cooldown():
-            return False
-        if receiver_id not in self.active_conversations:
-            self.active_conversations[receiver_id] = {
-                "start_time": time.time(),
-                "message_count": 0,
-            }
-        return True
-
-    async def can_receive_message(self, sender_id: str) -> bool:
-        """Return False during cooldown."""
-        return not self.is_in_cooldown()
-
-    def _init_payments(self, wallet_data_dir: Optional[Union[str, Path]]) -> None:
-        try:
-            load_dotenv()
-            wallet_data = wallet_manager.load_wallet_data(
-                self.agent_id, wallet_data_dir
-            )
-            from coinbase_agentkit import (
-                AgentKit,
-                AgentKitConfig,
-                CdpWalletProvider,
-                CdpWalletProviderConfig,
-                wallet_action_provider,
-                erc20_action_provider,
-                cdp_api_action_provider,
-            )
-            from agentconnect.config.models import PaymentsSettings
-
-            cdp_config = (
-                CdpWalletProviderConfig(wallet_data=wallet_data)
-                if wallet_data
-                else None
-            )
-            self.wallet_provider = cast(
-                "_CdpWalletProvider", CdpWalletProvider(cdp_config)
-            )
-            action_providers = [wallet_action_provider(), cdp_api_action_provider()]
-            payment_symbol = PaymentsSettings().default_token_symbol
-            if payment_symbol != "ETH":
-                action_providers.append(erc20_action_provider())
-            self.agent_kit = cast(
-                "_AgentKit",
-                AgentKit(
-                    AgentKitConfig(
-                        wallet_provider=self.wallet_provider,
-                        action_providers=action_providers,
-                    )
-                ),
-            )
-            if not wallet_data:
-                try:
-                    new_wallet_data = self.wallet_provider.export_wallet()
-                    wallet_manager.save_wallet_data(
-                        self.agent_id, new_wallet_data, wallet_data_dir
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to persist new wallet data agent_id=%s: %s",
-                        self.agent_id,
-                        exc,
-                    )
-            try:
-                wallet_address = self.wallet_provider.get_address()
-                if wallet_address and self.profile is not None:
-                    try:
-                        self.profile.payment_address = wallet_address
-                    except Exception:
-                        pass
-            except Exception as exc:
-                logger.error(
-                    "Error retrieving wallet address agent_id=%s: %s",
-                    self.agent_id,
-                    exc,
-                )
-        except Exception as exc:
-            logger.error(
-                "Error initializing payment capabilities agent_id=%s: %s",
-                self.agent_id,
-                exc,
-            )
-            self.wallet_provider = None
-            self.agent_kit = None
 
 
 def _discovery_profile(profile: Any, name: str) -> dict[str, Any]:

@@ -4,8 +4,7 @@ A Team is a running process that serves one named Team. Agents stay in
 their own processes and pull work through Runtime operations. This module
 never holds Agent objects and never calls a method on an Agent.
 
-Start a Team, join as a member, then ``send``, ``lease``, ``complete``,
-and ``reply``:
+Start, stop, serve, and join are the process API:
 
     team = await Team("content-squad").start()
     writer = await team.join(
@@ -31,6 +30,10 @@ join token and an EdDSA identity proof.
     writer = Writer(name="writer")
     issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
     await writer.join(url, join_token=issued["token"])
+
+``send``, ``lease``, ``complete``, ``reply``, and the other token-taking
+methods are the Session transport. HTTP, MCP, and the in-process Session
+call them by name. Agent code uses ``BaseAgent``.
 
 Pass ``store="memory"`` (the default) for a process-local Team. Pass a
 Redis URL when Memberships, mailboxes, open Tickets, and Thread history
@@ -154,13 +157,17 @@ def _is_principal(member: Mapping[str, Any] | None) -> bool:
 class Team:
     """Runtime serving one Team.
 
+    Process API: :meth:`start`, :meth:`stop`, :meth:`serve`, :meth:`join`,
+    :meth:`issue_join_token`, :meth:`revoke_join_token`, :meth:`status`,
+    :meth:`get_trace`, :meth:`remove_membership`.
+
+    Operations that take a Session token are the Session transport. HTTP,
+    MCP, and the in-process Session call them by name.
+
     The Team owns Memberships, Sessions, Mailboxes, Deliveries, Tickets,
-    Thread history, and the Directory. Use :meth:`join` to create or
-    reconnect a Membership, then pass the returned ``session_token`` to
-    every other operation. ``find`` ranks other members from a
-    natural-language query. :meth:`status` and :meth:`get_trace` are the
-    operator view of members and of one causal timeline. :meth:`serve`
-    also mounts the Team MCP server at ``{origin}/mcp``.
+    Thread history, and the Directory. ``find`` ranks other members from a
+    natural-language query. :meth:`serve` also mounts the Team MCP server
+    at ``{origin}/mcp``.
     """
 
     def __init__(
@@ -1209,6 +1216,8 @@ class Team:
             ttl_seconds=self._held_wait_ttl(),
         )
 
+    # Session transport. HTTP, MCP, and in-process Session call these by name.
+
     async def send(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
@@ -2158,13 +2167,13 @@ class Team:
             )
 
     async def status(self, session_token: str) -> dict[str, Any]:
-        """Return members, online state, Mailbox depths, and open Tickets.
+        """Return members, online state, and Agent Mailbox depths.
 
-        Operator only.
+        Operator only. Principal rows omit Mailbox and Ticket counts.
 
             token = await team.ensure_operator_session()
             snapshot = await team.status(token)
-            snapshot["members"][0]["mailbox_depth"]
+            snapshot["members"][0]["kind"]
         """
         async with self._lock:
             await self._require_operator(session_token)
@@ -2187,10 +2196,6 @@ class Team:
                 if member is None:
                     continue
                 address = str(member["address"])
-                if _is_principal(member):
-                    mailbox_depth = 0
-                else:
-                    mailbox_depth = await mailbox_mod.depth(store, address)
                 online = False
                 for token in list(
                     self._session_tokens_by_member.get(str(member["name"])) or ()
@@ -2201,12 +2206,23 @@ class Team:
                     if parse_timestamp(session["expires_at"]) > now:
                         online = True
                         break
+                if _is_principal(member):
+                    members.append(
+                        {
+                            "kind": "principal",
+                            "name": member["name"],
+                            "address": address,
+                            "online": online,
+                        }
+                    )
+                    continue
                 members.append(
                     {
+                        "kind": "agent",
                         "name": member["name"],
                         "address": address,
                         "online": online,
-                        "mailbox_depth": mailbox_depth,
+                        "mailbox_depth": await mailbox_mod.depth(store, address),
                         "open_tickets": by_recipient.get(address, 0),
                     }
                 )

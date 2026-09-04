@@ -25,6 +25,7 @@ from agentconnect.core.message import parse_delivery
 from agentconnect.core.operations import (
     AcceptedSendResult,
     HeartbeatResult,
+    HistoryResult,
     JoinResult,
     TicketedSendResult,
     parse_history_result,
@@ -148,7 +149,7 @@ class Session:
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
-    ) -> TicketedSendResult:
+    ) -> Ticket:
         """Send a reply-expected request.
 
         ``collect="wait"`` (default) returns a terminal Ticket. If the
@@ -180,14 +181,12 @@ class Session:
         )
         if not isinstance(result, TicketedSendResult):
             raise SessionError("internal", "request send did not return a Ticket")
-        if collect == "wait" and result.ticket.state == "open":
-            ticket = await self._await_ticket(result.ticket.id)
-            return TicketedSendResult(
-                status="ticketed",
-                message=result.message,
-                ticket=ticket,
-            )
-        return result
+        ticket = result.ticket
+        object.__setattr__(ticket, "_client_trace_id", result.message.trace_id)
+        if collect == "wait" and ticket.state == "open":
+            ticket = await self._await_ticket(ticket.id)
+            object.__setattr__(ticket, "_client_trace_id", result.message.trace_id)
+        return ticket
 
     async def _await_ticket(self, ticket_id: str) -> Ticket:
         """Poll ``get_result`` until the Ticket is no longer ``open``."""
@@ -232,7 +231,7 @@ class Session:
 
     async def find(
         self, query: str, *, limit: int | None = None, detail: str = "summary"
-    ) -> dict[str, Any]:
+    ) -> FindResult:
         """Search this Team's Directory.
 
         found = await session.find("someone who can draft a summary")
@@ -248,7 +247,7 @@ class Session:
             )
         )
 
-    async def get_profile(self, address: str) -> dict[str, Any]:
+    async def get_profile(self, address: str) -> DirectoryEntry:
         """Return one Directory entry."""
         return DirectoryEntry.model_validate(
             await self._call(
@@ -270,7 +269,7 @@ class Session:
         *,
         before: Optional[str] = None,
         limit: int = 50,
-    ) -> dict[str, Any]:
+    ) -> HistoryResult:
         """Return one page of retained Thread history, ordered by ``seq``.
 
         Omit ``before`` for the newest page. A UUID that is not in the
@@ -602,8 +601,6 @@ class Session:
             self,
             parsed,
             sender_did=sender_did,
-            origin=self.team_name or "",
-            external=False,
         )
 
     async def _finish_handler(self, delivery: Any, result: Any) -> None:

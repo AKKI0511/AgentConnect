@@ -9,15 +9,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
+from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.message import Delivery, MailboxMessage, Message
-from agentconnect.core.operations import AcceptedSendResult, TicketedSendResult
+from agentconnect.core.operations import AcceptedSendResult, HistoryResult
+from agentconnect.core.ticket import Ticket
 
 if TYPE_CHECKING:
     from agentconnect.agent.session import CollectMode, Session
 
 
 class TicketHandle:
-    """Answer a reply-expected Delivery after ``process_message`` returns.
+    """Answer a reply-expected Delivery after ``handle`` returns.
 
     The Delivery stays leased until ``reply``, ``fail``, or ``decline``
     succeeds, or the lease expires and another Instance may take it.
@@ -102,16 +104,17 @@ class Context:
         delivery: Delivery,
         *,
         sender_did: str,
-        origin: str,
-        external: bool = False,
     ) -> None:
         """Attach delivery facts from one leased attempt."""
         self._session = session
         self._delivery = delivery
         self._ticket: Optional[TicketHandle] = None
         self.sender_did = sender_did
-        self.origin = origin
-        self.external = external
+
+    @property
+    def sender(self) -> str:
+        """Address of the Membership that sent this Message."""
+        return str(self._delivery.message.sender)
 
     @property
     def message(self) -> MailboxMessage:
@@ -181,7 +184,7 @@ class Context:
     def ticket(self) -> TicketHandle:
         """Keep the Delivery leased and answer later.
 
-        Return from ``process_message`` after calling this. Reply with
+        Return from ``handle`` after calling this. Reply with
         ``handle.reply``, ``handle.fail``, or ``handle.decline``.
         """
         if self._ticket is None:
@@ -198,7 +201,7 @@ class Context:
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-    ) -> TicketedSendResult:
+    ) -> Ticket:
         """Send a reply-expected request and collect the result.
 
         Same contract as :meth:`agentconnect.agent.base.BaseAgent.ask`.
@@ -236,28 +239,26 @@ class Context:
 
     async def find(
         self, query: str, *, limit: int | None = None, detail: str = "summary"
-    ) -> dict[str, Any]:
+    ) -> FindResult:
         """Search this Team's Directory, excluding this Agent.
 
         found = await ctx.find("someone who can review a contract")
-        peer = found["matches"][0]["address"]
+        peer = found.matches[0].address
         """
         return await self._session.find(query, limit=limit, detail=detail)
 
-    async def get_profile(self, address: str) -> dict[str, Any]:
+    async def get_profile(self, address: str) -> DirectoryEntry:
         """Return the Directory entry for ``address`` in this Team."""
         return await self._session.get_profile(address)
 
     async def get_history(
         self, *, before: Optional[str] = None, limit: int = 50
-    ) -> dict[str, Any]:
+    ) -> HistoryResult:
         """Page older retained Thread history.
 
         Omit ``before`` for the newest page of this Delivery's Thread.
         Returns empty history when the Message has no ``thread_id``.
         """
-        from agentconnect.core.operations import HistoryResult
-
         thread_id = self.thread_id
         if thread_id is None:
             return HistoryResult(messages=[], has_more=False)

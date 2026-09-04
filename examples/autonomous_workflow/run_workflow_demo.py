@@ -1,8 +1,7 @@
 """Researcher and optional Telegram bot on one Team, driven from stdin.
 
 Requires ``agentconnect[aiagent,cli]``. Telegram needs ``TELEGRAM_BOT_TOKEN``.
-Web search needs ``TAVILY_API_KEY``. Payments need ``agentconnect[payments]``
-and CDP keys.
+Web search needs ``TAVILY_API_KEY``.
 
     poetry run python examples/autonomous_workflow/run_workflow_demo.py
 """
@@ -30,7 +29,7 @@ async def web_search(query: str) -> str:
     return "\n".join(lines) or "no hits"
 
 
-def _researcher(model: str, enable_payments: bool) -> AIAgent:
+def _researcher(model: str) -> AIAgent:
     tools: list[Tool] = []
     if os.getenv("TAVILY_API_KEY"):
         tools.append(
@@ -48,7 +47,6 @@ def _researcher(model: str, enable_payments: bool) -> AIAgent:
     return AIAgent(
         name="researcher",
         model=model,
-        enable_payments=enable_payments,
         instructions=(
             "You research companies and topics. Search when you need facts. "
             "If a Telegram teammate exists, ask them to broadcast a short summary."
@@ -70,9 +68,8 @@ def _researcher(model: str, enable_payments: bool) -> AIAgent:
 async def main() -> None:
     load_dotenv()
     model = os.getenv("AGENTCONNECT_MODEL", "gpt-4o-mini")
-    enable_payments = os.getenv("CDP_API_KEY_NAME") is not None
     team = await Team("workflow").start()
-    researcher = _researcher(model, enable_payments)
+    researcher = _researcher(model)
     human = HumanAgent(name="operator-human")
     telegram = None
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -83,7 +80,6 @@ async def main() -> None:
             name="telegram-bot",
             model=model,
             telegram_token=telegram_token,
-            enable_payments=enable_payments,
             instructions=(
                 "Broadcast short summaries to registered Telegram groups when asked."
             ),

@@ -32,7 +32,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."

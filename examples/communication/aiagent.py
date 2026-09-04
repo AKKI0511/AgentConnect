@@ -34,7 +34,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx) -> Any:
+    async def handle(self, msg, ctx) -> Any:
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."
@@ -77,7 +77,7 @@ def _recorded_complete():
                                     "arguments": (
                                         '{"recipient": "writer@content-squad",'
                                         ' "content": "Draft a two-paragraph summary.",'
-                                        ' "deadline_seconds": 30, "wait_seconds": 10}'
+                                        ' "deadline_seconds": 30}'
                                     ),
                                 },
                             }
@@ -120,13 +120,12 @@ async def main() -> None:
     await writer.join(team)
     await coordinator.join(team)
     try:
-        result = await writer.ask(
+        ticket = await writer.ask(
             "researcher",
             "Draft a two-paragraph summary of today's notes.",
         )
-        ticket = result["ticket"]
-        print(f"ticket: {ticket['state']}")
-        print(f"reply: {ticket['response']['content']}")
+        print(f"ticket: {ticket.state}")
+        print(f"reply: {ticket.content}")
     finally:
         await coordinator.leave()
         await writer.leave()

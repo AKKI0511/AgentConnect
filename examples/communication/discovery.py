@@ -31,7 +31,7 @@ class Reviewer(BaseAgent):
         "tags": ["legal", "contracts"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return "Reviewed. Flag the indemnity cap and the missing termination clause."
 
 
@@ -49,7 +49,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return f"Draft complete for {msg.content!r}."
 
 
@@ -67,7 +67,7 @@ class Researcher(BaseAgent):
         "tags": ["research"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return None
 
 
@@ -82,18 +82,18 @@ async def main() -> None:
     try:
         found = await researcher.find("someone who can verify a contract")
         print("find:")
-        for match in found["matches"]:
-            print(f"  {match['address']}: {match['summary']}")
+        for match in found.matches:
+            print(f"  {match.address}: {match.summary}")
 
-        recipient = found["matches"][0]["address"]
-        result = await researcher.ask(
+        recipient = found.matches[0].address
+        ticket = await researcher.ask(
             recipient,
             "Review the attached MSA for missing termination terms.",
             deadline_seconds=30,
             collect="wait",
         )
         print(f"asked: {recipient}")
-        print(f"reply: {result['ticket']['response']['content']}")
+        print(f"reply: {ticket.content}")
     finally:
         await researcher.leave()
         await writer.leave()

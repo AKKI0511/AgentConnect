@@ -31,7 +31,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."
@@ -55,15 +55,15 @@ class Coordinator(BaseAgent):
         super().__init__(name=name)
         self.tools = self.team_tools()
 
-    async def process_message(self, msg, ctx):
-        found = await self.tools.find(query=str(msg["content"]))
+    async def handle(self, msg, ctx):
+        found = await self.tools.find(query=str(msg.content))
         peer = found["matches"][0]["address"]
-        return await self.tools.ask(
+        ticket = await self.tools.ask(
             recipient=peer,
-            content=msg["content"],
+            content=msg.content,
             deadline_seconds=30,
-            wait_seconds=10,
         )
+        return ticket["response"]["content"]
 
 
 async def main() -> None:
@@ -87,7 +87,6 @@ async def main() -> None:
             recipient=recipient,
             content="Draft a two-paragraph summary of today's notes.",
             deadline_seconds=30,
-            wait_seconds=10,
         )
         print(f"asked: {recipient}")
         print(f"ticket: {ticket['state']}")

@@ -22,7 +22,7 @@ from agentconnect.team import Team
 class Writer(BaseAgent):
     """Replies with the prior Thread contents it was given on this Delivery."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind != "request":
             return None
         prior = [getattr(item, "content", None) for item in ctx.history]
@@ -32,7 +32,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Sends threaded work and prints Tickets. Does not handle inbound work."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return None
 
 
@@ -49,7 +49,7 @@ async def main() -> None:
             "outline the draft",
             thread_id=thread_id,
         )
-        print("first:", first["ticket"]["response"]["content"])
+        print("first:", first.content)
 
         pending = await researcher.ask(
             "writer",
@@ -57,16 +57,16 @@ async def main() -> None:
             collect="ticket",
             thread_id=thread_id,
         )
-        print("ticket state:", pending["ticket"]["state"])
-        ticket = await researcher.get_result(pending["ticket"]["id"])
-        while ticket["state"] == "open":
+        print("ticket state:", pending.state)
+        ticket = await researcher.get_result(pending.id)
+        while ticket.state == "open":
             await asyncio.sleep(0.05)
-            ticket = await researcher.get_result(pending["ticket"]["id"])
-        print("second:", ticket["response"]["content"])
+            ticket = await researcher.get_result(pending.id)
+        print("second:", ticket.content)
 
         page = await researcher.get_history(thread_id)
-        print("history:", [(msg["kind"], msg["seq"]) for msg in page["messages"]])
-        print("has_more:", page["has_more"])
+        print("history:", [(msg.kind, msg.seq) for msg in page.messages])
+        print("has_more:", page.has_more)
     finally:
         await researcher.leave()
         await writer.leave()

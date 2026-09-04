@@ -1,7 +1,7 @@
 # Quickstart
 
 AgentConnect is a runtime for teams of independent agents. Subclass
-`BaseAgent`, join a `Team`, and implement `process_message`. `AIAgent` is
+`BaseAgent`, join a `Team`, and implement `handle`. `AIAgent` is
 an optional helper on a LiteLLM tool loop.
 
 ### Prerequisites
@@ -71,11 +71,11 @@ async def main():
     await researcher.join(team)
     await assistant.join(team)
     try:
-        result = await assistant.ask(
+        ticket = await assistant.ask(
             "researcher",
             "Summarize RAG in three short bullets.",
         )
-        print(result["ticket"]["response"]["content"])
+        print(ticket.content)
     finally:
         await assistant.leave()
         await researcher.leave()

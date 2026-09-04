@@ -32,7 +32,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."
@@ -53,11 +53,11 @@ async def main() -> None:
     await writer.join(team)
     await researcher.join(team)
     try:
-        result = await researcher.ask(
+        ticket = await researcher.ask(
             "writer",
             "Draft two paragraphs on Q3 ecommerce conversion.",
         )
-        print(result["ticket"]["response"]["content"])
+        print(ticket.content)
     finally:
         await researcher.leave()
         await writer.leave()

@@ -1,6 +1,6 @@
 """Two BaseAgents join a Team, exchange a request, and leave.
 
-Subclass ``BaseAgent``, implement ``process_message``, and call ``join``.
+Subclass ``BaseAgent``, implement ``handle``, and call ``join``.
 The same class joins an embedded Team or a Team served over HTTP.
 
 Run from the repo root::
@@ -30,7 +30,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind != "request":
             return None
         task = msg.content
@@ -40,7 +40,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Asks a teammate to draft, then prints the Ticket."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return None
 
 
@@ -55,17 +55,16 @@ async def main() -> None:
         print(f"researcher address: {researcher.address}")
 
         found = await researcher.find("someone who can draft a summary")
-        print("find:", [match["address"] for match in found["matches"]])
+        print("find:", [match.address for match in found.matches])
 
-        result = await researcher.ask(
+        ticket = await researcher.ask(
             "writer",
             {"task": "Draft a two-paragraph summary of today's notes."},
             deadline_seconds=30,
             collect="wait",
         )
-        ticket = result["ticket"]
-        print(f"ticket state: {ticket['state']}")
-        print(f"response: {ticket['response']['content']}")
+        print(f"ticket state: {ticket.state}")
+        print(f"response: {ticket.content}")
     finally:
         await researcher.leave()
         await writer.leave()

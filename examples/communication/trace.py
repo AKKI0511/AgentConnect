@@ -27,7 +27,7 @@ class Writer(BaseAgent):
         ],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind == "request":
             raise TeamError("handler_failed", "the draft could not be written")
         return None
@@ -36,7 +36,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Sends one request and does not handle inbound work."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return None
 
 
@@ -47,18 +47,16 @@ async def main() -> None:
     await writer.join(team)
     await researcher.join(team)
     try:
-        result = await researcher.ask(
+        ticket = await researcher.ask(
             "writer",
             "Draft a summary",
             deadline_seconds=15,
             collect="wait",
         )
-        ticket = result["ticket"]
-        print(f"ticket state: {ticket['state']}")
-        print(f"error: {ticket['error']['code']}")
-        trace_id = result["message"]["trace_id"]
+        print(f"ticket state: {ticket.state}")
+        print(f"error: {ticket.error.code}")
         operator = await team.ensure_operator_session()
-        timeline = await team.get_trace(operator, trace_id)
+        timeline = await team.get_trace(operator, ticket.trace_id)
         print(
             "trace:",
             [(event["type"], event.get("parent_id")) for event in timeline["events"]],

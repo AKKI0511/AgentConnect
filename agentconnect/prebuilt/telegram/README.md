@@ -34,5 +34,5 @@ await agent.run()
 - `HandlerRegistry`: `/start`, `/help`, mentions, media, private text
 - `telegram_tools.py`: `Tool` values the model can call
 
-Team deliveries still go through `process_message`. `run()` polls Telegram
+Team deliveries still go through `handle`. `run()` polls Telegram
 only. The Session already pulls Team work after `join`.

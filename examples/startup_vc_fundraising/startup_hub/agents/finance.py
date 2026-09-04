@@ -28,7 +28,7 @@ class Finance(BaseAgent):
     def __init__(self, name: str = "finance"):
         super().__init__(name=name)
 
-    async def process_message(self, msg, ctx) -> Any:
+    async def handle(self, msg, ctx) -> Any:
         if msg.kind != "request":
             return None
         if _DATA.exists():

@@ -1,8 +1,8 @@
 """Team runtime: routing, mailboxes, tickets, threads, and directory.
 
 The public type is :class:`~agentconnect.team.runtime.Team`. Start a Team,
-join as a member, then send and pull work. The Runtime never holds Agent
-objects.
+join as a member, then talk through ``BaseAgent``. Token-taking methods on
+``Team`` are the Session transport.
 """
 
 from agentconnect.team.errors import TeamError

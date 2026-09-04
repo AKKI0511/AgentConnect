@@ -21,7 +21,7 @@ from agentconnect.team import Team
 class Echo(BaseAgent):
     """Returns whatever ``content`` arrived on a reply-expected request."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind == "request" and getattr(msg, "deadline", None):
             return {"echo": msg.content}
         return None
@@ -53,7 +53,7 @@ async def main() -> None:
     print(f"joined: {writer.address}, {researcher.address}")
 
     result = await researcher.ask("writer", "ping", deadline_seconds=10)
-    print(f"ask: {result['ticket']['state']} {result['ticket']['response']['content']}")
+    print(f"ask: {result.state} {result.content}")
 
     attestation = await team.membership_attestation("writer")
     print(f"writer attestation issued: {bool(attestation)}")

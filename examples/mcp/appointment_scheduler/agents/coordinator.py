@@ -43,7 +43,7 @@ class CalendarInspector(BaseAgent):
         super().__init__(name=name)
         self.data_path = _DATA / "calendar.json"
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
+    async def handle(self, msg: dict[str, Any], ctx: Any) -> Any:
         if msg.kind != "request":
             return None
         busy = []
@@ -72,7 +72,7 @@ class Availability(BaseAgent):
         super().__init__(name=name)
         self.data_path = _DATA / "availability.json"
 
-    async def process_message(self, msg: dict[str, Any], ctx: Any) -> Any:
+    async def handle(self, msg: dict[str, Any], ctx: Any) -> Any:
         if msg.kind != "request":
             return None
         slots = []

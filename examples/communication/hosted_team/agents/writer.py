@@ -26,7 +26,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, msg, ctx) -> Any:
+    async def handle(self, msg, ctx) -> Any:
         """Reply to a request with a draft line."""
         if msg.kind != "request":
             return None

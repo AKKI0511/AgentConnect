@@ -92,10 +92,3 @@ await agent.run()
 ```
 
 ``TELEGRAM_BOT_TOKEN`` is read when ``telegram_token`` is omitted.
-
-## Payments
-
-``enable_payments=True`` still initializes the wallet on ``BaseAgent``. When
-AgentKit exposes ``get_actions()``, those actions become ``Tool`` values. The
-``payments`` extra is required. AgentConnect does not depend on LangChain for
-that path.

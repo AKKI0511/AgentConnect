@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Team Runtime with store-backed mailboxes, Tickets, and Thread history. `Team("name").start()` serves join, send, lease, complete, reply, get_result, get_history, find, and get_profile. Memory is the default store; Redis keeps open Tickets across a Runtime restart.
-- Agent Session and handler contract. Subclass `BaseAgent`, implement `process_message(msg, ctx)`, and `join` a Team in-process or by URL. The Session pulls work, maps return / None / raise / `ctx.ticket()` onto Runtime reply and complete, retries while the Team is coming up, and reconnects after a restart. `Team.serve()` exposes the HTTP binding (POST + SSE) on loopback.
+- Agent Session and handler contract. Subclass `BaseAgent`, implement `handle(msg, ctx)`, and `join` a Team in-process or by URL. The Session pulls work, maps return / None / raise / `ctx.ticket()` onto Runtime reply and complete, retries while the Team is coming up, and reconnects after a restart. `Team.serve()` exposes the HTTP binding (POST + SSE) on loopback.
 - Join authentication. Every Agent has an Ed25519 `did:key`. `Team.issue_join_token` issues a scoped, expiring, revocable token. Network joins (`require_join_auth=True`) require that token plus an EdDSA identity proof. Revoking a token or removing a Membership drops the Session immediately. The Runtime mints a membership attestation JWT at join; inbound verification of that statement is later work.
 - Ticket and Thread contract. Open Tickets (and Thread Messages they still need) are kept until at least the deadline. `collect=wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` (default 25) elapses, then returns the current Ticket. `BaseAgent.ask(collect="wait")` still waits for a terminal Ticket. A Delivery history window is capped by count and by `max_message_bytes`. `get_history(before=...)` with a missing UUID returns the newest page. `callback` and `stream` fail with `unsupported_collect_mode`.
 - A request always expects a reply, carries a `deadline`, and opens a Ticket. Fire-and-forget work is an `event`. Thread history, the delivered window, and `get_history` order by a per-Thread `seq` assigned on acceptance. `parent_id` names the Message this one replies to or continues.
@@ -22,8 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Store insert-if-absent and compare-and-set. Mailboxes are per-item documents behind a time-ordered index. `max_mailbox_depth` is an exact count of queued plus leased items. `Team(..., max_held_waits=16)` caps concurrent `collect=wait` sends per Membership; past the cap `send` fails with `wait_limit`. `BaseAgent(..., delivery_history="ids")` puts earlier Message ids on each Delivery instead of bodies.
 
 ### Changed
+- `ask` returns a Ticket. Read a completed reply as `ticket.content`. Session-bound tools and MCP `ask` use the same argument names (`deadline_seconds`, `collect`) and dump JSON through `dump_public`.
+- Handler method is `handle`. `process_message` still works as an alias. `join`/`leave` and `connected` are the Client lifecycle names. `status` member rows are discriminated on `kind`; a principal omits Mailbox and Ticket counts.
 - Replaced the in-process communication hub and Future-backed response tracker. The Runtime never holds Agent objects and never calls a method on an Agent.
-- Replaced `BaseAgent.run()`, the per-agent queue, and the 100ms poll loop with a pull Session. `join_network` / `register_agent` are gone. `process_message` takes `(msg, ctx)`.
+- Replaced `BaseAgent.run()`, the per-agent queue, and the 100ms poll loop with a pull Session. `join_network` / `register_agent` are gone. `handle` takes `(msg, ctx)`. `process_message` remains as an alias.
 - Switched Agent and Team key generation from RSA to Ed25519 `did:key`. Join identity proofs are EdDSA JWTs.
 - Renamed ready-made agents from `agentconnect.agents` to `agentconnect.prebuilt`.
 - Moved `aiogram`, `cdp-sdk`, and `aioconsole` to optional extras (`telegram`, `payments`, `cli`).
@@ -39,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Deleted unused `agentconnect.communication.protocols`.
+- Removed `BaseAgent` names the Session never called (`hub`, `registry`, cooldown, `send_message`, `verify_identity`, `agent_id`, `stop`, `is_running`) and the payment constructor arguments. MCP `ask` no longer has `wait_seconds`.
 - Removed `pylint` and the PyPI `asyncio` backport from runtime dependencies.
 - Removed the `communication/`, `servers/`, and `clients/` packages after moving their code into `team/`, `transport/`, `gateway/`, `index/`, and `config/`.
 - Removed `communication_mcp_server`, `registry_mcp_server`, `token_verifier`, `BaseAgent.mint_mcp_access_token`, and the `agentconnect mcp` CLI group.

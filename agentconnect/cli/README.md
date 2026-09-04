@@ -23,7 +23,7 @@ agentconnect trace <trace-id>
 
 - ``init`` — write ``agentconnect.yaml`` and ``agents/assistant.py``
 - ``up`` / ``down`` — start or stop the Team and hosted Agents
-- ``status`` — members, online state, mailbox depths, open tickets
+- ``status`` — members, kind, online state, Agent mailbox depths, open tickets
 - ``token issue`` / ``token revoke`` — join credentials
 - ``find`` — Directory search
 - ``ask`` — send reply-expected work and wait

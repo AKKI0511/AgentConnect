@@ -25,7 +25,7 @@ class Writer(BaseAgent):
     def __init__(self) -> None:
         super().__init__(name="writer", delivery_history="ids")
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind != "request":
             return None
         prior_ids = list(ctx.history_ids or [])
@@ -35,7 +35,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Sends threaded work and prints Tickets. Does not handle inbound work."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return None
 
 
@@ -52,17 +52,17 @@ async def main() -> None:
             "outline the draft",
             thread_id=thread_id,
         )
-        print("first:", first["ticket"]["response"]["content"])
+        print("first:", first.content)
 
         second = await researcher.ask(
             "writer",
             "expand section 2",
             thread_id=thread_id,
         )
-        print("second:", second["ticket"]["response"]["content"])
+        print("second:", second.content)
 
         page = await researcher.get_history(thread_id)
-        print("history:", [(msg["kind"], msg["seq"]) for msg in page["messages"]])
+        print("history:", [(msg.kind, msg.seq) for msg in page.messages])
     finally:
         await researcher.leave()
         await writer.leave()

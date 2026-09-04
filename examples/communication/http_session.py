@@ -20,7 +20,7 @@ from agentconnect.team import Team
 class Echo(BaseAgent):
     """Returns whatever ``content`` arrived on a reply-expected request."""
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         if msg.kind == "request" and getattr(msg, "deadline", None):
             return {"echo": msg.content}
         return None
@@ -39,9 +39,7 @@ async def main() -> None:
 
     try:
         result = await researcher.ask("writer", "ping", deadline_seconds=10)
-        print(
-            f"first ask: {result['ticket']['state']} {result['ticket']['response']['content']}"
-        )
+        print(f"first ask: {result.state} {result.content}")
 
         await writer.leave()
         print("writer left; membership remains, mailbox still accepts mail")
@@ -49,24 +47,23 @@ async def main() -> None:
         pending = await researcher.ask(
             "writer", "queued", deadline_seconds=15, collect="ticket"
         )
-        print(f"ask while writer is down: {pending['ticket']['state']}")
+        print(f"ask while writer is down: {pending.state}")
 
         await writer.join(url)
+        ticket = pending
         for _ in range(50):
-            ticket = await researcher.get_result(pending["ticket"]["id"])
-            if ticket["state"] != "open":
+            ticket = await researcher.get_result(pending.id)
+            if ticket.state != "open":
                 break
             await asyncio.sleep(0.1)
-        print(
-            f"after writer rejoined: {ticket['state']} {ticket.get('response', {}).get('content')}"
-        )
+        print(f"after writer rejoined: {ticket.state} {ticket.content}")
 
         extra = Echo(name="editor")
         await extra.join(url)
         later = await extra.ask(
             "researcher", "hello from a new member", deadline_seconds=10
         )
-        print(f"new member ask: {later['ticket']['state']}")
+        print(f"new member ask: {later.state}")
         await extra.leave()
     finally:
         await researcher.leave()

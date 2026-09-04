@@ -27,7 +27,7 @@ class Reviewer(BaseAgent):
         "tags": ["legal", "contracts"],
     }
 
-    async def process_message(self, msg, ctx):
+    async def handle(self, msg, ctx):
         return "reviewed"
 
 team = await Team("content-squad").start()
@@ -35,10 +35,10 @@ await Reviewer(name="reviewer").join(team)
 await Researcher(name="researcher").join(team)
 
 found = await researcher.find("someone who can verify a contract")
-found["matches"][0]["address"]  # reviewer@content-squad
+found.matches[0].address  # reviewer@content-squad
 
 entry = await researcher.get_profile("reviewer")
-entry["profile"]["summary"]
+entry.profile.summary
 ```
 
 Omit ``limit`` to receive every other member, ordered, up to 100. Pass

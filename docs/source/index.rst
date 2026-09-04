@@ -232,11 +232,11 @@ Session after ``join``.
       await researcher.join(team)
       await assistant.join(team)
       try:
-          result = await assistant.ask(
+          ticket = await assistant.ask(
               "researcher",
               "Summarize RAG in three short bullets.",
           )
-          print(result["ticket"]["response"]["content"])
+          print(ticket.content)
       finally:
           await assistant.leave()
           await researcher.leave()

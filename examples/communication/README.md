@@ -1,6 +1,6 @@
 # Communication examples
 
-Agents subclass ``BaseAgent``, implement ``process_message``, and call ``join``.
+Agents subclass ``BaseAgent``, implement ``handle``, and call ``join``.
 The Team never holds Agent objects. Each Agent pulls work through its Session.
 
 ```bash

@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from agentconnect.team.codec import parse_timestamp
 from agentconnect.team.constants import TICKET_TERMINAL
-from agentconnect.team.store.base import Store
+from agentconnect.team.store.base import Store, StoreRecord
 
 TICKET_KEY_PREFIX = "ticket:"
 OPEN_TICKETS_SET = "tickets:open"
@@ -125,12 +125,41 @@ async def save_ticket(store: Store, ticket: dict[str, Any]) -> None:
         await store.set_remove(OPEN_TICKETS_SET, ticket_id)
 
 
+async def insert_ticket(store: Store, ticket: dict[str, Any]) -> bool:
+    """Insert an open Ticket. False if that id already exists."""
+    ticket_id = ticket["id"]
+    if not await store.insert(ticket_key(ticket_id), ticket):
+        return False
+    await store.set_add(ALL_TICKETS_SET, ticket_id)
+    if ticket["state"] == "open":
+        await store.set_add(OPEN_TICKETS_SET, ticket_id)
+    return True
+
+
+async def cas_ticket(store: Store, ticket: dict[str, Any], version: int) -> bool:
+    """Replace a Ticket when ``version`` still matches."""
+    ticket_id = ticket["id"]
+    if not await store.compare_and_set(ticket_key(ticket_id), version, ticket):
+        return False
+    await store.set_add(ALL_TICKETS_SET, ticket_id)
+    if ticket["state"] == "open":
+        await store.set_add(OPEN_TICKETS_SET, ticket_id)
+    else:
+        await store.set_remove(OPEN_TICKETS_SET, ticket_id)
+    return True
+
+
 async def load_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:
     """Load a Ticket, or None if it is missing."""
     record = await store.get(ticket_key(ticket_id))
     if record is None:
         return None
     return record
+
+
+async def load_ticket_record(store: Store, ticket_id: str) -> Optional[StoreRecord]:
+    """Load a Ticket with its store version, or None if it is missing."""
+    return await store.get_record(ticket_key(ticket_id))
 
 
 async def delete_ticket(store: Store, ticket_id: str) -> None:

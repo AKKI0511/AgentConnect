@@ -96,18 +96,30 @@ async def append_message(
     sender: str,
     recipient: str,
 ) -> dict[str, Any]:
-    """Append ``message`` to the Thread transcript if it is not already listed."""
-    thread = ensure_thread(
-        await load_thread(store, thread_id),
-        thread_id=thread_id,
-        sender=sender,
-        recipient=recipient,
-    )
-    allocate_seq(thread, message)
-    if message["id"] not in thread["message_ids"]:
-        thread["message_ids"].append(message["id"])
-    await save_thread(store, thread)
-    return thread
+    """Append ``message`` to the Thread transcript if it is not already listed.
+
+    Compare-and-set on the Thread document assigns ``seq``. Two concurrent
+    appends receive distinct values in the order the store accepts them.
+    """
+    key = thread_key(thread_id)
+    while True:
+        record = await store.get_record(key)
+        thread = ensure_thread(
+            None if record is None else record.value,
+            thread_id=thread_id,
+            sender=sender,
+            recipient=recipient,
+        )
+        allocate_seq(thread, message)
+        if message["id"] not in thread["message_ids"]:
+            thread["message_ids"].append(message["id"])
+        if record is None:
+            if await store.insert(key, thread):
+                await store.set_add(THREADS_SET, thread_id)
+                return thread
+            continue
+        if await store.compare_and_set(key, record.version, thread):
+            return thread
 
 
 def history_window(
@@ -137,6 +149,29 @@ def history_window(
         window = window[1:]
     complete = len(window) == complete_count
     return window, complete
+
+
+def history_id_window(
+    messages: list[dict[str, Any]],
+    *,
+    delivered_id: str,
+    limit: int,
+) -> tuple[list[str], bool]:
+    """Return earlier Message ids before ``delivered_id``, capped by ``limit``.
+
+    Ordered by ``seq``. No byte budget; ids are small.
+    """
+    ordered = sorted(messages, key=_sort_key)
+    earlier: list[str] = []
+    for message in ordered:
+        if message["id"] == delivered_id:
+            break
+        earlier.append(message["id"])
+    complete_count = len(earlier)
+    if limit <= 0:
+        return [], complete_count == 0
+    window = earlier[-limit:]
+    return window, len(window) == complete_count
 
 
 def page_history(

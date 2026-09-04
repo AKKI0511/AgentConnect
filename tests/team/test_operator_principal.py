@@ -85,4 +85,6 @@ async def test_remove_membership_refuses_operator(team: Team):
     names = {row["name"] for row in snapshot["members"]}
     assert "operator" in names
     by_name = {row["name"]: row for row in snapshot["members"]}
-    assert by_name["operator"]["mailbox_depth"] == 0
+    assert by_name["operator"]["kind"] == "principal"
+    assert "mailbox_depth" not in by_name["operator"]
+    assert "open_tickets" not in by_name["operator"]

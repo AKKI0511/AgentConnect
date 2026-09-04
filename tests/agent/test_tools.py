@@ -24,7 +24,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message, ctx) -> Any:
+    async def handle(self, message, ctx) -> Any:
         if message.kind == "request" and getattr(message, "deadline", None):
             return {"echo": message.content}
         return None
@@ -48,7 +48,7 @@ class Coordinator(BaseAgent):
         super().__init__(name=name)
         self.tools = self.team_tools()
 
-    async def process_message(self, message, ctx) -> Any:
+    async def handle(self, message, ctx) -> Any:
         return None
 
 
@@ -86,10 +86,37 @@ async def test_team_tools_find_then_ask_without_hardcoded_address():
             recipient=recipient,
             content="draft this",
             deadline_seconds=30,
-            wait_seconds=8,
         )
         assert ticket["state"] == "completed"
         assert ticket["response"]["content"] == {"echo": "draft this"}
+    finally:
+        await researcher.leave()
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_team_tools_collect_ticket_returns_json_without_content_sugar():
+    class Hold(BaseAgent):
+        async def handle(self, message, ctx) -> Any:
+            ctx.ticket()
+            return None
+
+    team = await Team("content-squad").start()
+    writer = Hold(name="writer")
+    researcher = Coordinator(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        ticket = await researcher.tools.ask(
+            recipient="writer",
+            content="later",
+            deadline_seconds=8,
+            collect="ticket",
+        )
+        assert ticket["state"] == "open"
+        assert "content" not in ticket
+        assert ticket["id"]
     finally:
         await researcher.leave()
         await writer.leave()
@@ -108,21 +135,18 @@ async def test_team_tools_idempotency_key_reuses_ticket():
             recipient="writer",
             content="same",
             deadline_seconds=30,
-            wait_seconds=8,
             idempotency_key="draft-1",
         )
         second = await researcher.tools.ask(
             recipient="writer",
             content="same",
             deadline_seconds=30,
-            wait_seconds=8,
             idempotency_key="draft-1",
         )
         third = await researcher.tools.ask(
             recipient="writer",
             content="same",
             deadline_seconds=30,
-            wait_seconds=8,
         )
         assert first["id"] == second["id"]
         assert first["id"] != third["id"]

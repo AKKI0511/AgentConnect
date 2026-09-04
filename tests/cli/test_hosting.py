@@ -29,7 +29,7 @@ class Echo(BaseAgent):
         ],
     }
 
-    async def process_message(self, msg, ctx: Any) -> Any:
+    async def handle(self, msg, ctx: Any) -> Any:
         if msg.kind != "request":
             return None
         return msg.content

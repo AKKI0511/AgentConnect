@@ -27,20 +27,20 @@ async def test_many_agents_join_talk_and_leave(team: Team):
         ]
         results = await asyncio.gather(*pairs)
         for i, result in enumerate(results):
-            assert result["ticket"]["state"] == "completed"
-            assert result["ticket"]["response"]["content"] == {"echo": {"n": i * 2}}
+            assert result.state == "completed"
+            assert result.content == {"echo": {"n": i * 2}}
 
         leaving = agents[:8]
         await asyncio.gather(*(agent.leave() for agent in leaving))
         remaining = agents[8:]
         still = remaining[0].ask(remaining[1].name, "still-here", deadline_seconds=8)
         result = await still
-        assert result["ticket"]["state"] == "completed"
+        assert result.state == "completed"
 
         await asyncio.gather(*(agent.join(team) for agent in leaving))
         back = leaving[0].ask(leaving[1].name, "back", deadline_seconds=8)
         result = await back
-        assert result["ticket"]["state"] == "completed"
+        assert result.state == "completed"
     finally:
         await asyncio.gather(
             *(agent.leave() for agent in agents), return_exceptions=True
@@ -55,14 +55,14 @@ async def test_dynamic_join_mid_conversation(team: Team):
     await b.join(team)
     try:
         first = await a.ask("beta", "one", deadline_seconds=5)
-        assert first["ticket"]["state"] == "completed"
+        assert first.state == "completed"
         gamma = EchoAgent(name="gamma")
         await gamma.join(team)
         second = await gamma.ask("alpha", "two", deadline_seconds=5)
-        assert second["ticket"]["state"] == "completed"
+        assert second.state == "completed"
         await gamma.leave()
         third = await b.ask("alpha", "three", deadline_seconds=5)
-        assert third["ticket"]["state"] == "completed"
+        assert third.state == "completed"
     finally:
         await a.leave()
         await b.leave()

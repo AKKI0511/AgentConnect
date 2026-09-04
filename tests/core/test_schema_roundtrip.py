@@ -286,6 +286,34 @@ def test_required_null_content_survives_python_dump():
     ).validate(dumped)
 
 
+def test_dump_public_omits_ticket_content_sugar():
+    from agentconnect.core.message import ResponseMessage
+    from agentconnect.core.ticket import CompletedTicket
+
+    ticket = CompletedTicket(
+        id=_UUID,
+        requester="researcher@content-squad",
+        recipient="writer@content-squad",
+        created_at=_TIMESTAMP,
+        updated_at=_TIMESTAMP,
+        deadline=_TIMESTAMP,
+        late_reply_count=0,
+        response=ResponseMessage(
+            id=_UUID,
+            sender="writer@content-squad",
+            recipient="researcher@content-squad",
+            created_at=_TIMESTAMP,
+            trace_id=_UUID,
+            parent_id=_UUID,
+            content="hello",
+        ),
+    )
+    dumped = dump_public(ticket)
+    assert ticket.content == "hello"
+    assert "content" not in dumped
+    assert dumped["response"]["content"] == "hello"
+
+
 def test_vision_imports_resolve():
     from agentconnect import BaseAgent, Context, Message
 

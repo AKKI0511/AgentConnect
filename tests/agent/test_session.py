@@ -52,8 +52,8 @@ async def test_leave_keeps_mailbox_for_later_join(team: Team):
     await writer.join(team)
     try:
         result = await researcher.ask("writer", "hello", deadline_seconds=5)
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == {"echo": "hello"}
+        assert result.state == "completed"
+        assert result.content == {"echo": "hello"}
     finally:
         await writer.leave()
         await researcher.leave()
@@ -95,12 +95,12 @@ async def test_find_and_get_profile(team: Team):
     await researcher.join(team)
     try:
         found = await researcher.find("drafting")
-        addresses = [match["address"] for match in found["matches"]]
+        addresses = [match.address for match in found.matches]
         assert "writer@content-squad" in addresses
         assert "researcher@content-squad" not in addresses
         entry = await researcher.get_profile("writer")
-        assert entry["address"] == "writer@content-squad"
-        assert entry["profile"]["skills"][0]["name"] == "drafting"
+        assert entry.address == "writer@content-squad"
+        assert entry.profile.skills[0].name == "drafting"
     finally:
         await writer.leave()
         await researcher.leave()

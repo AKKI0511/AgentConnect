@@ -28,10 +28,16 @@ async def test_status_lists_members_and_open_tickets(team):
     assert snapshot["team_name"] == "content-squad"
     assert snapshot["open_tickets"] == 1
     by_name = {row["name"]: row for row in snapshot["members"]}
+    assert by_name["writer"]["kind"] == "agent"
     assert by_name["writer"]["online"] is True
     assert by_name["writer"]["mailbox_depth"] == 1
     assert by_name["writer"]["open_tickets"] == 1
+    assert by_name["researcher"]["kind"] == "agent"
     assert by_name["researcher"]["mailbox_depth"] == 0
+    operator_row = by_name["operator"]
+    assert operator_row["kind"] == "principal"
+    assert "mailbox_depth" not in operator_row
+    assert "open_tickets" not in operator_row
     with pytest.raises(Exception) as exc:
         await team.status(writer["session_token"])
     assert exc.value.code == "forbidden"

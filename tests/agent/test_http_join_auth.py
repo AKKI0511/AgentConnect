@@ -28,8 +28,8 @@ async def test_http_join_with_bound_token():
         await writer.join(url, join_token=writer_tok["token"])
         await researcher.join(url, join_token=researcher_tok["token"])
         result = await researcher.ask("writer", "hello", deadline_seconds=8)
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == {"echo": "hello"}
+        assert result.state == "completed"
+        assert result.content == {"echo": "hello"}
     finally:
         await writer.leave()
         await researcher.leave()
@@ -67,7 +67,7 @@ async def test_http_loopback_join_without_token_still_proves_did():
         await writer.join(url)
         await researcher.join(url)
         result = await researcher.ask("writer", "via-http", deadline_seconds=8)
-        assert result["ticket"]["state"] == "completed"
+        assert result.state == "completed"
     finally:
         await writer.leave()
         await researcher.leave()

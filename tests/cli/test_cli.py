@@ -49,7 +49,9 @@ def test_init_writes_team_file_and_agent(tmp_path: Path) -> None:
     assert "agents.assistant:Assistant" in text
     assistant = tmp_path / "agents" / "assistant.py"
     assert assistant.exists()
-    assert "class Assistant" in assistant.read_text(encoding="utf-8")
+    source = assistant.read_text(encoding="utf-8")
+    assert "class Assistant" in source
+    assert "async def handle" in source
 
     p = run_cli("init", cwd=tmp_path)
     assert p.returncode == 1

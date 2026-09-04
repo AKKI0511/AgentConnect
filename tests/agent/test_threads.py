@@ -25,14 +25,14 @@ async def test_ask_wait_polls_until_terminal_after_hold():
             researcher.ask("writer", "later", deadline_seconds=8, collect="wait")
         )
         for _ in range(50):
-            if writer.handle is not None:
+            if writer.ticket_handle is not None:
                 break
             await asyncio.sleep(0.05)
-        assert writer.handle is not None
-        await writer.handle.reply("done after hold")
+        assert writer.ticket_handle is not None
+        await writer.ticket_handle.reply("done after hold")
         result = await asyncio.wait_for(task, timeout=5)
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == "done after hold"
+        assert result.state == "completed"
+        assert result.content == "done after hold"
     finally:
         await writer.leave()
         await researcher.leave()
@@ -46,7 +46,7 @@ async def test_threaded_ask_exposes_history_and_paging(team: Team):
             super().__init__(*args, **kwargs)
             self.seen_history = None
 
-        async def process_message(self, message, ctx):
+        async def handle(self, message, ctx):
             self.seen_history = list(ctx.history)
             if message.kind == "request" and getattr(message, "deadline", None):
                 return {"echo": message.content, "prior": len(ctx.history)}
@@ -61,11 +61,11 @@ async def test_threaded_ask_exposes_history_and_paging(team: Team):
         first = await researcher.ask(
             "writer", "turn-0", deadline_seconds=5, thread_id=thread_id
         )
-        assert first["ticket"]["state"] == "completed"
+        assert first.state == "completed"
         second = await researcher.ask(
             "writer", "turn-1", deadline_seconds=5, thread_id=thread_id
         )
-        assert second["ticket"]["response"]["content"]["prior"] >= 1
+        assert second.content["prior"] >= 1
         assert writer.seen_history is not None
         assert writer.seen_history[0]["content"] == "turn-0"
         page = await researcher.get_history(thread_id, limit=10)
@@ -109,7 +109,7 @@ async def test_ids_history_exposes_history_ids(team: Team):
             self.seen_ids = None
             self.seen_history = None
 
-        async def process_message(self, message, ctx):
+        async def handle(self, message, ctx):
             self.seen_ids = ctx.history_ids
             self.seen_history = list(ctx.history)
             if message.kind == "request" and getattr(message, "deadline", None):
@@ -133,7 +133,7 @@ async def test_ids_history_exposes_history_ids(team: Team):
         )
         assert writer.seen_history == []
         assert writer.seen_ids
-        assert second["ticket"]["response"]["content"]["prior_ids"]
+        assert second.content["prior_ids"]
         page = await researcher.get_history(thread_id, limit=10)
         assert page["messages"]
     finally:

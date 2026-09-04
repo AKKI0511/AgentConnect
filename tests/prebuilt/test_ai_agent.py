@@ -26,7 +26,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message, ctx) -> Any:
+    async def handle(self, message, ctx) -> Any:
         if message.kind != "request":
             return None
         return "Draft complete."
@@ -70,7 +70,7 @@ async def test_aiagent_process_message_reads_ctx_history():
         return turns.pop(0)
 
     class Silent(BaseAgent):
-        async def process_message(self, message, ctx) -> Any:
+        async def handle(self, message, ctx) -> Any:
             return None
 
     team = await Team("content-squad").start()
@@ -82,8 +82,8 @@ async def test_aiagent_process_message_reads_ctx_history():
         thread_id = "11111111-1111-1111-1111-111111111111"
         first = await asker.ask("researcher", "one", thread_id=thread_id)
         second = await asker.ask("researcher", "two", thread_id=thread_id)
-        assert first["ticket"]["response"]["content"] == "first reply"
-        assert second["ticket"]["response"]["content"] == "second reply"
+        assert first.content == "first reply"
+        assert second.content == "second reply"
         assert len(recorded) == 2
         second_contents = [str(item.get("content")) for item in recorded[1]]
         assert any("one" in content for content in second_contents)
@@ -107,9 +107,8 @@ async def test_aiagent_team_tools_find_without_hardcoded_address():
     await researcher.join(team)
     try:
         result = await writer.ask("researcher", "who can draft?")
-        ticket = result["ticket"]
-        assert ticket["state"] == "completed"
-        assert "writer" in str(ticket["response"]["content"])
+        assert result.state == "completed"
+        assert "writer" in str(result.content)
     finally:
         await researcher.leave()
         await writer.leave()

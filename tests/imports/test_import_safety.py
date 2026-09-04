@@ -2,6 +2,8 @@ import importlib
 import sys
 from types import ModuleType
 
+import pytest
+
 
 def test_top_level_import_has_version_and_no_crash():
     mod = importlib.import_module("agentconnect")
@@ -88,7 +90,7 @@ def test_base_agent_does_not_import_coinbase_when_disabled(monkeypatch):
         def _initialize_workflow(self):
             return None
 
-        async def process_message(self, message, ctx=None):
+        async def handle(self, message, ctx=None):
             return None
 
     profile = AgentProfile(
@@ -97,36 +99,21 @@ def test_base_agent_does_not_import_coinbase_when_disabled(monkeypatch):
     )
     identity = AgentIdentity.create_key_based()
     agent = DummyAgent(
-        agent_id="test_agent",
+        name="test-agent",
         identity=identity,
         profile=profile,
-        enable_payments=False,
     )
 
-    assert agent.wallet_provider is None and agent.agent_kit is None
+    assert agent.name == "test-agent"
 
 
-def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
-    # Purge optional deps to simulate missing installation
-    for name in [
-        "coinbase_agentkit",
-        "coinbase_agentkit_langchain",
-        "cdp",
-    ]:
-        sys.modules.pop(name, None)
-
+def test_base_agent_rejects_removed_constructor_args():
     from agentconnect.agent.base import BaseAgent
     from agentconnect.core.identity import AgentIdentity
     from agentconnect.core.profile import AgentProfile, Skill
 
     class DummyAgent(BaseAgent):
-        def _initialize_llm(self):
-            return None
-
-        def _initialize_workflow(self):
-            return None
-
-        async def process_message(self, message, ctx=None):
+        async def handle(self, message, ctx=None):
             return None
 
     profile = AgentProfile(
@@ -134,17 +121,13 @@ def test_base_agent_payments_enabled_handles_missing_coinbase(monkeypatch):
         skills=[Skill(name="x", description="Handles a tiny test skill.")],
     )
     identity = AgentIdentity.create_key_based()
-
-    # Should not raise even if optional deps are missing; agent disables payments internally
-    agent = DummyAgent(
-        agent_id="test_agent",
-        identity=identity,
-        profile=profile,
-        enable_payments=True,
-    )
-
-    # Since deps are missing, lazy import path should fail internally and disable payments
-    assert agent.wallet_provider is None and agent.agent_kit is None
+    with pytest.raises(TypeError):
+        DummyAgent(
+            name="test-agent",
+            identity=identity,
+            profile=profile,
+            enable_payments=True,
+        )
 
 
 def test_prebuilt_ai_agent_does_not_import_langchain():

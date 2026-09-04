@@ -16,7 +16,7 @@ async def test_human_process_message_returns_typed_text():
         return "hello from human"
 
     human = HumanAgent(name="operator-human", read_line=fake_input)
-    reply = await human.process_message(
+    reply = await human.handle(
         {"sender": "assistant@content-squad", "content": "Are you there?"}
     )
     assert reply == "hello from human"
@@ -28,7 +28,7 @@ async def test_human_empty_input_declines():
         return "   "
 
     human = HumanAgent(name="operator-human", read_line=fake_input)
-    assert await human.process_message({"sender": "a", "content": "hi"}) is None
+    assert await human.handle({"sender": "a", "content": "hi"}) is None
 
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_human_exit_declines():
         return "exit"
 
     human = HumanAgent(name="operator-human", read_line=fake_input)
-    assert await human.process_message({"sender": "a", "content": "hi"}) is None
+    assert await human.handle({"sender": "a", "content": "hi"}) is None
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,7 @@ async def test_human_joins_team_and_replies():
     from agentconnect.agent import BaseAgent
 
     class Peer(BaseAgent):
-        async def process_message(self, message: dict[str, Any], ctx) -> Any:
+        async def handle(self, message: dict[str, Any], ctx) -> Any:
             return None
 
     peer = Peer(name="asker")
@@ -59,8 +59,8 @@ async def test_human_joins_team_and_replies():
     await peer.join(team)
     try:
         result = await peer.ask("operator-human", "please confirm")
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == "noted"
+        assert result.state == "completed"
+        assert result.content == "noted"
     finally:
         await peer.leave()
         await human.leave()

@@ -6,6 +6,7 @@ import asyncio
 
 import pytest
 
+from agentconnect.agent import BaseAgent
 from agentconnect.team import Team
 from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
@@ -17,12 +18,15 @@ async def test_return_value_completes_ticket(team: Team):
     await writer.join(team)
     await researcher.join(team)
     try:
-        result = await researcher.ask(
+        ticket = await researcher.ask(
             "writer", {"task": "draft"}, deadline_seconds=5, collect="wait"
         )
-        assert result["status"] == "ticketed"
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == {"echo": {"task": "draft"}}
+        assert ticket.state == "completed"
+        assert ticket.content == {"echo": {"task": "draft"}}
+        assert ticket.trace_id
+        polled = await researcher.get_result(ticket.id)
+        assert polled.content == ticket.content
+        assert polled.trace_id is None
     finally:
         await writer.leave()
         await researcher.leave()
@@ -35,8 +39,9 @@ async def test_return_none_declines_request(team: Team):
     await writer.join(team)
     await researcher.join(team)
     try:
-        result = await researcher.ask("writer", "please", deadline_seconds=5)
-        assert result["ticket"]["state"] == "declined"
+        ticket = await researcher.ask("writer", "please", deadline_seconds=5)
+        assert ticket.state == "declined"
+        assert ticket.content is None
     finally:
         await writer.leave()
         await researcher.leave()
@@ -49,9 +54,10 @@ async def test_raise_fails_request(team: Team):
     await writer.join(team)
     await researcher.join(team)
     try:
-        result = await researcher.ask("writer", "please", deadline_seconds=5)
-        assert result["ticket"]["state"] == "failed"
-        assert result["ticket"]["error"]["code"] == "handler_failed"
+        ticket = await researcher.ask("writer", "please", deadline_seconds=5)
+        assert ticket.state == "failed"
+        assert ticket.error.code == "handler_failed"
+        assert ticket.content is None
     finally:
         await writer.leave()
         await researcher.leave()
@@ -70,16 +76,16 @@ async def test_ticket_handle_replies_later(team: Team):
             deadline_seconds=8,
             collect="ticket",
         )
-        assert pending["ticket"]["state"] == "open"
+        assert pending.state == "open"
         for _ in range(50):
-            if writer.handle is not None:
+            if writer.ticket_handle is not None:
                 break
             await asyncio.sleep(0.05)
-        assert writer.handle is not None
-        await writer.handle.reply("done later")
-        ticket = await researcher.get_result(pending["ticket"]["id"])
-        assert ticket["state"] == "completed"
-        assert ticket["response"]["content"] == "done later"
+        assert writer.ticket_handle is not None
+        await writer.ticket_handle.reply("done later")
+        ticket = await researcher.get_result(pending.id)
+        assert ticket.state == "completed"
+        assert ticket.content == "done later"
     finally:
         await writer.leave()
         await researcher.leave()
@@ -93,7 +99,7 @@ async def test_event_does_not_open_ticket(team: Team):
     await researcher.join(team)
     try:
         sent = await researcher.tell("writer", {"note": "fyi"})
-        assert sent["status"] == "accepted"
+        assert sent.status == "accepted"
         assert "ticket" not in sent
     finally:
         await writer.leave()
@@ -103,13 +109,13 @@ async def test_event_does_not_open_ticket(team: Team):
 @pytest.mark.asyncio
 async def test_ctx_ask_mid_handling(team: Team):
     class Relay(EchoAgent):
-        async def process_message(self, message, ctx):
+        async def handle(self, message, ctx):
             if message.content == "relay":
                 inner = await ctx.ask(
                     "writer", "from-relay", deadline_seconds=5, collect="wait"
                 )
-                return inner["ticket"]["response"]["content"]
-            return await super().process_message(message, ctx)
+                return inner.content
+            return await super().handle(message, ctx)
 
     writer = EchoAgent(name="writer")
     relay = Relay(name="relay")
@@ -118,10 +124,54 @@ async def test_ctx_ask_mid_handling(team: Team):
     await relay.join(team)
     await researcher.join(team)
     try:
-        result = await researcher.ask("relay", "relay", deadline_seconds=8)
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == {"echo": "from-relay"}
+        ticket = await researcher.ask("relay", "relay", deadline_seconds=8)
+        assert ticket.state == "completed"
+        assert ticket.content == {"echo": "from-relay"}
     finally:
         await writer.leave()
         await relay.leave()
         await researcher.leave()
+
+
+@pytest.mark.asyncio
+async def test_ctx_sender_is_the_requester_address(team: Team):
+    class Who(EchoAgent):
+        async def handle(self, message, ctx):
+            return {"sender": ctx.sender, "did": ctx.sender_did}
+
+    writer = Who(name="writer")
+    researcher = EchoAgent(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        ticket = await researcher.ask("writer", "who", deadline_seconds=5)
+        assert ticket.content["sender"] == researcher.address
+        assert ticket.content["did"] == researcher.agent_did
+    finally:
+        await writer.leave()
+        await researcher.leave()
+
+
+@pytest.mark.asyncio
+async def test_process_message_override_still_runs(team: Team):
+    class Legacy(BaseAgent):
+        async def process_message(self, message, ctx):
+            return {"legacy": message.content}
+
+    writer = Legacy(name="writer")
+    researcher = EchoAgent(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        ticket = await researcher.ask("writer", "hi", deadline_seconds=5)
+        assert ticket.content == {"legacy": "hi"}
+    finally:
+        await writer.leave()
+        await researcher.leave()
+
+
+def test_unknown_constructor_kwargs_fail():
+    with pytest.raises(TypeError):
+        EchoAgent(name="writer", enable_payments=True)
+    with pytest.raises(TypeError):
+        EchoAgent(name="writer", agent_id="writer")

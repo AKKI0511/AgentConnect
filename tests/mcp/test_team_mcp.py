@@ -30,7 +30,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message, ctx) -> Any:
+    async def handle(self, message, ctx) -> Any:
         if message.kind == "request" and getattr(message, "deadline", None):
             return {"echo": message.content}
         return None
@@ -147,7 +147,6 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
                         "recipient": recipient,
                         "content": "draft this",
                         "deadline_seconds": 30,
-                        "wait_seconds": 8,
                     },
                 )
             )
@@ -191,6 +190,37 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
 
 
 @pytest.mark.asyncio
+async def test_ask_collect_ticket_returns_open_without_waiting():
+    class Hold(BaseAgent):
+        async def handle(self, message, ctx) -> Any:
+            ctx.ticket()
+            return None
+
+    team = await Team("content-squad").start()
+    writer = Hold(name="writer")
+    await writer.join(team)
+    mcp = create_team_mcp(team)
+    try:
+        async with Client(mcp) as client:
+            ticket = _body(
+                await client.call_tool(
+                    "ask",
+                    {
+                        "recipient": "writer",
+                        "content": "later",
+                        "deadline_seconds": 30,
+                        "collect": "ticket",
+                    },
+                )
+            )
+        assert ticket["state"] == "open"
+        assert "content" not in ticket
+    finally:
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
 async def test_identical_asks_open_two_tickets_unless_keyed():
     team = await Team("content-squad").start()
     writer = Writer(name="writer")
@@ -200,7 +230,6 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
         "recipient": "writer",
         "content": "same",
         "deadline_seconds": 30,
-        "wait_seconds": 8,
     }
     try:
         async with Client(mcp) as client_a:

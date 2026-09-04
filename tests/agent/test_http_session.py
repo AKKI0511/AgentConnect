@@ -29,8 +29,8 @@ async def test_join_by_url_same_as_embedded():
         await writer.join(url)
         await researcher.join(url)
         result = await researcher.ask("writer", "via-http", deadline_seconds=8)
-        assert result["ticket"]["state"] == "completed"
-        assert result["ticket"]["response"]["content"] == {"echo": "via-http"}
+        assert result.state == "completed"
+        assert result.content == {"echo": "via-http"}
     finally:
         await writer.leave()
         await researcher.leave()
@@ -67,7 +67,7 @@ async def test_reconnects_after_team_restart():
         await writer.join(url)
         await researcher.join(url)
         first = await researcher.ask("writer", "before", deadline_seconds=8)
-        assert first["ticket"]["state"] == "completed"
+        assert first.state == "completed"
         await team.stop()
 
         team = await Team("content-squad", session_ttl_seconds=15).start()
@@ -86,8 +86,8 @@ async def test_reconnects_after_team_restart():
 
         await asyncio.gather(_until_live(writer), _until_live(researcher))
         second = await researcher.ask("writer", "after", deadline_seconds=8)
-        assert second["ticket"]["state"] == "completed"
-        assert second["ticket"]["response"]["content"] == {"echo": "after"}
+        assert second.state == "completed"
+        assert second.content == {"echo": "after"}
     finally:
         await writer.leave()
         await researcher.leave()

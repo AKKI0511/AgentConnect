@@ -29,7 +29,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def process_message(self, message, ctx) -> Any:
+    async def handle(self, message, ctx) -> Any:
         if message.kind == "request" and getattr(message, "deadline", None):
             return {"echo": message.content}
         return None
@@ -69,7 +69,6 @@ async def test_serve_exposes_mcp_url_and_operator_can_ask():
                         "recipient": recipient,
                         "content": "via-mcp",
                         "deadline_seconds": 30,
-                        "wait_seconds": 8,
                     },
                 )
             )

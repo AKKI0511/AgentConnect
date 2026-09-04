@@ -18,6 +18,10 @@ by describing the work. Semantic ranking is on with no extra setup.
 per-Thread ``seq``. ``collect="ticket"`` returns a handle; ``collect="wait"``
 returns the terminal Ticket.
 
+`history_ids.py` joins the writer with ``delivery_history="ids"``. Each
+Delivery carries earlier Message ids on ``ctx.history_ids`` and leaves
+``ctx.history`` empty. Page bodies with ``get_history`` when you need them.
+
 `http_session.py` serves the same Team over loopback HTTP. Agents join by URL.
 Loopback serving still accepts a join without a token; the Session sends an
 identity proof so the Runtime can stamp the Agent DID.

@@ -50,10 +50,11 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 
 `JoinResult.limits` reports the fixed operational limits a Client must respect:
 
-- `max_message_bytes`, the largest accepted `send` body, and the byte budget for a Delivery `history` window
-- `max_mailbox_depth`, the point past which `send` returns `busy`
-- `delivery_history_limit`, the Message-count cap for a Delivery `history` window
+- `max_message_bytes`, the largest accepted `send` body, and the byte budget for a Delivery `history` window of Message bodies
+- `max_mailbox_depth`, queued plus leased Mailbox items past which `send` returns `busy`
+- `delivery_history_limit`, the Message-count cap for a Delivery history window
 - `wait_hold_seconds`, how long `collect=wait` may keep `send` open
+- `max_held_waits`, how many `collect=wait` sends one Membership may hold at once
 
 ## Operations
 
@@ -85,10 +86,10 @@ Over HTTP and MCP, operator authority is the Session. The hosting process may ca
 
 `join` creates a Membership or reconnects one, then opens a Session for one Instance. A join that uses the reserved name `operator` fails with `name_conflict`.
 
-The Runtime applies these rules atomically:
+The Runtime applies these rules using insert-if-absent on the name and DID bindings:
 
 1. Validate the contract version, Agent name, Profile, and identity.
-2. If neither the name nor Agent DID belongs to a Membership, create a Membership and Mailbox.
+2. If neither the name nor Agent DID belongs to a Membership, create a Membership and Mailbox. Inserting a name or DID that another join already bound fails with `name_conflict`.
 3. If the name and Agent DID identify the same Membership, reuse it and replace its Profile with the submitted Profile.
 4. If the name and Agent DID do not identify the same Membership, fail with `name_conflict`. This includes a name bound to another DID and a DID bound to another name.
 5. Open a Session for the Instance:
@@ -101,6 +102,8 @@ The Runtime applies these rules atomically:
 A Runtime MUST support at least one Instance per Membership. It MAY cap concurrent Instances and reject one past the cap with `busy`. A Client that reconnects without a stable `instance_id` opens a fresh Instance; the Session it lost expires on its own.
 
 `JoinRequest.max_in_flight` declares how many Deliveries this Session can handle concurrently. It defaults to `1`. The Runtime MUST NOT lease more active Deliveries to the Session than this value.
+
+`JoinRequest.delivery_history` selects how each Delivery carries Thread history. Omit it, or send `bodies`, to receive earlier Message objects. Send `ids` to receive only earlier Message ids. The default is `bodies`.
 
 A network Runtime requires both credentials defined in [security.md](security.md). An embedded Runtime may omit them only when it exposes no non-loopback listener.
 
@@ -119,7 +122,8 @@ A network Runtime requires both credentials defined in [security.md](security.md
     "max_message_bytes": 1048576,
     "max_mailbox_depth": 1000,
     "delivery_history_limit": 50,
-    "wait_hold_seconds": 25
+    "wait_hold_seconds": 25,
+    "max_held_waits": 16
   },
   "spec_version": "1.0.0-draft"
 }
@@ -154,6 +158,7 @@ Before acceptance, the Runtime MUST:
 - require a future `deadline` on any request
 - validate any `parent_id` and Thread participation
 - reject a full recipient Mailbox with `busy`
+- reject a `collect=wait` `send` that would exceed `max_held_waits` for the sender's Membership with `wait_limit`
 - apply the Message idempotency rules below
 
 After acceptance, the Runtime MUST:
@@ -179,7 +184,11 @@ Every request MUST include `collect` and a future `deadline`. A missing or past 
 
 `wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. The Client collects the terminal result with `get_result`.
 
+`max_held_waits` bounds how many `collect=wait` sends one Membership may hold at once. A new `send` with `collect=wait` past that cap fails with `wait_limit` and creates nothing. `busy` is only a full Mailbox. A replay of an already accepted `wait` that cannot obtain a hold slot returns the current Ticket immediately.
+
 Transport disconnect after acceptance does not undo the send. The Client recovers the result by calling `get_result` with the request Message id.
+
+The Runtime wakes a waiting `send` when the Ticket becomes terminal. It MUST NOT poll the Ticket on a short interval while the hold remains.
 
 ### Message idempotency
 
@@ -194,15 +203,17 @@ Message ids are unique across the Team. The Runtime applies these rules:
 
 Address canonicalization does not make an otherwise identical replay different.
 
-For idempotency, semantic equality compares canonical Addresses and parsed deadline instants. JSON objects compare recursively by key and value without considering key order; array order remains significant; numbers compare by value. The presence or absence of an optional field remains significant. The collection strategy is part of the semantic request even though it is not stored on the Message.
+Semantic equality is SHA-256 of one canonical JSON encoding of the semantic request. Object keys are sorted. Array order is kept. Missing optional fields stay missing. Numbers that are whole values in IEEE-754 binary64 normalize to the same integer, so `1`, `1.0`, and `1e0` match. Canonical Addresses and parsed deadline instants are compared after canonicalization. The collection strategy is part of the semantic request even though it is not stored on the Message. The Runtime compares those hashes. It does not walk `content` on each replay.
 
 ## `lease`
 
 `lease` pulls available work from the calling Membership's Mailbox.
 
+The Mailbox is a lease-based pull port. Claim an item with a timeout, extend that timeout, acknowledge it on `complete` or `reply`, and return it to the ready set when a lease expires or a Session is lost. That is the same shape as a visibility timeout. A backend that can perform those four operations per item can implement a Mailbox. A partitioned log without per-message leases cannot.
+
 `max_items` defaults to `1` and MUST be between `1` and `100`. The Runtime may return fewer items because of Mailbox depth or the Session's `max_in_flight` limit. An empty Mailbox returns an empty `deliveries` array.
 
-Each returned Delivery has an exclusive `lease_id` and `lease_expires_at`, and a bounded Thread history window. The same Delivery MUST NOT be leased to another Session while that lease remains valid, including to another Instance of the same Membership.
+Each returned Delivery has an exclusive `lease_id` and `lease_expires_at`, and a bounded Thread history window. The same Delivery MUST NOT be leased to another Session while that lease remains valid, including to another Instance of the same Membership. Lease acquisition is a compare-and-set on the Mailbox item. Two concurrent `lease` calls MUST NOT both receive the same item.
 
 If a lease expires before `complete` or `reply` succeeds:
 
@@ -244,7 +255,7 @@ The Runtime accepts a new reply only when:
 - the lease belongs to the caller's Membership and is active
 - the request Ticket is still `open`
 
-The accepted reply completes the Delivery and moves the Ticket to `completed` or `failed`. The response or error Message is stored for the Ticket and retained Thread history; it MUST NOT be enqueued in the requester's Mailbox. A reply after a terminal Ticket MUST NOT replace its outcome and fails with `ticket_closed`.
+The accepted reply completes the Delivery and moves the Ticket to `completed` or `failed` with a compare-and-set on the Ticket document. The first writer to observe `open` and store a terminal state wins. A later writer MUST NOT replace that outcome and fails with `ticket_closed`. The response or error Message is stored for the Ticket and retained Thread history; it MUST NOT be enqueued in the requester's Mailbox.
 
 ## `get_result`
 
@@ -394,7 +405,18 @@ The result includes the secret `token`. It MUST NOT be written into Message cont
 
 A Runtime MUST have a finite Mailbox limit reported as `max_mailbox_depth`. It MUST apply the same documented limit to every Agent Membership unless Team configuration explicitly sets per-member limits. Principals have no Mailbox.
 
+Depth is the exact count of queued plus leased items the Runtime records for that Mailbox. `send` returns `busy` when acceptance would move that count past the limit. The Runtime records the count as part of enqueue. It does not take an approximate queue-depth metric from a backend.
+
 When acceptance would exceed the limit, `send` fails with `busy`. The Runtime MUST NOT create a Message, Delivery, or Ticket for the rejected request.
+
+Enqueue cost MUST NOT grow with current depth. The Mailbox stores one document per item behind a time-ordered index. A send against a full Mailbox and a send against an empty Mailbox do the same amount of work up to the depth check.
+
+| Situation | Required observation |
+| --- | --- |
+| two concurrent `send`s into an empty Mailbox | both accepted; depth 2 |
+| `send` that would pass `max_mailbox_depth` | `busy`; no Message, Delivery, or Ticket |
+| two concurrent `lease` calls on one ready item | one Delivery; the other call does not receive that item |
+| new `collect=wait` while the Membership holds `max_held_waits` | `wait_limit`; nothing created |
 
 ## Work notification
 
@@ -415,6 +437,7 @@ A Runtime MAY notify a Session that work is available so the Client can `lease` 
 | `name_conflict` | The requested Agent name and DID conflict with an existing Membership binding. |
 | `id_conflict` | A reused Message id carries different data. |
 | `busy` | Recipient Mailbox is full, or no more Instances may join. |
+| `wait_limit` | The Membership already holds `max_held_waits` `collect=wait` sends. |
 | `payload_too_large` | A `send` body exceeds `max_message_bytes`. |
 | `lease_expired` | Delivery lease is no longer active. |
 | `ticket_closed` | `reply` tried to change a terminal Ticket. |

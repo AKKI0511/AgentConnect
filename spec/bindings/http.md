@@ -91,7 +91,7 @@ Every non-success response has an `ErrorObject` body.
 | `not_found` | `404` |
 | `name_conflict`, `id_conflict`, `lease_expired`, `ticket_closed` | `409` |
 | `payload_too_large` | `413` |
-| `busy` | `429` |
+| `busy`, `wait_limit` | `429` |
 | `internal` | `500` |
 | `unsupported_collect_mode` | `501` |
 | `unavailable` | `503` |
@@ -166,6 +166,7 @@ Message ids provide idempotency for `POST /messages` and `POST /deliveries/reply
 
 - same id and same semantic body follows the original collection behavior without creating another Delivery
 - same id and changed semantic body, including a changed `collect`, returns `409` with `code=id_conflict`
+- semantic equality is the SHA-256 hash of canonical JSON defined in [runtime.md](../runtime.md)
 - the Runtime MUST NOT create a second Message or Delivery
 
 Other successful retries behave as follows:

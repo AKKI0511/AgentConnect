@@ -117,7 +117,11 @@ The Runtime reports `wait_hold_seconds` in `JoinResult`. `send` with `collect=wa
 - the Ticket becomes terminal
 - `wait_hold_seconds` elapses after this `send` call
 
+The Runtime wakes that `send` when the Ticket becomes terminal. It does not poll the Ticket while the hold remains.
+
 When the hold elapses and the Ticket is still `open`, `send` returns that Ticket. The Client then calls `get_result` with the request Message id. A Client that loses its connection during `wait` does the same.
+
+`JoinResult.limits.max_held_waits` caps how many `collect=wait` sends one Membership may hold at once. A new `send` with `collect=wait` past that cap fails with `wait_limit` and creates nothing. `busy` remains the Mailbox-full error.
 
 `ticket` returns immediately even if the recipient has already replied. The returned Ticket may therefore be `open` or terminal.
 
@@ -131,7 +135,7 @@ A Delivery is one attempt to handle a Message. It contains:
 - an exclusive `lease_id`
 - the lease expiry
 - the attempt number
-- a bounded recent window of the Message's Thread history
+- a bounded recent window of the Message's Thread history, as Message bodies by default, or as Message ids when the Session joined with `delivery_history=ids`
 - a flag stating whether that window is the complete history
 
 The first attempt is `1`. Every recovery after lease release or expiry increments it. The Message id never changes across attempts.
@@ -277,15 +281,19 @@ On acceptance the Runtime assigns `seq`, an integer that starts at `1` for the f
 
 A Delivery carries a bounded recent window of its Thread, not the whole transcript:
 
-- `history` contains Messages accepted before the delivered Message
+- `history` contains Messages accepted before the delivered Message, or is empty when the Session asked for ids
+- when the Session joined with `delivery_history=ids`, `history_ids` contains those earlier Message ids in the same order and `history` is `[]`
 - it is ordered by `seq` ascending
 - it excludes the currently delivered Message
 - it holds at most `delivery_history_limit` Messages, reported in `JoinResult`
-- its UTF-8 JSON encoding MUST NOT exceed `max_message_bytes`; the Runtime drops oldest Messages from the window until both caps hold
+- a window of Message bodies MUST NOT exceed `max_message_bytes` in UTF-8 JSON; the Runtime drops oldest Messages from the window until both caps hold
+- an ids window is capped by count only
 - `history_complete` is `true` when the window already contains every earlier retained Message
-- an empty complete history is `[]` with `history_complete=true`
+- an empty complete history is `[]` with `history_complete=true`, and `history_ids` omitted or `[]`
 
-Whichever cap is hit first truncates the window. `history_complete` is `false` when either cap dropped earlier Messages.
+Whichever cap is hit first truncates a bodies window. `history_complete` is `false` when either cap dropped earlier Messages. An ids window is truncated only by `delivery_history_limit`.
+
+`delivery_history` is declared at `join` and defaults to `bodies`. A Session that pages history itself can set `ids` and avoid copying Message bodies it will discard.
 
 This keeps every Delivery bounded no matter how long a Thread grows.
 
@@ -315,6 +323,10 @@ These vectors are normative summaries. An implementation test may express them i
 | lease expires | next attempt has the same Message id and a higher `attempt` |
 | reply copies request `trace_id` | response and request share one `trace_id` |
 | two replies race | one terminal result; loser receives `ticket_closed`; `late_reply_count` increases |
+| `1` / `1.0` / `1e0` in `content` on replay | same Message; not `id_conflict` |
+| `collect=wait` while the Membership already holds `max_held_waits` | `wait_limit`; no Message, Delivery, or Ticket |
+| Session joined with `delivery_history=ids` | Delivery `history` is `[]`; `history_ids` lists earlier Message ids |
+| `collect=wait` hold elapses while the Ticket is `open` | `send` returns `status=ticketed` with that Ticket; `get_result` still reads it |
 | deadline wins a race | Ticket is `expired`; later reply cannot replace it |
 | `get_result` twice with no intervening write | identical stored Ticket |
 | request declined via `complete` | Ticket `declined`; not a failure |
@@ -331,7 +343,6 @@ These vectors are normative summaries. An implementation test may express them i
 | `get_history` `before` a well-formed UUID not in the retained transcript | newest page; same shape as omitting `before` |
 | `get_history` `before` a non-UUID | `invalid_request` |
 | open Ticket whose deadline has not passed | `get_result` returns the Ticket after the terminal-retention interval would have elapsed |
-| `collect=wait` hold elapses while the Ticket is `open` | `send` returns `status=ticketed` with that Ticket; `get_result` still reads it |
 | two Instances handle consecutive turns of one Thread | each Delivery is leased to one Instance; the later Delivery's `history` contains the earlier turn |
 | another Membership submits a retained `lease_id` | `not_found`; no Delivery or Ticket state changes |
 | `collect=callback` or `collect=stream` | `unsupported_collect_mode`; nothing created |

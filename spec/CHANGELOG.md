@@ -21,6 +21,10 @@ Defines:
 - Thread history ordered by a per-Thread `seq` assigned on acceptance; `parent_id` names the reply or continuation target
 - a Thread participant set of one or more Memberships, fixed at creation and seeded from the first Message
 - `wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket
+- `max_held_waits` caps concurrent held `wait` sends per Membership; past the cap `send` fails with `wait_limit`
+- Message idempotency compares a SHA-256 hash of canonical JSON, with `1` / `1.0` / `1e0` equal
+- a Mailbox is a lease-based pull port of per-item documents; `max_mailbox_depth` is an exact count of queued plus leased items
+- `join` may request Delivery history as Message ids instead of bodies
 - pull delivery with exclusive leases, at-least-once handling, and a reported message-size limit
 - requester-owned Tickets with five states, including an explicit `declined` when a recipient chooses not to answer
 - Ticket and Thread retention that outlasts an open Ticket deadline

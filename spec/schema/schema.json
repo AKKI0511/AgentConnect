@@ -20,6 +20,9 @@
         "collect_mode": {
           "$ref": "#/definitions/CollectMode"
         },
+        "delivery_history_form": {
+          "$ref": "#/definitions/DeliveryHistoryForm"
+        },
         "ticket_state": {
           "$ref": "#/definitions/TicketState"
         },
@@ -201,6 +204,14 @@
       ],
       "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request carries `collect` and a `deadline` and opens a Ticket. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
     },
+    "DeliveryHistoryForm": {
+      "type": "string",
+      "enum": [
+        "bodies",
+        "ids"
+      ],
+      "description": "How a Session wants Thread history attached to each Delivery.\n\n- `bodies`: include earlier Message objects (the default).\n- `ids`: include only earlier Message ids. The Agent pages bodies with   `get_history`."
+    },
     "TicketState": {
       "type": "string",
       "enum": [
@@ -226,6 +237,7 @@
         "name_conflict",
         "id_conflict",
         "busy",
+        "wait_limit",
         "payload_too_large",
         "lease_expired",
         "ticket_closed",
@@ -744,11 +756,18 @@
           "items": {
             "$ref": "#/definitions/Message"
           },
-          "description": "Bounded recent window of earlier Messages from this Thread."
+          "description": "Bounded recent window of earlier Messages from this Thread. Empty when the Session joined with `delivery_history=ids`; then `history_ids` carries the window."
+        },
+        "history_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Uuid"
+          },
+          "description": "Earlier Message ids when this Session joined with `delivery_history=ids`. Omitted when the window is Message bodies."
         },
         "history_complete": {
           "type": "boolean",
-          "description": "True when `history` already contains every earlier retained Message."
+          "description": "True when the delivered window already contains every earlier retained Message."
         }
       },
       "required": [
@@ -760,7 +779,7 @@
         "history_complete"
       ],
       "additionalProperties": false,
-      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `seq` ascending and excluding `message`. The window is capped by `delivery_history_limit` and by `max_message_bytes`. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`. This keeps a Delivery's size bounded no matter how long a Thread grows."
+      "description": "One exclusive attempt to handle a Message.\n\n`history` is a bounded recent window of the Thread, ordered by `seq` ascending and excluding `message`. The window is capped by `delivery_history_limit` and, when it carries Message bodies, by `max_message_bytes`. A Session that joined with `delivery_history=ids` receives `history_ids` instead of bodies. When `history_complete` is false, older retained Messages exist and can be paged with `get_history`."
     },
     "Ticket": {
       "anyOf": [
@@ -1214,6 +1233,10 @@
           "type": "string",
           "description": "EdDSA JWT required by a network Runtime.",
           "minLength": 1
+        },
+        "delivery_history": {
+          "$ref": "#/definitions/DeliveryHistoryForm",
+          "description": "How Deliveries to this Session carry Thread history. Omit for `bodies`. `ids` is for an Agent that pages history itself and does not want Message copies on every Delivery."
         }
       },
       "required": [
@@ -1241,7 +1264,7 @@
         },
         "max_mailbox_depth": {
           "type": "number",
-          "description": "Maximum Messages one Membership Mailbox holds before `send` returns busy.",
+          "description": "Maximum queued plus leased items one Membership Mailbox holds before `send` returns `busy`. The Runtime enforces this as an exact count.",
           "minimum": 1,
           "multipleOf": 1
         },
@@ -1255,13 +1278,20 @@
           "type": "number",
           "description": "Seconds a `collect=wait` `send` may stay open. When this elapses and the Ticket is still `open`, `send` returns that Ticket and the Client continues with `get_result`. `0` returns immediately after acceptance.",
           "minimum": 0
+        },
+        "max_held_waits": {
+          "type": "number",
+          "description": "Maximum concurrent `collect=wait` sends one Membership may hold. A further `send` with `collect=wait` fails with `wait_limit`. `busy` remains the Mailbox-full error. `0` refuses every held wait.",
+          "minimum": 0,
+          "multipleOf": 1
         }
       },
       "required": [
         "max_message_bytes",
         "max_mailbox_depth",
         "delivery_history_limit",
-        "wait_hold_seconds"
+        "wait_hold_seconds",
+        "max_held_waits"
       ],
       "additionalProperties": false,
       "description": "Fixed operational limits a Runtime reports at join."

@@ -92,6 +92,15 @@ export type JsonObject = { [key: string]: JsonValue };
 export type PersistenceMode = "volatile" | "durable";
 
 /**
+ * How a Session wants Thread history attached to each Delivery.
+ *
+ * - `bodies`: include earlier Message objects (the default).
+ * - `ids`: include only earlier Message ids. The Agent pages bodies with
+ *   `get_history`.
+ */
+export type DeliveryHistoryForm = "bodies" | "ids";
+
+/**
  * How the sender collects the result of a request. It is a choice made on
  * the `send` call and is not stored on the immutable Message; the recipient
  * never observes it. Every request carries `collect` and a `deadline` and
@@ -132,6 +141,7 @@ export type ErrorCode =
   | "name_conflict"
   | "id_conflict"
   | "busy"
+  | "wait_limit"
   | "payload_too_large"
   | "lease_expired"
   | "ticket_closed"
@@ -361,10 +371,10 @@ export type Message =
  *
  * `history` is a bounded recent window of the Thread, ordered by `seq`
  * ascending and excluding `message`. The window is capped by
- * `delivery_history_limit` and by `max_message_bytes`. When
- * `history_complete` is false, older retained Messages exist and can be paged
- * with `get_history`. This keeps a Delivery's size bounded no matter how long
- * a Thread grows.
+ * `delivery_history_limit` and, when it carries Message bodies, by
+ * `max_message_bytes`. A Session that joined with `delivery_history=ids`
+ * receives `history_ids` instead of bodies. When `history_complete` is
+ * false, older retained Messages exist and can be paged with `get_history`.
  */
 export interface Delivery {
   /** Opaque id authorizing completion of this attempt. */
@@ -379,9 +389,18 @@ export interface Delivery {
   attempt: number;
   /** Request or event leased from the Membership's Mailbox. */
   message: MailboxMessage;
-  /** Bounded recent window of earlier Messages from this Thread. */
+  /**
+   * Bounded recent window of earlier Messages from this Thread.
+   * Empty when the Session joined with `delivery_history=ids`; then
+   * `history_ids` carries the window.
+   */
   history: Message[];
-  /** True when `history` already contains every earlier retained Message. */
+  /**
+   * Earlier Message ids when this Session joined with `delivery_history=ids`.
+   * Omitted when the window is Message bodies.
+   */
+  history_ids?: Uuid[];
+  /** True when the delivered window already contains every earlier retained Message. */
   history_complete: boolean;
 }
 
@@ -544,6 +563,12 @@ export interface JoinRequest {
    * @minLength 1
    */
   identity_proof?: string;
+  /**
+   * How Deliveries to this Session carry Thread history. Omit for `bodies`.
+   * `ids` is for an Agent that pages history itself and does not want Message
+   * copies on every Delivery.
+   */
+  delivery_history?: DeliveryHistoryForm;
 }
 
 /** Fixed operational limits a Runtime reports at join. */
@@ -558,7 +583,8 @@ export interface RuntimeLimits {
    */
   max_message_bytes: number;
   /**
-   * Maximum Messages one Membership Mailbox holds before `send` returns busy.
+   * Maximum queued plus leased items one Membership Mailbox holds before
+   * `send` returns `busy`. The Runtime enforces this as an exact count.
    * @minimum 1
    * @multipleOf 1
    */
@@ -579,6 +605,14 @@ export interface RuntimeLimits {
    * @minimum 0
    */
   wait_hold_seconds: number;
+  /**
+   * Maximum concurrent `collect=wait` sends one Membership may hold. A further
+   * `send` with `collect=wait` fails with `wait_limit`. `busy` remains the
+   * Mailbox-full error. `0` refuses every held wait.
+   * @minimum 0
+   * @multipleOf 1
+   */
+  max_held_waits: number;
 }
 
 /** Result of a successful join. */
@@ -1053,6 +1087,7 @@ export interface AgentConnectPublicSchema {
   address?: Address;
   qualified_address?: QualifiedAddress;
   collect_mode?: CollectMode;
+  delivery_history_form?: DeliveryHistoryForm;
   ticket_state?: TicketState;
   error_code?: ErrorCode;
   skill_example?: SkillExample;

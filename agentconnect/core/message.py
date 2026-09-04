@@ -108,7 +108,12 @@ class Delivery(SchemaModel):
     """One exclusive attempt to handle a Message.
 
     ``history`` is the bounded recent Thread window, ordered by ``seq``
-    and excluding ``message``.
+    and excluding ``message``. After ``join(..., delivery_history="ids")``
+    ``history`` is empty and ``history_ids`` lists those earlier ids.
+
+        delivery.history
+        delivery.history_ids   # present only for ids mode
+        delivery.history_complete
     """
 
     lease_id: Uuid
@@ -116,6 +121,7 @@ class Delivery(SchemaModel):
     attempt: int = Field(ge=1)
     message: Union[RequestMessage, EventMessage]
     history: list[Message]
+    history_ids: Optional[list[Uuid]] = None
     history_complete: bool
 
 

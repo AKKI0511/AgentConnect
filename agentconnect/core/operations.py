@@ -27,6 +27,7 @@ from agentconnect.core.primitives import (
     AgentDid,
     AgentName,
     CollectMode,
+    DeliveryHistoryForm,
     PersistenceMode,
     QualifiedAddress,
     SessionToken,
@@ -107,7 +108,11 @@ class JoinChallenge(SchemaModel):
 
 
 class JoinRequest(SchemaModel):
-    """Input that creates or reconnects a Membership and opens one Instance."""
+    """Input that creates or reconnects a Membership and opens one Instance.
+
+    ``delivery_history="ids"`` puts earlier Message ids on each Delivery
+    instead of Message bodies. Omit it to receive bodies.
+    """
 
     spec_version: SpecVersion = SPEC_VERSION
     name: AgentName
@@ -117,15 +122,22 @@ class JoinRequest(SchemaModel):
     max_in_flight: Optional[int] = Field(default=None, ge=1, le=100)
     join_token: Optional[str] = Field(default=None, min_length=1)
     identity_proof: Optional[str] = Field(default=None, min_length=1)
+    delivery_history: Optional[DeliveryHistoryForm] = None
 
 
 class RuntimeLimits(SchemaModel):
-    """Fixed operational limits a Runtime reports at join."""
+    """Fixed operational limits a Runtime reports at join.
+
+    ``max_held_waits`` caps concurrent ``collect=wait`` sends per
+    Membership. ``max_mailbox_depth`` caps queued plus leased Mailbox
+    items. Both are exact counts this Runtime enforces.
+    """
 
     max_message_bytes: int = Field(ge=1)
     max_mailbox_depth: int = Field(ge=1)
     delivery_history_limit: int = Field(ge=0)
     wait_hold_seconds: float = Field(ge=0)
+    max_held_waits: int = Field(ge=0)
 
 
 class JoinResult(SchemaModel):

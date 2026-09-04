@@ -11,6 +11,7 @@ from typing import Any
 from agentconnect.core.kinds import MessageKind
 from agentconnect.core.primitives import (
     CollectMode,
+    DeliveryHistoryForm,
     ErrorCode,
     PersistenceMode,
     TicketState,
@@ -27,6 +28,7 @@ __all__ = [
     "Skill",
     "MessageKind",
     "CollectMode",
+    "DeliveryHistoryForm",
     "ErrorCode",
     "PersistenceMode",
     "TicketState",

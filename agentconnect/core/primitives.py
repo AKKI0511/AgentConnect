@@ -85,6 +85,7 @@ ErrorCode = Literal[
     "name_conflict",
     "id_conflict",
     "busy",
+    "wait_limit",
     "payload_too_large",
     "lease_expired",
     "ticket_closed",
@@ -93,6 +94,7 @@ ErrorCode = Literal[
     "handler_failed",
     "deadline_exceeded",
 ]
+DeliveryHistoryForm = Literal["bodies", "ids"]
 TraceEventType = Literal[
     "accepted",
     "ticket_opened",

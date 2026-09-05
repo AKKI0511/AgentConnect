@@ -36,8 +36,8 @@ methods are the Session transport. HTTP, MCP, and the in-process Session
 call them by name. Agent code uses ``BaseAgent``.
 
 Pass ``store="memory"`` (the default) for a process-local Team. Pass a
-Redis URL when Memberships, mailboxes, open Tickets, and Thread history
-must survive a Runtime restart.
+Redis URL when Memberships, Sessions, mailboxes, open Tickets, and
+Thread history must survive a Runtime restart.
 
 Open Tickets are retained until at least their deadline. Terminal Tickets
 are kept for 24 hours after they close, or until that deadline if it is
@@ -46,6 +46,11 @@ needs an older Message. A ``collect=wait`` send holds until the Ticket
 is terminal or ``wait_hold_seconds`` elapses, then returns the current
 Ticket. One Membership may hold at most ``max_held_waits`` of those
 sends at once.
+
+Expiry is indexed by time. The background sweep pops Sessions, leases,
+Tickets, and join credentials that are due. It does not walk every
+stored id. ``status`` reads presence from stored Sessions, so a durable
+Runtime still reports a live Membership as online after a restart.
 """
 
 from __future__ import annotations
@@ -132,6 +137,8 @@ from agentconnect.team.constants import (
     SWEEP_INTERVAL_SECONDS,
 )
 from agentconnect.team.errors import TeamError
+import agentconnect.team.expiry as expiry_mod
+from agentconnect.team.locks import KeyedLock
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.memory import MemoryStore
 from agentconnect.team.store.redis import RedisStore
@@ -167,7 +174,8 @@ class Team:
     The Team owns Memberships, Sessions, Mailboxes, Deliveries, Tickets,
     Thread history, and the Directory. ``find`` ranks other members from a
     natural-language query. :meth:`serve` also mounts the Team MCP server
-    at ``{origin}/mcp``.
+    at ``{origin}/mcp``. ``status`` reports ``online`` from stored
+    Sessions. Expiry is processed from a time-ordered index.
     """
 
     def __init__(
@@ -253,7 +261,7 @@ class Team:
         self._mcp_session_cm: Any = None
         self._directory: Optional[Directory] = None
         self._identity: Optional[AgentIdentity] = None
-        self._lock = asyncio.Lock()
+        self._keys = KeyedLock()
         self._waiters: dict[str, list[asyncio.Event]] = {}
         self._session_wake: dict[str, list[asyncio.Event]] = {}
         self._work_waiters: dict[str, list[asyncio.Event]] = {}
@@ -308,6 +316,7 @@ class Team:
         self._directory = Directory(self._store, self._embedder)
         await self._ensure_identity()
         await self._reserve_operator()
+        await self._restore_session_index()
         loop = asyncio.get_running_loop()
         self._sweep_task = loop.create_task(self._sweep_loop())
         return self
@@ -381,13 +390,12 @@ class Team:
         """
         event = asyncio.Event()
         name = ""
-        async with self._lock:
-            session = await self._require_session(session_token)
-            name = session["membership_name"]
-            self._work_waiters.setdefault(name, []).append(event)
-            store = self._ensure_started()
-            if await mailbox_mod.has_ready(store, session["address"], utc_now()):
-                event.set()
+        session = await self._require_session(session_token)
+        name = session["membership_name"]
+        self._work_waiters.setdefault(name, []).append(event)
+        store = self._ensure_started()
+        if await mailbox_mod.has_ready(store, session["address"], utc_now()):
+            event.set()
         try:
             await asyncio.wait_for(event.wait(), timeout)
             return True
@@ -405,11 +413,13 @@ class Team:
 
     async def subscribe_events(self, session_token: str) -> asyncio.Queue:
         """Attach an SSE queue to this Session. The caller must unsubscribe."""
-        async with self._lock:
-            await self._require_session(session_token)
-            queue: asyncio.Queue = asyncio.Queue(maxsize=32)
-            self._sse_subscribers.setdefault(session_token, []).append(queue)
-            return queue
+        session = await self._require_session(session_token)
+        self._session_tokens_by_member.setdefault(
+            session["membership_name"], set()
+        ).add(session_token)
+        queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+        self._sse_subscribers.setdefault(session_token, []).append(queue)
+        return queue
 
     async def unsubscribe_events(
         self, session_token: str, queue: asyncio.Queue
@@ -432,19 +442,17 @@ class Team:
         ``identity_proof`` on :meth:`join`.
         """
         store = self._ensure_started()
-        async with self._lock:
-            record = await auth_mod.create_join_challenge(
-                store,
-                self.name,
-                ttl_seconds=self.join_challenge_ttl_seconds,
-            )
-            return JoinChallenge.model_validate(record)
+        record = await auth_mod.create_join_challenge(
+            store,
+            self.name,
+            ttl_seconds=self.join_challenge_ttl_seconds,
+        )
+        return JoinChallenge.model_validate(record)
 
     async def caller_address(self, session_token: str) -> str:
         """Return the qualified Address stamped on this Session."""
-        async with self._lock:
-            session = await self._require_session(session_token)
-            return str(session["address"])
+        session = await self._require_session(session_token)
+        return str(session["address"])
 
     async def roster(self) -> TeamRoster:
         """Return every Agent Membership as a DirectoryEntry list.
@@ -487,7 +495,7 @@ class Team:
                 if exc.code != "unauthorized":
                     raise
                 self._operator_token = None
-        async with self._lock:
+        async with self._keys.acquire("operator"):
             if self._operator_token:
                 try:
                     session = await self._get_session(self._operator_token)
@@ -495,7 +503,7 @@ class Team:
                         return self._operator_token
                 except TeamError:
                     self._operator_token = None
-            return await self._open_operator_session_locked()
+            return await self._open_operator_session()
 
     async def serve(self, host: str = "127.0.0.1", port: int = 0) -> str:
         """Serve Runtime HTTP and the Team MCP server on a loopback address.
@@ -505,15 +513,19 @@ class Team:
         Non-loopback hosts are rejected.
         """
         self._ensure_started()
-        if self._http_task is not None and not self._http_task.done():
-            if self._http_url is None:
-                raise TeamError("internal", "HTTP serving is starting")
-            return self._http_url
-        if not _is_loopback(host):
-            _fail(
-                "invalid_request",
-                "Team.serve binds loopback only",
-            )
+        async with self._keys.acquire("serve"):
+            if self._http_task is not None and not self._http_task.done():
+                if self._http_url is None:
+                    raise TeamError("internal", "HTTP serving is starting")
+                return self._http_url
+            if not _is_loopback(host):
+                _fail(
+                    "invalid_request",
+                    "Team.serve binds loopback only",
+                )
+            return await self._serve_http(host, port)
+
+    async def _serve_http(self, host: str, port: int) -> str:
         await self.ensure_operator_session()
         from agentconnect.team.http import create_runtime_app
         import uvicorn
@@ -619,7 +631,80 @@ class Team:
         if not waiters:
             self._waiters.pop(ticket_id, None)
 
-    # --- sessions and memberships ---
+    @staticmethod
+    def _member_sessions_key(name: str) -> str:
+        return f"sessions:{name}"
+
+    async def _restore_session_index(self) -> None:
+        """Rebuild the process Session map and Session expiry index from the store."""
+        store = self._ensure_started()
+        now = utc_now()
+        restored: dict[str, set[str]] = {}
+        for name in await store.set_members("members"):
+            live: set[str] = set()
+            for token in await store.set_members(self._member_sessions_key(name)):
+                session = await self._get_session(token)
+                if session is None:
+                    await store.set_remove(self._member_sessions_key(name), token)
+                    continue
+                if parse_timestamp(session["expires_at"]) > now:
+                    live.add(token)
+                    await expiry_mod.schedule(
+                        store, expiry_mod.SESSIONS, token, session["expires_at"]
+                    )
+            if live:
+                restored[name] = live
+        self._session_tokens_by_member = restored
+
+    async def _member_is_online(self, name: str, now) -> bool:
+        """Return True when stored Sessions for ``name`` include an unexpired one."""
+        store = self._ensure_started()
+        for token in await store.set_members(self._member_sessions_key(name)):
+            session = await self._get_session(token)
+            if session is None:
+                continue
+            if parse_timestamp(session["expires_at"]) > now:
+                return True
+        return False
+
+    async def _append_thread_message(
+        self,
+        *,
+        thread_id: str,
+        message: dict[str, Any],
+        sender: str,
+        recipient: str,
+    ) -> dict[str, Any]:
+        store = self._ensure_started()
+        keep_ids = await tickets_mod.retained_message_ids(store)
+        return await threads_mod.append_message(
+            store,
+            thread_id=thread_id,
+            message=message,
+            sender=sender,
+            recipient=recipient,
+            max_messages=self.thread_message_limit,
+            keep_ids=keep_ids,
+        )
+
+    async def _trim_thread(self, thread_id: str) -> None:
+        store = self._ensure_started()
+        thread = await threads_mod.load_thread(store, thread_id)
+        if thread is None:
+            return
+        keep_ids = await tickets_mod.retained_message_ids(store)
+        trimmed = threads_mod.trim_thread_ids(
+            list(thread.get("message_ids") or []),
+            keep_ids=keep_ids,
+            max_messages=self.thread_message_limit,
+        )
+        if trimmed != list(thread.get("message_ids") or []):
+            thread["message_ids"] = trimmed
+            await threads_mod.save_thread(store, thread)
+
+    async def _session_tokens_for(self, membership_name: str) -> list[str]:
+        store = self._ensure_started()
+        return await store.set_members(self._member_sessions_key(membership_name))
 
     async def _get_member(self, name: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
@@ -647,53 +732,55 @@ class Team:
 
     async def _save_session(self, session: dict[str, Any]) -> None:
         store = self._ensure_started()
-        await store.put(f"session:{session['token']}", session)
-        await store.set_add("sessions", session["token"])
+        token = session["token"]
+        name = session["membership_name"]
+        await store.put(f"session:{token}", session)
         await store.put(
-            f"instance:{session['membership_name']}:{session['instance_id']}",
-            session["token"],
+            f"instance:{name}:{session['instance_id']}",
+            token,
         )
-        self._session_tokens_by_member.setdefault(
-            session["membership_name"], set()
-        ).add(session["token"])
+        await store.set_add(self._member_sessions_key(name), token)
+        await expiry_mod.schedule(
+            store, expiry_mod.SESSIONS, token, session["expires_at"]
+        )
+        self._session_tokens_by_member.setdefault(name, set()).add(token)
         join_token = session.get("join_token")
         if isinstance(join_token, str) and join_token:
-            await auth_mod.bind_session_to_token(store, join_token, session["token"])
+            await auth_mod.bind_session_to_token(store, join_token, token)
 
     async def _delete_session(self, session: dict[str, Any]) -> None:
         store = self._ensure_started()
-        await store.delete(f"session:{session['token']}")
-        await store.set_remove("sessions", session["token"])
-        await store.delete(
-            f"instance:{session['membership_name']}:{session['instance_id']}"
-        )
-        tokens = self._session_tokens_by_member.get(session["membership_name"])
+        token = session["token"]
+        name = session["membership_name"]
+        await store.delete(f"session:{token}")
+        await store.delete(f"instance:{name}:{session['instance_id']}")
+        await store.set_remove(self._member_sessions_key(name), token)
+        await expiry_mod.cancel(store, expiry_mod.SESSIONS, token)
+        tokens = self._session_tokens_by_member.get(name)
         if tokens is not None:
-            tokens.discard(session["token"])
+            tokens.discard(token)
             if not tokens:
-                self._session_tokens_by_member.pop(session["membership_name"], None)
+                self._session_tokens_by_member.pop(name, None)
         join_token = session.get("join_token")
         if isinstance(join_token, str) and join_token:
-            await auth_mod.unbind_session_from_token(
-                store, join_token, session["token"]
-            )
-        self._wake_session(session["token"])
-        for queue in self._sse_subscribers.pop(session["token"], []):
+            await auth_mod.unbind_session_from_token(store, join_token, token)
+        self._wake_session(token)
+        for queue in self._sse_subscribers.pop(token, []):
             try:
                 queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
         remaining: list[tuple[str, asyncio.Queue]] = []
-        for token, queue in self._trace_subscribers:
-            if token == session["token"]:
+        for queued_token, queue in self._trace_subscribers:
+            if queued_token == token:
                 try:
                     queue.put_nowait(None)
                 except asyncio.QueueFull:
                     pass
             else:
-                remaining.append((token, queue))
+                remaining.append((queued_token, queue))
         self._trace_subscribers = remaining
-        if self._operator_token == session["token"]:
+        if self._operator_token == token:
             self._operator_token = None
 
     def _wake_session(self, session_token: str) -> None:
@@ -735,11 +822,18 @@ class Team:
 
     async def _session_count(self, membership_name: str) -> int:
         store = self._ensure_started()
-        tokens = await store.set_members("sessions")
+        now = utc_now()
         count = 0
-        for token in tokens:
+        for token in await store.set_members(
+            self._member_sessions_key(membership_name)
+        ):
             session = await self._get_session(token)
-            if session and session["membership_name"] == membership_name:
+            if session is None:
+                await store.set_remove(
+                    self._member_sessions_key(membership_name), token
+                )
+                continue
+            if parse_timestamp(session["expires_at"]) > now:
                 count += 1
         return count
 
@@ -821,7 +915,10 @@ class Team:
             join_token = parsed.join_token
             identity_proof = parsed.identity_proof
             delivery_history = parsed.delivery_history
-        async with self._lock:
+        canonical_name = parse_agent_name(name or "")
+        if canonical_name is None:
+            _fail("invalid_request", "Agent name is invalid")
+        async with self._keys.acquire(f"member:{canonical_name}"):
             return await self._join_locked(
                 name=name,
                 agent_did=agent_did,
@@ -949,10 +1046,11 @@ class Team:
 
         existing_token = await store.get(f"instance:{member['name']}:{instance_id}")
         if isinstance(existing_token, str):
-            old = await self._get_session(existing_token)
-            if old is not None:
-                await self._release_session_leases(old, now_ts)
-                await self._delete_session(old)
+            async with self._keys.acquire(f"session:{existing_token}"):
+                old = await self._get_session(existing_token)
+                if old is not None:
+                    await self._release_session_leases(old, now_ts)
+                    await self._delete_session(old)
         elif await self._session_count(member["name"]) >= self.max_instances:
             _fail("busy", "No more Instances may join this Membership")
 
@@ -977,7 +1075,7 @@ class Team:
 
     async def disconnect(self, session_token: str) -> None:
         """Close this Session. The Membership and its Mailbox remain."""
-        async with self._lock:
+        async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             _, now_ts = self._now_pair()
             await self._release_session_leases(session, now_ts)
@@ -985,7 +1083,7 @@ class Team:
 
     async def heartbeat(self, session_token: str) -> dict[str, Any]:
         """Prove the Client still holds its Session and extend expiry."""
-        async with self._lock:
+        async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             now = utc_now()
             session["expires_at"] = format_timestamp(
@@ -1027,16 +1125,15 @@ class Team:
         ttl = self.join_token_ttl_seconds if ttl_seconds is None else float(ttl_seconds)
         if ttl <= 0:
             _fail("invalid_request", "ttl_seconds must be positive")
-        async with self._lock:
-            issued = await auth_mod.issue_join_token(
-                store,
-                self.name,
-                agent_did=agent_did,
-                name=canonical_name,
-                ttl_seconds=ttl,
-                single_use=bool(single_use),
-            )
-            return JoinTokenIssued.model_validate(issued)
+        issued = await auth_mod.issue_join_token(
+            store,
+            self.name,
+            agent_did=agent_did,
+            name=canonical_name,
+            ttl_seconds=ttl,
+            single_use=bool(single_use),
+        )
+        return JoinTokenIssued.model_validate(issued)
 
     async def revoke_join_token(self, token: str) -> None:
         """Revoke ``token`` and drop every Session created from it.
@@ -1045,12 +1142,12 @@ class Team:
         sends return ``unauthorized``. Event streams close.
         """
         store = self._ensure_started()
-        async with self._lock:
-            record = await auth_mod.revoke_join_token_record(store, token)
-            if record is None:
-                return
-            _, now_ts = self._now_pair()
-            for session_token in await auth_mod.sessions_for_join_token(store, token):
+        record = await auth_mod.revoke_join_token_record(store, token)
+        if record is None:
+            return
+        _, now_ts = self._now_pair()
+        for session_token in await auth_mod.sessions_for_join_token(store, token):
+            async with self._keys.acquire(f"session:{session_token}"):
                 session = await self._get_session(session_token)
                 if session is None:
                     continue
@@ -1070,19 +1167,18 @@ class Team:
         if canonical == OPERATOR_NAME:
             _fail("forbidden", "The operator Membership cannot be removed")
         store = self._ensure_started()
-        async with self._lock:
+        async with self._keys.acquire(f"member:{canonical}"):
             member = await self._get_member(canonical)
             if member is None:
                 _fail("not_found", "Membership was not found")
             _, now_ts = self._now_pair()
-            for session_token in list(
-                self._session_tokens_by_member.get(canonical) or ()
-            ):
-                session = await self._get_session(session_token)
-                if session is None:
-                    continue
-                await self._release_session_leases(session, now_ts)
-                await self._delete_session(session)
+            for session_token in await self._session_tokens_for(canonical):
+                async with self._keys.acquire(f"session:{session_token}"):
+                    session = await self._get_session(session_token)
+                    if session is None:
+                        continue
+                    await self._release_session_leases(session, now_ts)
+                    await self._delete_session(session)
             for token in await auth_mod.tokens_bound_to_member(
                 store, name=canonical, agent_did=member.get("agent_did")
             ):
@@ -1090,11 +1186,12 @@ class Team:
                 for session_token in await auth_mod.sessions_for_join_token(
                     store, token
                 ):
-                    session = await self._get_session(session_token)
-                    if session is None:
-                        continue
-                    await self._release_session_leases(session, now_ts)
-                    await self._delete_session(session)
+                    async with self._keys.acquire(f"session:{session_token}"):
+                        session = await self._get_session(session_token)
+                        if session is None:
+                            continue
+                        await self._release_session_leases(session, now_ts)
+                        await self._delete_session(session)
             await store.delete(f"member:{canonical}")
             await store.set_remove("members", canonical)
             agent_did = member.get("agent_did")
@@ -1150,8 +1247,8 @@ class Team:
             }
         )
 
-    async def _open_operator_session_locked(self) -> str:
-        """Create or replace the loopback operator Session. Caller holds the lock."""
+    async def _open_operator_session(self) -> str:
+        """Create or replace the loopback operator Session."""
         store = self._ensure_started()
         member = await self._get_member(OPERATOR_NAME)
         if member is None or not _is_principal(member):
@@ -1166,10 +1263,11 @@ class Team:
         now, now_ts = self._now_pair()
         existing_token = await store.get(f"instance:{OPERATOR_NAME}:{instance_id}")
         if isinstance(existing_token, str):
-            old = await self._get_session(existing_token)
-            if old is not None:
-                await self._release_session_leases(old, now_ts)
-                await self._delete_session(old)
+            async with self._keys.acquire(f"session:{existing_token}"):
+                old = await self._get_session(existing_token)
+                if old is not None:
+                    await self._release_session_leases(old, now_ts)
+                    await self._delete_session(old)
         expires = now + timedelta(seconds=self.session_ttl_seconds)
         session = {
             "token": secrets.token_urlsafe(32),
@@ -1236,12 +1334,12 @@ class Team:
         deadline_dt = None
         hold = {"acquired": False, "name": ""}
         try:
-            async with self._lock:
+            async with self._keys.acquire(f"session:{session_token}"):
                 result, wait_for = await self._send_locked(session_token, request, hold)
-                if wait_for is not None:
-                    ticket_id, deadline_dt = wait_for
-                    waiter = self._register_waiter(ticket_id)
-                    self._register_session_wake(session_token, waiter)
+            if wait_for is not None:
+                ticket_id, deadline_dt = wait_for
+                waiter = self._register_waiter(ticket_id)
+                self._register_session_wake(session_token, waiter)
             if waiter is not None and ticket_id is not None and deadline_dt is not None:
                 try:
                     ticket = await self._wait_until_terminal(
@@ -1495,8 +1593,7 @@ class Team:
             message["metadata"] = metadata
 
         if thread_id is not None:
-            await threads_mod.append_message(
-                store,
+            await self._append_thread_message(
                 thread_id=thread_id,
                 message=message,
                 sender=sender,
@@ -1594,40 +1691,37 @@ class Team:
     ) -> dict[str, Any]:
         hold_until = utc_now() + timedelta(seconds=self.wait_hold_seconds)
         while True:
-            async with self._lock:
-                session = await self._get_session(session_token)
-                if session is None:
-                    _fail("unauthorized", "Session is missing or invalid")
-                if parse_timestamp(session["expires_at"]) <= utc_now():
-                    _fail("unauthorized", "Session is missing or invalid")
-                ticket = await self._expire_ticket_if_due(ticket_id)
-                if ticket is not None and tickets_mod.is_terminal(ticket):
-                    return ticket
+            session = await self._get_session(session_token)
+            if session is None:
+                _fail("unauthorized", "Session is missing or invalid")
+            if parse_timestamp(session["expires_at"]) <= utc_now():
+                _fail("unauthorized", "Session is missing or invalid")
+            ticket = await self._expire_ticket_if_due(ticket_id)
+            if ticket is not None and tickets_mod.is_terminal(ticket):
+                return ticket
             now = utc_now()
             remaining_deadline = (deadline_dt - now).total_seconds()
             remaining_hold = (hold_until - now).total_seconds()
             remaining = min(remaining_deadline, remaining_hold)
             if remaining <= 0:
-                async with self._lock:
-                    ticket = await self._expire_ticket_if_due(ticket_id)
-                    if ticket is None:
-                        _fail("not_found", "Ticket was not found")
-                    return ticket
+                ticket = await self._expire_ticket_if_due(ticket_id)
+                if ticket is None:
+                    _fail("not_found", "Ticket was not found")
+                return ticket
             try:
                 await asyncio.wait_for(event.wait(), timeout=remaining)
                 event.clear()
             except asyncio.TimeoutError:
-                async with self._lock:
-                    ticket = await self._expire_ticket_if_due(ticket_id)
-                    if ticket is None:
-                        _fail("not_found", "Ticket was not found")
-                    return ticket
+                ticket = await self._expire_ticket_if_due(ticket_id)
+                if ticket is None:
+                    _fail("not_found", "Ticket was not found")
+                return ticket
 
     # --- lease / complete / reply ---
 
     async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
         """Pull available work from the calling Membership's Mailbox."""
-        async with self._lock:
+        async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             try:
                 n = int(max_items)
@@ -1781,7 +1875,7 @@ class Team:
         An event just ends. A request is declined: the Ticket becomes
         ``declined``, which is not a failure.
         """
-        async with self._lock:
+        async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             try:
                 lease_id = require_uuid(lease_id, field="lease_id")
@@ -1811,7 +1905,10 @@ class Team:
                 record = await tickets_mod.load_ticket_record(store, ticket["id"])
                 declined = tickets_mod.mark_declined(dict(ticket), now_ts)
                 if record is not None and await tickets_mod.cas_ticket(
-                    store, declined, record.version
+                    store,
+                    declined,
+                    record.version,
+                    retention_seconds=self.terminal_ticket_retention_seconds,
                 ):
                     ticket = declined
                     result["ticket"] = ticket
@@ -1852,7 +1949,7 @@ class Team:
         except ValueError as exc:
             _fail("invalid_request", str(exc))
         request = dump_public(parsed_reply)
-        async with self._lock:
+        async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             if not isinstance(request, Mapping):
                 _fail("invalid_request", "reply body must be an object")
@@ -1951,8 +2048,7 @@ class Team:
                 }
             if message.get("thread_id"):
                 reply_message["thread_id"] = message["thread_id"]
-                await threads_mod.append_message(
-                    store,
+                await self._append_thread_message(
                     thread_id=message["thread_id"],
                     message=reply_message,
                     sender=reply_message["sender"],
@@ -1972,7 +2068,12 @@ class Team:
             inserted_reply = await store.insert(f"msg:{reply_id}", reply_message)
             if not inserted_reply:
                 _fail("id_conflict", "Message id is already used")
-            if not await tickets_mod.cas_ticket(store, next_ticket, record.version):
+            if not await tickets_mod.cas_ticket(
+                store,
+                next_ticket,
+                record.version,
+                retention_seconds=self.terminal_ticket_retention_seconds,
+            ):
                 current = await tickets_mod.load_ticket(store, ticket["id"])
                 if current is not None and tickets_mod.is_terminal(current):
                     late = tickets_mod.observe_late_reply(dict(current), now_ts)
@@ -2027,16 +2128,15 @@ class Team:
 
     async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
         """Return the Ticket owned by the calling Membership."""
-        async with self._lock:
-            session = await self._require_session(session_token)
-            try:
-                ticket_id = require_uuid(ticket_id, field="ticket_id")
-            except ValueError:
-                _fail("invalid_request", "ticket_id must be a UUID")
-            ticket = await self._expire_ticket_if_due(ticket_id)
-            if ticket is None or ticket.get("requester") != session["address"]:
-                _fail("not_found", "Ticket was not found")
-            return parse_ticket(ticket)
+        session = await self._require_session(session_token)
+        try:
+            ticket_id = require_uuid(ticket_id, field="ticket_id")
+        except ValueError:
+            _fail("invalid_request", "ticket_id must be a UUID")
+        ticket = await self._expire_ticket_if_due(ticket_id)
+        if ticket is None or ticket.get("requester") != session["address"]:
+            _fail("not_found", "Ticket was not found")
+        return parse_ticket(ticket)
 
     async def get_history(
         self,
@@ -2052,39 +2152,38 @@ class Team:
         retained transcript, including one retention has removed, returns
         that newest page. A non-UUID ``before`` is ``invalid_request``.
         """
-        async with self._lock:
-            session = await self._require_session(session_token)
+        session = await self._require_session(session_token)
+        try:
+            thread_id = require_uuid(thread_id, field="thread_id")
+        except ValueError:
+            _fail("invalid_request", "thread_id must be a UUID")
+        if before is not None:
             try:
-                thread_id = require_uuid(thread_id, field="thread_id")
+                before = require_uuid(before, field="before")
             except ValueError:
-                _fail("invalid_request", "thread_id must be a UUID")
-            if before is not None:
-                try:
-                    before = require_uuid(before, field="before")
-                except ValueError:
-                    _fail("invalid_request", "before must be a UUID")
-            try:
-                n = int(limit)
-            except (TypeError, ValueError):
-                _fail("invalid_request", "limit must be an integer")
-            if n < 1 or n > 200:
-                _fail("invalid_request", "limit must be between 1 and 200")
-            store = self._ensure_started()
-            thread = await threads_mod.load_thread(store, thread_id)
-            if thread is None or session["address"] not in threads_mod.participant_set(
-                thread
-            ):
-                _fail("not_found", "Thread was not found")
-            messages: list[dict[str, Any]] = []
-            for message_id in thread.get("message_ids") or []:
-                stored = await store.get(f"msg:{message_id}")
-                if stored is not None:
-                    messages.append(stored)
-            page, has_more = threads_mod.page_history(messages, before=before, limit=n)
-            try:
-                return parse_history_result({"messages": page, "has_more": has_more})
-            except ValueError as exc:
-                _fail("internal", str(exc))
+                _fail("invalid_request", "before must be a UUID")
+        try:
+            n = int(limit)
+        except (TypeError, ValueError):
+            _fail("invalid_request", "limit must be an integer")
+        if n < 1 or n > 200:
+            _fail("invalid_request", "limit must be between 1 and 200")
+        store = self._ensure_started()
+        thread = await threads_mod.load_thread(store, thread_id)
+        if thread is None or session["address"] not in threads_mod.participant_set(
+            thread
+        ):
+            _fail("not_found", "Thread was not found")
+        messages: list[dict[str, Any]] = []
+        for message_id in thread.get("message_ids") or []:
+            stored = await store.get(f"msg:{message_id}")
+            if stored is not None:
+                messages.append(stored)
+        page, has_more = threads_mod.page_history(messages, before=before, limit=n)
+        try:
+            return parse_history_result({"messages": page, "has_more": has_more})
+        except ValueError as exc:
+            _fail("internal", str(exc))
 
     async def find(
         self,
@@ -2102,37 +2201,36 @@ class Team:
             found = await team.find(token, "someone who can review a contract")
             found["matches"][0]["address"]
         """
-        async with self._lock:
-            session = await self._require_session(session_token)
-            if not isinstance(query, str) or not query.strip() or len(query) > 1000:
+        session = await self._require_session(session_token)
+        if not isinstance(query, str) or not query.strip() or len(query) > 1000:
+            _fail(
+                "invalid_request",
+                "query must be 1 to 1000 non-whitespace characters",
+            )
+        cap: int | None
+        if limit is None:
+            cap = None
+        else:
+            try:
+                cap = int(limit)
+            except (TypeError, ValueError):
+                _fail("invalid_request", "limit must be an integer")
+            if cap < 1 or cap > MAX_FIND_LIMIT:
                 _fail(
                     "invalid_request",
-                    "query must be 1 to 1000 non-whitespace characters",
+                    f"limit must be between 1 and {MAX_FIND_LIMIT}",
                 )
-            cap: int | None
-            if limit is None:
-                cap = None
-            else:
-                try:
-                    cap = int(limit)
-                except (TypeError, ValueError):
-                    _fail("invalid_request", "limit must be an integer")
-                if cap < 1 or cap > MAX_FIND_LIMIT:
-                    _fail(
-                        "invalid_request",
-                        f"limit must be between 1 and {MAX_FIND_LIMIT}",
-                    )
-            if detail not in {"summary", "full"}:
-                _fail("invalid_request", "detail must be summary or full")
-            store = self._ensure_started()
-            names = await store.set_members("members")
-            members: list[dict[str, Any]] = []
-            for name in names:
-                member = await self._get_member(name)
-                if member is not None and not _is_principal(member):
-                    members.append(member)
-            exclude = session["address"]
-            directory = self._directory
+        if detail not in {"summary", "full"}:
+            _fail("invalid_request", "detail must be summary or full")
+        store = self._ensure_started()
+        names = await store.set_members("members")
+        members: list[dict[str, Any]] = []
+        for name in names:
+            member = await self._get_member(name)
+            if member is not None and not _is_principal(member):
+                members.append(member)
+        exclude = session["address"]
+        directory = self._directory
         if directory is None:
             _fail("unavailable", "Team has not been started")
         return await directory.search(
@@ -2145,97 +2243,88 @@ class Team:
 
     async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
         """Return one Directory entry by local or same-Team Address."""
-        async with self._lock:
-            await self._require_session(session_token)
-            if not isinstance(address, str):
-                _fail("invalid_request", "address is required")
-            resolved = resolve_address(address, self.name)
-            if resolved == INVALID_ADDRESS:
-                _fail("invalid_address", "Address syntax is invalid")
-            if resolved == ADDRESS_OUTSIDE_TEAM:
-                _fail("address_outside_team", "Address does not name the current Team")
-            name = resolved.split("@", 1)[0]
-            member = await self._get_member(name)
-            if member is None or _is_principal(member) or not member.get("profile"):
-                _fail("not_found", "Membership was not found")
-            return DirectoryEntry.model_validate(
-                {
-                    "address": member["address"],
-                    "agent_did": member["agent_did"],
-                    "profile": member["profile"],
-                }
-            )
+        await self._require_session(session_token)
+        if not isinstance(address, str):
+            _fail("invalid_request", "address is required")
+        resolved = resolve_address(address, self.name)
+        if resolved == INVALID_ADDRESS:
+            _fail("invalid_address", "Address syntax is invalid")
+        if resolved == ADDRESS_OUTSIDE_TEAM:
+            _fail("address_outside_team", "Address does not name the current Team")
+        name = resolved.split("@", 1)[0]
+        member = await self._get_member(name)
+        if member is None or _is_principal(member) or not member.get("profile"):
+            _fail("not_found", "Membership was not found")
+        return DirectoryEntry.model_validate(
+            {
+                "address": member["address"],
+                "agent_did": member["agent_did"],
+                "profile": member["profile"],
+            }
+        )
 
     async def status(self, session_token: str) -> dict[str, Any]:
         """Return members, online state, and Agent Mailbox depths.
 
         Operator only. Principal rows omit Mailbox and Ticket counts.
+        ``online`` is read from stored Sessions, so a durable restart
+        still reports a live Membership as online.
 
             token = await team.ensure_operator_session()
             snapshot = await team.status(token)
             snapshot["members"][0]["kind"]
         """
-        async with self._lock:
-            await self._require_operator(session_token)
-            store = self._ensure_started()
-            now = utc_now()
-            names = await store.set_members("members")
-            open_ids = await store.set_members(tickets_mod.OPEN_TICKETS_SET)
-            by_recipient: dict[str, int] = {}
-            open_count = 0
-            for ticket_id in open_ids:
-                ticket = await tickets_mod.load_ticket(store, ticket_id)
-                if ticket is None or ticket.get("state") != "open":
-                    continue
-                open_count += 1
-                recipient = str(ticket["recipient"])
-                by_recipient[recipient] = by_recipient.get(recipient, 0) + 1
-            members: list[dict[str, Any]] = []
-            for name in names:
-                member = await self._get_member(name)
-                if member is None:
-                    continue
-                address = str(member["address"])
-                online = False
-                for token in list(
-                    self._session_tokens_by_member.get(str(member["name"])) or ()
-                ):
-                    session = await self._get_session(token)
-                    if session is None:
-                        continue
-                    if parse_timestamp(session["expires_at"]) > now:
-                        online = True
-                        break
-                if _is_principal(member):
-                    members.append(
-                        {
-                            "kind": "principal",
-                            "name": member["name"],
-                            "address": address,
-                            "online": online,
-                        }
-                    )
-                    continue
+        await self._require_operator(session_token)
+        store = self._ensure_started()
+        now = utc_now()
+        names = await store.set_members("members")
+        open_ids = await store.set_members(tickets_mod.OPEN_TICKETS_SET)
+        by_recipient: dict[str, int] = {}
+        open_count = 0
+        for ticket_id in open_ids:
+            ticket = await tickets_mod.load_ticket(store, ticket_id)
+            if ticket is None or ticket.get("state") != "open":
+                continue
+            open_count += 1
+            recipient = str(ticket["recipient"])
+            by_recipient[recipient] = by_recipient.get(recipient, 0) + 1
+        members: list[dict[str, Any]] = []
+        for name in names:
+            member = await self._get_member(name)
+            if member is None:
+                continue
+            address = str(member["address"])
+            online = await self._member_is_online(str(member["name"]), now)
+            if _is_principal(member):
                 members.append(
                     {
-                        "kind": "agent",
+                        "kind": "principal",
                         "name": member["name"],
                         "address": address,
                         "online": online,
-                        "mailbox_depth": await mailbox_mod.depth(store, address),
-                        "open_tickets": by_recipient.get(address, 0),
                     }
                 )
-            members.sort(key=lambda row: str(row["address"]))
-            result: dict[str, Any] = {
-                "team_name": self.name,
-                "persistence": self.persistence,
-                "open_tickets": open_count,
-                "members": members,
-            }
-            if self._http_url:
-                result["origin"] = self._http_url
-            return StatusResult.model_validate(result)
+                continue
+            members.append(
+                {
+                    "kind": "agent",
+                    "name": member["name"],
+                    "address": address,
+                    "online": online,
+                    "mailbox_depth": await mailbox_mod.depth(store, address),
+                    "open_tickets": by_recipient.get(address, 0),
+                }
+            )
+        members.sort(key=lambda row: str(row["address"]))
+        result: dict[str, Any] = {
+            "team_name": self.name,
+            "persistence": self.persistence,
+            "open_tickets": open_count,
+            "members": members,
+        }
+        if self._http_url:
+            result["origin"] = self._http_url
+        return StatusResult.model_validate(result)
 
     async def get_trace(self, session_token: str, trace_id: str) -> dict[str, Any]:
         """Return the recorded timeline for one ``trace_id``.
@@ -2246,30 +2335,28 @@ class Team:
             token = await team.ensure_operator_session()
             timeline = await team.get_trace(token, message["trace_id"])
         """
-        async with self._lock:
-            session = await self._require_session(session_token)
-            try:
-                trace_id = require_uuid(trace_id, field="trace_id")
-            except ValueError:
-                _fail("invalid_request", "trace_id must be a UUID")
-            store = self._ensure_started()
-            events = await trace_mod.load_events(store, trace_id)
+        session = await self._require_session(session_token)
+        try:
+            trace_id = require_uuid(trace_id, field="trace_id")
+        except ValueError:
+            _fail("invalid_request", "trace_id must be a UUID")
+        store = self._ensure_started()
+        events = await trace_mod.load_events(store, trace_id)
+        if not events:
+            _fail("not_found", "Trace was not found")
+        if session["membership_name"] != OPERATOR_NAME:
+            address = str(session["address"])
+            events = await trace_mod.visible_events(store, events, address)
             if not events:
                 _fail("not_found", "Trace was not found")
-            if session["membership_name"] != OPERATOR_NAME:
-                address = str(session["address"])
-                events = await trace_mod.visible_events(store, events, address)
-                if not events:
-                    _fail("not_found", "Trace was not found")
-            return TraceResult.model_validate({"trace_id": trace_id, "events": events})
+        return TraceResult.model_validate({"trace_id": trace_id, "events": events})
 
     async def subscribe_trace_events(self, session_token: str) -> asyncio.Queue:
         """Attach a watch queue for new Trace events. Operator only."""
-        async with self._lock:
-            await self._require_operator(session_token)
-            queue: asyncio.Queue = asyncio.Queue(maxsize=64)
-            self._trace_subscribers.append((session_token, queue))
-            return queue
+        await self._require_operator(session_token)
+        queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+        self._trace_subscribers.append((session_token, queue))
+        return queue
 
     async def unsubscribe_trace_events(
         self, session_token: str, queue: asyncio.Queue
@@ -2290,7 +2377,12 @@ class Team:
         now, now_ts = self._now_pair()
         if ticket["state"] == "open" and tickets_mod.deadline_passed(ticket, now):
             expired = tickets_mod.mark_expired(ticket, now_ts)
-            if await tickets_mod.cas_ticket(store, expired, record.version):
+            if await tickets_mod.cas_ticket(
+                store,
+                expired,
+                record.version,
+                retention_seconds=self.terminal_ticket_retention_seconds,
+            ):
                 await mailbox_mod.drop_item(store, str(expired["recipient"]), ticket_id)
                 self._notify(expired["id"])
                 message = await store.get(f"msg:{ticket_id}")
@@ -2307,6 +2399,9 @@ class Team:
                             detail={"state": "expired"},
                         )
                     )
+                thread_id = expired.get("thread_id")
+                if isinstance(thread_id, str):
+                    await self._trim_thread(thread_id)
                 return expired
             return await tickets_mod.load_ticket(store, ticket_id)
         return ticket
@@ -2316,8 +2411,7 @@ class Team:
             while True:
                 await asyncio.sleep(self.sweep_interval_seconds)
                 try:
-                    async with self._lock:
-                        await self._sweep_once()
+                    await self._sweep_once()
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -2329,62 +2423,53 @@ class Team:
         store = self._ensure_started()
         now, now_ts = self._now_pair()
         await auth_mod.sweep_join_state(store, now=now)
-        for token in list(await store.set_members("sessions")):
-            session = await self._get_session(token)
-            if session is None:
-                continue
-            if parse_timestamp(session["expires_at"]) <= now:
+        for token in await expiry_mod.due(store, expiry_mod.SESSIONS, now):
+            async with self._keys.acquire(f"session:{token}"):
+                session = await self._get_session(token)
+                if session is None:
+                    await expiry_mod.cancel(store, expiry_mod.SESSIONS, token)
+                    continue
+                if parse_timestamp(session["expires_at"]) > now:
+                    await expiry_mod.schedule(
+                        store, expiry_mod.SESSIONS, token, session["expires_at"]
+                    )
+                    continue
                 await self._release_session_leases(session, now_ts)
                 await self._delete_session(session)
-        for lease_id in list(await store.set_members(mailbox_mod.LEASES_SET)):
+        for lease_id in await expiry_mod.due(store, expiry_mod.LEASES, now):
             lease = await mailbox_mod.get_lease(store, lease_id)
             if lease is None:
+                await expiry_mod.cancel(store, expiry_mod.LEASES, lease_id)
                 continue
             if mailbox_mod.lease_is_active(lease, now):
+                await expiry_mod.schedule(
+                    store, expiry_mod.LEASES, lease_id, lease["expires_at"]
+                )
                 continue
             await mailbox_mod.return_item(
                 store, lease["address"], lease["message_id"], lease_id, now_ts
             )
             self._signal_work(lease["membership_name"])
             await mailbox_mod.deactivate_lease(store, lease_id)
-        keep_ids: set[str] = set()
-        for ticket_id in list(await store.set_members(tickets_mod.OPEN_TICKETS_SET)):
+        for ticket_id in await expiry_mod.due(store, expiry_mod.OPEN_TICKETS, now):
             ticket = await self._expire_ticket_if_due(ticket_id)
-            if ticket is not None and ticket["state"] == "open":
-                keep_ids.add(ticket["id"])
-        retention = timedelta(seconds=self.terminal_ticket_retention_seconds)
-        for ticket_id in list(await store.set_members(tickets_mod.ALL_TICKETS_SET)):
+            if ticket is None or ticket.get("state") != "open":
+                await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
+            elif not tickets_mod.deadline_passed(ticket, now):
+                await expiry_mod.schedule(
+                    store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
+                )
+        for ticket_id in await expiry_mod.due(store, expiry_mod.TERMINAL_TICKETS, now):
             ticket = await tickets_mod.load_ticket(store, ticket_id)
-            if ticket is None or ticket["state"] == "open":
+            if ticket is None:
+                await expiry_mod.cancel(store, expiry_mod.TERMINAL_TICKETS, ticket_id)
                 continue
-            closed_at = parse_timestamp(ticket["updated_at"])
-            deadline = parse_timestamp(ticket["deadline"])
-            retain_until = max(deadline, closed_at + retention)
-            if retain_until <= now:
-                await tickets_mod.delete_ticket(store, ticket_id)
-            else:
-                keep_ids.add(ticket["id"])
-                if ticket.get("response"):
-                    keep_ids.add(ticket["response"]["id"])
-        for thread_id in list(await store.set_members(threads_mod.THREADS_SET)):
-            thread = await threads_mod.load_thread(store, thread_id)
-            if thread is None:
+            if ticket["state"] == "open":
                 continue
-            messages_by_id: dict[str, dict[str, Any]] = {}
-            for message_id in thread.get("message_ids") or []:
-                stored = await store.get(f"msg:{message_id}")
-                if stored is not None:
-                    messages_by_id[message_id] = stored
-            trimmed = threads_mod.trim_thread_ids(
-                list(thread.get("message_ids") or []),
-                messages_by_id,
-                keep_ids=keep_ids,
-                max_messages=self.thread_message_limit,
-            )
-            dropped = set(thread.get("message_ids") or []) - set(trimmed)
-            if dropped:
-                thread["message_ids"] = trimmed
-                await threads_mod.save_thread(store, thread)
+            thread_id = ticket.get("thread_id")
+            await tickets_mod.delete_ticket(store, ticket_id)
+            if isinstance(thread_id, str):
+                await self._trim_thread(thread_id)
 
 
 def _is_loopback(host: str) -> bool:

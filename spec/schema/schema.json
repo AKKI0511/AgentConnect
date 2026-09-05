@@ -1383,7 +1383,7 @@
         "volatile",
         "durable"
       ],
-      "description": "How a Runtime survives process exit."
+      "description": "How a Runtime survives process exit. `durable` keeps Memberships, Sessions, Mailboxes, Messages, Tickets, and Thread history."
     },
     "HeartbeatResult": {
       "type": "object",
@@ -2057,7 +2057,7 @@
         },
         "online": {
           "type": "boolean",
-          "description": "True when the Membership has at least one unexpired Session."
+          "description": "True when the Membership has at least one unexpired Session in the store."
         },
         "mailbox_depth": {
           "type": "number",
@@ -2100,7 +2100,7 @@
         },
         "online": {
           "type": "boolean",
-          "description": "True when the Membership has at least one unexpired Session."
+          "description": "True when the Membership has at least one unexpired Session in the store."
         }
       },
       "required": [

@@ -88,7 +88,7 @@ export type JsonValue =
 /** JSON object with application-defined keys. */
 export type JsonObject = { [key: string]: JsonValue };
 
-/** How a Runtime survives process exit. */
+/** How a Runtime survives process exit. `durable` keeps Memberships, Sessions, Mailboxes, Messages, Tickets, and Thread history. */
 export type PersistenceMode = "volatile" | "durable";
 
 /**
@@ -980,7 +980,7 @@ export interface StatusAgent {
   name: AgentName;
   /** Canonical qualified Address. */
   address: QualifiedAddress;
-  /** True when the Membership has at least one unexpired Session. */
+  /** True when the Membership has at least one unexpired Session in the store. */
   online: boolean;
   /**
    * Queued plus leased Mailbox items.
@@ -1006,7 +1006,7 @@ export interface StatusPrincipal {
   name: AgentName;
   /** Canonical qualified Address. */
   address: QualifiedAddress;
-  /** True when the Membership has at least one unexpired Session. */
+  /** True when the Membership has at least one unexpired Session in the store. */
   online: boolean;
 }
 

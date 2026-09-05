@@ -48,6 +48,8 @@ Defines:
 - HTTP trace watch stream at `GET /traces/events`
 - MCP `ask`/`tell` mint a fresh Message id unless the caller supplies `idempotency_key`
 - `TraceEvent.parent_id` copies the named Message's parent so a Client can draw the request tree
+- Sessions survive a `durable` restart; `status` `online` is read from stored Sessions
+- Expiry for Sessions, leases, Tickets, and join credentials is processed from a time-ordered index of due items
 - documented TypeScript structures and generated JSON Schema
 
 This is a draft. No implementation may claim conformance yet.

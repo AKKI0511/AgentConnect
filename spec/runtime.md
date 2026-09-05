@@ -42,7 +42,7 @@ Every Runtime reports one `persistence` value in `JoinResult`.
 | Value | Required behavior |
 | --- | --- |
 | `volatile` | Shared state survives Client disconnects but may be lost when the Runtime process exits. |
-| `durable` | Memberships, Mailboxes, accepted Messages, open Tickets, Trace events, and retained Thread history survive a Runtime restart. |
+| `durable` | Memberships, Sessions, Mailboxes, accepted Messages, open Tickets, Trace events, and retained Thread history survive a Runtime restart. |
 
 A Runtime MUST NOT report `durable` unless all listed state survives restart as one consistent state. A partially persistent Runtime reports `volatile`.
 
@@ -142,6 +142,14 @@ Disconnecting does not remove the Membership, Profile, Address, Mailbox, or reta
 `heartbeat` proves that the Client still holds its Session. The Runtime MAY extend the Session before returning its current `session_expires_at`.
 
 A missed heartbeat may let the Session expire. Session expiry releases active leases and has the same shared-state behavior as `disconnect`.
+
+## Expiry
+
+Sessions, Delivery leases, open Ticket deadlines, terminal Ticket retention, join challenges, and join tokens expire from a time-ordered index. Each sweep processes items whose time is due.
+
+| Situation | Required observation |
+| --- | --- |
+| one Session past `expires_at` among many unexpired Sessions | the expired Session is `unauthorized`; the others remain valid |
 
 ## `send`
 
@@ -318,7 +326,7 @@ The result MUST include:
 - every Membership, including `operator`
 - the number of open Tickets in the Team
 
-Each member row MUST include `kind`, the canonical name and Address, and whether the Membership has at least one unexpired Session (`online`). An Agent row (`kind` `agent`) also includes current Mailbox depth and the number of open Tickets whose recipient is that Membership. A principal row (`kind` `principal`) MUST omit those counts.
+Each member row MUST include `kind`, the canonical name and Address, and whether the Membership has at least one unexpired Session (`online`). `online` is read from stored Sessions. A durable restart keeps `online` true for any Membership that still has an unexpired Session. An Agent row (`kind` `agent`) also includes current Mailbox depth and the number of open Tickets whose recipient is that Membership. A principal row (`kind` `principal`) MUST omit those counts.
 
 Mailbox depth counts queued and leased items, matching the busy limit.
 
@@ -350,6 +358,7 @@ Mailbox depth counts queued and leased items, matching the busy limit.
 | Situation | Required observation |
 | --- | --- |
 | `status` with `operator` and an idle Agent | the operator row has `kind` `principal` and no `mailbox_depth`; the Agent row has `kind` `agent` and `mailbox_depth` `0` |
+| durable Runtime restart, Agent Session still unexpired | that Agent row has `online` true |
 
 ## `get_trace`
 

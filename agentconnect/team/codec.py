@@ -37,6 +37,13 @@ def parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value).astimezone(timezone.utc)
 
 
+def timestamp_score(value: datetime | str) -> float:
+    """Return a unix timestamp for a Runtime instant or RFC 3339 string."""
+    if isinstance(value, str):
+        return parse_timestamp(value).timestamp()
+    return value.astimezone(timezone.utc).timestamp()
+
+
 def require_uuid(value: Any, *, field: str = "id") -> str:
     """Return ``value`` when it is an RFC 9562 UUID string."""
     if not isinstance(value, str):

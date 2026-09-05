@@ -8,15 +8,18 @@ The first accepted reply wins; a later distinct reply increments
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any, Optional
 
-from agentconnect.team.codec import parse_timestamp
+from agentconnect.team.codec import format_timestamp, parse_timestamp
 from agentconnect.team.constants import TICKET_TERMINAL
+import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store, StoreRecord
 
 TICKET_KEY_PREFIX = "ticket:"
 OPEN_TICKETS_SET = "tickets:open"
 ALL_TICKETS_SET = "tickets"
+RETAIN_MESSAGES_SET = "retain:messages"
 
 
 def ticket_key(ticket_id: str) -> str:
@@ -114,6 +117,32 @@ def deadline_passed(ticket: dict[str, Any], now) -> bool:
     return parse_timestamp(ticket["deadline"]) <= now
 
 
+def retain_until_ts(ticket: dict[str, Any], *, retention_seconds: float) -> str:
+    """Return when a terminal Ticket may be deleted.
+
+    Later of the request deadline and ``updated_at + retention_seconds``.
+    """
+    closed_at = parse_timestamp(ticket["updated_at"])
+    deadline = parse_timestamp(ticket["deadline"])
+    retain = max(deadline, closed_at + timedelta(seconds=float(retention_seconds)))
+    return format_timestamp(retain)
+
+
+async def retain_message(store: Store, message_id: str) -> None:
+    """Keep ``message_id`` in Thread history while a Ticket still needs it."""
+    await store.set_add(RETAIN_MESSAGES_SET, message_id)
+
+
+async def drop_retained_message(store: Store, message_id: str) -> None:
+    """Stop protecting ``message_id`` from Thread retention."""
+    await store.set_remove(RETAIN_MESSAGES_SET, message_id)
+
+
+async def retained_message_ids(store: Store) -> set[str]:
+    """Return Message ids Thread trim must keep."""
+    return set(await store.set_members(RETAIN_MESSAGES_SET))
+
+
 async def save_ticket(store: Store, ticket: dict[str, Any]) -> None:
     """Persist a Ticket and update the open/all Ticket sets."""
     ticket_id = ticket["id"]
@@ -121,8 +150,13 @@ async def save_ticket(store: Store, ticket: dict[str, Any]) -> None:
     await store.set_add(ALL_TICKETS_SET, ticket_id)
     if ticket["state"] == "open":
         await store.set_add(OPEN_TICKETS_SET, ticket_id)
+        await expiry_mod.schedule(
+            store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
+        )
+        await retain_message(store, ticket_id)
     else:
         await store.set_remove(OPEN_TICKETS_SET, ticket_id)
+        await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
 
 
 async def insert_ticket(store: Store, ticket: dict[str, Any]) -> bool:
@@ -133,19 +167,48 @@ async def insert_ticket(store: Store, ticket: dict[str, Any]) -> bool:
     await store.set_add(ALL_TICKETS_SET, ticket_id)
     if ticket["state"] == "open":
         await store.set_add(OPEN_TICKETS_SET, ticket_id)
+        await expiry_mod.schedule(
+            store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
+        )
+        await retain_message(store, ticket_id)
     return True
 
 
-async def cas_ticket(store: Store, ticket: dict[str, Any], version: int) -> bool:
-    """Replace a Ticket when ``version`` still matches."""
+async def cas_ticket(
+    store: Store,
+    ticket: dict[str, Any],
+    version: int,
+    *,
+    retention_seconds: Optional[float] = None,
+) -> bool:
+    """Replace a Ticket when ``version`` still matches.
+
+    Pass ``retention_seconds`` when this write is the open-to-terminal
+    transition so the sweep can pop the Ticket when retention ends.
+    """
     ticket_id = ticket["id"]
     if not await store.compare_and_set(ticket_key(ticket_id), version, ticket):
         return False
     await store.set_add(ALL_TICKETS_SET, ticket_id)
     if ticket["state"] == "open":
         await store.set_add(OPEN_TICKETS_SET, ticket_id)
+        await expiry_mod.schedule(
+            store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
+        )
+        await retain_message(store, ticket_id)
     else:
         await store.set_remove(OPEN_TICKETS_SET, ticket_id)
+        await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
+        if retention_seconds is not None:
+            await expiry_mod.schedule(
+                store,
+                expiry_mod.TERMINAL_TICKETS,
+                ticket_id,
+                retain_until_ts(ticket, retention_seconds=retention_seconds),
+            )
+        response = ticket.get("response")
+        if isinstance(response, dict) and isinstance(response.get("id"), str):
+            await retain_message(store, str(response["id"]))
     return True
 
 
@@ -162,8 +225,17 @@ async def load_ticket_record(store: Store, ticket_id: str) -> Optional[StoreReco
     return await store.get_record(ticket_key(ticket_id))
 
 
-async def delete_ticket(store: Store, ticket_id: str) -> None:
-    """Remove a Ticket and drop it from Ticket sets."""
+async def delete_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:
+    """Remove a Ticket, drop indexes, and return the deleted record if any."""
+    ticket = await load_ticket(store, ticket_id)
     await store.delete(ticket_key(ticket_id))
     await store.set_remove(OPEN_TICKETS_SET, ticket_id)
     await store.set_remove(ALL_TICKETS_SET, ticket_id)
+    await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
+    await expiry_mod.cancel(store, expiry_mod.TERMINAL_TICKETS, ticket_id)
+    await drop_retained_message(store, ticket_id)
+    if ticket is not None:
+        response = ticket.get("response")
+        if isinstance(response, dict) and isinstance(response.get("id"), str):
+            await drop_retained_message(store, str(response["id"]))
+    return ticket

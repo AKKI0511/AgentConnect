@@ -22,7 +22,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from agentconnect.team.codec import new_uuid, parse_timestamp
+from agentconnect.team.codec import new_uuid, parse_timestamp, timestamp_score
+import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store
 
 LEASE_KEY_PREFIX = "lease:"
@@ -48,7 +49,7 @@ def lease_key(lease_id: str) -> str:
 
 def score_of(timestamp: str) -> float:
     """Return a sortable score for a Runtime timestamp."""
-    return parse_timestamp(timestamp).timestamp()
+    return timestamp_score(timestamp)
 
 
 def new_item(message_id: str, now_ts: str) -> dict[str, Any]:
@@ -255,6 +256,7 @@ async def put_lease(
     }
     await store.put(lease_key(lease_id), record)
     await store.set_add(LEASES_SET, lease_id)
+    await expiry_mod.schedule(store, expiry_mod.LEASES, lease_id, expires_at)
     return record
 
 
@@ -273,6 +275,7 @@ async def deactivate_lease(store: Store, lease_id: str) -> None:
         record["active"] = False
         await store.put(lease_key(lease_id), record)
     await store.set_remove(LEASES_SET, lease_id)
+    await expiry_mod.cancel(store, expiry_mod.LEASES, lease_id)
 
 
 def lease_is_active(record: dict[str, Any], now: datetime) -> bool:

@@ -23,6 +23,7 @@ from agentconnect.core.identity import (
 )
 from agentconnect.team.codec import format_timestamp, parse_timestamp, utc_now
 from agentconnect.team.errors import TeamError
+import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store
 
 JOIN_UNAUTH_MESSAGE = "Join credentials are missing or invalid"
@@ -79,6 +80,9 @@ async def create_join_challenge(
     }
     await store.put(f"{CHALLENGE_PREFIX}{nonce}", record)
     await store.set_add(CHALLENGES_SET, nonce)
+    await expiry_mod.schedule(
+        store, expiry_mod.JOIN_CHALLENGES, nonce, record["expires_at"]
+    )
     return {
         "nonce": nonce,
         "audience": record["audience"],
@@ -98,6 +102,7 @@ async def consume_challenge(store: Store, nonce: str) -> None:
     """Delete ``nonce`` so it cannot authenticate another join."""
     await store.delete(f"{CHALLENGE_PREFIX}{nonce}")
     await store.set_remove(CHALLENGES_SET, nonce)
+    await expiry_mod.cancel(store, expiry_mod.JOIN_CHALLENGES, nonce)
 
 
 async def issue_join_token(
@@ -128,6 +133,9 @@ async def issue_join_token(
         record["name"] = name
     await store.put(f"{TOKEN_PREFIX}{token}", record)
     await store.set_add(TOKENS_SET, token)
+    await expiry_mod.schedule(
+        store, expiry_mod.JOIN_TOKENS, token, record["expires_at"]
+    )
     issued: JoinToken = {
         "token": token,
         "expires_at": record["expires_at"],
@@ -332,12 +340,13 @@ def mint_member_attestation(
 
 
 async def sweep_join_state(store: Store, now=None) -> None:
-    """Drop expired challenges and expired join tokens."""
+    """Drop expired challenges and expired join tokens from the due indexes."""
     instant = now or utc_now()
-    for nonce in list(await store.set_members(CHALLENGES_SET)):
+    for nonce in await expiry_mod.due(store, expiry_mod.JOIN_CHALLENGES, instant):
         record = await load_challenge(store, nonce)
         if record is None:
             await store.set_remove(CHALLENGES_SET, nonce)
+            await expiry_mod.cancel(store, expiry_mod.JOIN_CHALLENGES, nonce)
             continue
         try:
             expires = parse_timestamp(str(record["expires_at"]))
@@ -346,18 +355,21 @@ async def sweep_join_state(store: Store, now=None) -> None:
             continue
         if expires <= instant:
             await consume_challenge(store, nonce)
-    for token in list(await store.set_members(TOKENS_SET)):
+    for token in await expiry_mod.due(store, expiry_mod.JOIN_TOKENS, instant):
         record = await load_join_token(store, token)
         if record is None:
             await store.set_remove(TOKENS_SET, token)
+            await expiry_mod.cancel(store, expiry_mod.JOIN_TOKENS, token)
             continue
         try:
             expires = parse_timestamp(str(record["expires_at"]))
         except (KeyError, ValueError, TypeError):
             await store.delete(f"{TOKEN_PREFIX}{token}")
             await store.set_remove(TOKENS_SET, token)
+            await expiry_mod.cancel(store, expiry_mod.JOIN_TOKENS, token)
             continue
         if expires <= instant:
             await store.delete(f"{TOKEN_PREFIX}{token}")
             await store.set_remove(TOKENS_SET, token)
+            await expiry_mod.cancel(store, expiry_mod.JOIN_TOKENS, token)
             await store.delete(f"{TOKEN_SESSIONS_PREFIX}{token}")

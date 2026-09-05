@@ -95,13 +95,18 @@ async def append_message(
     message: dict[str, Any],
     sender: str,
     recipient: str,
+    max_messages: Optional[int] = None,
+    keep_ids: Optional[set[str]] = None,
 ) -> dict[str, Any]:
     """Append ``message`` to the Thread transcript if it is not already listed.
 
     Compare-and-set on the Thread document assigns ``seq``. Two concurrent
     appends receive distinct values in the order the store accepts them.
+    When ``max_messages`` is set, oldest Messages not in ``keep_ids`` are
+    dropped from the transcript on the same write.
     """
     key = thread_key(thread_id)
+    retained = keep_ids or set()
     while True:
         record = await store.get_record(key)
         thread = ensure_thread(
@@ -113,6 +118,12 @@ async def append_message(
         allocate_seq(thread, message)
         if message["id"] not in thread["message_ids"]:
             thread["message_ids"].append(message["id"])
+        if max_messages is not None:
+            thread["message_ids"] = trim_thread_ids(
+                list(thread["message_ids"] or []),
+                keep_ids=retained,
+                max_messages=max_messages,
+            )
         if record is None:
             if await store.insert(key, thread):
                 await store.set_add(THREADS_SET, thread_id)
@@ -205,23 +216,22 @@ def page_history(
 
 def trim_thread_ids(
     message_ids: list[str],
-    messages_by_id: dict[str, dict[str, Any]],
     *,
     keep_ids: set[str],
     max_messages: int,
 ) -> list[str]:
-    """Drop oldest Messages past ``max_messages``, keeping ``keep_ids``."""
+    """Drop oldest Messages past ``max_messages``, keeping ``keep_ids``.
+
+    ``message_ids`` is seq order, oldest first. Ids in ``keep_ids`` stay
+    even when that leaves the Thread longer than ``max_messages``.
+    """
     if len(message_ids) <= max_messages:
         return list(message_ids)
-    ordered = sorted(
-        (messages_by_id[mid] for mid in message_ids if mid in messages_by_id),
-        key=_sort_key,
-    )
     kept: list[str] = []
-    drop_budget = max(0, len(ordered) - max_messages)
-    for message in ordered:
-        if drop_budget > 0 and message["id"] not in keep_ids:
+    drop_budget = max(0, len(message_ids) - max_messages)
+    for message_id in message_ids:
+        if drop_budget > 0 and message_id not in keep_ids:
             drop_budget -= 1
             continue
-        kept.append(message["id"])
+        kept.append(message_id)
     return kept

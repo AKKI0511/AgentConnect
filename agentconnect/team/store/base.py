@@ -5,8 +5,8 @@ Thread history. Agents never talk to it. Memory is the default for a
 process-local Team. Redis keeps that state across a Runtime restart.
 
 Contention uses two primitives: insert-if-absent and compare-and-set
-against a document version. Mailbox ready sets are a time-ordered index
-so enqueue does not rewrite a queue document.
+against a document version. Mailbox ready sets and expiry are
+time-ordered indexes so enqueue and sweep do not walk every stored id.
 """
 
 from __future__ import annotations

@@ -16,3 +16,14 @@ def test_object_key_order_does_not_change_hash():
 
 def test_array_order_is_significant():
     assert semantic_hash([1, 2]) != semantic_hash([2, 1])
+
+
+def test_timestamp_score_orders_past_before_future():
+    from datetime import timedelta
+
+    from agentconnect.team.codec import format_timestamp, timestamp_score, utc_now
+
+    now = utc_now()
+    past = format_timestamp(now - timedelta(seconds=5))
+    future = format_timestamp(now + timedelta(seconds=5))
+    assert timestamp_score(past) < timestamp_score(now) < timestamp_score(future)

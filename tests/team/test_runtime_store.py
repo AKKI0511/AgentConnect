@@ -167,6 +167,29 @@ async def test_redis_mailbox_event_survives_restart(redis_store: RedisStore):
 
 
 @pytest.mark.asyncio
+async def test_redis_status_online_survives_runtime_restart(redis_store: RedisStore):
+    first = Team("content-squad", store=redis_store, session_ttl_seconds=120)
+    await first.start()
+    try:
+        writer = await join_member(first, "writer", agent_did=make_did("writer"))
+        writer_token = writer["session_token"]
+    finally:
+        await first.stop()
+
+    second = Team("content-squad", store=redis_store, session_ttl_seconds=120)
+    await second.start()
+    try:
+        second._session_tokens_by_member.clear()
+        operator = await second.ensure_operator_session()
+        snapshot = await second.status(operator)
+        by_name = {row["name"]: row for row in snapshot["members"]}
+        assert by_name["writer"]["online"] is True
+        await second.heartbeat(writer_token)
+    finally:
+        await second.stop()
+
+
+@pytest.mark.asyncio
 async def test_redis_directory_vectors_survive_runtime_restart(redis_store: RedisStore):
     first = Team("content-squad", store=redis_store, embeddings="none")
     await first.start()

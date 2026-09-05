@@ -382,7 +382,11 @@ class TraceResult(SchemaModel):
 
 
 class StatusAgent(SchemaModel):
-    """Agent Membership row in ``status``."""
+    """Agent Membership row in ``status``.
+
+    ``online`` is true when this Membership has at least one unexpired
+    Session in the store.
+    """
 
     kind: Literal["agent"] = "agent"
     name: AgentName
@@ -393,7 +397,10 @@ class StatusAgent(SchemaModel):
 
 
 class StatusPrincipal(SchemaModel):
-    """Principal Membership row in ``status``. No Mailbox or Ticket counts."""
+    """Principal Membership row in ``status``.
+
+    No Mailbox or Ticket counts. ``online`` is read from stored Sessions.
+    """
 
     kind: Literal["principal"] = "principal"
     name: AgentName

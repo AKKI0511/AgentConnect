@@ -9,6 +9,7 @@ poetry run python examples/communication/basic_communication.py
 ```
 
 `basic_communication.py` starts an embedded Team and two Agents in one process.
+After they talk, it prints ``status`` so you can see which members are online.
 
 `discovery.py` joins a reviewer and a writer, then uses ``find`` to hire
 by describing the work. Semantic ranking is on with no extra setup.

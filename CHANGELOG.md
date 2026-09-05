@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Trace timeline stored with the Team. `get_trace` returns accept, lease, reply, and expiry events for one `trace_id`. `agentconnect trace` prints that timeline. Loopback HTTP with no Authorization header is the operator, the same Membership MCP uses.
 - LiteLLM tool loop for prebuilt helpers. `AIAgent(name=..., model="gpt-4o-mini")` runs a short call-model / run-tools cycle. Conversation state for Team work comes from `ctx.history`. Team tools attach from the Session. Tests inject `complete=` (a recorded model) so they never call a live API.
 - Store insert-if-absent and compare-and-set. Mailboxes are per-item documents behind a time-ordered index. `max_mailbox_depth` is an exact count of queued plus leased items. `Team(..., max_held_waits=16)` caps concurrent `collect=wait` sends per Membership; past the cap `send` fails with `wait_limit`. `BaseAgent(..., delivery_history="ids")` puts earlier Message ids on each Delivery instead of bodies.
+- Time-indexed expiry. The Runtime sweep pops due Sessions, leases, Tickets, and join credentials. `status` reads `online` from stored Sessions, so a durable Runtime still reports a live member after a restart.
 
 ### Changed
 - `ask` returns a Ticket. Read a completed reply as `ticket.content`. Session-bound tools and MCP `ask` use the same argument names (`deadline_seconds`, `collect`) and dump JSON through `dump_public`.
@@ -47,6 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed `communication_mcp_server`, `registry_mcp_server`, `token_verifier`, `BaseAgent.mint_mcp_access_token`, and the `agentconnect mcp` CLI group.
 - Removed `agentconnect.providers` and `agentconnect.prompts`. Model access goes through LiteLLM. Prompt templates existed only to drive LangChain.
 - Removed `openai`, `anthropic`, `groq`, `google-generativeai`, all `langchain*` packages, `langgraph`, `langsmith`, `sentence-transformers`, `accelerate`, `huggingface-hub`, `pandas`, `python-dateutil`, and `colorama` from runtime extras. `litellm` is `agentconnect[aiagent]`.
+- Removed `agentconnect.utils.metrics`. Trace events are the store-backed timeline from M8.
+
+## A2A Communication Hardening
+
+- Message verification now uses the sender's identity (resolved via registry) in `agentconnect/agent/base.py`; hub-verified messages continue to bypass re-verification.
+- Inbox server enforces `allowed_senders` (403) when configured via `InboxServerSettings`; added tests in `tests/gateway/`.
+- HTTP transport defaults applied across hub and MCP using `communication.http_defaults` (verify_ssl, timeouts, retries, backoff, jitter, idempotency header).
+- MCP check tool now supports Redis-backed route context; rehydrates `TransportTarget` and `RouteContext` when stored as JSON.
+- Replaced busy-wait spin in `CommunicationHub.send_message_and_wait_response` with `asyncio.wait_for`, preserving late-response correlation.
+- Implemented persistent `httpx.AsyncClient` pooling in `HTTPOutboundTransport` with `.close()`; hub and MCP lifespan close transports to avoid leaks.
+- Added tests: inbox allowed senders, MCP local/remote flows (pending→completed), wait_for timeout semantics with late-response retrieval, and Redis route context rehydration.
+- Updated example YAML to surface safe HTTP defaults and README to document starting inbox/communication MCP servers and defaults.
 
 ### Planned
 - A2A communication hardening: ResponseTracker, HTTP transport SPI, Inbox server, metrics, remote A2A support.

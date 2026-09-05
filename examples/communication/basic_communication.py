@@ -65,6 +65,11 @@ async def main() -> None:
         )
         print(f"ticket state: {ticket.state}")
         print(f"response: {ticket.content}")
+
+        operator = await team.ensure_operator_session()
+        snapshot = await team.status(operator)
+        online = [row["name"] for row in snapshot["members"] if row["online"]]
+        print("online:", online)
     finally:
         await researcher.leave()
         await writer.leave()

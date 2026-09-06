@@ -270,6 +270,7 @@ def test_required_null_content_survives_python_dump():
     message = RequestMessage(
         id=_UUID,
         sender="writer@content-squad",
+        sender_did=_DID,
         recipient="researcher@content-squad",
         created_at=_TIMESTAMP,
         trace_id=_UUID,
@@ -301,6 +302,7 @@ def test_dump_public_omits_ticket_content_sugar():
         response=ResponseMessage(
             id=_UUID,
             sender="writer@content-squad",
+            sender_did=_DID,
             recipient="researcher@content-squad",
             created_at=_TIMESTAMP,
             trace_id=_UUID,

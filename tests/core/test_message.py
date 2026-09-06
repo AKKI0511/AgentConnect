@@ -9,6 +9,7 @@ from agentconnect.core.operations import parse_send_request
 
 _UUID = "00000000-0000-4000-8000-000000000001"
 _TIMESTAMP = "2026-08-18T15:00:00Z"
+_DID = "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m"
 
 
 def test_request_without_deadline_is_invalid():
@@ -17,6 +18,7 @@ def test_request_without_deadline_is_invalid():
             {
                 "id": _UUID,
                 "sender": "researcher@content-squad",
+                "sender_did": _DID,
                 "recipient": "writer@content-squad",
                 "kind": "request",
                 "content": "work",
@@ -31,6 +33,7 @@ def test_request_is_reply_expected():
         {
             "id": _UUID,
             "sender": "researcher@content-squad",
+            "sender_did": _DID,
             "recipient": "writer@content-squad",
             "kind": "request",
             "content": "work",
@@ -48,6 +51,7 @@ def test_event_is_not_reply_expected():
         {
             "id": _UUID,
             "sender": "researcher@content-squad",
+            "sender_did": _DID,
             "recipient": "writer@content-squad",
             "kind": "event",
             "content": "note",
@@ -76,6 +80,7 @@ def test_threaded_message_keeps_seq():
         {
             "id": _UUID,
             "sender": "researcher@content-squad",
+            "sender_did": _DID,
             "recipient": "writer@content-squad",
             "kind": "event",
             "content": "note",

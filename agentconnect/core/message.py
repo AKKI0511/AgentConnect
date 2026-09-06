@@ -6,6 +6,7 @@ event. Response and error Messages are created by the Runtime on reply.
 
     msg.kind
     msg.content
+    msg.sender_did
     msg.deadline   # requests only
     msg.seq        # present when the Message belongs to a Thread
 """
@@ -23,7 +24,7 @@ from agentconnect.core.base import (
     validation_message,
 )
 from agentconnect.core.error import ErrorObject
-from agentconnect.core.primitives import QualifiedAddress, Timestamp, Uuid
+from agentconnect.core.primitives import AgentDid, QualifiedAddress, Timestamp, Uuid
 
 __all__ = [
     "MessageBase",
@@ -43,12 +44,15 @@ __all__ = [
 class MessageBase(SchemaModel):
     """Fields shared by every accepted Message.
 
-    ``seq`` is present exactly when ``thread_id`` is present. History
-    and ``before`` cursors order by ``seq``, not by ``created_at``.
+    ``sender_did`` is the verified DID copied from the Session at
+    acceptance. ``seq`` is present exactly when ``thread_id`` is
+    present. History and ``before`` cursors order by ``seq``, not by
+    ``created_at``.
     """
 
     id: Uuid
     sender: QualifiedAddress
+    sender_did: AgentDid
     recipient: QualifiedAddress
     created_at: Timestamp
     trace_id: Uuid

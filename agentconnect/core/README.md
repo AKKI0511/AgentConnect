@@ -38,6 +38,11 @@ sends as `identity_proof`. `issue_membership_attestation` is the Team-signed
 statement that this Team vouches for an Agent. The Runtime stores that JWT; it
 does not verify inbound attestations in this release.
 
+Filesystem persistence lives in `agentconnect.agent.identity`
+(`save_identity`, `load_identity`, `load_or_create_identity`).
+`BaseAgent(identity_path=...)` uses that path. This package only serializes
+identities to dicts.
+
 ## Message kinds
 
 `Message.kind` is one of `request`, `response`, `error`, or `event`. Application typing belongs in `content` or `metadata`. A handler receives a Message with attributes, not a dictionary.

@@ -187,7 +187,7 @@ async def test_delivery_history_truncated_by_bytes():
     small = Team(
         "content-squad",
         delivery_history_limit=10,
-        max_message_bytes=400,
+        max_message_bytes=700,
     )
     await small.start()
     try:
@@ -529,6 +529,12 @@ async def test_three_member_thread_authorizes_every_participant(team: Team):
     writer = await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
     editor = await join_member(team, "editor")
+    writer_member = await team._get_member("writer")
+    researcher_member = await team._get_member("researcher")
+    editor_member = await team._get_member("editor")
+    assert writer_member is not None
+    assert researcher_member is not None
+    assert editor_member is not None
     thread_id = _id()
     msg_id = _id()
     store = team._store
@@ -536,7 +542,10 @@ async def test_three_member_thread_authorizes_every_participant(team: Team):
     message = {
         "id": msg_id,
         "sender": researcher["address"],
+        "sender_did": researcher["agent_did"],
+        "sender_membership_id": researcher_member["membership_id"],
         "recipient": writer["address"],
+        "recipient_membership_id": writer_member["membership_id"],
         "kind": "event",
         "content": "seed",
         "created_at": "2026-08-18T15:00:00.000000Z",
@@ -551,9 +560,9 @@ async def test_three_member_thread_authorizes_every_participant(team: Team):
             "id": thread_id,
             "participants": sorted(
                 [
-                    researcher["address"],
-                    writer["address"],
-                    editor["address"],
+                    researcher_member["membership_id"],
+                    writer_member["membership_id"],
+                    editor_member["membership_id"],
                 ]
             ),
             "message_ids": [msg_id],

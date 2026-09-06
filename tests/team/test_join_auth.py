@@ -272,3 +272,139 @@ async def test_sender_field_on_send_is_invalid_request(team: Team):
             },
         )
     assert exc.value.code == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_sender_did_field_on_send_is_invalid_request(team: Team):
+    await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    with pytest.raises(TeamError) as exc:
+        await team.send(
+            researcher["session_token"],
+            {
+                "id": "15c44926-4c2a-4a01-a13b-95152da9a859",
+                "recipient": "writer",
+                "kind": "event",
+                "content": "hello",
+                "sender_did": researcher["agent_did"],
+            },
+        )
+    assert exc.value.code == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_unbound_single_use_token_admits_one_join():
+    team = await _auth_team()
+    writer = AgentIdentity.create_key_based()
+    editor = AgentIdentity.create_key_based()
+    try:
+        issued = await team.issue_join_token(single_use=True)
+
+        async def _join(identity: AgentIdentity, name: str):
+            return await _join_with_proof(team, identity, name, issued["token"])
+
+        results = await asyncio.gather(
+            _join(writer, "writer"),
+            _join(editor, "editor"),
+            return_exceptions=True,
+        )
+        successes = [item for item in results if not isinstance(item, BaseException)]
+        failures = [item for item in results if isinstance(item, TeamError)]
+        assert len(successes) == 1
+        assert len(failures) == 1
+        assert failures[0].code == "unauthorized"
+        present = [
+            await team._get_member("writer"),
+            await team._get_member("editor"),
+        ]
+        assert sum(1 for member in present if member is not None) == 1
+    finally:
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_revoke_racing_join_cannot_leave_a_usable_token():
+    team = await _auth_team()
+    writer = AgentIdentity.create_key_based()
+    try:
+        issued = await team.issue_join_token(
+            name="writer", agent_did=writer.did, single_use=True
+        )
+
+        async def _join():
+            return await _join_with_proof(team, writer, "writer", issued["token"])
+
+        results = await asyncio.gather(
+            _join(),
+            team.revoke_join_token(issued["token"]),
+            return_exceptions=True,
+        )
+        join_error = next(
+            (item for item in results if isinstance(item, TeamError)), None
+        )
+        member = await team._get_member("writer")
+        if join_error is not None:
+            assert join_error.code == "unauthorized"
+            assert member is None
+        else:
+            assert member is not None
+            joined = results[0]
+            with pytest.raises(TeamError) as exc:
+                await team.heartbeat(joined["session_token"])
+            assert exc.value.code == "unauthorized"
+        with pytest.raises(TeamError) as later:
+            await _join_with_proof(team, writer, "writer", issued["token"])
+        assert later.value.code == "unauthorized"
+    finally:
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_single_use_token_reconnects_the_admitted_membership():
+    team = await _auth_team()
+    writer = AgentIdentity.create_key_based()
+    try:
+        issued = await team.issue_join_token(
+            name="writer", agent_did=writer.did, single_use=True
+        )
+        instance_id = "8f0d3e6a-6b1f-4d1e-9a2c-2f0b7c9d1e5a"
+        first = await _join_with_proof(
+            team, writer, "writer", issued["token"], instance_id=instance_id
+        )
+        second = await _join_with_proof(
+            team, writer, "writer", issued["token"], instance_id=instance_id
+        )
+        assert second["session_token"] != first["session_token"]
+        await team.heartbeat(second["session_token"])
+        with pytest.raises(TeamError) as exc:
+            await team.heartbeat(first["session_token"])
+        assert exc.value.code == "unauthorized"
+    finally:
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_name_conflict_does_not_consume_the_join_challenge():
+    team = await _auth_team()
+    writer = AgentIdentity.create_key_based()
+    usurper = AgentIdentity.create_key_based()
+    try:
+        first = await team.issue_join_token(name="writer", agent_did=writer.did)
+        await _join_with_proof(team, writer, "writer", first["token"])
+        stolen = await team.issue_join_token(name="writer", agent_did=usurper.did)
+        challenge = await team.join_challenge()
+        proof = issue_identity_proof(usurper, challenge)
+        with pytest.raises(TeamError) as exc:
+            await team.join(
+                name="writer",
+                agent_did=usurper.did,
+                profile=profile(),
+                join_token=stolen["token"],
+                identity_proof=proof,
+            )
+        assert exc.value.code == "name_conflict"
+        store = team._ensure_started()
+        leftover = await store.get(f"join_challenge:{challenge['nonce']}")
+        assert leftover is not None
+    finally:
+        await team.stop()

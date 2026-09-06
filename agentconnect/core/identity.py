@@ -243,11 +243,13 @@ class AgentIdentity:
     """Ed25519 ``did:key`` identity for one Agent.
 
     ``create_key_based`` mints a new key pair. Pass the result to
-    ``BaseAgent(name=..., identity=identity)`` when you want a stable DID
-    across process restarts.
+    ``BaseAgent`` when you already hold the identity, or pass
+    ``identity_path`` and the Client loads or creates the file.
 
         identity = AgentIdentity.create_key_based()
         agent = Researcher(name="researcher", identity=identity)
+
+        agent = Researcher(name="researcher", identity_path="researcher.json")
     """
 
     did: str

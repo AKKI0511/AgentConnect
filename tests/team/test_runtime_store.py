@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 
 from agentconnect.team import RedisStore, Team
+from agentconnect.team.store import Cas, Insert
 from tests.team.conftest import deadline, join_member, profile, make_did
 
 
@@ -219,3 +220,30 @@ async def test_redis_directory_vectors_survive_runtime_restart(redis_store: Redi
         assert found["matches"][0]["address"] == "reviewer@content-squad"
     finally:
         await second.stop()
+
+
+@pytest.mark.asyncio
+async def test_redis_apply_is_all_or_nothing(redis_store: RedisStore):
+    assert await redis_store.insert("ticket", {"state": "open"})
+    record = await redis_store.get_record("ticket")
+    assert record is not None
+    result = await redis_store.apply(
+        [
+            Insert("msg", {"id": "m1"}),
+            Cas("ticket", record.version + 3, {"state": "completed"}),
+        ]
+    )
+    assert result.ok is False
+    assert await redis_store.get("msg") is None
+    assert await redis_store.get("ticket") == {"state": "open"}
+
+
+@pytest.mark.asyncio
+async def test_redis_concurrent_put_assigns_distinct_versions(redis_store: RedisStore):
+    import asyncio
+
+    assert await redis_store.insert("k", {"n": 0})
+    await asyncio.gather(*[redis_store.put("k", {"n": i}) for i in range(10)])
+    record = await redis_store.get_record("k")
+    assert record is not None
+    assert record.version == 11

@@ -7,6 +7,7 @@ import asyncio
 import pytest
 
 from agentconnect.team.store import MemoryStore, StoreRecord
+from agentconnect.team.store.ops import Cas, Insert
 
 
 @pytest.mark.asyncio
@@ -59,3 +60,32 @@ async def test_increment_if_below_caps_at_limit():
     assert await store.decrement_floor("held") == 1
     assert await store.decrement_floor("held") == 0
     assert await store.decrement_floor("held") == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_put_assigns_distinct_versions():
+    store = MemoryStore()
+    await store.open()
+    assert await store.insert("k", {"n": 0})
+    await asyncio.gather(*[store.put("k", {"n": i}) for i in range(10)])
+    record = await store.get_record("k")
+    assert record is not None
+    assert record.version == 11
+
+
+@pytest.mark.asyncio
+async def test_apply_is_all_or_nothing():
+    store = MemoryStore()
+    await store.open()
+    assert await store.insert("ticket", {"state": "open"})
+    record = await store.get_record("ticket")
+    assert record is not None
+    result = await store.apply(
+        [
+            Insert("msg", {"id": "m1"}),
+            Cas("ticket", record.version + 3, {"state": "completed"}),
+        ]
+    )
+    assert result.ok is False
+    assert await store.get("msg") is None
+    assert await store.get("ticket") == {"state": "open"}

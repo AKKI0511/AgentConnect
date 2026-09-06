@@ -19,8 +19,9 @@ class SendCommit:
 
     message_id: str
     sender: str
-    membership_name: str
+    membership_id: str
     recipient: str
+    recipient_membership_id: str
     collect: Optional[str]
     request_hash: str
     message: dict[str, Any]
@@ -58,7 +59,7 @@ async def load_replay(store: Store, commit: SendCommit) -> Optional[dict[str, An
     existing = await store.get(f"send:{commit.message_id}")
     if existing is None:
         return None
-    if existing.get("sender") != commit.sender:
+    if existing.get("membership_id") != commit.membership_id:
         raise SendConflict("id_conflict", "Message id is already used")
     if existing.get("hash") != commit.request_hash:
         raise SendConflict(
@@ -122,7 +123,7 @@ async def _plan_send(
     if commit.collect == "wait":
         ops.append(
             IncrementIfBelow(
-                f"held_waits:{commit.membership_name}",
+                f"held_waits:{commit.membership_id}",
                 commit.max_held_waits,
                 ttl_seconds=commit.wait_ttl,
             )
@@ -137,8 +138,8 @@ async def _plan_send(
             record,
             thread_id=thread_id,
             message=message,
-            sender=commit.sender,
-            recipient=commit.recipient,
+            sender=commit.membership_id,
+            recipient=commit.recipient_membership_id,
             max_messages=commit.thread_limit,
             keep_ids=keep_ids,
         )
@@ -159,6 +160,7 @@ async def _plan_send(
 
     send_record = {
         "sender": commit.sender,
+        "membership_id": commit.membership_id,
         "hash": commit.request_hash,
         "collect": commit.collect,
         "result": result,

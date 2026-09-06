@@ -41,7 +41,7 @@ class TeamRuntime(Protocol):
         """Search this Team's Directory."""
 
     async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """Return a Ticket this Session's Membership owns."""
+        """Return a Ticket this Membership owns."""
 
     async def get_history(
         self,
@@ -289,7 +289,7 @@ async def tell_action(
 async def get_result_action(
     runtime: TeamRuntime, session_token: str, ticket_id: str
 ) -> dict[str, Any]:
-    """Return the current Ticket owned by this Session."""
+    """Return the current Ticket owned by this Membership."""
     return dump_public(
         await runtime.get_result(
             session_token, _require_uuid(ticket_id, name="ticket_id")

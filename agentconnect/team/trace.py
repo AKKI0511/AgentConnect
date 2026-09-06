@@ -43,6 +43,7 @@ def make_event(
     type: str,
     trace_id: str,
     actor: str,
+    actor_membership_id: str,
     message_id: Optional[str] = None,
     parent_id: Optional[str] = None,
     ticket_id: Optional[str] = None,
@@ -60,6 +61,7 @@ def make_event(
         "type": type,
         "trace_id": trace_id,
         "actor": actor,
+        "actor_membership_id": actor_membership_id,
         "detail": dict(detail) if detail is not None else {},
     }
     if message_id is not None:
@@ -120,32 +122,31 @@ async def load_events(store: Store, trace_id: str) -> list[dict[str, Any]]:
 
 def event_names_member(
     event: Mapping[str, Any],
-    address: str,
+    membership_id: str,
     messages: Mapping[str, Mapping[str, Any]],
 ) -> bool:
-    """Return True when ``event`` names ``address``.
+    """Return True when ``event`` names ``membership_id``.
 
-    Named means the event ``actor``, a ``sender`` or ``recipient`` in
-    ``detail``, or the sender or recipient of the Message ``message_id``.
+    Named means the event ``actor_membership_id``, or the sender or
+    recipient Membership of the Message ``message_id``.
     """
-    if event.get("actor") == address:
+    if event.get("actor_membership_id") == membership_id:
         return True
-    detail = event.get("detail")
-    if isinstance(detail, Mapping):
-        if detail.get("sender") == address or detail.get("recipient") == address:
-            return True
     message_id = event.get("message_id")
     message = messages.get(message_id) if isinstance(message_id, str) else None
     if isinstance(message, Mapping):
-        if address in {message.get("sender"), message.get("recipient")}:
+        if membership_id in {
+            message.get("sender_membership_id"),
+            message.get("recipient_membership_id"),
+        }:
             return True
     return False
 
 
 async def visible_events(
-    store: Store, events: list[Mapping[str, Any]], address: str
+    store: Store, events: list[Mapping[str, Any]], membership_id: str
 ) -> list[dict[str, Any]]:
-    """Return the subset of ``events`` that name ``address``, in order."""
+    """Return the subset of ``events`` that name ``membership_id``, in order."""
     ids = {
         str(event["message_id"])
         for event in events
@@ -157,5 +158,7 @@ async def visible_events(
         if isinstance(record, dict):
             messages[message_id] = record
     return [
-        dict(event) for event in events if event_names_member(event, address, messages)
+        dict(event)
+        for event in events
+        if event_names_member(event, membership_id, messages)
     ]

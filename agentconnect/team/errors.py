@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+IDENTITY_MISSING = (
+    "Stored Team state is missing Membership identity. "
+    "Reset this Team's store before using this Runtime."
+)
+
 
 class TeamError(Exception):
     """A Runtime operation failed with a public error code.

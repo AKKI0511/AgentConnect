@@ -9,6 +9,7 @@ import agentconnect.team.mailbox as mailbox_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
 import agentconnect.team.trace as trace_mod
+from agentconnect.team.errors import IDENTITY_MISSING
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.ops import Cas, DeleteIfVersion, Insert, StoreOp
 
@@ -19,6 +20,7 @@ class ReplyCommit:
 
     reply_id: str
     sender: str
+    membership_id: str
     reply_hash: str
     reply_message: dict[str, Any]
     ticket: dict[str, Any]
@@ -53,13 +55,16 @@ class ReplyConflict(Exception):
 
 
 async def load_reply_replay(
-    store: Store, reply_id: str, sender: str, reply_hash: str
+    store: Store,
+    reply_id: str,
+    reply_hash: str,
+    membership_id: str,
 ) -> Optional[dict[str, Any]]:
     """Return a stored reply result when this id is already accepted."""
     existing = await store.get(f"reply:{reply_id}")
     if existing is None:
         return None
-    if existing.get("sender") != sender:
+    if existing.get("membership_id") != membership_id:
         raise ReplyConflict("id_conflict", "Message id is already used")
     if existing.get("hash") != reply_hash:
         raise ReplyConflict(
@@ -74,7 +79,7 @@ async def load_reply_replay(
 async def commit_reply(store: Store, commit: ReplyCommit) -> ReplyAccepted:
     """Commit reply acceptance or raise ``ReplyConflict``."""
     replay = await load_reply_replay(
-        store, commit.reply_id, commit.sender, commit.reply_hash
+        store, commit.reply_id, commit.reply_hash, commit.membership_id
     )
     if replay is not None:
         return ReplyAccepted(result=replay, replay=True, events=[])
@@ -93,7 +98,10 @@ async def commit_reply(store: Store, commit: ReplyCommit) -> ReplyAccepted:
             key = getattr(failed, "key", "")
             if key.startswith(("msg:", "reply:")):
                 replayed = await load_reply_replay(
-                    store, commit.reply_id, commit.sender, commit.reply_hash
+                    store,
+                    commit.reply_id,
+                    commit.reply_hash,
+                    commit.membership_id,
                 )
                 if replayed is not None:
                     return ReplyAccepted(result=replayed, replay=True, events=[])
@@ -122,12 +130,18 @@ async def _plan_reply(
     thread_id = message.get("thread_id")
     if isinstance(thread_id, str):
         record = await store.get_record(threads_mod.thread_key(thread_id))
+        sender_mid = message.get("sender_membership_id")
+        recipient_mid = message.get("recipient_membership_id")
+        if not isinstance(sender_mid, str) or not sender_mid:
+            raise ReplyConflict("internal", IDENTITY_MISSING)
+        if not isinstance(recipient_mid, str) or not recipient_mid:
+            raise ReplyConflict("internal", IDENTITY_MISSING)
         _thread, thread_ops, error = threads_mod.prepare_append(
             record,
             thread_id=thread_id,
             message=message,
-            sender=message["sender"],
-            recipient=message["recipient"],
+            sender=sender_mid,
+            recipient=recipient_mid,
             max_messages=commit.thread_limit,
             keep_ids=keep_ids,
         )
@@ -148,6 +162,7 @@ async def _plan_reply(
                 f"reply:{commit.reply_id}",
                 {
                     "sender": commit.sender,
+                    "membership_id": commit.membership_id,
                     "hash": commit.reply_hash,
                     "result": result,
                 },

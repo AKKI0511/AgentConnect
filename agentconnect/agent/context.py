@@ -102,19 +102,27 @@ class Context:
         self,
         session: "Session",
         delivery: Delivery,
-        *,
-        sender_did: str,
     ) -> None:
         """Attach delivery facts from one leased attempt."""
         self._session = session
         self._delivery = delivery
         self._ticket: Optional[TicketHandle] = None
-        self.sender_did = sender_did
 
     @property
     def sender(self) -> str:
         """Address of the Membership that sent this Message."""
         return str(self._delivery.message.sender)
+
+    @property
+    def sender_did(self) -> str:
+        """Verified DID of the sender, stamped when the Runtime accepted the Message.
+
+        It does not change if that Agent later leaves or another Agent
+        reuses the Address.
+
+            ctx.sender_did
+        """
+        return str(self._delivery.message.sender_did)
 
     @property
     def message(self) -> MailboxMessage:

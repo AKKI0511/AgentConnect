@@ -183,7 +183,7 @@ def create_team_mcp(
             raise _tool_error(exc) from exc
 
     async def get_result(ctx: Context, ticket_id: str) -> dict[str, Any]:
-        """Return the current Ticket for work this caller sent.
+        """Return the current Ticket for work this Membership sent.
 
         ticket_id: Ticket id from ask. Equal to the request Message id.
         """

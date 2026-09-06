@@ -351,7 +351,7 @@ class TeamTools(Sequence[TeamTool]):
             raise
 
     async def get_result(self, ticket_id: str) -> dict[str, Any]:
-        """Return the current Ticket this Agent opened."""
+        """Return the current Ticket this Membership opened."""
         return dump_public(await self._session().get_result(ticket_id))
 
     async def get_history(

@@ -12,6 +12,12 @@ from agentconnect.team.transitions.reply import (
     ReplyConflict,
     commit_reply,
 )
+from agentconnect.team.transitions.join import (
+    JoinAccepted,
+    JoinConflict,
+    JoinPlan,
+    commit_join,
+)
 from agentconnect.team.transitions.send import (
     SendAccepted,
     SendCommit,
@@ -20,6 +26,10 @@ from agentconnect.team.transitions.send import (
 )
 
 __all__ = [
+    "JoinPlan",
+    "JoinAccepted",
+    "JoinConflict",
+    "commit_join",
     "SendCommit",
     "SendAccepted",
     "SendConflict",

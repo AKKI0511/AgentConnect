@@ -97,7 +97,6 @@ class Session:
         self._wake = asyncio.Event()
         self._supervisor: Optional[asyncio.Task] = None
         self._inflight: set[asyncio.Task] = set()
-        self._sender_did_cache: dict[str, str] = {}
         self._reconnect_lock = asyncio.Lock()
 
     @property
@@ -588,20 +587,7 @@ class Session:
             if isinstance(delivery, DeliveryModel)
             else parse_delivery(delivery)
         )
-        sender = str(parsed.message.sender)
-        sender_did = self._sender_did_cache.get(sender, "")
-        if sender and sender not in self._sender_did_cache:
-            try:
-                entry = await self.get_profile(sender)
-                sender_did = str(entry.agent_did)
-                self._sender_did_cache[sender] = sender_did
-            except SessionError:
-                sender_did = ""
-        return Context(
-            self,
-            parsed,
-            sender_did=sender_did,
-        )
+        return Context(self, parsed)
 
     async def _finish_handler(self, delivery: Any, result: Any) -> None:
         from agentconnect.core.message import is_reply_expected

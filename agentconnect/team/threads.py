@@ -1,9 +1,10 @@
 """Thread transcript storage.
 
 A Thread is an opaque UUID shared by related Messages among a fixed
-participant set of one or more Memberships. The first accepted Message
-using a ``thread_id`` seeds that set from its sender and recipient.
-Later Messages may travel only among those Memberships. The Runtime
+participant set of Membership identities. The first accepted Message
+using a ``thread_id`` seeds that set from the sending and receiving
+Memberships. Later Messages may travel only among those identities.
+Address reuse after removal is a different Membership. The Runtime
 assigns a per-Thread ``seq`` on acceptance. History, the delivered
 window, and ``before`` cursors order by that value.
 """
@@ -68,7 +69,7 @@ def ensure_thread(
 
 
 def participant_set(thread: dict[str, Any]) -> set[str]:
-    """Return the Addresses allowed to send in this Thread."""
+    """Return the Membership identities allowed to send in this Thread."""
     return set(thread.get("participants") or [])
 
 

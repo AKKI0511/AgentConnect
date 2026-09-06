@@ -104,6 +104,8 @@ from agentconnect.team.directory import Directory, MAX_FIND_LIMIT
 from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
 import agentconnect.team.auth as auth_mod
 import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.projection as projection_mod
+import agentconnect.team.sessions as sessions_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
 import agentconnect.team.trace as trace_mod
@@ -116,7 +118,6 @@ from agentconnect.team.codec import (
     require_did,
     require_uuid,
     semantic_hash,
-    timestamp_score,
     utc_now,
 )
 from agentconnect.core.spec import SPEC_VERSION
@@ -141,16 +142,16 @@ from agentconnect.team.constants import (
     RESERVED_MCP_TOOL_NAMES,
     SWEEP_INTERVAL_SECONDS,
 )
-from agentconnect.team.errors import TeamError
+from agentconnect.team.errors import IDENTITY_MISSING, TeamError
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.locks import KeyedLock
 from agentconnect.team.store import MemoryStore, RedisStore, Store
-from agentconnect.team.store.ops import IndexAdd, Put, SetAdd
 from agentconnect.team.transitions.complete import (
     CompleteCommit,
     CompleteConflict,
     commit_complete,
 )
+from agentconnect.team.transitions.join import JoinConflict, JoinPlan, commit_join
 from agentconnect.team.transitions.reply import (
     ReplyCommit,
     ReplyConflict,
@@ -175,6 +176,26 @@ def _is_principal(member: Mapping[str, Any] | None) -> bool:
     if member.get("principal") is True:
         return True
     return member.get("name") == OPERATOR_NAME
+
+
+def _membership_id(record: Mapping[str, Any], field: str = "membership_id") -> str:
+    """Return a required Membership identity field from ``record``."""
+    value = record.get(field)
+    if not isinstance(value, str) or not value:
+        _fail("internal", IDENTITY_MISSING)
+    return value
+
+
+def _session_did(session: Mapping[str, Any]) -> str:
+    """Return the DID stamped on this Session at join."""
+    value = session.get("agent_did")
+    if not isinstance(value, str) or not value:
+        _fail(
+            "internal",
+            "Stored Team state is missing Session identity. "
+            "Reset this Team's store before using this Runtime.",
+        )
+    return value
 
 
 class Team:
@@ -658,7 +679,7 @@ class Team:
 
     @staticmethod
     def _member_sessions_key(name: str) -> str:
-        return f"sessions:{name}"
+        return sessions_mod.member_sessions_key(name)
 
     async def _restore_session_index(self) -> None:
         """Rebuild the process Session map and Session expiry index from the store."""
@@ -757,44 +778,27 @@ class Team:
 
     async def _save_session(self, session: dict[str, Any]) -> None:
         store = self._ensure_started()
-        token = session["token"]
-        name = session["membership_name"]
         while True:
-            applied = await store.apply(
-                [
-                    Put(f"session:{token}", session),
-                    Put(f"instance:{name}:{session['instance_id']}", token),
-                    SetAdd(self._member_sessions_key(name), token),
-                    IndexAdd(
-                        expiry_mod.SESSIONS,
-                        timestamp_score(session["expires_at"]),
-                        token,
-                    ),
-                ]
-            )
+            applied = await store.apply(sessions_mod.put_ops(session))
             if applied.ok or applied.reason != "cas":
                 break
-        self._session_tokens_by_member.setdefault(name, set()).add(token)
-        join_token = session.get("join_token")
-        if isinstance(join_token, str) and join_token:
-            await auth_mod.bind_session_to_token(store, join_token, token)
+        self._index_session(session)
 
-    async def _delete_session(self, session: dict[str, Any]) -> None:
-        store = self._ensure_started()
+    def _index_session(self, session: dict[str, Any]) -> None:
+        """Record a stored Session in this process."""
         token = session["token"]
         name = session["membership_name"]
-        await store.delete(f"session:{token}")
-        await store.delete(f"instance:{name}:{session['instance_id']}")
-        await store.set_remove(self._member_sessions_key(name), token)
-        await expiry_mod.cancel(store, expiry_mod.SESSIONS, token)
+        self._session_tokens_by_member.setdefault(name, set()).add(token)
+
+    def _forget_session(self, session: dict[str, Any]) -> None:
+        """Drop process maps, subscribers, and waiters for one Session."""
+        token = session["token"]
+        name = session["membership_name"]
         tokens = self._session_tokens_by_member.get(name)
         if tokens is not None:
             tokens.discard(token)
             if not tokens:
                 self._session_tokens_by_member.pop(name, None)
-        join_token = session.get("join_token")
-        if isinstance(join_token, str) and join_token:
-            await auth_mod.unbind_session_from_token(store, join_token, token)
         self._wake_session(token)
         for queue in self._sse_subscribers.pop(token, []):
             try:
@@ -813,6 +817,11 @@ class Team:
         self._trace_subscribers = remaining
         if self._operator_token == token:
             self._operator_token = None
+
+    async def _delete_session(self, session: dict[str, Any]) -> None:
+        store = self._ensure_started()
+        await store.apply(sessions_mod.drop_ops(session))
+        self._forget_session(session)
 
     def _wake_session(self, session_token: str) -> None:
         """Wake waiters bound to this Session (waiting sends, work hints)."""
@@ -842,6 +851,8 @@ class Team:
         now = utc_now()
         if parse_timestamp(session["expires_at"]) <= now:
             _fail("unauthorized", "Session is missing or invalid")
+        _membership_id(session)
+        _session_did(session)
         return session
 
     async def _require_operator(self, session_token: Optional[str]) -> dict[str, Any]:
@@ -920,7 +931,8 @@ class Team:
         token the operator issued.
 
         ``name`` is canonicalized to lowercase. A name and DID that already
-        belong together reconnect; any other clash fails with
+        belong together reconnect to that live Membership. After removal,
+        the same spelling is a new Membership. Any other clash fails with
         ``name_conflict``. ``delivery_history="ids"`` puts earlier Message
         ids on each Delivery instead of Message bodies.
         """
@@ -949,18 +961,35 @@ class Team:
         canonical_name = parse_agent_name(name or "")
         if canonical_name is None:
             _fail("invalid_request", "Agent name is invalid")
-        async with self._keys.acquire(f"member:{canonical_name}"):
-            return await self._join_locked(
-                name=name,
-                agent_did=agent_did,
-                profile=profile,
-                spec_version=spec_version,
-                instance_id=instance_id,
-                max_in_flight=max_in_flight,
-                join_token=join_token,
-                identity_proof=identity_proof,
-                delivery_history=delivery_history,
-            )
+        try:
+            did = require_did(agent_did)
+        except ValueError:
+            _fail("invalid_request", "agent_did must be a did:key identifier")
+        token_value = (
+            join_token.strip()
+            if isinstance(join_token, str) and join_token.strip()
+            else None
+        )
+
+        async def _with_member_locks() -> dict[str, Any]:
+            async with self._keys.acquire(f"member:{canonical_name}"):
+                async with self._keys.acquire(f"did:{did}"):
+                    return await self._join_locked(
+                        name=name,
+                        agent_did=agent_did,
+                        profile=profile,
+                        spec_version=spec_version,
+                        instance_id=instance_id,
+                        max_in_flight=max_in_flight,
+                        join_token=join_token,
+                        identity_proof=identity_proof,
+                        delivery_history=delivery_history,
+                    )
+
+        if token_value:
+            async with self._keys.acquire(f"join_token:{token_value}"):
+                return await _with_member_locks()
+        return await _with_member_locks()
 
     async def _join_locked(
         self,
@@ -1015,7 +1044,7 @@ class Team:
 
         store = self._ensure_started()
         now, now_ts = self._now_pair()
-        token_record = await auth_mod.authenticate_join(
+        creds = await auth_mod.inspect_join_credentials(
             store,
             team_name=self.name,
             agent_did=did,
@@ -1028,33 +1057,34 @@ class Team:
 
         by_name = await self._get_member(canonical_name)
         by_did = await self._get_member_by_did(did)
+        created = False
+        member_version: int | None = None
         if by_name is None and by_did is None:
+            created = True
+            await mailbox_mod.drop_mailbox(store, f"{canonical_name}@{self.name}")
             member = {
+                "membership_id": new_uuid(),
                 "name": canonical_name,
                 "address": f"{canonical_name}@{self.name}",
                 "agent_did": did,
                 "profile": canonical_profile,
             }
-            if not await store.insert(f"member:{canonical_name}", member):
-                _fail(
-                    "name_conflict",
-                    "Agent name and DID do not identify the same Membership",
-                )
-            if not await store.insert(f"did:{did}", canonical_name):
-                await store.delete(f"member:{canonical_name}")
-                _fail(
-                    "name_conflict",
-                    "Agent name and DID do not identify the same Membership",
-                )
-            await store.set_add("members", canonical_name)
         elif (
             by_name is not None
             and by_did is not None
             and by_name["name"] == by_did["name"]
             and by_name["agent_did"] == did
         ):
+            _membership_id(by_name)
             member = dict(by_name)
             member["profile"] = canonical_profile
+            record = await store.get_record(f"member:{canonical_name}")
+            if record is None:
+                _fail(
+                    "name_conflict",
+                    "Agent name and DID do not identify the same Membership",
+                )
+            member_version = record.version
         else:
             _fail(
                 "name_conflict",
@@ -1071,23 +1101,22 @@ class Team:
         )
         if attestation is not None:
             member["attestation"] = attestation
-        await self._save_member(member)
-        if self._directory is not None and not _is_principal(member):
-            await self._directory.upsert(member["name"], member["profile"])
 
         existing_token = await store.get(f"instance:{member['name']}:{instance_id}")
+        old_session = None
         if isinstance(existing_token, str):
             async with self._keys.acquire(f"session:{existing_token}"):
                 old = await self._get_session(existing_token)
                 if old is not None:
                     await self._release_session_leases(old, now_ts)
-                    await self._delete_session(old)
+                    old_session = old
         elif await self._session_count(member["name"]) >= self.max_instances:
             _fail("busy", "No more Instances may join this Membership")
 
         expires = now + timedelta(seconds=self.session_ttl_seconds)
         session = {
             "token": secrets.token_urlsafe(32),
+            "membership_id": member["membership_id"],
             "membership_name": member["name"],
             "address": member["address"],
             "agent_did": member["agent_did"],
@@ -1097,12 +1126,34 @@ class Team:
             "expires_at": format_timestamp(expires),
             "lease_ids": [],
         }
+        token_record = creds.token_record
         if token_record is not None:
             session["join_token"] = token_record["token"]
-            if token_record.get("single_use"):
-                await auth_mod.mark_join_token_used(store, token_record)
-        await self._save_session(session)
-        return self._join_result(session, member)
+        try:
+            accepted = await commit_join(
+                store,
+                JoinPlan(
+                    member=member,
+                    created=created,
+                    member_version=member_version,
+                    session=session,
+                    old_session=old_session,
+                    challenge_nonce=creds.challenge_nonce,
+                    challenge_version=creds.challenge_version,
+                    token_record=token_record,
+                    token_version=creds.token_version,
+                ),
+            )
+        except JoinConflict as exc:
+            _fail(exc.code, exc.message)
+        if accepted.old_session is not None:
+            self._forget_session(accepted.old_session)
+        self._index_session(accepted.session)
+        if self._directory is not None and not _is_principal(accepted.member):
+            await self._directory.upsert(
+                accepted.member["name"], accepted.member["profile"]
+            )
+        return self._join_result(accepted.session, accepted.member)
 
     async def disconnect(self, session_token: str) -> None:
         """Close this Session. The Membership and its Mailbox remain."""
@@ -1172,18 +1223,22 @@ class Team:
         A later join with this token fails with ``unauthorized``. Waiting
         sends return ``unauthorized``. Event streams close.
         """
-        store = self._ensure_started()
-        record = await auth_mod.revoke_join_token_record(store, token)
-        if record is None:
+        secret = token.strip() if isinstance(token, str) else ""
+        if not secret:
             return
-        _, now_ts = self._now_pair()
-        for session_token in await auth_mod.sessions_for_join_token(store, token):
-            async with self._keys.acquire(f"session:{session_token}"):
-                session = await self._get_session(session_token)
-                if session is None:
-                    continue
-                await self._release_session_leases(session, now_ts)
-                await self._delete_session(session)
+        async with self._keys.acquire(f"join_token:{secret}"):
+            store = self._ensure_started()
+            record = await auth_mod.revoke_join_token_record(store, secret)
+            if record is None:
+                return
+            _, now_ts = self._now_pair()
+            for session_token in await auth_mod.sessions_for_join_token(store, secret):
+                async with self._keys.acquire(f"session:{session_token}"):
+                    session = await self._get_session(session_token)
+                    if session is None:
+                        continue
+                    await self._release_session_leases(session, now_ts)
+                    await self._delete_session(session)
 
     async def remove_membership(self, name: str) -> None:
         """Remove a Membership and drop every Session it holds.
@@ -1228,6 +1283,11 @@ class Team:
             agent_did = member.get("agent_did")
             if isinstance(agent_did, str):
                 await store.delete(f"did:{agent_did}")
+            address = str(member.get("address") or f"{canonical}@{self.name}")
+            await mailbox_mod.drop_mailbox(store, address)
+            membership_id = member.get("membership_id")
+            if isinstance(membership_id, str) and membership_id:
+                await store.delete(f"held_waits:{membership_id}")
             if self._directory is not None:
                 await self._directory.drop(canonical)
 
@@ -1262,15 +1322,19 @@ class Team:
             await store.put("team:operator", payload)
         existing = await self._get_member(OPERATOR_NAME)
         if existing is not None:
+            membership_id = _membership_id(existing)
             old_did = existing.get("agent_did")
             if isinstance(old_did, str) and old_did != identity.did:
                 await store.delete(f"did:{old_did}")
             if self._directory is not None:
                 await self._directory.drop(OPERATOR_NAME)
+        else:
+            membership_id = new_uuid()
         address = f"{OPERATOR_NAME}@{self.name}"
         await mailbox_mod.drop_mailbox(store, address)
         await self._save_member(
             {
+                "membership_id": membership_id,
                 "name": OPERATOR_NAME,
                 "address": address,
                 "agent_did": identity.did,
@@ -1287,6 +1351,7 @@ class Team:
             member = await self._get_member(OPERATOR_NAME)
         if member is None:
             _fail("internal", "operator Membership was not reserved")
+        membership_id = _membership_id(member)
         record = await store.get("team:operator")
         instance_id = new_uuid()
         if isinstance(record, dict) and isinstance(record.get("instance_id"), str):
@@ -1302,6 +1367,7 @@ class Team:
         expires = now + timedelta(seconds=self.session_ttl_seconds)
         session = {
             "token": secrets.token_urlsafe(32),
+            "membership_id": membership_id,
             "membership_name": member["name"],
             "address": member["address"],
             "agent_did": member["agent_did"],
@@ -1330,18 +1396,18 @@ class Team:
     def _held_wait_ttl(self) -> float:
         return max(60.0, float(self.wait_hold_seconds) * 2)
 
-    async def _acquire_held_wait(self, membership_name: str) -> bool:
+    async def _acquire_held_wait(self, membership_id: str) -> bool:
         store = self._ensure_started()
         return await store.increment_if_below(
-            f"held_waits:{membership_name}",
+            f"held_waits:{membership_id}",
             self.max_held_waits,
             ttl_seconds=self._held_wait_ttl(),
         )
 
-    async def _release_held_wait(self, membership_name: str) -> None:
+    async def _release_held_wait(self, membership_id: str) -> None:
         store = self._ensure_started()
         await store.decrement_floor(
-            f"held_waits:{membership_name}",
+            f"held_waits:{membership_id}",
             ttl_seconds=self._held_wait_ttl(),
         )
 
@@ -1399,7 +1465,7 @@ class Team:
                     self._drop_waiter(ticket_id, waiter)
                     self._drop_session_wake(session_token, waiter)
             try:
-                return parse_send_result(result)
+                return parse_send_result(projection_mod.public_send_result(result))
             except ValueError as exc:
                 _fail("internal", str(exc))
         finally:
@@ -1511,6 +1577,9 @@ class Team:
             _fail("not_found", "Recipient Membership was not found")
 
         sender = session["address"]
+        sender_did = _session_did(session)
+        sender_membership_id = _membership_id(session)
+        recipient_membership_id = _membership_id(recipient_member)
         now, now_ts = self._now_pair()
         trace_id = new_uuid()
         parent = None
@@ -1518,7 +1587,10 @@ class Team:
             parent = await store.get(f"msg:{parent_id}")
             if parent is None:
                 _fail("not_found", "parent_id was not found")
-            authorized = sender in {parent.get("sender"), parent.get("recipient")}
+            authorized = sender_membership_id in {
+                _membership_id(parent, field="sender_membership_id"),
+                _membership_id(parent, field="recipient_membership_id"),
+            }
             if not authorized:
                 _fail("not_found", "parent_id was not found")
             if thread_id is not None:
@@ -1531,7 +1603,10 @@ class Team:
             thread = await threads_mod.load_thread(store, thread_id)
             if thread is not None:
                 participants = threads_mod.participant_set(thread)
-                if sender not in participants or recipient not in participants:
+                if (
+                    sender_membership_id not in participants
+                    or recipient_membership_id not in participants
+                ):
                     _fail(
                         "forbidden", "Message is outside this Thread's participant set"
                     )
@@ -1547,12 +1622,14 @@ class Team:
             "metadata": metadata,
         }
         request_hash = semantic_hash(semantic)
-        membership_name = session["membership_name"]
 
         message: dict[str, Any] = {
             "id": message_id,
             "sender": sender,
+            "sender_did": sender_did,
+            "sender_membership_id": sender_membership_id,
             "recipient": recipient,
+            "recipient_membership_id": recipient_membership_id,
             "kind": kind,
             "content": content,
             "created_at": now_ts,
@@ -1576,6 +1653,8 @@ class Team:
                 created_at=now_ts,
                 deadline=deadline_raw,
                 thread_id=thread_id,
+                requester_membership_id=sender_membership_id,
+                recipient_membership_id=recipient_membership_id,
             )
         events = [
             trace_mod.make_event(
@@ -1583,6 +1662,7 @@ class Team:
                 type="accepted",
                 trace_id=trace_id,
                 actor=sender,
+                actor_membership_id=sender_membership_id,
                 message_id=message_id,
                 parent_id=trace_mod.parent_id_of(message),
                 detail={
@@ -1599,6 +1679,7 @@ class Team:
                     type="ticket_opened",
                     trace_id=trace_id,
                     actor=sender,
+                    actor_membership_id=sender_membership_id,
                     message_id=message_id,
                     parent_id=trace_mod.parent_id_of(message),
                     ticket_id=message_id,
@@ -1607,8 +1688,9 @@ class Team:
         commit = SendCommit(
             message_id=message_id,
             sender=sender,
-            membership_name=membership_name,
+            membership_id=sender_membership_id,
             recipient=recipient,
+            recipient_membership_id=recipient_membership_id,
             collect=collect,
             request_hash=request_hash,
             message=message,
@@ -1636,7 +1718,7 @@ class Team:
                     and current["state"] == "open"
                 ):
                     if await self._hold_wait_slot(
-                        collect, membership_name, hold, required=False
+                        collect, sender_membership_id, hold, required=False
                     ):
                         return result, (
                             message_id,
@@ -1645,7 +1727,7 @@ class Team:
             return result, None
         if accepted.wait:
             hold["acquired"] = True
-            hold["name"] = membership_name
+            hold["name"] = sender_membership_id
         self._signal_work(recipient_name)
         self._publish_trace_events(accepted.events)
         if collect == "wait" and hold.get("acquired") and deadline_dt is not None:
@@ -1655,16 +1737,16 @@ class Team:
     async def _hold_wait_slot(
         self,
         collect: Any,
-        membership_name: str,
+        membership_id: str,
         hold: dict[str, Any],
         *,
         required: bool,
     ) -> bool:
         if collect != "wait" or hold.get("acquired"):
             return bool(hold.get("acquired"))
-        if await self._acquire_held_wait(membership_name):
+        if await self._acquire_held_wait(membership_id):
             hold["acquired"] = True
-            hold["name"] = membership_name
+            hold["name"] = membership_id
             return True
         if required:
             _fail(
@@ -1739,6 +1821,10 @@ class Team:
                 if message is None:
                     await mailbox_mod.drop_item(store, address, message_id)
                     continue
+                recipient_mid = _membership_id(message, field="recipient_membership_id")
+                if recipient_mid != _membership_id(session):
+                    await mailbox_mod.drop_item(store, address, message_id)
+                    continue
                 if message.get("kind") == "request":
                     ticket = await self._expire_ticket_if_due(message["id"])
                     if ticket is None or ticket["state"] != "open":
@@ -1796,6 +1882,7 @@ class Team:
                         type="leased",
                         trace_id=str(message["trace_id"]),
                         actor=address,
+                        actor_membership_id=_membership_id(session),
                         message_id=message["id"],
                         parent_id=trace_mod.parent_id_of(message),
                         ticket_id=(message["id"] if message.get("deadline") else None),
@@ -1804,7 +1891,9 @@ class Team:
                 )
             await self._save_session(session)
             try:
-                return parse_lease_result({"deliveries": deliveries})
+                return parse_lease_result(
+                    projection_mod.public_lease_result({"deliveries": deliveries})
+                )
             except ValueError as exc:
                 _fail("internal", str(exc))
 
@@ -1836,7 +1925,10 @@ class Team:
             if history_form == "ids":
                 payload["history_ids"] = []
             return payload
-        messages = await self._thread_messages(str(thread_id))
+        messages = [
+            projection_mod.public_message(item)
+            for item in await self._thread_messages(str(thread_id))
+        ]
         if history_form == "ids":
             ids, complete = threads_mod.history_id_window(
                 messages,
@@ -1877,7 +1969,9 @@ class Team:
                 _fail("not_found", "lease_id was not found")
             existing = await store.get(f"complete:{lease_id}")
             if existing is not None:
-                return CompleteResult.model_validate(existing["result"])
+                return CompleteResult.model_validate(
+                    projection_mod.public_ticket_result(existing["result"])
+                )
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
             ticket = None
@@ -1914,6 +2008,7 @@ class Team:
                         type="completed",
                         trace_id=str(message["trace_id"]),
                         actor=session["address"],
+                        actor_membership_id=_membership_id(session),
                         message_id=str(lease["message_id"]),
                         parent_id=trace_mod.parent_id_of(message),
                         ticket_id=ticket["id"] if ticket is not None else None,
@@ -1944,7 +2039,9 @@ class Team:
             if result.get("ticket"):
                 self._notify(str(result["ticket"]["id"]))
             self._publish_trace_events(accepted.events)
-            return CompleteResult.model_validate(accepted.result)
+            return CompleteResult.model_validate(
+                projection_mod.public_ticket_result(accepted.result)
+            )
 
     async def reply(
         self, session_token: str, request: Mapping[str, Any]
@@ -2008,12 +2105,20 @@ class Team:
                 _fail("invalid_request", "reply data must be JSON")
             try:
                 replayed = await load_reply_replay(
-                    store, reply_id, session["address"], reply_hash
+                    store,
+                    reply_id,
+                    reply_hash,
+                    _membership_id(session),
                 )
             except ReplyConflict as exc:
                 _fail(exc.code, exc.message)
             if replayed is not None:
-                return dict(replayed)
+                try:
+                    return ReplyResult.model_validate(
+                        projection_mod.public_ticket_result(replayed)
+                    )
+                except ValidationError as exc:
+                    _fail("internal", validation_message(exc))
 
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
@@ -2040,10 +2145,15 @@ class Team:
             if ticket is None or ticket["state"] != "open":
                 _fail("ticket_closed", "Ticket is already terminal")
 
+            reply_to_membership_id = _membership_id(
+                message, field="sender_membership_id"
+            )
             if outcome == "failed":
                 reply_message: dict[str, Any] = {
                     "id": reply_id,
                     "sender": session["address"],
+                    "sender_did": _session_did(session),
+                    "sender_membership_id": _membership_id(session),
                     "recipient": message["sender"],
                     "kind": "error",
                     "error": self._validate_error_object(payload["error"]),
@@ -2055,6 +2165,8 @@ class Team:
                 reply_message = {
                     "id": reply_id,
                     "sender": session["address"],
+                    "sender_did": _session_did(session),
+                    "sender_membership_id": _membership_id(session),
                     "recipient": message["sender"],
                     "kind": "response",
                     "content": payload["content"],
@@ -2062,6 +2174,7 @@ class Team:
                     "trace_id": message["trace_id"],
                     "parent_id": message["id"],
                 }
+            reply_message["recipient_membership_id"] = reply_to_membership_id
             if message.get("thread_id"):
                 reply_message["thread_id"] = message["thread_id"]
             if outcome == "failed":
@@ -2086,6 +2199,7 @@ class Team:
                     type="replied",
                     trace_id=str(message["trace_id"]),
                     actor=session["address"],
+                    actor_membership_id=_membership_id(session),
                     message_id=message["id"],
                     parent_id=trace_mod.parent_id_of(message),
                     ticket_id=next_ticket["id"],
@@ -2101,6 +2215,7 @@ class Team:
                     ReplyCommit(
                         reply_id=reply_id,
                         sender=session["address"],
+                        membership_id=_membership_id(session),
                         reply_hash=reply_hash,
                         reply_message=reply_message,
                         ticket=next_ticket,
@@ -2120,7 +2235,9 @@ class Team:
             await self._drop_lease_from_session(session, lease_id)
             self._notify(next_ticket["id"])
             self._publish_trace_events(accepted.events)
-            return ReplyResult.model_validate(accepted.result)
+            return ReplyResult.model_validate(
+                projection_mod.public_ticket_result(accepted.result)
+            )
 
     def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
         try:
@@ -2156,9 +2273,13 @@ class Team:
         except ValueError:
             _fail("invalid_request", "ticket_id must be a UUID")
         ticket = await self._expire_ticket_if_due(ticket_id)
-        if ticket is None or ticket.get("requester") != session["address"]:
+        if ticket is None:
             _fail("not_found", "Ticket was not found")
-        return parse_ticket(ticket)
+        if _membership_id(ticket, field="requester_membership_id") != _membership_id(
+            session
+        ):
+            _fail("not_found", "Ticket was not found")
+        return parse_ticket(projection_mod.public_ticket(ticket))
 
     async def get_history(
         self,
@@ -2192,7 +2313,7 @@ class Team:
             _fail("invalid_request", "limit must be between 1 and 200")
         store = self._ensure_started()
         thread = await threads_mod.load_thread(store, thread_id)
-        if thread is None or session["address"] not in threads_mod.participant_set(
+        if thread is None or _membership_id(session) not in threads_mod.participant_set(
             thread
         ):
             _fail("not_found", "Thread was not found")
@@ -2203,7 +2324,11 @@ class Team:
                 messages.append(stored)
         page, has_more = threads_mod.page_history(messages, before=before, limit=n)
         try:
-            return parse_history_result({"messages": page, "has_more": has_more})
+            return parse_history_result(
+                projection_mod.public_history_result(
+                    {"messages": page, "has_more": has_more}
+                )
+            )
         except ValueError as exc:
             _fail("internal", str(exc))
 
@@ -2367,11 +2492,14 @@ class Team:
         if not events:
             _fail("not_found", "Trace was not found")
         if session["membership_name"] != OPERATOR_NAME:
-            address = str(session["address"])
-            events = await trace_mod.visible_events(store, events, address)
+            events = await trace_mod.visible_events(
+                store, events, _membership_id(session)
+            )
             if not events:
                 _fail("not_found", "Trace was not found")
-        return TraceResult.model_validate({"trace_id": trace_id, "events": events})
+        return TraceResult.model_validate(
+            projection_mod.public_trace_result({"trace_id": trace_id, "events": events})
+        )
 
     async def subscribe_trace_events(self, session_token: str) -> asyncio.Queue:
         """Attach a watch queue for new Trace events. Operator only."""
@@ -2408,13 +2536,20 @@ class Team:
                 await mailbox_mod.drop_item(store, str(expired["recipient"]), ticket_id)
                 self._notify(expired["id"])
                 message = await store.get(f"msg:{ticket_id}")
-                if isinstance(message, dict) and message.get("trace_id"):
+                actor_mid = expired.get("recipient_membership_id")
+                if (
+                    isinstance(message, dict)
+                    and message.get("trace_id")
+                    and isinstance(actor_mid, str)
+                    and actor_mid
+                ):
                     await self._record_trace(
                         trace_mod.make_event(
                             at=now_ts,
                             type="ticket_closed",
                             trace_id=str(message["trace_id"]),
                             actor=str(expired["recipient"]),
+                            actor_membership_id=actor_mid,
                             message_id=ticket_id,
                             parent_id=trace_mod.parent_id_of(message),
                             ticket_id=ticket_id,

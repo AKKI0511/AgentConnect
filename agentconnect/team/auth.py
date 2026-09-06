@@ -13,6 +13,7 @@ Failed credential checks raise ``unauthorized`` with one generic message.
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Mapping, NoReturn, NotRequired, Optional, TypedDict
 
@@ -25,6 +26,13 @@ from agentconnect.team.codec import format_timestamp, parse_timestamp, utc_now
 from agentconnect.team.errors import TeamError
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store
+from agentconnect.team.store.ops import (
+    Cas,
+    DeleteIfVersion,
+    IndexRemove,
+    SetRemove,
+    StoreOp,
+)
 
 JOIN_UNAUTH_MESSAGE = "Join credentials are missing or invalid"
 
@@ -47,6 +55,16 @@ class JoinToken(TypedDict):
     single_use: bool
     agent_did: NotRequired[str]
     name: NotRequired[str]
+
+
+@dataclass
+class JoinCredentials:
+    """Verified join credentials that have not yet been consumed."""
+
+    token_record: Optional[dict[str, Any]] = None
+    token_version: Optional[int] = None
+    challenge_nonce: Optional[str] = None
+    challenge_version: Optional[int] = None
 
 
 def join_unauthorized() -> NoReturn:
@@ -156,13 +174,6 @@ async def load_join_token(store: Store, token: str) -> Optional[dict[str, Any]]:
     return record if isinstance(record, dict) else None
 
 
-async def mark_join_token_used(store: Store, record: Mapping[str, Any]) -> None:
-    """Mark a single-use token as consumed."""
-    updated = dict(record)
-    updated["used"] = True
-    await store.put(f"{TOKEN_PREFIX}{updated['token']}", updated)
-
-
 async def revoke_join_token_record(
     store: Store, token: str
 ) -> Optional[dict[str, Any]]:
@@ -174,20 +185,6 @@ async def revoke_join_token_record(
     record["revoked"] = True
     await store.put(f"{TOKEN_PREFIX}{token}", record)
     return record
-
-
-async def bind_session_to_token(
-    store: Store, join_token: str, session_token: str
-) -> None:
-    """Record that ``session_token`` was created from ``join_token``."""
-    await store.set_add(f"{TOKEN_SESSIONS_PREFIX}{join_token}", session_token)
-
-
-async def unbind_session_from_token(
-    store: Store, join_token: str, session_token: str
-) -> None:
-    """Drop the session mapping when a Session is deleted."""
-    await store.set_remove(f"{TOKEN_SESSIONS_PREFIX}{join_token}", session_token)
 
 
 async def sessions_for_join_token(store: Store, join_token: str) -> list[str]:
@@ -212,18 +209,31 @@ async def tokens_bound_to_member(
     return found
 
 
-def token_is_usable(record: Mapping[str, Any], *, now=None) -> bool:
-    """Return True when the token is unexpired, unrevoked, and not consumed."""
-    if record.get("revoked"):
-        return False
-    if record.get("single_use") and record.get("used"):
-        return False
+def _token_unexpired(record: Mapping[str, Any], *, now=None) -> bool:
     instant = now or utc_now()
     try:
         expires = parse_timestamp(str(record["expires_at"]))
     except (KeyError, ValueError, TypeError):
         return False
     return expires > instant
+
+
+def token_allows_join(
+    record: Mapping[str, Any], *, agent_did: str, name: str, now=None
+) -> bool:
+    """Return True when this token may admit or reconnect this join."""
+    if record.get("revoked"):
+        return False
+    if not _token_unexpired(record, now=now):
+        return False
+    if not token_matches_join(record, agent_did=agent_did, name=name):
+        return False
+    if record.get("single_use") and record.get("used"):
+        return (
+            record.get("admitted_name") == name
+            and record.get("admitted_did") == agent_did
+        )
+    return True
 
 
 def token_matches_join(record: Mapping[str, Any], *, agent_did: str, name: str) -> bool:
@@ -237,7 +247,38 @@ def token_matches_join(record: Mapping[str, Any], *, agent_did: str, name: str) 
     return True
 
 
-async def authenticate_join(
+def consume_challenge_ops(nonce: str, version: int) -> list[StoreOp]:
+    """Return writes that delete ``nonce`` in the join apply."""
+    return [
+        DeleteIfVersion(f"{CHALLENGE_PREFIX}{nonce}", version),
+        SetRemove(CHALLENGES_SET, nonce),
+        IndexRemove(expiry_mod.JOIN_CHALLENGES, nonce),
+    ]
+
+
+def token_join_ops(
+    record: Mapping[str, Any],
+    version: int,
+    *,
+    name: str,
+    agent_did: str,
+    membership_id: str,
+) -> list[StoreOp]:
+    """Return a compare-and-set that records this join on the token.
+
+    Single-use tokens become consumed and bound to the admitted Membership.
+    Every token join bumps the stored version so a concurrent revoke loses.
+    """
+    updated = dict(record)
+    if updated.get("single_use"):
+        updated["used"] = True
+        updated["admitted_name"] = name
+        updated["admitted_did"] = agent_did
+        updated["membership_id"] = membership_id
+    return [Cas(f"{TOKEN_PREFIX}{updated['token']}", version, updated)]
+
+
+async def inspect_join_credentials(
     store: Store,
     *,
     team_name: str,
@@ -247,10 +288,9 @@ async def authenticate_join(
     identity_proof: Optional[str],
     require_auth: bool,
     now=None,
-) -> Optional[dict[str, Any]]:
-    """Verify join credentials.
+) -> JoinCredentials:
+    """Verify join credentials without consuming them.
 
-    Returns the join-token record when a token was used, otherwise None.
     Raises ``unauthorized`` with :data:`JOIN_UNAUTH_MESSAGE` on any failure.
     """
     token_value = _as_optional_str(join_token)
@@ -258,19 +298,23 @@ async def authenticate_join(
     if require_auth and (not token_value or not proof_value):
         join_unauthorized()
     if not token_value and not proof_value:
-        return None
+        return JoinCredentials()
 
-    token_record: Optional[dict[str, Any]] = None
+    creds = JoinCredentials()
+    instant = now or utc_now()
     if token_value:
-        token_record = await load_join_token(store, token_value)
-        instant = now or utc_now()
+        token_row = await store.get_record(f"{TOKEN_PREFIX}{token_value}")
+        token_record = token_row.value if token_row is not None else None
         if (
-            token_record is None
+            not isinstance(token_record, dict)
             or token_record.get("team") not in {None, team_name}
-            or not token_is_usable(token_record, now=instant)
-            or not token_matches_join(token_record, agent_did=agent_did, name=name)
+            or not token_allows_join(
+                token_record, agent_did=agent_did, name=name, now=instant
+            )
         ):
             join_unauthorized()
+        creds.token_record = dict(token_record)
+        creds.token_version = token_row.version
 
     if proof_value:
         try:
@@ -280,9 +324,9 @@ async def authenticate_join(
         nonce = payload.get("nonce")
         if not isinstance(nonce, str):
             join_unauthorized()
-        challenge = await load_challenge(store, nonce)
-        instant = now or utc_now()
-        if challenge is None:
+        challenge_row = await store.get_record(f"{CHALLENGE_PREFIX}{nonce}")
+        challenge = challenge_row.value if challenge_row is not None else None
+        if not isinstance(challenge, dict):
             join_unauthorized()
         try:
             expires = parse_timestamp(str(challenge["expires_at"]))
@@ -301,11 +345,12 @@ async def authenticate_join(
             )
         except ValueError:
             join_unauthorized()
-        await consume_challenge(store, nonce)
+        creds.challenge_nonce = nonce
+        creds.challenge_version = challenge_row.version
     elif require_auth:
         join_unauthorized()
 
-    return token_record
+    return creds
 
 
 def split_proof_nonce(token: str) -> dict[str, Any]:

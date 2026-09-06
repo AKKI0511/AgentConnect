@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
+from agentconnect.team.store.apply import Overlay, apply_ops, watch_keys
 from agentconnect.team.store.base import Store, StoreRecord
+from agentconnect.team.store.ops import ApplyResult, IndexAddIfCardBelow, StoreOp
 
 _CAS_LUA = """
 local cur = redis.call('GET', KEYS[1])
@@ -14,6 +16,18 @@ local doc = cjson.decode(cur)
 if tonumber(doc.v) ~= tonumber(ARGV[1]) then return 0 end
 redis.call('SET', KEYS[1], ARGV[2])
 return 1
+"""
+
+_PUT_LUA = """
+local raw = redis.call('GET', KEYS[1])
+local v = 1
+if raw then
+  local doc = cjson.decode(raw)
+  v = (tonumber(doc.v) or 0) + 1
+end
+local wrapped = '{"v":' .. tostring(v) .. ',"d":' .. ARGV[1] .. '}'
+redis.call('SET', KEYS[1], wrapped)
+return v
 """
 
 _INDEX_ADD_IF_BELOW_LUA = """
@@ -76,7 +90,8 @@ class RedisStore(Store):
 
     Pass the same ``url`` and ``prefix`` to a new Runtime after a restart to
     recover open Tickets and queued Mailbox work. ``insert`` uses ``SET NX``.
-    ``compare_and_set`` and Mailbox depth checks use small Lua scripts.
+    ``compare_and_set``, ``put``, and ``apply`` use Lua or WATCH/MULTI so
+    version updates themselves are atomic.
     """
 
     persistence = "durable"
@@ -89,6 +104,7 @@ class RedisStore(Store):
         self._prefix = prefix.rstrip(":")
         self._redis: Any = None
         self._cas = None
+        self._put = None
         self._index_add_if_below = None
         self._incr_if_below = None
         self._decr_floor = None
@@ -113,6 +129,7 @@ class RedisStore(Store):
 
         self._redis = Redis.from_url(self._url, decode_responses=True)
         self._cas = self._redis.register_script(_CAS_LUA)
+        self._put = self._redis.register_script(_PUT_LUA)
         self._index_add_if_below = self._redis.register_script(_INDEX_ADD_IF_BELOW_LUA)
         self._incr_if_below = self._redis.register_script(_INCR_IF_BELOW_LUA)
         self._decr_floor = self._redis.register_script(_DECR_FLOOR_LUA)
@@ -127,6 +144,7 @@ class RedisStore(Store):
         finally:
             self._redis = None
             self._cas = None
+            self._put = None
             self._index_add_if_below = None
             self._incr_if_below = None
             self._decr_floor = None
@@ -151,12 +169,99 @@ class RedisStore(Store):
             return None
         return _unwrap(raw)
 
-    async def put(self, key: str, value: Any) -> None:
-        """Write a JSON value at ``key``, bumping the version."""
-        record = await self.get_record(key)
-        version = 1 if record is None else record.version + 1
+    async def apply(self, ops: Sequence[StoreOp]) -> ApplyResult:
+        """Apply ``ops`` with WATCH/MULTI, or leave every key unchanged."""
+        batch = tuple(ops)
+        if not batch:
+            return ApplyResult(ok=True)
+        from redis.exceptions import WatchError
+
         client = await self._client()
-        await client.set(self._key(key), _wrap(value, version))
+        doc_keys, _set_keys, index_keys = watch_keys(batch)
+        physical = []
+        for key in doc_keys:
+            physical.append(self._key(key))
+        for op in batch:
+            if isinstance(op, IndexAddIfCardBelow):
+                physical.append(self._index_key(op.key))
+        physical = list(dict.fromkeys(physical))
+
+        pipe = client.pipeline(transaction=True)
+        try:
+            if physical:
+                await pipe.watch(*physical)
+            docs: dict[str, StoreRecord | None] = {}
+            for key in doc_keys:
+                raw = await pipe.get(self._key(key))
+                docs[key] = None if raw is None else _unwrap(raw)
+            scores: dict[tuple[str, str], float | None] = {}
+            cards: dict[str, int] = {}
+            for key in index_keys:
+                cards[key] = int(await pipe.zcard(self._index_key(key)) or 0)
+            for op in batch:
+                member = getattr(op, "member", None)
+                if member is None or op.key not in index_keys:
+                    continue
+                pair = (op.key, str(member))
+                if pair in scores:
+                    continue
+                raw_score = await pipe.zscore(self._index_key(op.key), str(member))
+                scores[pair] = None if raw_score is None else float(raw_score)
+
+            overlay = Overlay(
+                get_doc=lambda key: docs.get(key),
+                get_index_score=lambda key, member: scores.get((key, member)),
+                get_index_card=lambda key: cards.get(key, 0),
+            )
+            result = apply_ops(batch, overlay)
+            if not result.ok:
+                await pipe.unwatch()
+                return result
+            pipe.multi()
+            self._emit_overlay(pipe, overlay)
+            await pipe.execute()
+            return ApplyResult(ok=True)
+        except WatchError:
+            return ApplyResult(ok=False, reason="cas")
+        finally:
+            await pipe.reset()
+
+    def _emit_overlay(self, pipe: Any, overlay: Overlay) -> None:
+        for key, record in overlay.iter_docs():
+            namespaced = self._key(key)
+            if record is None:
+                pipe.delete(namespaced, self._set_key(key), self._index_key(key))
+            else:
+                pipe.set(namespaced, _wrap(record.value, record.version))
+        for key in overlay.wiped:
+            pipe.delete(self._set_key(key), self._index_key(key))
+        for key, members in overlay.set_add.items():
+            if members:
+                pipe.sadd(self._set_key(key), *members)
+        for key, members in overlay.set_rem.items():
+            if members:
+                pipe.srem(self._set_key(key), *members)
+        for key, scores in overlay.index_add.items():
+            if scores:
+                pipe.zadd(self._index_key(key), scores)
+        for key, members in overlay.index_rem.items():
+            if members:
+                pipe.zrem(self._index_key(key), *members)
+        for key, ttl in overlay.expire.items():
+            pipe.expire(self._key(key), ttl)
+
+    async def put(self, key: str, value: Any) -> None:
+        """Write a JSON value at ``key``, bumping the version in one Lua step."""
+        client = await self._client()
+        script = self._put
+        if script is None:
+            await self._client()
+            script = self._put
+        await script(
+            keys=[self._key(key)],
+            args=[_dumps(value)],
+            client=client,
+        )
 
     async def insert(self, key: str, value: Any) -> bool:
         """Write ``value`` only if ``key`` is absent (``SET NX``)."""
@@ -306,6 +411,10 @@ class RedisStore(Store):
                 batch.clear()
         if batch:
             await client.delete(*batch)
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
 def _wrap(value: Any, version: int) -> str:

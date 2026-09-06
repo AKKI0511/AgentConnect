@@ -9,7 +9,13 @@ from agentconnect.team.errors import TeamError
 from agentconnect.team.http import create_runtime_app
 from agentconnect.team.runtime import Team
 from agentconnect.team.auth import JoinToken
-from agentconnect.team.store import MemoryStore, RedisStore, Store, StoreRecord
+from agentconnect.team.store import (
+    ApplyResult,
+    MemoryStore,
+    RedisStore,
+    Store,
+    StoreRecord,
+)
 
 __all__ = [
     "Team",
@@ -17,6 +23,7 @@ __all__ = [
     "JoinToken",
     "Store",
     "StoreRecord",
+    "ApplyResult",
     "MemoryStore",
     "RedisStore",
     "create_runtime_app",

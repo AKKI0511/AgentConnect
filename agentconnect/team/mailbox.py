@@ -15,6 +15,10 @@ The four operations match a visibility-timeout queue:
     ids = await ready_ids(store, address, now, limit=1)
     item = await claim(store, address, ids[0], lease_id, expires_at, now, now_ts)
     await acknowledge(store, address, message_id, lease_id)
+
+Enqueue, claim, and acknowledge each commit their document and index
+writes together. A Runtime send transition includes enqueue in a larger
+apply so the item is not visible until the Message exists.
 """
 
 from __future__ import annotations
@@ -25,6 +29,19 @@ from typing import Any, Literal, Optional
 from agentconnect.team.codec import new_uuid, parse_timestamp, timestamp_score
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store
+from agentconnect.team.store.ops import (
+    Cas,
+    Delete,
+    DeleteIfVersion,
+    IndexAdd,
+    IndexAddIfCardBelow,
+    IndexRemove,
+    Insert,
+    Put,
+    SetAdd,
+    SetRemove,
+    StoreOp,
+)
 
 LEASE_KEY_PREFIX = "lease:"
 LEASES_SET = "leases"
@@ -65,6 +82,25 @@ def new_item(message_id: str, now_ts: str) -> dict[str, Any]:
     }
 
 
+def enqueue_ops(
+    address: str,
+    message_id: str,
+    now_ts: str,
+    *,
+    max_depth: int,
+) -> list[StoreOp]:
+    """Return the writes that enqueue ``message_id`` if depth allows."""
+    return [
+        Insert(mailbox_item_key(address, message_id), new_item(message_id, now_ts)),
+        IndexAddIfCardBelow(
+            mailbox_index_key(address),
+            score_of(now_ts),
+            message_id,
+            max_depth,
+        ),
+    ]
+
+
 async def enqueue(
     store: Store,
     address: str,
@@ -74,20 +110,14 @@ async def enqueue(
     max_depth: int,
 ) -> EnqueueResult:
     """Insert one Mailbox item. ``busy`` when depth would pass ``max_depth``."""
-    item_key = mailbox_item_key(address, message_id)
-    item = new_item(message_id, now_ts)
-    if not await store.insert(item_key, item):
-        return "duplicate"
-    added = await store.index_add_if_card_below(
-        mailbox_index_key(address),
-        score_of(now_ts),
-        message_id,
-        max_depth,
+    result = await store.apply(
+        enqueue_ops(address, message_id, now_ts, max_depth=max_depth)
     )
-    if not added:
-        await store.delete(item_key)
-        return "busy"
-    return "ok"
+    if result.ok:
+        return "ok"
+    if result.reason == "exists":
+        return "duplicate"
+    return "busy"
 
 
 async def depth(store: Store, address: str) -> int:
@@ -142,9 +172,14 @@ async def claim(
     item["lease_id"] = lease_id
     item["lease_expires_at"] = expires_at
     item["available_at"] = expires_at
-    if not await store.compare_and_set(item_key, record.version, item):
+    result = await store.apply(
+        [
+            Cas(item_key, record.version, item),
+            IndexAdd(mailbox_index_key(address), score_of(expires_at), message_id),
+        ]
+    )
+    if not result.ok:
         return None
-    await store.index_add(mailbox_index_key(address), score_of(expires_at), message_id)
     del now_ts
     return item
 
@@ -166,10 +201,21 @@ async def extend(
         return False
     item["lease_expires_at"] = expires_at
     item["available_at"] = expires_at
-    if not await store.compare_and_set(item_key, record.version, item):
-        return False
-    await store.index_add(mailbox_index_key(address), score_of(expires_at), message_id)
-    return True
+    result = await store.apply(
+        [
+            Cas(item_key, record.version, item),
+            IndexAdd(mailbox_index_key(address), score_of(expires_at), message_id),
+        ]
+    )
+    return result.ok
+
+
+def acknowledge_ops(address: str, message_id: str, version: int) -> list[StoreOp]:
+    """Return the writes that drop a Mailbox item after complete or reply."""
+    return [
+        DeleteIfVersion(mailbox_item_key(address, message_id), version),
+        IndexRemove(mailbox_index_key(address), message_id),
+    ]
 
 
 async def acknowledge(
@@ -184,9 +230,8 @@ async def acknowledge(
     item = record.value
     if lease_id is not None and item.get("lease_id") not in {lease_id, None}:
         return False
-    await store.delete(item_key)
-    await store.index_remove(mailbox_index_key(address), message_id)
-    return True
+    result = await store.apply(acknowledge_ops(address, message_id, record.version))
+    return result.ok
 
 
 async def return_item(
@@ -209,16 +254,23 @@ async def return_item(
     item["available_at"] = now_ts
     item["lease_id"] = None
     item["lease_expires_at"] = None
-    if not await store.compare_and_set(item_key, record.version, item):
-        return False
-    await store.index_add(mailbox_index_key(address), score_of(now_ts), message_id)
-    return True
+    result = await store.apply(
+        [
+            Cas(item_key, record.version, item),
+            IndexAdd(mailbox_index_key(address), score_of(now_ts), message_id),
+        ]
+    )
+    return result.ok
 
 
 async def drop_item(store: Store, address: str, message_id: str) -> None:
     """Remove an item without requiring an active lease. Used on Ticket expiry."""
-    await store.delete(mailbox_item_key(address, message_id))
-    await store.index_remove(mailbox_index_key(address), message_id)
+    await store.apply(
+        [
+            Delete(mailbox_item_key(address, message_id)),
+            IndexRemove(mailbox_index_key(address), message_id),
+        ]
+    )
 
 
 async def drop_mailbox(store: Store, address: str) -> None:
@@ -230,6 +282,35 @@ async def drop_mailbox(store: Store, address: str) -> None:
     for message_id in message_ids:
         await store.delete(mailbox_item_key(address, message_id))
     await store.delete(index_key)
+
+
+def put_lease_ops(
+    *,
+    lease_id: str,
+    message_id: str,
+    address: str,
+    session_token: str,
+    membership_name: str,
+    attempt: int,
+    expires_at: str,
+) -> tuple[dict[str, Any], list[StoreOp]]:
+    """Return the lease record and the writes that store it."""
+    record = {
+        "lease_id": lease_id,
+        "message_id": message_id,
+        "address": address,
+        "session_token": session_token,
+        "membership_name": membership_name,
+        "attempt": attempt,
+        "expires_at": expires_at,
+        "active": True,
+    }
+    ops: list[StoreOp] = [
+        Put(lease_key(lease_id), record),
+        SetAdd(LEASES_SET, lease_id),
+        IndexAdd(expiry_mod.LEASES, score_of(expires_at), lease_id),
+    ]
+    return record, ops
 
 
 async def put_lease(
@@ -244,19 +325,16 @@ async def put_lease(
     expires_at: str,
 ) -> dict[str, Any]:
     """Store an active lease record and return it."""
-    record = {
-        "lease_id": lease_id,
-        "message_id": message_id,
-        "address": address,
-        "session_token": session_token,
-        "membership_name": membership_name,
-        "attempt": attempt,
-        "expires_at": expires_at,
-        "active": True,
-    }
-    await store.put(lease_key(lease_id), record)
-    await store.set_add(LEASES_SET, lease_id)
-    await expiry_mod.schedule(store, expiry_mod.LEASES, lease_id, expires_at)
+    record, ops = put_lease_ops(
+        lease_id=lease_id,
+        message_id=message_id,
+        address=address,
+        session_token=session_token,
+        membership_name=membership_name,
+        attempt=attempt,
+        expires_at=expires_at,
+    )
+    await store.apply(ops)
     return record
 
 
@@ -271,11 +349,27 @@ async def get_lease(store: Store, lease_id: str) -> Optional[dict[str, Any]]:
 async def deactivate_lease(store: Store, lease_id: str) -> None:
     """Mark a lease inactive and drop it from the active set."""
     record = await store.get(lease_key(lease_id))
+    ops: list[StoreOp] = [
+        SetRemove(LEASES_SET, lease_id),
+        IndexRemove(expiry_mod.LEASES, lease_id),
+    ]
     if record is not None:
-        record["active"] = False
-        await store.put(lease_key(lease_id), record)
-    await store.set_remove(LEASES_SET, lease_id)
-    await expiry_mod.cancel(store, expiry_mod.LEASES, lease_id)
+        inactive = dict(record)
+        inactive["active"] = False
+        ops.insert(0, Put(lease_key(lease_id), inactive))
+    await store.apply(ops)
+
+
+def deactivate_lease_ops(lease: dict[str, Any]) -> list[StoreOp]:
+    """Return the writes that mark ``lease`` inactive."""
+    inactive = dict(lease)
+    inactive["active"] = False
+    lease_id = str(inactive["lease_id"])
+    return [
+        Put(lease_key(lease_id), inactive),
+        SetRemove(LEASES_SET, lease_id),
+        IndexRemove(expiry_mod.LEASES, lease_id),
+    ]
 
 
 def lease_is_active(record: dict[str, Any], now: datetime) -> bool:

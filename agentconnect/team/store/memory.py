@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from agentconnect.team.store.base import Store, StoreRecord
+from agentconnect.team.store.apply import Overlay, apply_ops
+from agentconnect.team.store.ops import ApplyResult, StoreOp
 
 
 class MemoryStore(Store):
     """Volatile document store backed by dicts in this process.
 
-    ``insert`` and ``compare_and_set`` are atomic with respect to other
-    MemoryStore operations. Mailbox index updates use the same lock.
+    ``insert``, ``compare_and_set``, and ``apply`` are atomic with
+    respect to other MemoryStore operations. Mailbox index updates use
+    the same lock.
     """
 
     persistence = "volatile"
@@ -47,6 +50,72 @@ class MemoryStore(Store):
             if record is None:
                 return None
             return StoreRecord(value=_clone(record[0]), version=record[1])
+
+    async def apply(self, ops: Sequence[StoreOp]) -> ApplyResult:
+        """Apply ``ops`` under the store lock, or leave every key unchanged."""
+        batch = tuple(ops)
+        if not batch:
+            return ApplyResult(ok=True)
+        async with self._lock:
+            overlay = Overlay(
+                get_doc=self._doc_unlocked,
+                get_index_score=self._index_score_unlocked,
+                get_index_card=self._index_card_unlocked,
+            )
+            result = apply_ops(batch, overlay)
+            if not result.ok:
+                return result
+            self._install(overlay)
+            return result
+
+    def _doc_unlocked(self, key: str) -> StoreRecord | None:
+        record = self._docs.get(key)
+        if record is None:
+            return None
+        return StoreRecord(value=record[0], version=record[1])
+
+    def _index_score_unlocked(self, key: str, member: str) -> float | None:
+        index = self._indexes.get(key)
+        if index is None or member not in index:
+            return None
+        return float(index[member])
+
+    def _index_card_unlocked(self, key: str) -> int:
+        index = self._indexes.get(key)
+        return 0 if not index else len(index)
+
+    def _install(self, overlay: Overlay) -> None:
+        for key, record in overlay.iter_docs():
+            if record is None:
+                self._docs.pop(key, None)
+            else:
+                self._docs[key] = (_clone(record.value), int(record.version))
+        for key in overlay.wiped:
+            self._sets.pop(key, None)
+            self._indexes.pop(key, None)
+        for key, members in overlay.set_add.items():
+            if not members:
+                continue
+            self._sets.setdefault(key, set()).update(members)
+        for key, members in overlay.set_rem.items():
+            bucket = self._sets.get(key)
+            if bucket is None:
+                continue
+            bucket.difference_update(members)
+            if not bucket:
+                self._sets.pop(key, None)
+        for key, scores in overlay.index_add.items():
+            if not scores:
+                continue
+            self._indexes.setdefault(key, {}).update(scores)
+        for key, members in overlay.index_rem.items():
+            index = self._indexes.get(key)
+            if index is None:
+                continue
+            for member in members:
+                index.pop(member, None)
+            if not index:
+                self._indexes.pop(key, None)
 
     async def put(self, key: str, value: Any) -> None:
         """Write a copied value at ``key``, bumping the version."""

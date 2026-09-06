@@ -13,7 +13,8 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from agentconnect.team.codec import json_size
-from agentconnect.team.store.base import Store
+from agentconnect.team.store.base import Store, StoreRecord
+from agentconnect.team.store.ops import Cas, Insert, SetAdd, StoreOp
 
 THREAD_KEY_PREFIX = "thread:"
 THREADS_SET = "threads"
@@ -88,6 +89,63 @@ def allocate_seq(thread: dict[str, Any], message: dict[str, Any]) -> int:
     return seq
 
 
+def copy_thread(thread: dict[str, Any]) -> dict[str, Any]:
+    """Return a shallow copy of Thread fields the Runtime mutates."""
+    return {
+        "id": thread["id"],
+        "participants": list(thread.get("participants") or []),
+        "message_ids": list(thread.get("message_ids") or []),
+        "next_seq": thread.get("next_seq"),
+    }
+
+
+def prepare_append(
+    record: Optional[StoreRecord],
+    *,
+    thread_id: str,
+    message: dict[str, Any],
+    sender: str,
+    recipient: str,
+    max_messages: Optional[int] = None,
+    keep_ids: Optional[set[str]] = None,
+) -> tuple[dict[str, Any], list[StoreOp], Optional[str]]:
+    """Build the Thread write for one Message.
+
+    Returns ``(thread, ops, error)``. ``error`` is ``forbidden`` when
+    ``sender`` or ``recipient`` is outside a Thread that already exists.
+    Mutates ``message['seq']`` when the Message is new.
+    """
+    existing = None if record is None else dict(record.value)
+    if existing is not None:
+        participants = participant_set(existing)
+        if sender not in participants or recipient not in participants:
+            return existing, [], "forbidden"
+        thread = copy_thread(existing)
+    else:
+        thread = ensure_thread(
+            None,
+            thread_id=thread_id,
+            sender=sender,
+            recipient=recipient,
+        )
+    allocate_seq(thread, message)
+    if message["id"] not in thread["message_ids"]:
+        thread["message_ids"].append(message["id"])
+    retained = keep_ids or set()
+    if max_messages is not None:
+        thread["message_ids"] = trim_thread_ids(
+            list(thread["message_ids"] or []),
+            keep_ids=retained,
+            max_messages=max_messages,
+        )
+    key = thread_key(thread_id)
+    if record is None:
+        ops: list[StoreOp] = [Insert(key, thread), SetAdd(THREADS_SET, thread_id)]
+    else:
+        ops = [Cas(key, record.version, thread)]
+    return thread, ops, None
+
+
 async def append_message(
     store: Store,
     *,
@@ -106,31 +164,25 @@ async def append_message(
     dropped from the transcript on the same write.
     """
     key = thread_key(thread_id)
-    retained = keep_ids or set()
     while True:
         record = await store.get_record(key)
-        thread = ensure_thread(
-            None if record is None else record.value,
+        thread, ops, error = prepare_append(
+            record,
             thread_id=thread_id,
+            message=message,
             sender=sender,
             recipient=recipient,
+            max_messages=max_messages,
+            keep_ids=keep_ids,
         )
-        allocate_seq(thread, message)
-        if message["id"] not in thread["message_ids"]:
-            thread["message_ids"].append(message["id"])
-        if max_messages is not None:
-            thread["message_ids"] = trim_thread_ids(
-                list(thread["message_ids"] or []),
-                keep_ids=retained,
-                max_messages=max_messages,
-            )
-        if record is None:
-            if await store.insert(key, thread):
-                await store.set_add(THREADS_SET, thread_id)
-                return thread
-            continue
-        if await store.compare_and_set(key, record.version, thread):
+        if error == "forbidden":
             return thread
+        result = await store.apply(ops)
+        if result.ok:
+            return thread
+        if result.reason in {"exists", "cas"}:
+            continue
+        return thread
 
 
 def history_window(

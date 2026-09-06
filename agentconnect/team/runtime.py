@@ -35,6 +35,10 @@ join token and an EdDSA identity proof.
 methods are the Session transport. HTTP, MCP, and the in-process Session
 call them by name. Agent code uses ``BaseAgent``.
 
+``send`` and ``reply`` commit as one store transition. A Mailbox item is
+not leaseable until its Message exists, and a request's Ticket is stored
+in that same commit.
+
 Pass ``store="memory"`` (the default) for a process-local Team. Pass a
 Redis URL when Memberships, Sessions, mailboxes, open Tickets, and
 Thread history must survive a Runtime restart.
@@ -112,6 +116,7 @@ from agentconnect.team.codec import (
     require_did,
     require_uuid,
     semantic_hash,
+    timestamp_score,
     utc_now,
 )
 from agentconnect.core.spec import SPEC_VERSION
@@ -139,9 +144,20 @@ from agentconnect.team.constants import (
 from agentconnect.team.errors import TeamError
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.locks import KeyedLock
-from agentconnect.team.store.base import Store
-from agentconnect.team.store.memory import MemoryStore
-from agentconnect.team.store.redis import RedisStore
+from agentconnect.team.store import MemoryStore, RedisStore, Store
+from agentconnect.team.store.ops import IndexAdd, Put, SetAdd
+from agentconnect.team.transitions.complete import (
+    CompleteCommit,
+    CompleteConflict,
+    commit_complete,
+)
+from agentconnect.team.transitions.reply import (
+    ReplyCommit,
+    ReplyConflict,
+    commit_reply,
+    load_reply_replay,
+)
+from agentconnect.team.transitions.send import SendCommit, SendConflict, commit_send
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +385,15 @@ class Team:
             for queue in list(self._sse_subscribers.get(token) or ()):
                 try:
                     queue.put_nowait({"type": "work_available", "data": {}})
+                except asyncio.QueueFull:
+                    pass
+
+    def _publish_trace_events(self, events: Sequence[dict[str, Any]]) -> None:
+        """Notify watchers of Trace events already committed to the store."""
+        for stored in events:
+            for _token, queue in list(self._trace_subscribers):
+                try:
+                    queue.put_nowait(stored)
                 except asyncio.QueueFull:
                     pass
 
@@ -734,15 +759,21 @@ class Team:
         store = self._ensure_started()
         token = session["token"]
         name = session["membership_name"]
-        await store.put(f"session:{token}", session)
-        await store.put(
-            f"instance:{name}:{session['instance_id']}",
-            token,
-        )
-        await store.set_add(self._member_sessions_key(name), token)
-        await expiry_mod.schedule(
-            store, expiry_mod.SESSIONS, token, session["expires_at"]
-        )
+        while True:
+            applied = await store.apply(
+                [
+                    Put(f"session:{token}", session),
+                    Put(f"instance:{name}:{session['instance_id']}", token),
+                    SetAdd(self._member_sessions_key(name), token),
+                    IndexAdd(
+                        expiry_mod.SESSIONS,
+                        timestamp_score(session["expires_at"]),
+                        token,
+                    ),
+                ]
+            )
+            if applied.ok or applied.reason != "cas":
+                break
         self._session_tokens_by_member.setdefault(name, set()).add(token)
         join_token = session.get("join_token")
         if isinstance(join_token, str) and join_token:
@@ -1321,8 +1352,25 @@ class Team:
     ) -> dict[str, Any]:
         """Accept one request or event for one recipient in this Team.
 
+        The Message, Ticket, Thread append, and Mailbox enqueue commit
+        together. A recipient cannot lease the item until that commit
+        finishes.
+
         ``collect=wait`` holds until the Ticket is terminal or
         ``wait_hold_seconds`` elapses, then returns the current Ticket.
+
+            result = await team.send(
+                token,
+                {
+                    "id": message_id,
+                    "recipient": "writer",
+                    "kind": "request",
+                    "content": {"task": "draft"},
+                    "collect": "ticket",
+                    "deadline": "2026-08-18T15:10:00Z",
+                },
+            )
+            result["ticket"]["id"]
         """
         try:
             parsed_send = parse_send_request(request)
@@ -1499,80 +1547,7 @@ class Team:
             "metadata": metadata,
         }
         request_hash = semantic_hash(semantic)
-        send_key = f"send:{message_id}"
         membership_name = session["membership_name"]
-
-        existing_send = await store.get(send_key)
-        created_send = False
-        if existing_send is not None:
-            if existing_send.get("sender") != sender:
-                _fail("id_conflict", "Message id is already used")
-            if existing_send.get("hash") != request_hash:
-                _fail("id_conflict", "Message id is already used with different data")
-            result = existing_send.get("result")
-            if isinstance(result, dict):
-                result = dict(result)
-                if result.get("status") == "ticketed":
-                    ticket = await self._expire_ticket_if_due(message_id)
-                    if ticket is not None:
-                        result["ticket"] = ticket
-                    if (
-                        collect == "wait"
-                        and ticket is not None
-                        and ticket["state"] == "open"
-                    ):
-                        if await self._hold_wait_slot(
-                            collect, membership_name, hold, required=False
-                        ):
-                            return result, (
-                                message_id,
-                                parse_timestamp(ticket["deadline"]),
-                            )
-                return result, None
-        else:
-            created_send = await store.insert(
-                send_key,
-                {
-                    "sender": sender,
-                    "hash": request_hash,
-                    "collect": collect,
-                },
-            )
-            if not created_send:
-                existing_send = await store.get(send_key)
-                if existing_send is None or existing_send.get("sender") != sender:
-                    _fail("id_conflict", "Message id is already used")
-                if existing_send.get("hash") != request_hash:
-                    _fail(
-                        "id_conflict",
-                        "Message id is already used with different data",
-                    )
-                result = existing_send.get("result")
-                if isinstance(result, dict):
-                    return dict(result), None
-
-        if collect == "wait":
-            if not await self._hold_wait_slot(
-                collect, membership_name, hold, required=False
-            ):
-                if created_send:
-                    await store.delete(send_key)
-                    _fail(
-                        "wait_limit",
-                        "this Membership already holds the maximum number of waits",
-                    )
-
-        enqueued = await mailbox_mod.enqueue(
-            store,
-            recipient,
-            message_id,
-            now_ts,
-            max_depth=self.max_mailbox_depth,
-        )
-        if enqueued == "busy":
-            if created_send:
-                await store.delete(send_key)
-            _fail("busy", "Recipient Mailbox is full")
 
         message: dict[str, Any] = {
             "id": message_id,
@@ -1592,17 +1567,17 @@ class Team:
         if metadata is not None:
             message["metadata"] = metadata
 
-        if thread_id is not None:
-            await self._append_thread_message(
-                thread_id=thread_id,
-                message=message,
-                sender=sender,
+        ticket = None
+        if deadline_dt is not None:
+            ticket = tickets_mod.new_open_ticket(
+                ticket_id=message_id,
+                requester=sender,
                 recipient=recipient,
+                created_at=now_ts,
+                deadline=deadline_raw,
+                thread_id=thread_id,
             )
-
-        await store.insert(f"msg:{message_id}", message)
-        self._signal_work(recipient_name)
-        await self._record_trace(
+        events = [
             trace_mod.make_event(
                 at=now_ts,
                 type="accepted",
@@ -1616,52 +1591,64 @@ class Team:
                     "recipient": recipient,
                 },
             )
-        )
-
-        if deadline_dt is None:
-            result = {"status": "accepted", "message": message}
-            await store.put(
-                send_key,
-                {
-                    "sender": sender,
-                    "hash": request_hash,
-                    "collect": collect,
-                    "result": result,
-                },
+        ]
+        if ticket is not None:
+            events.append(
+                trace_mod.make_event(
+                    at=now_ts,
+                    type="ticket_opened",
+                    trace_id=trace_id,
+                    actor=sender,
+                    message_id=message_id,
+                    parent_id=trace_mod.parent_id_of(message),
+                    ticket_id=message_id,
+                )
             )
-            return result, None
-
-        ticket = tickets_mod.new_open_ticket(
-            ticket_id=message_id,
-            requester=sender,
+        commit = SendCommit(
+            message_id=message_id,
+            sender=sender,
+            membership_name=membership_name,
             recipient=recipient,
-            created_at=now_ts,
-            deadline=deadline_raw,
-            thread_id=thread_id,
+            collect=collect,
+            request_hash=request_hash,
+            message=message,
+            ticket=ticket,
+            max_depth=self.max_mailbox_depth,
+            max_held_waits=self.max_held_waits,
+            thread_limit=self.thread_message_limit,
+            wait_ttl=self._held_wait_ttl(),
+            now_ts=now_ts,
+            events=events,
         )
-        await tickets_mod.insert_ticket(store, ticket)
-        await self._record_trace(
-            trace_mod.make_event(
-                at=now_ts,
-                type="ticket_opened",
-                trace_id=trace_id,
-                actor=sender,
-                message_id=message_id,
-                parent_id=trace_mod.parent_id_of(message),
-                ticket_id=message_id,
-            )
-        )
-        result = {"status": "ticketed", "message": message, "ticket": ticket}
-        await store.put(
-            send_key,
-            {
-                "sender": sender,
-                "hash": request_hash,
-                "collect": collect,
-                "result": result,
-            },
-        )
-        if collect == "wait" and hold.get("acquired"):
+        try:
+            accepted = await commit_send(store, commit)
+        except SendConflict as exc:
+            _fail(exc.code, exc.message)
+        result = accepted.result
+        if accepted.replay:
+            if result.get("status") == "ticketed":
+                current = await self._expire_ticket_if_due(message_id)
+                if current is not None:
+                    result["ticket"] = current
+                if (
+                    collect == "wait"
+                    and current is not None
+                    and current["state"] == "open"
+                ):
+                    if await self._hold_wait_slot(
+                        collect, membership_name, hold, required=False
+                    ):
+                        return result, (
+                            message_id,
+                            parse_timestamp(current["deadline"]),
+                        )
+            return result, None
+        if accepted.wait:
+            hold["acquired"] = True
+            hold["name"] = membership_name
+        self._signal_work(recipient_name)
+        self._publish_trace_events(accepted.events)
+        if collect == "wait" and hold.get("acquired") and deadline_dt is not None:
             return result, (message_id, deadline_dt)
         return result, None
 
@@ -1894,39 +1881,34 @@ class Team:
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
             ticket = None
+            ticket_record = None
             if message and message.get("kind") == "request":
                 ticket = await self._expire_ticket_if_due(message["id"])
                 if ticket is not None and tickets_mod.is_terminal(ticket):
                     _fail("ticket_closed", "Ticket is already terminal")
             if not mailbox_mod.lease_is_active(lease, now):
                 _fail("lease_expired", "Delivery lease is no longer active")
+            item_record = await store.get_record(
+                mailbox_mod.mailbox_item_key(lease["address"], lease["message_id"])
+            )
+            if item_record is None:
+                _fail("lease_expired", "Delivery lease is no longer active")
             result: dict[str, Any] = {}
+            declined = None
             if ticket is not None and ticket["state"] == "open":
-                record = await tickets_mod.load_ticket_record(store, ticket["id"])
+                ticket_record = await tickets_mod.load_ticket_record(
+                    store, ticket["id"]
+                )
+                if ticket_record is None:
+                    _fail("ticket_closed", "Ticket is already terminal")
                 declined = tickets_mod.mark_declined(dict(ticket), now_ts)
-                if record is not None and await tickets_mod.cas_ticket(
-                    store,
-                    declined,
-                    record.version,
-                    retention_seconds=self.terminal_ticket_retention_seconds,
-                ):
-                    ticket = declined
-                    result["ticket"] = ticket
-                    self._notify(ticket["id"])
-                else:
-                    current = await tickets_mod.load_ticket(store, ticket["id"])
-                    if current is not None and tickets_mod.is_terminal(current):
-                        _fail("ticket_closed", "Ticket is already terminal")
-                    ticket = current or ticket
-                    result["ticket"] = ticket
-                    self._notify(ticket["id"])
-            await self._finish_delivery(session, lease, now_ts)
-            await store.put(f"complete:{lease_id}", {"result": result})
+                result["ticket"] = declined
+            events: list[dict[str, Any]] = []
             if isinstance(message, dict) and message.get("trace_id"):
                 detail: dict[str, Any] = {}
-                if ticket is not None and ticket.get("state") == "declined":
+                if declined is not None:
                     detail["declined"] = True
-                await self._record_trace(
+                events.append(
                     trace_mod.make_event(
                         at=now_ts,
                         type="completed",
@@ -1938,12 +1920,51 @@ class Team:
                         detail=detail,
                     )
                 )
-            return CompleteResult.model_validate(result)
+            try:
+                accepted = await commit_complete(
+                    store,
+                    CompleteCommit(
+                        lease_id=lease_id,
+                        result=result,
+                        ticket=declined,
+                        ticket_version=(
+                            None if ticket_record is None else ticket_record.version
+                        ),
+                        mailbox_address=str(lease["address"]),
+                        mailbox_message_id=str(lease["message_id"]),
+                        mailbox_version=item_record.version,
+                        lease=lease,
+                        retention_seconds=self.terminal_ticket_retention_seconds,
+                        events=events,
+                    ),
+                )
+            except CompleteConflict as exc:
+                _fail(exc.code, exc.message)
+            await self._drop_lease_from_session(session, lease_id)
+            if result.get("ticket"):
+                self._notify(str(result["ticket"]["id"]))
+            self._publish_trace_events(accepted.events)
+            return CompleteResult.model_validate(accepted.result)
 
     async def reply(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
-        """Finish a reply-expected Delivery with content or an error."""
+        """Finish a reply-expected Delivery with content or an error.
+
+        The response Message, Ticket, Thread append, and lease
+        acknowledgement commit together.
+
+            result = await team.reply(
+                token,
+                {
+                    "id": reply_id,
+                    "lease_id": delivery["lease_id"],
+                    "outcome": "completed",
+                    "content": "Draft complete.",
+                },
+            )
+            result["ticket"]["state"]
+        """
         try:
             parsed_reply = parse_reply_request(request)
         except ValueError as exc:
@@ -1985,19 +2006,14 @@ class Team:
                 reply_hash = semantic_hash(payload)
             except (TypeError, ValueError):
                 _fail("invalid_request", "reply data must be JSON")
-
-            existing_reply = await store.get(f"reply:{reply_id}")
-            existing_msg = await store.get(f"msg:{reply_id}")
-            if existing_reply is not None:
-                if existing_reply.get("sender") != session["address"]:
-                    _fail("id_conflict", "Message id is already used")
-                if existing_reply.get("hash") != reply_hash:
-                    _fail(
-                        "id_conflict", "Message id is already used with different data"
-                    )
-                return dict(existing_reply["result"])
-            if existing_msg is not None:
-                _fail("id_conflict", "Message id is already used")
+            try:
+                replayed = await load_reply_replay(
+                    store, reply_id, session["address"], reply_hash
+                )
+            except ReplyConflict as exc:
+                _fail(exc.code, exc.message)
+            if replayed is not None:
+                return dict(replayed)
 
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
@@ -2048,12 +2064,6 @@ class Team:
                 }
             if message.get("thread_id"):
                 reply_message["thread_id"] = message["thread_id"]
-                await self._append_thread_message(
-                    thread_id=message["thread_id"],
-                    message=reply_message,
-                    sender=reply_message["sender"],
-                    recipient=reply_message["recipient"],
-                )
             if outcome == "failed":
                 next_ticket = tickets_mod.mark_failed(
                     dict(ticket), reply_message["error"], now_ts
@@ -2062,34 +2072,15 @@ class Team:
                 next_ticket = tickets_mod.mark_completed(
                     dict(ticket), reply_message, now_ts
                 )
-            record = await tickets_mod.load_ticket_record(store, ticket["id"])
-            if record is None or record.value.get("state") != "open":
+            ticket_record = await tickets_mod.load_ticket_record(store, ticket["id"])
+            if ticket_record is None or ticket_record.value.get("state") != "open":
                 _fail("ticket_closed", "Ticket is already terminal")
-            inserted_reply = await store.insert(f"msg:{reply_id}", reply_message)
-            if not inserted_reply:
-                _fail("id_conflict", "Message id is already used")
-            if not await tickets_mod.cas_ticket(
-                store,
-                next_ticket,
-                record.version,
-                retention_seconds=self.terminal_ticket_retention_seconds,
-            ):
-                current = await tickets_mod.load_ticket(store, ticket["id"])
-                if current is not None and tickets_mod.is_terminal(current):
-                    late = tickets_mod.observe_late_reply(dict(current), now_ts)
-                    late_rec = await tickets_mod.load_ticket_record(store, ticket["id"])
-                    if late_rec is not None:
-                        await tickets_mod.cas_ticket(store, late, late_rec.version)
-                _fail("ticket_closed", "Ticket is already terminal")
-            ticket = next_ticket
-            await self._finish_delivery(session, lease, now_ts)
-            result = {"ticket": ticket}
-            await store.put(
-                f"reply:{reply_id}",
-                {"sender": session["address"], "hash": reply_hash, "result": result},
+            item_record = await store.get_record(
+                mailbox_mod.mailbox_item_key(lease["address"], lease["message_id"])
             )
-            self._notify(ticket["id"])
-            await self._record_trace(
+            if item_record is None:
+                _fail("lease_expired", "Delivery lease is no longer active")
+            events = [
                 trace_mod.make_event(
                     at=now_ts,
                     type="replied",
@@ -2097,20 +2088,54 @@ class Team:
                     actor=session["address"],
                     message_id=message["id"],
                     parent_id=trace_mod.parent_id_of(message),
-                    ticket_id=ticket["id"],
+                    ticket_id=next_ticket["id"],
                     detail={
                         "outcome": ("failed" if outcome == "failed" else "completed"),
                         "reply_id": reply_id,
                     },
                 )
-            )
-            return ReplyResult.model_validate(result)
+            ]
+            try:
+                accepted = await commit_reply(
+                    store,
+                    ReplyCommit(
+                        reply_id=reply_id,
+                        sender=session["address"],
+                        reply_hash=reply_hash,
+                        reply_message=reply_message,
+                        ticket=next_ticket,
+                        ticket_version=ticket_record.version,
+                        mailbox_address=str(lease["address"]),
+                        mailbox_message_id=str(lease["message_id"]),
+                        mailbox_version=item_record.version,
+                        lease=lease,
+                        retention_seconds=self.terminal_ticket_retention_seconds,
+                        thread_limit=self.thread_message_limit,
+                        now_ts=now_ts,
+                        events=events,
+                    ),
+                )
+            except ReplyConflict as exc:
+                _fail(exc.code, exc.message)
+            await self._drop_lease_from_session(session, lease_id)
+            self._notify(next_ticket["id"])
+            self._publish_trace_events(accepted.events)
+            return ReplyResult.model_validate(accepted.result)
 
     def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
         try:
             return ErrorObject.model_validate(error).to_public_dict()
         except ValidationError as exc:
             _fail("invalid_request", validation_message(exc))
+
+    async def _drop_lease_from_session(
+        self, session: dict[str, Any], lease_id: str
+    ) -> None:
+        lease_ids = list(session.get("lease_ids") or [])
+        if lease_id in lease_ids:
+            lease_ids.remove(lease_id)
+        session["lease_ids"] = lease_ids
+        await self._save_session(session)
 
     async def _finish_delivery(
         self, session: dict[str, Any], lease: dict[str, Any], now_ts: str
@@ -2120,11 +2145,8 @@ class Team:
             store, lease["address"], lease["message_id"], lease["lease_id"]
         )
         await mailbox_mod.deactivate_lease(store, lease["lease_id"])
-        lease_ids = list(session.get("lease_ids") or [])
-        if lease["lease_id"] in lease_ids:
-            lease_ids.remove(lease["lease_id"])
-        session["lease_ids"] = lease_ids
-        await self._save_session(session)
+        del now_ts
+        await self._drop_lease_from_session(session, lease["lease_id"])
 
     async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
         """Return the Ticket owned by the calling Membership."""

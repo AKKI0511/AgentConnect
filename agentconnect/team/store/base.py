@@ -4,8 +4,9 @@ A Store holds Memberships, Sessions, Mailboxes, Messages, Tickets, and
 Thread history. Agents never talk to it. Memory is the default for a
 process-local Team. Redis keeps that state across a Runtime restart.
 
-Contention uses two primitives: insert-if-absent and compare-and-set
-against a document version. Mailbox ready sets and expiry are
+Contention uses insert-if-absent, compare-and-set, and :meth:`apply`.
+``apply`` is how a Runtime transition commits Message, Ticket, Thread,
+and Mailbox writes together. Mailbox ready sets and expiry are
 time-ordered indexes so enqueue and sweep do not walk every stored id.
 """
 
@@ -13,7 +14,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
+
+from agentconnect.team.store.ops import ApplyResult, StoreOp
 
 
 @dataclass(frozen=True)
@@ -32,13 +35,17 @@ class Store(ABC):
     """Key-value document store plus sets and a time-ordered index.
 
     Custom backends implement this for a Team. Ordinary Agent code never
-    constructs a Store.
+    constructs a Store. Runtime transitions call :meth:`apply` so a Message,
+    Ticket, and Mailbox item commit together.
 
-        record = await store.get_record("ticket:abc")
-        if record is not None:
-            ok = await store.compare_and_set(
-                "ticket:abc", record.version, updated
-            )
+        result = await store.apply(
+            [
+                Insert("msg:abc", message),
+                Insert("ticket:abc", ticket),
+            ]
+        )
+        if not result.ok:
+            ...
     """
 
     persistence: str
@@ -122,6 +129,23 @@ class Store(ABC):
 
         Updating an existing member's score always succeeds and does not
         change cardinality. True when the member is in the index afterwards.
+        """
+
+    @abstractmethod
+    async def apply(self, ops: Sequence[StoreOp]) -> ApplyResult:
+        """Apply ``ops`` as one transition: every write or none of them.
+
+        Use this for send, reply, and complete. A conflict returns
+        ``ok=False`` and leaves the store unchanged.
+
+            result = await store.apply(
+                [
+                    Insert("msg:abc", message),
+                    Insert("ticket:abc", ticket),
+                ]
+            )
+            if not result.ok:
+                ...
         """
 
     @abstractmethod

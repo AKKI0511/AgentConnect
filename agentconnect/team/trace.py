@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
-from agentconnect.team.store.base import Store
+from agentconnect.team.store.base import Store, StoreRecord
+from agentconnect.team.store.ops import Cas, Insert, SetAdd, StoreOp
 
 TRACE_KEY_PREFIX = "trace:"
 TRACES_SET = "traces"
@@ -78,23 +79,35 @@ def parent_id_of(message: Optional[Mapping[str, Any]]) -> Optional[str]:
     return str(parent) if parent else None
 
 
+def append_event_ops(
+    record: StoreRecord | None, events: list[dict[str, Any]]
+) -> list[StoreOp]:
+    """Return the writes that append ``events`` to one Trace list."""
+    if not events:
+        return []
+    trace_id = str(events[0]["trace_id"])
+    key = trace_key(trace_id)
+    if record is None:
+        stored = events[-MAX_TRACE_EVENTS:]
+        return [Insert(key, stored), SetAdd(TRACES_SET, trace_id)]
+    existing = list(record.value) if isinstance(record.value, list) else []
+    stored = (existing + events)[-MAX_TRACE_EVENTS:]
+    return [Cas(key, record.version, stored)]
+
+
 async def append_event(store: Store, event: Mapping[str, Any]) -> dict[str, Any]:
     """Append ``event`` to its Trace, dropping the oldest past the cap."""
     stored = dict(event)
     trace_id = str(stored["trace_id"])
     key = trace_key(trace_id)
-    existing = await store.get(key)
-    events: list[dict[str, Any]]
-    if isinstance(existing, list):
-        events = list(existing)
-    else:
-        events = []
-    events.append(stored)
-    if len(events) > MAX_TRACE_EVENTS:
-        events = events[-MAX_TRACE_EVENTS:]
-    await store.put(key, events)
-    await store.set_add(TRACES_SET, trace_id)
-    return stored
+    while True:
+        record = await store.get_record(key)
+        result = await store.apply(append_event_ops(record, [stored]))
+        if result.ok:
+            return stored
+        if result.reason in {"exists", "cas"}:
+            continue
+        return stored
 
 
 async def load_events(store: Store, trace_id: str) -> list[dict[str, Any]]:

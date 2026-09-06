@@ -11,10 +11,19 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any, Optional
 
-from agentconnect.team.codec import format_timestamp, parse_timestamp
+from agentconnect.team.codec import format_timestamp, parse_timestamp, timestamp_score
 from agentconnect.team.constants import TICKET_TERMINAL
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store, StoreRecord
+from agentconnect.team.store.ops import (
+    Cas,
+    IndexAdd,
+    IndexRemove,
+    Insert,
+    SetAdd,
+    SetRemove,
+    StoreOp,
+)
 
 TICKET_KEY_PREFIX = "ticket:"
 OPEN_TICKETS_SET = "tickets:open"
@@ -128,6 +137,75 @@ def retain_until_ts(ticket: dict[str, Any], *, retention_seconds: float) -> str:
     return format_timestamp(retain)
 
 
+def insert_ticket_ops(ticket: dict[str, Any]) -> list[StoreOp]:
+    """Return the writes that create an open Ticket and its indexes."""
+    ticket_id = ticket["id"]
+    ops: list[StoreOp] = [
+        Insert(ticket_key(ticket_id), ticket),
+        SetAdd(ALL_TICKETS_SET, ticket_id),
+    ]
+    if ticket["state"] == "open":
+        ops.extend(
+            [
+                SetAdd(OPEN_TICKETS_SET, ticket_id),
+                IndexAdd(
+                    expiry_mod.OPEN_TICKETS,
+                    timestamp_score(ticket["deadline"]),
+                    ticket_id,
+                ),
+                SetAdd(RETAIN_MESSAGES_SET, ticket_id),
+            ]
+        )
+    return ops
+
+
+def cas_ticket_ops(
+    ticket: dict[str, Any],
+    version: int,
+    *,
+    retention_seconds: Optional[float] = None,
+) -> list[StoreOp]:
+    """Return the writes that replace a Ticket at ``version``."""
+    ticket_id = ticket["id"]
+    ops: list[StoreOp] = [
+        Cas(ticket_key(ticket_id), version, ticket),
+        SetAdd(ALL_TICKETS_SET, ticket_id),
+    ]
+    if ticket["state"] == "open":
+        ops.extend(
+            [
+                SetAdd(OPEN_TICKETS_SET, ticket_id),
+                IndexAdd(
+                    expiry_mod.OPEN_TICKETS,
+                    timestamp_score(ticket["deadline"]),
+                    ticket_id,
+                ),
+                SetAdd(RETAIN_MESSAGES_SET, ticket_id),
+            ]
+        )
+    else:
+        ops.extend(
+            [
+                SetRemove(OPEN_TICKETS_SET, ticket_id),
+                IndexRemove(expiry_mod.OPEN_TICKETS, ticket_id),
+            ]
+        )
+        if retention_seconds is not None:
+            ops.append(
+                IndexAdd(
+                    expiry_mod.TERMINAL_TICKETS,
+                    timestamp_score(
+                        retain_until_ts(ticket, retention_seconds=retention_seconds)
+                    ),
+                    ticket_id,
+                )
+            )
+        response = ticket.get("response")
+        if isinstance(response, dict) and isinstance(response.get("id"), str):
+            ops.append(SetAdd(RETAIN_MESSAGES_SET, str(response["id"])))
+    return ops
+
+
 async def retain_message(store: Store, message_id: str) -> None:
     """Keep ``message_id`` in Thread history while a Ticket still needs it."""
     await store.set_add(RETAIN_MESSAGES_SET, message_id)
@@ -161,17 +239,8 @@ async def save_ticket(store: Store, ticket: dict[str, Any]) -> None:
 
 async def insert_ticket(store: Store, ticket: dict[str, Any]) -> bool:
     """Insert an open Ticket. False if that id already exists."""
-    ticket_id = ticket["id"]
-    if not await store.insert(ticket_key(ticket_id), ticket):
-        return False
-    await store.set_add(ALL_TICKETS_SET, ticket_id)
-    if ticket["state"] == "open":
-        await store.set_add(OPEN_TICKETS_SET, ticket_id)
-        await expiry_mod.schedule(
-            store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
-        )
-        await retain_message(store, ticket_id)
-    return True
+    result = await store.apply(insert_ticket_ops(ticket))
+    return result.ok
 
 
 async def cas_ticket(
@@ -186,30 +255,10 @@ async def cas_ticket(
     Pass ``retention_seconds`` when this write is the open-to-terminal
     transition so the sweep can pop the Ticket when retention ends.
     """
-    ticket_id = ticket["id"]
-    if not await store.compare_and_set(ticket_key(ticket_id), version, ticket):
-        return False
-    await store.set_add(ALL_TICKETS_SET, ticket_id)
-    if ticket["state"] == "open":
-        await store.set_add(OPEN_TICKETS_SET, ticket_id)
-        await expiry_mod.schedule(
-            store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
-        )
-        await retain_message(store, ticket_id)
-    else:
-        await store.set_remove(OPEN_TICKETS_SET, ticket_id)
-        await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
-        if retention_seconds is not None:
-            await expiry_mod.schedule(
-                store,
-                expiry_mod.TERMINAL_TICKETS,
-                ticket_id,
-                retain_until_ts(ticket, retention_seconds=retention_seconds),
-            )
-        response = ticket.get("response")
-        if isinstance(response, dict) and isinstance(response.get("id"), str):
-            await retain_message(store, str(response["id"]))
-    return True
+    result = await store.apply(
+        cas_ticket_ops(ticket, version, retention_seconds=retention_seconds)
+    )
+    return result.ok
 
 
 async def load_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:

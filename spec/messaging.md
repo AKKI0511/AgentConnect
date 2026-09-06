@@ -6,7 +6,7 @@ Exact structures are in [schema/schema.ts](schema/schema.ts). Runtime operations
 
 ## Message
 
-A Message is created only after `send` or `reply` succeeds. The Client supplies the Message `id`; the Runtime sets the verified Addresses, `created_at`, `trace_id`, and `seq` when `thread_id` is present, then stores the Message as immutable data.
+A Message is created only after `send` or `reply` succeeds. The Client supplies the Message `id`; the Runtime sets the verified Addresses, `created_at`, `trace_id`, and `seq` when `thread_id` is present, then stores the Message as immutable data. A `send` does not make that Message leaseable until that store step commits together with its Ticket, when the Message is a request.
 
 A request or event created by `send` enters the recipient's Mailbox. A response or error created by `reply` resolves the requester's Ticket and enters retained Thread history when the request had a `thread_id`. It does not enter the requester's Mailbox.
 

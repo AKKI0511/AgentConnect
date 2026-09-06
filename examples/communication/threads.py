@@ -5,6 +5,9 @@ from ``ctx.history`` and pages the rest with ``get_history``.
 ``collect="ticket"`` returns immediately; ``collect="wait"`` returns a
 terminal Ticket, even if the Runtime's wait hold elapsed first.
 
+The Runtime assigns ``seq`` when it accepts a Message, in the same
+commit as the Message itself.
+
 Run from the repo root::
 
     poetry run python examples/communication/threads.py

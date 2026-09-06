@@ -178,7 +178,10 @@ After acceptance, the Runtime MUST:
 - set `trace_id` by the propagation rules in [messaging.md](messaging.md)
 - store the immutable Message
 - append it to retained Thread history when `thread_id` is present
+- open a Ticket when the Message is a request
 - enqueue it in the recipient's Mailbox
+
+Acceptance is one transition. The Runtime reserves the Message id against both `send` and `reply`, stores the Message, opens a Ticket when the Message is a request, appends Thread history, and only then makes the Mailbox item leaseable. A crash or a concurrent `lease` during acceptance leaves either that full accepted state or no acceptance. Work-available hints are published only after that commit.
 
 The result depends on the request:
 
@@ -202,7 +205,7 @@ The Runtime wakes a waiting `send` when the Ticket becomes terminal. It MUST NOT
 
 `SendRequest.id` is Client-generated and becomes the accepted Message id. A Ticket, when created, uses the same id.
 
-Message ids are unique across the Team. The Runtime applies these rules:
+Message ids are unique across the Team. The Runtime reserves a proposed id against both `send` and `reply` before either operation stores a Message. The Runtime applies these rules:
 
 - replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
 - using an existing id from another Membership fails with `id_conflict`
@@ -246,6 +249,8 @@ The Runtime first verifies that the retained lease belongs to the caller's Membe
 2. A request whose Ticket is already terminal returns `ticket_closed`.
 3. An inactive lease returns `lease_expired`.
 
+Complete is one transition. The Runtime stores the result, declines the Ticket when the Delivery is a request, and acknowledges the lease together. A lease replacement that wins that compare-and-set leaves the Ticket `open`.
+
 ## `reply`
 
 `reply` finishes a request Delivery with either successful content or an `ErrorObject`. The Runtime creates an immutable response or error Message whose `parent_id` is the request Message id, whose `thread_id` matches the request, whose `seq` is the next Thread sequence when the request has a `thread_id`, and whose `trace_id` is copied from the request.
@@ -264,6 +269,8 @@ The Runtime accepts a new reply only when:
 - the request Ticket is still `open`
 
 The accepted reply completes the Delivery and moves the Ticket to `completed` or `failed` with a compare-and-set on the Ticket document. The first writer to observe `open` and store a terminal state wins. A later writer MUST NOT replace that outcome and fails with `ticket_closed`. The response or error Message is stored for the Ticket and retained Thread history; it MUST NOT be enqueued in the requester's Mailbox.
+
+Reply acceptance is one transition. The Runtime stores the response or error Message, appends Thread history, moves the Ticket, and acknowledges the lease together. A lease replacement that wins that compare-and-set leaves the Ticket `open`. A crash during acceptance leaves either the full accepted reply or the still-open request.
 
 ## `get_result`
 
@@ -436,11 +443,14 @@ Enqueue cost MUST NOT grow with current depth. The Mailbox stores one document p
 | two concurrent `send`s into an empty Mailbox | both accepted; depth 2 |
 | `send` that would pass `max_mailbox_depth` | `busy`; no Message, Delivery, or Ticket |
 | two concurrent `lease` calls on one ready item | one Delivery; the other call does not receive that item |
+| `send` interrupted before commit | no Message, Ticket, or leaseable Mailbox item |
+| concurrent `send` and `lease` | the item is leased only after its Message (and Ticket, for a request) exist |
+| `send` and `reply` using the same Message id | one succeeds; the other returns `id_conflict` |
 | new `collect=wait` while the Membership holds `max_held_waits` | `wait_limit`; nothing created |
 
 ## Work notification
 
-A Runtime MAY notify a Session that work is available so the Client can `lease` without polling. This is only a hint. Mailbox and Ticket correctness MUST NOT depend on it; a Client that ignores every notification and polls `lease` loses nothing. The notification channel is defined in [bindings/http.md](bindings/http.md).
+A Runtime MAY notify a Session that work is available so the Client can `lease` without polling. This is only a hint. Mailbox and Ticket correctness MUST NOT depend on it; a Client that ignores every notification and polls `lease` loses nothing. The Runtime publishes a hint only after the acceptance transition commits. The notification channel is defined in [bindings/http.md](bindings/http.md).
 
 ## Errors
 

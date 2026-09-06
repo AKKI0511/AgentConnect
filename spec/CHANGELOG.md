@@ -51,5 +51,6 @@ Defines:
 - Sessions survive a `durable` restart; `status` `online` is read from stored Sessions
 - Expiry for Sessions, leases, Tickets, and join credentials is processed from a time-ordered index of due items
 - documented TypeScript structures and generated JSON Schema
+- send and reply acceptance is one transition: a Mailbox item is not leaseable until its Message (and Ticket, for a request) exist; Message ids are reserved across `send` and `reply`
 
 This is a draft. No implementation may claim conformance yet.

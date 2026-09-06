@@ -272,15 +272,21 @@ export interface DeadlineExceededError extends ErrorObject {
 
 /**
  * Fields shared by every accepted Message. The Runtime sets the Message `id`
- * (acceptance is keyed on it), the canonical Addresses, `created_at`,
- * `trace_id`, and `seq` when `thread_id` is present. A Client cannot set the
- * Runtime-owned fields.
+ * (acceptance is keyed on it), the canonical Addresses, `sender_did`,
+ * `created_at`, `trace_id`, and `seq` when `thread_id` is present. A Client
+ * cannot set the Runtime-owned fields.
  */
 export interface MessageBase {
   /** Immutable Message id and idempotency key. */
   id: Uuid;
   /** Canonical qualified Address set by the Runtime. */
   sender: QualifiedAddress;
+  /**
+   * Verified DID of the sending Membership, copied from the authenticated
+   * Session at acceptance. It is not looked up later from the Directory. A
+   * principal, including `operator`, has a DID and this field carries it.
+   */
+  sender_did: AgentDid;
   /** Canonical qualified Address set by the Runtime. */
   recipient: QualifiedAddress;
   /** Runtime acceptance time. */

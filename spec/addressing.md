@@ -82,9 +82,10 @@ Assume the current Team is `content-squad`.
 Agent names are unique within a Team.
 
 - A name and Agent DID that are both unused may create a Membership.
-- The same name and Agent DID reconnect to their existing Membership, whether as the same Instance or an additional one.
-- A name bound to another DID fails `name_conflict`.
-- A DID bound to another name fails `name_conflict`.
+- The same name and Agent DID reconnect to their existing live Membership, whether as the same Instance or an additional one.
+- A name bound to another live DID fails `name_conflict`.
+- A DID bound to another live name fails `name_conflict`.
+- After the Team removes a Membership, that name and DID are unused. A later join creates a new Membership. It does not inherit the removed Membership's Mailbox, Tickets, history, or Trace visibility.
 
 Changing an Agent's name is not defined in the current draft. The Runtime MUST NOT silently rename a Membership during `join`.
 

@@ -10,7 +10,9 @@ Every Agent has an Agent DID backed by its own Ed25519 key pair. The current dra
 
 The private key stays with the Client. The Runtime stores the Agent DID and the public information needed to verify join proofs. It MUST NOT require or accept an Agent private key.
 
-The Agent DID identifies the logical Agent across Session replacement and across concurrent Instances. The Agent name identifies its Membership within one Team. Neither value substitutes for the other.
+The Agent DID identifies the logical Agent across Session replacement and across concurrent Instances. The Agent name identifies the current Address of a Membership within one Team. The Membership itself has a third, immutable identity assigned at creation. Address spelling does not transfer rights to a later Membership.
+
+A Client that intends to reconnect MUST persist that key. Minting a new key for a retained name produces a different Agent DID and cannot reconnect to the existing Membership.
 
 ## Embedded join
 
@@ -18,7 +20,7 @@ An embedded Runtime may accept `join` without a join token or identity proof onl
 
 Opening an unauthenticated embedded Runtime on a non-loopback interface is forbidden. A configuration flag alone does not make that deployment safe.
 
-The Runtime still records the submitted Agent DID and stamps it on Messages. In this mode the containing application is the trust source for that DID.
+The Runtime still records the submitted Agent DID and stamps it on Messages as `sender_did`. In this mode the containing application is the trust source for that DID.
 
 ## Network join
 
@@ -38,9 +40,13 @@ Every token MUST be:
 - scoped to one Team
 - expiring
 - revocable
-- single-use or safely replayable for reconnecting the same Membership
+- single-use, or replayable for reconnecting the Membership it already admitted
 
 A token MAY also bind an Agent DID, Agent name, or both. If a bound value differs from `JoinRequest`, the join fails.
+
+A single-use token is consumed in the same store transition as a successful join. After that it may be presented again only to reconnect the Membership it admitted. Using it to create a different Membership fails with `unauthorized`. Two concurrent joins that share one token admit at most one Membership.
+
+Revoking a token and joining with it are one compare-and-set on the token record. The transition that commits first wins. Revoke-first means the join fails with `unauthorized`. Join-first means the Membership exists and revoke then invalidates Sessions created from the token.
 
 The operator issues and revokes tokens through `issue_join_token` and `revoke_join_token` on HTTP and MCP. The hosting process may call the same issuance on the Runtime object without a Session.
 
@@ -58,7 +64,7 @@ Before joining, the Client fetches a short-lived `JoinChallenge`:
 }
 ```
 
-The nonce MUST contain at least 128 bits of cryptographically random data encoded for JSON. A nonce is accepted once. Reuse fails even before `expires_at`.
+The nonce MUST contain at least 128 bits of cryptographically random data encoded for JSON. A nonce is accepted once, in the same store transition as a successful join. Reuse fails even before `expires_at`. A join that fails before that transition leaves the nonce unused.
 
 The `audience` prefix `agentconnect:` is the only brand-coupled token in the security surface. It is Runtime machinery, not part of any Address or Message.
 
@@ -86,7 +92,7 @@ The payload contains exactly these required claims:
 | `iat` | no more than 60 seconds in the future |
 | `exp` | later than `iat` and no later than the challenge expiry |
 
-The Runtime resolves `iss` as a `did:key`, verifies the Ed25519 signature, validates every claim, then consumes the nonce atomically with successful join authentication.
+The Runtime resolves `iss` as a `did:key`, verifies the Ed25519 signature, and validates every claim. It consumes the nonce only in the store transition that records a successful join.
 
 ## Session
 
@@ -100,7 +106,7 @@ The Session is bound to one Instance of one Membership. It authorizes only that 
 - `lease`
 - `complete`
 - `reply`
-- `get_result` for Tickets created by that Membership
+- `get_result` for Tickets opened by that Membership, including after Session replacement
 - `get_history` for Threads the Membership participates in
 - `find`
 - `get_profile`
@@ -130,11 +136,16 @@ This is the kill switch: cutting a compromised member off from sending and recei
 
 ## Sender attribution
 
-`SendRequest` has no sender field. The Runtime derives the sender from the authenticated Session and stores the canonical Address in the accepted Message.
+`SendRequest` has no sender field. The Runtime derives the sender from the authenticated Session and stores two facts on the accepted Message:
 
-`reply` follows the same rule. The Runtime derives the response sender from the Membership that owns the lease and the response recipient from the request Message.
+- `sender`, the canonical Address of that Membership
+- `sender_did`, the verified Agent DID of that Membership, including when the Membership is a principal such as `operator`
 
-Inside a Team, Messages are not signed individually. Attribution comes from Session authentication plus Runtime stamping. A Client-supplied `sender`, recipient override on reply, `created_at`, `trace_id`, `seq`, `attempt`, lease fact, or Instance stamp MUST be rejected as an unknown or invalid field.
+Both values are copied from acceptance data. A handler reads `sender_did` from the delivered Message. The Runtime MUST NOT reconstruct it from the Directory or from a later lookup of that Address.
+
+`reply` follows the same rule. The Runtime derives the response sender Address and `sender_did` from the Membership that owns the lease, and the response recipient from the request Message.
+
+Inside a Team, Messages are not signed individually. Attribution comes from Session authentication plus Runtime stamping. A Client-supplied `sender`, `sender_did`, recipient override on reply, `created_at`, `trace_id`, `seq`, `attempt`, lease fact, or Instance stamp MUST be rejected as an unknown or invalid field.
 
 ## Transport security
 
@@ -152,12 +163,20 @@ The Runtime SHOULD avoid distinguishing authentication failures in public error 
 | valid proof, token bound to another DID | `unauthorized`; no Membership or Session created |
 | reused challenge nonce | `unauthorized` |
 | expired identity proof | `unauthorized` |
+| two concurrent joins with one single-use unbound token | one Membership; the other `unauthorized` |
+| single-use token after it admitted a Membership | reconnect of that Membership succeeds; a different name or DID is `unauthorized` |
+| revoke commits while `join` is in flight | `unauthorized`; no Membership created |
 | new join for the same Instance | that Instance's old Session becomes unauthorized |
 | new join for a new Instance | prior Instances keep their Sessions |
 | Membership removed while a `send` waits | the waiting `send` returns `unauthorized` |
+| name removed, different DID joins that name, `get_result` on a predecessor Ticket | `not_found` |
+| reconnect of a live Membership, `get_result` on a Ticket its prior Session opened | the current Ticket |
 | Client includes `sender` in send input | `invalid_request` |
+| Client includes `sender_did` in send input | `invalid_request` |
 | Client includes `seq` in send input | `invalid_request` |
 | one member reads another member's Ticket | `not_found` |
+| replacement Membership reads predecessor Thread history | `not_found` |
+| replacement Membership reads a Trace that named only the predecessor | `not_found` |
 | non-participant calls `get_history` | `not_found` |
 | member at the tail of a fan-out Trace | only events that name that member |
 | Session expires while holding leases | leases are released; Membership and Ticket state remain |

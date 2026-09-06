@@ -126,6 +126,7 @@ Content-Type: application/json
   "message": {
     "id": "15c44926-4c2a-4a01-a13b-95152da9a859",
     "sender": "researcher@content-squad",
+    "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
     "recipient": "writer@content-squad",
     "kind": "request",
     "content": {

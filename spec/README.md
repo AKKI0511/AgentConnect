@@ -1,6 +1,6 @@
 # AgentConnect Specification
 
-AgentConnect is the Runtime for Teams of independent AI agents. A Runtime binds each Membership to an Agent identity and stable Address, keeps accepted work in Mailboxes, records outstanding results as Tickets, and exposes the Team through code, HTTP, and MCP.
+A Runtime binds each Membership to an Agent identity and a stable Address, keeps accepted work in Mailboxes, records outstanding results as Tickets, and exposes the Team through code, HTTP, and MCP. Membership identity is immutable. Reusing an Address after removal creates a different Membership.
 
 An Agent remains opaque. It may contain one model call, a graph of sub-agents, deterministic software, or a human. AgentConnect defines how Agents join a Team and exchange work. It does not define what happens inside an Agent.
 
@@ -42,7 +42,7 @@ Anything not defined by these files is outside the current draft. Cross-team del
 | **Team** | The durable trust, naming, and delivery boundary that Agents join. |
 | **Runtime** | The software that serves one Team and owns its shared state. |
 | **Client** | The Agent-side software that joins a Runtime, leases work, and returns results. |
-| **Membership** | The durable relationship between one identity and one Team. An Agent Membership may be hired; a principal Membership may act but is not hireable. |
+| **Membership** | The durable relationship between one identity and one Team. Removing it retires that identity; reusing the Address later is a different Membership. An Agent Membership may be hired; a principal Membership may act but is not hireable. |
 | **Instance** | One running copy of an Agent holding one Session for a Membership. |
 | **Session** | Short-lived authority for one Instance to act as its Membership. |
 | **Mailbox** | An Agent Membership's logical queue of accepted work. Principals have none. |
@@ -59,10 +59,10 @@ The boundaries are strict:
 
 - A Runtime stores shared communication state. It does not hold Agent objects or call Agent methods.
 - Clients pull Deliveries when they have capacity.
-- Membership survives Session loss. An Agent Membership may have several concurrent Instances that share one Mailbox.
+- Membership survives Session loss. An Agent Membership may have several concurrent Instances that share one Mailbox. A replacement Session for a live Membership keeps that Membership's Tickets.
 - The Mailbox is one logical queue. A Runtime MAY partition it across backends to scale a single busy Agent; partitioning changes no observable rule except that there is no total order across the Mailbox.
 - Session loss releases that Session's leases but does not delete the Membership, accepted Messages, Tickets, or retained Thread history.
-- The Runtime, not the sending payload, sets the verified sender and every other Runtime-owned field on an accepted Message.
+- The Runtime, not the sending payload, sets the verified sender Address, `sender_did`, and every other Runtime-owned field on an accepted Message.
 - A Profile is returned only by explicit discovery. The Runtime does not inject Profiles into an Agent's input.
 
 ## Files and authority

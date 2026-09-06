@@ -21,9 +21,13 @@ Exact request and result shapes are in [schema/schema.ts](schema/schema.ts). Mes
 
 Membership is durable with respect to Client presence. An offline Agent keeps its Address, Profile, Mailbox, Tickets, and retained Thread history.
 
+Removing a Membership ends that identity. The name and Agent DID become available again. A later join that reuses them creates a different Membership and MUST NOT inherit the removed Membership's Mailbox, Tickets, Thread participation, Trace visibility, or Message-id replay rights.
+
 ## Memberships, Instances, and Mailboxes
 
 A Membership is one identity in one Team. It has one Address.
+
+The Runtime assigns an immutable identity to a Membership when it creates it. Address and Agent DID are the current bindings of that identity. Authorization for Tickets, Thread history, Trace visibility, Mailbox items, and Message-id replay uses the Membership identity, not the Address spelling. Reconnecting a live Membership keeps that identity. Removing it retires the identity; the same name or DID may later belong to a new Membership.
 
 A Membership that may be hired is an **Agent**. An Agent Membership has a Profile, a Directory entry, and one logical Mailbox.
 
@@ -86,16 +90,19 @@ Over HTTP and MCP, operator authority is the Session. The hosting process may ca
 
 `join` creates a Membership or reconnects one, then opens a Session for one Instance. A join that uses the reserved name `operator` fails with `name_conflict`.
 
-The Runtime applies these rules using insert-if-absent on the name and DID bindings:
+The Runtime applies these rules using insert-if-absent on the name and DID bindings of **live** Memberships:
 
-1. Validate the contract version, Agent name, Profile, and identity.
-2. If neither the name nor Agent DID belongs to a Membership, create a Membership and Mailbox. Inserting a name or DID that another join already bound fails with `name_conflict`.
-3. If the name and Agent DID identify the same Membership, reuse it and replace its Profile with the submitted Profile.
-4. If the name and Agent DID do not identify the same Membership, fail with `name_conflict`. This includes a name bound to another DID and a DID bound to another name.
-5. Open a Session for the Instance:
+1. Validate the contract version, Agent name, Profile, and identity. Verify join credentials without consuming them.
+2. If neither the name nor Agent DID belongs to a live Membership, create a Membership with a new immutable identity and a Mailbox. Inserting a name or DID that another join already bound fails with `name_conflict`.
+3. If the name and Agent DID identify the same live Membership, reuse it and replace its Profile with the submitted Profile. Rights, Mailbox, Tickets, and Thread participation stay with that Membership.
+4. If the name and Agent DID do not identify the same live Membership, fail with `name_conflict`. This includes a name bound to another DID and a DID bound to another name.
+5. Consume the join challenge nonce and, when the token is single-use and unused, consume that token in the same store transition as Membership creation or reuse and Session insert. A failed join leaves the nonce and token unused. A crash leaves either the full successful join or no join.
+6. Open a Session for the Instance:
    - If `instance_id` matches an active Instance of this Membership, replace that Instance's Session. Its prior Session becomes unauthorized and its leases are released, so their Messages become available again with a higher `attempt`.
    - Otherwise open an additional concurrent Instance. Assign an `instance_id` when the Client omitted one.
-6. Return the canonical Address, the Instance's `instance_id`, the reported limits, and a new Session.
+7. Return the canonical Address, the Instance's `instance_id`, the reported limits, and a new Session.
+
+Two concurrent joins that share one token MUST NOT both succeed. The Runtime serializes consumption of that token. An unbound token does not become two Memberships because two joins used different names at the same time.
 
 `instance_id` MUST be unique per running copy. Two copies that share one value keep replacing each other's Session. Clients SHOULD generate a fresh UUID when the caller does not supply a stable id. The Runtime assigns one when `instance_id` is omitted.
 
@@ -137,6 +144,47 @@ The Runtime MUST release the Session's active leases immediately. Their Messages
 
 Disconnecting does not remove the Membership, Profile, Address, Mailbox, or retained history.
 
+## Removal and name reuse
+
+`remove_membership` retires a live Membership. The Runtime MUST:
+
+- invalidate every Session of that Membership, with the promptness in [security.md](security.md)
+- drop its Mailbox so queued work is no longer leaseable
+- unbind its Agent name and Agent DID
+- revoke join tokens bound to that name or DID
+
+Retained Messages, Tickets, Thread records, and Trace events stay bound to the removed identity. They are not reassigned to a later Membership that spells the same Address.
+
+A later `join` with that name, that DID, or both creates a new Membership. The replacement MUST NOT read the predecessor's Tickets, receive its queued Deliveries, read its Thread history, see its Trace events, or replay its Message ids as the original sender.
+
+Reconnect without removal keeps the existing Membership. A new Session for that Membership reads the Tickets it opened, including Tickets opened through a prior Session.
+
+The reserved `operator` Membership cannot be removed.
+
+```text
+join researcher DID-A
+remove researcher
+join researcher DID-B
+```
+
+DID-B cannot `get_result` a Ticket DID-A opened, `get_history` a Thread DID-A participated in, `get_trace` a Trace that named only DID-A, or `lease` work queued for DID-A.
+
+```text
+join researcher DID-A
+disconnect
+join researcher DID-A
+```
+
+The second join is the same Membership. `get_result` returns Tickets the first Session opened.
+
+```text
+join researcher DID-A
+remove researcher
+join researcher DID-A
+```
+
+The second join is a new Membership even though the DID matches. It cannot read the removed Membership's Tickets.
+
 ## `heartbeat`
 
 `heartbeat` proves that the Client still holds its Session. The Runtime MAY extend the Session before returning its current `session_expires_at`.
@@ -171,7 +219,7 @@ Before acceptance, the Runtime MUST:
 
 After acceptance, the Runtime MUST:
 
-- set the verified `sender`
+- set the verified `sender` and `sender_did` from the authenticated Session
 - canonicalize `sender` and `recipient` as qualified Addresses
 - set `created_at`
 - set `seq` when `thread_id` is present
@@ -208,7 +256,7 @@ The Runtime wakes a waiting `send` when the Ticket becomes terminal. It MUST NOT
 Message ids are unique across the Team. The Runtime reserves a proposed id against both `send` and `reply` before either operation stores a Message. The Runtime applies these rules:
 
 - replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
-- using an existing id from another Membership fails with `id_conflict`
+- using an existing id from another Membership, including a later Membership that reuses the original Address, fails with `id_conflict`
 - replaying the original sender's id with different content, recipient, kind, deadline, collection strategy, Thread, parent, or metadata fails with `id_conflict`
 - a replay MUST NOT create another Delivery
 
@@ -276,7 +324,7 @@ Reply acceptance is one transition. The Runtime stores the response or error Mes
 
 `get_result` returns the Ticket whose id equals the original request Message id.
 
-Only the requesting Membership may read the Ticket. A request from another Membership returns `not_found` so Ticket existence and contents are not disclosed.
+Only the Membership that opened the Ticket may read it. That right survives Session replacement for the same live Membership. HTTP, MCP, and the in-process Client use this same rule. A caller from another Membership, including a later Membership that reuses the requester Address, returns `not_found` so Ticket existence and contents are not disclosed.
 
 The operation is read-only. Reading an open or terminal Ticket any number of times returns its current stored state without consuming it.
 
@@ -290,7 +338,7 @@ The operation is read-only. Reading an open or terminal Ticket any number of tim
 - `limit` is between `1` and `200` and defaults to `50`.
 - `has_more` is `true` when older retained Messages remain before this page.
 
-Only a Membership in the Thread's participant set may read it. Any other caller receives `not_found`, revealing no history. When retention has removed the oldest Messages, `get_history` returns the oldest that remain.
+Only a Membership in the Thread's participant set may read it. The set stores Membership identities, not Address spellings. Any other caller, including a replacement that reuses a participant Address, receives `not_found`, revealing no history. When retention has removed the oldest Messages, `get_history` returns the oldest that remain.
 
 ## `find`
 
@@ -375,9 +423,9 @@ The Runtime records a Trace event when it accepts a Message, opens a Ticket, lea
 
 When the Message named by an event has a `parent_id`, the event copies it. A Client rebuilds the request tree from that field. The result stays an ordered list.
 
-An unknown `trace_id`, and a non-operator caller that does not appear in the Trace, both return `not_found`. Appearing in the Trace means the caller's Address is an event `actor` or a Message `sender` or `recipient` named by an event.
+An unknown `trace_id`, and a non-operator caller that does not appear in the Trace, both return `not_found`. Appearing in the Trace means the caller's Membership identity performed the step or is the sender or recipient Membership of a Message named by an event. Address spelling is not enough.
 
-A member Session that appears in the Trace receives only the events that name that Membership: the event `actor`, a `sender` or `recipient` in `detail`, or the sender or recipient of the Message named by `message_id`. An operator Session receives the full list.
+A member Session that appears in the Trace receives only the events that name that Membership identity. An operator Session receives the full list. A replacement Membership that reuses an Address from the Trace does not appear in it.
 
 Events for one `trace_id` are retained at least while any Message or Ticket that carries that id is retained. A Runtime MAY keep them longer. A Runtime MAY cap the stored list; when the cap is reached it drops the oldest events.
 
@@ -428,6 +476,8 @@ The result includes the secret `token`. It MUST NOT be written into Message cont
 
 `revoke_join_token` revokes that secret if it exists. Revoking an unknown token is a no-op success. Revoking MUST invalidate every Session created from the token, with the same promptness as [security.md](security.md) immediate revocation.
 
+A revoke racing with `join` has a defined winner. The store transition that commits first wins. If revoke commits first, that `join` fails with `unauthorized` and creates no Membership. If `join` commits first, the Membership exists and revoke then invalidates Sessions created from the token. Revocation cannot be undone by a stale `join` that still holds the old token bytes.
+
 ## Mailbox limits
 
 A Runtime MUST have a finite Mailbox limit reported as `max_mailbox_depth`. It MUST apply the same documented limit to every Agent Membership unless Team configuration explicitly sets per-member limits. Principals have no Mailbox.
@@ -447,6 +497,10 @@ Enqueue cost MUST NOT grow with current depth. The Mailbox stores one document p
 | concurrent `send` and `lease` | the item is leased only after its Message (and Ticket, for a request) exist |
 | `send` and `reply` using the same Message id | one succeeds; the other returns `id_conflict` |
 | new `collect=wait` while the Membership holds `max_held_waits` | `wait_limit`; nothing created |
+| name removed, different DID joins that name, `get_result` on a predecessor Ticket | `not_found` |
+| reconnect of a live Membership, `get_result` on a Ticket its prior Session opened | the current Ticket |
+| two concurrent joins with one single-use unbound token | one Membership; the other `unauthorized` |
+| revoke commits before `join` with that token | `unauthorized`; no Membership created |
 
 ## Work notification
 

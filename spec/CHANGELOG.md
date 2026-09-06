@@ -52,5 +52,9 @@ Defines:
 - Expiry for Sessions, leases, Tickets, and join credentials is processed from a time-ordered index of due items
 - documented TypeScript structures and generated JSON Schema
 - send and reply acceptance is one transition: a Mailbox item is not leaseable until its Message (and Ticket, for a request) exist; Message ids are reserved across `send` and `reply`
+- each Membership has an immutable identity distinct from its Address and Agent DID; removing a name and admitting another DID creates a new Membership that cannot inherit Tickets, history, Trace visibility, or queued work
+- `sender_did` is stamped on every accepted Message from the Session at acceptance, including work sent by a principal
+- `get_result` authorizes the requesting Membership across Session replacement, in the Runtime, HTTP, MCP, and the Client
+- join challenge nonces and single-use tokens are consumed in the same store transition as a successful join; concurrent use of one token admits at most one Membership; revoke versus join has a defined winner
 
 This is a draft. No implementation may claim conformance yet.

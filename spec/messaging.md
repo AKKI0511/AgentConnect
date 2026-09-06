@@ -6,7 +6,7 @@ Exact structures are in [schema/schema.ts](schema/schema.ts). Runtime operations
 
 ## Message
 
-A Message is created only after `send` or `reply` succeeds. The Client supplies the Message `id`; the Runtime sets the verified Addresses, `created_at`, `trace_id`, and `seq` when `thread_id` is present, then stores the Message as immutable data. A `send` does not make that Message leaseable until that store step commits together with its Ticket, when the Message is a request.
+A Message is created only after `send` or `reply` succeeds. The Client supplies the Message `id`; the Runtime sets the verified Addresses, `sender_did`, `created_at`, `trace_id`, and `seq` when `thread_id` is present, then stores the Message as immutable data. A `send` does not make that Message leaseable until that store step commits together with its Ticket, when the Message is a request.
 
 A request or event created by `send` enters the recipient's Mailbox. A response or error created by `reply` resolves the requester's Ticket and enters retained Thread history when the request had a `thread_id`. It does not enter the requester's Mailbox.
 
@@ -23,7 +23,7 @@ Four Message kinds exist:
 
 A request always expects a reply. It carries a `deadline`, opens a Ticket, and ends in a terminal Ticket state. An event never expects a reply and creates no Ticket.
 
-`sender` and `recipient` on an accepted Message are canonical qualified Addresses. Clients do not set `sender`, `created_at`, `trace_id`, or `seq` in `SendRequest`.
+`sender` and `recipient` on an accepted Message are canonical qualified Addresses. `sender_did` is the verified DID of the sending Membership, copied from the Session at acceptance. It stays on the Message after a later Directory change, Membership removal, or name reuse. A principal, including `operator`, has a DID and `sender_did` carries it. Clients do not set `sender`, `sender_did`, `created_at`, `trace_id`, or `seq` in `SendRequest`.
 
 `content` is any JSON value. Message `metadata` is sender-controlled application data. The Runtime MUST NOT use `metadata` for authentication, routing, leases, Ticket state, or sender attribution.
 
@@ -33,6 +33,7 @@ A request always expects a reply. It carries a `deadline`, opens a Ticket, and e
 {
   "id": "15c44926-4c2a-4a01-a13b-95152da9a859",
   "sender": "researcher@content-squad",
+  "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
   "recipient": "writer@content-squad",
   "kind": "request",
   "content": {
@@ -150,6 +151,7 @@ The first attempt is `1`. Every recovery after lease release or expiry increment
   "message": {
     "id": "15c44926-4c2a-4a01-a13b-95152da9a859",
     "sender": "researcher@content-squad",
+    "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
     "recipient": "writer@content-squad",
     "kind": "request",
     "content": {
@@ -255,6 +257,7 @@ Count and age limits on Thread history apply only to Messages that no open Ticke
   "response": {
     "id": "2f45a4a6-9bbf-4f7b-bb8a-451a7285bf22",
     "sender": "writer@content-squad",
+    "sender_did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
     "recipient": "researcher@content-squad",
     "kind": "response",
     "content": "Draft complete.",
@@ -269,9 +272,9 @@ Count and age limits on Thread history apply only to Messages that no open Ticke
 
 ## Thread and history
 
-A Thread is an opaque UUID shared by related Messages among a fixed participant set. The set contains one or more Memberships. The first accepted Message using a `thread_id` creates the Thread and seeds the set from that Message's sender and recipient. Later Messages may travel only among those Memberships. A send that names a sender or recipient outside the set fails with `forbidden` and reveals no history.
+A Thread is an opaque UUID shared by related Messages among a fixed participant set. The set contains one or more Membership identities. The first accepted Message using a `thread_id` creates the Thread and seeds the set from the sending and receiving Memberships. Later Messages may travel only among those Memberships. A send that names a sender or recipient outside the set fails with `forbidden` and reveals no history.
 
-This draft never adds a Membership after creation. A two-party Thread stays two-party because it is seeded from two Addresses.
+This draft never adds a Membership after creation. A two-party Thread stays two-party because it is seeded from two Memberships. A later Membership that reuses a participant Address is not in the set.
 
 When `parent_id` and `thread_id` are both present, the parent MUST exist in the same Thread. A sender may name only a parent Message it was authorized to receive or created itself. A missing or unauthorized parent returns `not_found`; a visible parent from another Thread returns `invalid_request`.
 
@@ -299,7 +302,7 @@ This keeps every Delivery bounded no matter how long a Thread grows.
 
 ### Reading older history
 
-`get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `seq` ascending, and `has_more` states whether older retained Messages remain. Only a Membership in the Thread's participant set may read its history; a non-participant receives `not_found`.
+`get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `seq` ascending, and `has_more` states whether older retained Messages remain. Only a Membership in the Thread's participant set may read its history; a non-participant, including a replacement that reuses a participant Address, receives `not_found`.
 
 `before` is a Message id. Omit it to read the newest page.
 
@@ -347,3 +350,5 @@ These vectors are normative summaries. An implementation test may express them i
 | another Membership submits a retained `lease_id` | `not_found`; no Delivery or Ticket state changes |
 | `collect=callback` or `collect=stream` | `unsupported_collect_mode`; nothing created |
 | send that would add a third Membership to an existing Thread | `forbidden` |
+| name removed, different DID joins that name, `get_history` on a predecessor Thread | `not_found` |
+| operator `send`, delivered `sender_did` | the operator Membership DID |

@@ -468,6 +468,10 @@
           "$ref": "#/definitions/QualifiedAddress",
           "description": "Canonical qualified Address set by the Runtime."
         },
+        "sender_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Verified DID of the sending Membership, copied from the authenticated Session at acceptance. It is not looked up later from the Directory. A principal, including `operator`, has a DID and this field carries it."
+        },
         "recipient": {
           "$ref": "#/definitions/QualifiedAddress",
           "description": "Canonical qualified Address set by the Runtime."
@@ -520,6 +524,7 @@
         "kind",
         "recipient",
         "sender",
+        "sender_did",
         "trace_id"
       ],
       "additionalProperties": false,
@@ -529,6 +534,12 @@
       "type": "string",
       "description": "RFC 9562 UUID used for Messages, Threads, leases, traces, and Instances.",
       "format": "uuid"
+    },
+    "AgentDid": {
+      "type": "string",
+      "description": "Agent-owned `did:key` identity backed by an Ed25519 public key.",
+      "format": "uri",
+      "pattern": "^did:key:z[1-9A-HJ-NP-Za-km-z]+$"
     },
     "Timestamp": {
       "type": "string",
@@ -546,6 +557,10 @@
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
           "description": "Canonical qualified Address set by the Runtime."
+        },
+        "sender_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Verified DID of the sending Membership, copied from the authenticated Session at acceptance. It is not looked up later from the Directory. A principal, including `operator`, has a DID and this field carries it."
         },
         "recipient": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -594,6 +609,7 @@
         "kind",
         "recipient",
         "sender",
+        "sender_did",
         "trace_id"
       ],
       "additionalProperties": false,
@@ -620,6 +636,10 @@
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
           "description": "Canonical qualified Address set by the Runtime."
+        },
+        "sender_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Verified DID of the sending Membership, copied from the authenticated Session at acceptance. It is not looked up later from the Directory. A principal, including `operator`, has a DID and this field carries it."
         },
         "recipient": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -665,6 +685,7 @@
         "parent_id",
         "recipient",
         "sender",
+        "sender_did",
         "trace_id"
       ],
       "additionalProperties": false,
@@ -680,6 +701,10 @@
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
           "description": "Canonical qualified Address set by the Runtime."
+        },
+        "sender_did": {
+          "$ref": "#/definitions/AgentDid",
+          "description": "Verified DID of the sending Membership, copied from the authenticated Session at acceptance. It is not looked up later from the Directory. A principal, including `operator`, has a DID and this field carries it."
         },
         "recipient": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -725,6 +750,7 @@
         "parent_id",
         "recipient",
         "sender",
+        "sender_did",
         "trace_id"
       ],
       "additionalProperties": false,
@@ -1136,12 +1162,6 @@
       ],
       "additionalProperties": false,
       "description": "Full Directory record for one Membership, returned by `get_profile`."
-    },
-    "AgentDid": {
-      "type": "string",
-      "description": "Agent-owned `did:key` identity backed by an Ed25519 public key.",
-      "format": "uri",
-      "pattern": "^did:key:z[1-9A-HJ-NP-Za-km-z]+$"
     },
     "DirectoryMatch": {
       "type": "object",

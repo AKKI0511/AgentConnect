@@ -166,7 +166,7 @@ Arguments:
 }
 ```
 
-Result: the current `Ticket`. The read is repeatable and does not consume the result. Only the Session that created the Ticket may read it.
+Result: the current `Ticket`. The read is repeatable and does not consume the result. Only the Membership that opened the Ticket may read it, including after Session replacement for that Membership.
 
 ## `get_history`
 
@@ -215,6 +215,6 @@ An additional tool that sends work to an Agent must call the Runtime as the auth
 The MCP server may cache transport data, but correctness state belongs to the Runtime:
 
 - Tickets remain readable after the MCP connection closes.
-- Another MCP server process can serve `get_result` for the same authenticated member.
+- Another MCP server process can serve `get_result` for the same authenticated Membership.
 - Tool calls do not require sticky routing to one MCP server process.
 - Losing an MCP response does not cancel an accepted Runtime operation.

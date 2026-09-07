@@ -1,25 +1,37 @@
 """HTTP binding for agent-to-team Runtime operations.
 
 Routes match ``spec/bindings/http.md``. This is the Session binding, not
-the later gateway. Embedded serving binds loopback only. The Team MCP
-server is mounted at ``/mcp``. Loopback calls with no Authorization
-header run as the reserved ``operator`` principal Membership.
+the later gateway. Loopback serving binds loopback only. Loopback calls with
+no Authorization header run as the reserved ``operator`` principal Membership
+only when the HTTP peer is loopback and the request has no forwarded-client
+headers, including empty ``X-Forwarded-*`` values.
 """
 
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, Header, Query, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from agentconnect.core.base import dump_public
+from agentconnect.core.operations import (
+    GetHistoryRequest,
+    parse_complete_request,
+    parse_find_request,
+    parse_issue_join_token_request,
+    parse_lease_request,
+    parse_revoke_join_token_request,
+    parse_schema,
+)
 from agentconnect.team.errors import TeamError
 from agentconnect.team.runtime import Team
+from agentconnect.team.session_auth import session_token_for_request
 
 HTTP_PREFIX = "/agentconnect/v1"
 _NO_STORE = {"Cache-Control": "no-store"}
@@ -50,14 +62,71 @@ def _json(body: Any, **kwargs: Any) -> JSONResponse:
     return JSONResponse(dump_public(body), **kwargs)
 
 
-_TOKEN_ISSUE_FIELDS = {"name", "agent_did", "ttl_seconds", "single_use"}
+def _wire(parse_fn, body: Any):
+    """Parse a wire body or raise ``invalid_request``."""
+    try:
+        return parse_fn(body)
+    except ValueError as exc:
+        raise TeamError("invalid_request", str(exc)) from exc
+
+
+_PUBLIC_PATHS = frozenset(
+    {
+        HTTP_PREFIX + "/join",
+        HTTP_PREFIX + "/join/challenge",
+    }
+)
+
+
+class SessionAuthMiddleware:
+    """Authenticate Runtime HTTP routes once and store the Session on the request."""
+
+    def __init__(self, app: ASGIApp, team: Team) -> None:
+        """Bind the ASGI app and the Team whose Sessions are checked."""
+        self.app = app
+        self.team = team
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Resolve a live Session for protected Runtime HTTP routes."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path") or ""
+        if not str(path).startswith(HTTP_PREFIX) or path in _PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        client = scope.get("client")
+        peer_host = client[0] if isinstance(client, (tuple, list)) and client else None
+        try:
+            token = await session_token_for_request(
+                self.team,
+                headers,
+                peer_host=peer_host,
+                in_process=False,
+            )
+        except TeamError as exc:
+            response = _error_response(exc)
+            await response(scope, receive, send)
+            return
+        scope.setdefault("state", {})
+        scope["state"]["session_token"] = token
+        await self.app(scope, receive, send)
+
+
+def _bound_session(request: Request) -> str:
+    """Return the Session token stored by :class:`SessionAuthMiddleware`."""
+    token = getattr(request.state, "session_token", None)
+    if not isinstance(token, str) or not token:
+        raise TeamError("unauthorized", "Session is missing or invalid")
+    return token
 
 
 def create_runtime_app(team: Team) -> FastAPI:
     """Return an ASGI app that serves ``team`` at ``/agentconnect/v1`` and ``/mcp``."""
     from agentconnect.mcp.server import create_team_mcp
 
-    mcp = create_team_mcp(team)
+    mcp = create_team_mcp(team, in_process=False)
     team._mcp = mcp
     mcp_asgi = mcp.streamable_http_app(
         streamable_http_path="/",
@@ -100,63 +169,52 @@ def create_runtime_app(team: Team) -> FastAPI:
     @app.post(HTTP_PREFIX + "/session/disconnect")
     async def disconnect(
         request: Request,
-        authorization: Optional[str] = Header(default=None),
     ) -> Response:
         """Close this Session. Membership is retained."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         await team.disconnect(token)
         return Response(status_code=204)
 
     @app.post(HTTP_PREFIX + "/session/heartbeat")
     async def heartbeat(
         request: Request,
-        authorization: Optional[str] = Header(default=None),
     ) -> JSONResponse:
         """Refresh Session expiry."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         result = await team.heartbeat(token)
         return _json(result, headers=_NO_STORE)
 
     @app.post(HTTP_PREFIX + "/messages")
-    async def send(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def send(request: Request) -> JSONResponse:
         """Accept a Message."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         body = await _json_object(request)
         result = await team.send(token, body)
         return _json(result)
 
     @app.post(HTTP_PREFIX + "/mailbox/lease")
-    async def lease(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def lease(request: Request) -> JSONResponse:
         """Lease work from this Membership's Mailbox."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         body = await _json_object(request, empty_ok=True)
-        max_items = body.get("max_items", 1)
+        parsed = _wire(parse_lease_request, body)
+        max_items = 1 if parsed.max_items is None else parsed.max_items
         result = await team.lease(token, max_items)
         return _json(result)
 
     @app.post(HTTP_PREFIX + "/deliveries/complete")
-    async def complete(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def complete(request: Request) -> JSONResponse:
         """Finish a Delivery without a response Message."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         body = await _json_object(request)
-        lease_id = body.get("lease_id")
-        if not isinstance(lease_id, str):
-            raise TeamError("invalid_request", "lease_id is required")
-        result = await team.complete(token, lease_id)
+        parsed = _wire(parse_complete_request, body)
+        result = await team.complete(token, parsed.lease_id)
         return _json(result)
 
     @app.post(HTTP_PREFIX + "/deliveries/reply")
-    async def reply(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def reply(request: Request) -> JSONResponse:
         """Finish a leased reply-expected Delivery."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         body = await _json_object(request)
         result = await team.reply(token, body)
         return _json(result)
@@ -165,10 +223,9 @@ def create_runtime_app(team: Team) -> FastAPI:
     async def get_result(
         request: Request,
         ticket_id: str,
-        authorization: Optional[str] = Header(default=None),
     ) -> JSONResponse:
         """Return a Ticket this Session's Membership owns."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         result = await team.get_result(token, ticket_id)
         return _json(result)
 
@@ -176,30 +233,35 @@ def create_runtime_app(team: Team) -> FastAPI:
     async def get_history(
         request: Request,
         thread_id: str,
-        authorization: Optional[str] = Header(default=None),
         before: Optional[str] = Query(default=None),
         limit: int = Query(default=50),
     ) -> JSONResponse:
         """Return one page of retained Thread history."""
-        token = await _session_token(team, request, authorization)
-        result = await team.get_history(token, thread_id, before=before, limit=limit)
+        token = _bound_session(request)
+        parsed = _wire(
+            lambda payload: parse_schema(GetHistoryRequest, payload),
+            {
+                "thread_id": thread_id,
+                **({"before": before} if before is not None else {}),
+                "limit": limit,
+            },
+        )
+        result = await team.get_history(
+            token, parsed.thread_id, before=parsed.before, limit=parsed.limit or 50
+        )
         return _json(result)
 
     @app.post(HTTP_PREFIX + "/directory/find")
-    async def find(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def find(request: Request) -> JSONResponse:
         """Search this Team's Directory."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         body = await _json_object(request)
-        query = body.get("query")
-        if not isinstance(query, str):
-            raise TeamError("invalid_request", "query is required")
+        parsed = _wire(parse_find_request, body)
         result = await team.find(
             token,
-            query,
-            limit=body.get("limit"),
-            detail=body.get("detail", "summary"),
+            parsed.query,
+            limit=parsed.limit,
+            detail=parsed.detail,
         )
         return _json(result)
 
@@ -207,28 +269,23 @@ def create_runtime_app(team: Team) -> FastAPI:
     async def get_profile(
         request: Request,
         address: str,
-        authorization: Optional[str] = Header(default=None),
     ) -> JSONResponse:
         """Return one Directory entry."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         result = await team.get_profile(token, address)
         return _json(result)
 
     @app.get(HTTP_PREFIX + "/status")
-    async def status(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def status(request: Request) -> JSONResponse:
         """Return members, online state, Mailbox depths, and open Tickets."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         result = await team.status(token)
         return _json(result)
 
     @app.get(HTTP_PREFIX + "/traces/events")
-    async def trace_events(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> StreamingResponse:
+    async def trace_events(request: Request) -> StreamingResponse:
         """Stream new Trace events. Operator only."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         queue = await team.subscribe_trace_events(token)
 
         async def generate_trace():
@@ -259,70 +316,41 @@ def create_runtime_app(team: Team) -> FastAPI:
     async def get_trace(
         request: Request,
         trace_id: str,
-        authorization: Optional[str] = Header(default=None),
     ) -> JSONResponse:
         """Return the recorded timeline for one ``trace_id``."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         result = await team.get_trace(token, trace_id)
         return _json(result)
 
     @app.post(HTTP_PREFIX + "/tokens")
-    async def issue_join_token(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> JSONResponse:
+    async def issue_join_token(request: Request) -> JSONResponse:
         """Issue a join token. Operator only."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         await team._require_operator(token)
         body = await _json_object(request, empty_ok=True)
-        extra = set(body.keys()) - _TOKEN_ISSUE_FIELDS
-        if extra:
-            raise TeamError("invalid_request", "token body contains unsupported fields")
-        ttl = body.get("ttl_seconds")
-        ttl_seconds = None
-        if ttl is not None:
-            if isinstance(ttl, bool) or not isinstance(ttl, (int, float)):
-                raise TeamError("invalid_request", "ttl_seconds must be a number")
-            ttl_seconds = float(ttl)
-        single_use = body.get("single_use", False)
-        if not isinstance(single_use, bool):
-            raise TeamError("invalid_request", "single_use must be a boolean")
-        name = body.get("name")
-        agent_did = body.get("agent_did")
-        if name is not None and not isinstance(name, str):
-            raise TeamError("invalid_request", "name must be a string")
-        if agent_did is not None and not isinstance(agent_did, str):
-            raise TeamError("invalid_request", "agent_did must be a string")
+        parsed = _wire(parse_issue_join_token_request, body)
         result = await team.issue_join_token(
-            name=name,
-            agent_did=agent_did,
-            ttl_seconds=ttl_seconds,
-            single_use=single_use,
+            name=parsed.name,
+            agent_did=parsed.agent_did,
+            ttl_seconds=parsed.ttl_seconds,
+            single_use=False if parsed.single_use is None else parsed.single_use,
         )
         return _json(result, headers=_NO_STORE)
 
     @app.post(HTTP_PREFIX + "/tokens/revoke")
-    async def revoke_join_token(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> Response:
+    async def revoke_join_token(request: Request) -> Response:
         """Revoke a join token. Operator only."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         await team._require_operator(token)
         body = await _json_object(request)
-        extra = set(body.keys()) - {"token"}
-        if extra:
-            raise TeamError("invalid_request", "token body contains unsupported fields")
-        secret = body.get("token")
-        if not isinstance(secret, str) or not secret.strip():
-            raise TeamError("invalid_request", "token is required")
-        await team.revoke_join_token(secret.strip())
+        parsed = _wire(parse_revoke_join_token_request, body)
+        await team.revoke_join_token(parsed.token)
         return Response(status_code=204)
 
     @app.get(HTTP_PREFIX + "/session/events")
-    async def session_events(
-        request: Request, authorization: Optional[str] = Header(default=None)
-    ) -> StreamingResponse:
+    async def session_events(request: Request) -> StreamingResponse:
         """Stream work hints for this Session."""
-        token = await _session_token(team, request, authorization)
+        token = _bound_session(request)
         queue = await team.subscribe_events(token)
 
         async def generate():
@@ -354,48 +382,12 @@ def create_runtime_app(team: Team) -> FastAPI:
         )
 
     app.mount("/mcp", mcp_asgi)
+    app.add_middleware(SessionAuthMiddleware, team=team)
     return app
 
 
-async def _session_token(
-    team: Team, request: Request, authorization: Optional[str]
-) -> str:
-    """Return a Session token, using the loopback operator when none is sent."""
-    if authorization:
-        if not authorization.lower().startswith("bearer "):
-            raise TeamError("unauthorized", "Session is missing or invalid")
-        token = authorization.split(" ", 1)[1].strip()
-        if not token:
-            raise TeamError("unauthorized", "Session is missing or invalid")
-        return token
-    if _client_is_loopback(request):
-        return await team.ensure_operator_session()
-    raise TeamError("unauthorized", "Session is missing or invalid")
-
-
-def _client_is_loopback(request: Request) -> bool:
-    """Return True when the HTTP peer is a loopback address."""
-    client = request.client
-    if client is None:
-        return False
-    return _host_is_loopback(client.host)
-
-
-def _host_is_loopback(host: str) -> bool:
-    """Return True when ``host`` is loopback, including IPv4-mapped IPv6."""
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    if addr.is_loopback:
-        return True
-    mapped = getattr(addr, "ipv4_mapped", None)
-    return mapped is not None and mapped.is_loopback
-
-
 async def _json_object(request: Request, *, empty_ok: bool = False) -> dict[str, Any]:
+    """Read a JSON object body, or ``{}`` when ``empty_ok`` and the body is empty."""
     try:
         body = await request.json()
     except Exception:
@@ -410,6 +402,7 @@ async def _json_object(request: Request, *, empty_ok: bool = False) -> dict[str,
 
 
 def _error_response(exc: TeamError) -> JSONResponse:
+    """Map a TeamError to an HTTP JSON error response."""
     status = _STATUS.get(exc.code, 500)
     body = exc.to_error_object()
     if "retryable" not in body:

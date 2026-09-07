@@ -11,9 +11,10 @@ So does any MCP client, including Cursor, by adding the Team MCP URL.
     url = await team.serve()
     print(team.mcp_url)  # http://127.0.0.1:<port>/mcp
 
-Slow work returns a Ticket as an explicit handle. Each call authenticates
-with its own credential. A loopback call with no Authorization header runs
-as the reserved ``operator`` Membership.
+The MCP SDK's OAuth resource-server helpers need issuer metadata and wrap
+every HTTP method, including initialize. That does not match Session Bearer
+tokens or loopback operator. This server uses SDK ``ServerMiddleware`` for
+authentication and raw ``tools/call`` argument checks.
 
 Do not add ``from __future__ import annotations`` here. MCPServer injects
 ``Context`` from the live type annotation.
@@ -21,7 +22,8 @@ Do not add ``from __future__ import annotations`` here. MCPServer injects
 
 import inspect
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from contextvars import ContextVar
 from typing import Any, Optional
 
 from mcp.server.mcpserver import Context, MCPServer
@@ -29,18 +31,30 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_PARAMS, ToolAnnotations
 
-from agentconnect.core.base import dump_public
+from agentconnect.core.base import dump_public, parse_schema
+from agentconnect.core.directory import FindRequest
+from agentconnect.core.operations import (
+    AskToolRequest,
+    GetHistoryRequest,
+    GetResultRequest,
+    TellToolRequest,
+)
 from agentconnect.mcp.actions import (
     TeamRuntime,
     ask_action,
     find_action,
     get_history_action,
     get_result_action,
-    resolve_session,
     tell_action,
+)
+from agentconnect.mcp.tool_schema import (
+    advertise_tool_schema,
+    close_fixed_extra_tool_schemas,
+    tool_argument_keys,
 )
 from agentconnect.team.constants import RESERVED_MCP_TOOL_NAMES
 from agentconnect.team.errors import TeamError
+from agentconnect.team.session_auth import session_token_for_request
 
 _INSTRUCTIONS = (
     "You are talking to an AgentConnect Team. Use find to discover teammates "
@@ -51,16 +65,127 @@ _INSTRUCTIONS = (
     "idempotency_key when you mean to retry the same ask."
 )
 
+_PROTECTED_METHODS = frozenset({"tools/call", "resources/read"})
+_TOOL_MODELS = {
+    "find": FindRequest,
+    "ask": AskToolRequest,
+    "tell": TellToolRequest,
+    "get_result": GetResultRequest,
+    "get_history": GetHistoryRequest,
+}
+_resolved_session: ContextVar[str | None] = ContextVar(
+    "agentconnect_mcp_session", default=None
+)
+
+
+def _http_peer(ctx: Any) -> tuple[Mapping[str, str] | None, str | None]:
+    """Return headers and peer host from the SDK request context, if any."""
+    request = getattr(ctx, "request", None)
+    headers = getattr(request, "headers", None) if request is not None else None
+    client = getattr(request, "client", None) if request is not None else None
+    peer_host = client.host if client is not None else None
+    return headers, peer_host
+
+
+class _TeamBoundary:
+    """SDK ServerMiddleware: Session auth, then raw tools/call argument checks."""
+
+    def __init__(
+        self,
+        runtime: TeamRuntime,
+        *,
+        in_process: bool,
+        extra_tools: Mapping[str, Callable[..., Any]],
+    ) -> None:
+        """Bind the Runtime, hosting mode, and extra tool signatures."""
+        self._runtime = runtime
+        self._in_process = in_process
+        self._extra_tools = dict(extra_tools)
+
+    async def __call__(self, ctx: Any, call_next: Any) -> Any:
+        """Authenticate the caller, then reject invalid raw tool arguments."""
+        method = getattr(ctx, "method", None)
+        if method not in _PROTECTED_METHODS:
+            return await call_next(ctx)
+        headers, peer_host = _http_peer(ctx)
+        token_holder = None
+        try:
+            token = await session_token_for_request(
+                self._runtime,
+                headers,
+                peer_host=peer_host,
+                in_process=self._in_process,
+            )
+            if method == "tools/call":
+                self._reject_raw_arguments(getattr(ctx, "params", None))
+            token_holder = _resolved_session.set(token)
+            request = getattr(ctx, "request", None)
+            state = getattr(request, "state", None) if request is not None else None
+            if state is not None:
+                state.session_token = token
+            return await call_next(ctx)
+        except TeamError as exc:
+            if exc.code == "unauthorized":
+                raise MCPError(INVALID_PARAMS, exc.message) from exc
+            raise
+        finally:
+            if token_holder is not None:
+                _resolved_session.reset(token_holder)
+
+    def _reject_raw_arguments(self, params: Any) -> None:
+        """Validate original tool arguments before SDK coercion."""
+        if hasattr(params, "model_dump") and not isinstance(params, Mapping):
+            params = params.model_dump()
+        if not isinstance(params, Mapping):
+            raise MCPError(INVALID_PARAMS, "tool params must be an object")
+        name = params.get("name")
+        arguments = params.get("arguments")
+        if arguments is None:
+            arguments = {}
+        if not isinstance(arguments, Mapping):
+            raise MCPError(INVALID_PARAMS, "arguments must be an object")
+        raw = dict(arguments)
+        model = _TOOL_MODELS.get(str(name)) if name is not None else None
+        if model is not None:
+            try:
+                parse_schema(model, raw)
+            except ValueError as exc:
+                raise MCPError(INVALID_PARAMS, str(exc)) from exc
+            return
+        extra = self._extra_tools.get(str(name)) if name is not None else None
+        if extra is None:
+            return
+        allowed = tool_argument_keys(extra)
+        if allowed is None:
+            return
+        unknown = sorted(set(raw) - allowed)
+        if unknown:
+            raise MCPError(INVALID_PARAMS, f"unexpected argument {unknown[0]!r}")
+
+
+def _bound_session() -> str:
+    """Return the Session stored by :class:`_TeamBoundary`."""
+    token = _resolved_session.get()
+    if not token:
+        raise MCPError(INVALID_PARAMS, "Session is missing or invalid")
+    return token
+
 
 def create_team_mcp(
     runtime: TeamRuntime,
     extra_tools: Sequence[Callable[..., Any]] | None = None,
+    *,
+    in_process: bool = True,
 ) -> MCPServer:
     """Return the MCP server for ``runtime``.
 
     Tools are ``find``, ``ask``, ``tell``, ``get_result``, and ``get_history``.
     The roster is the resource ``agentconnect://team/roster``. Extra callables
     are registered by function name and must not reuse a reserved name.
+
+    ``in_process=True`` (the default) is the explicit in-process trust path
+    used by ``Client(mcp)``. HTTP serving passes ``in_process=False`` so a
+    missing request cannot become operator.
 
         mcp = create_team_mcp(team)
         async with Client(mcp) as client:
@@ -71,30 +196,21 @@ def create_team_mcp(
         if extra_tools is not None
         else list(getattr(runtime, "_extra_tools", []) or [])
     )
+    extra_by_name: dict[str, Callable[..., Any]] = {}
     for fn in extras:
         name = getattr(fn, "__name__", "")
         if name in RESERVED_MCP_TOOL_NAMES:
             raise ValueError(f"tool name {name!r} is reserved")
+        extra_by_name[name] = fn
 
     mcp = MCPServer(
         name=f"agentconnect-{runtime.name}",
         version="1.0.0-draft",
         instructions=_INSTRUCTIONS,
+        middleware=[
+            _TeamBoundary(runtime, in_process=in_process, extra_tools=extra_by_name)
+        ],
     )
-
-    async def _session(ctx: Context) -> tuple[str, str]:
-        try:
-            headers = ctx.headers
-        except Exception:
-            headers = None
-        try:
-            token = await resolve_session(runtime, headers)
-            address = await runtime.caller_address(token)
-            return token, address
-        except TeamError as exc:
-            if exc.code == "unauthorized":
-                raise MCPError(INVALID_PARAMS, exc.message) from exc
-            raise _tool_error(exc) from exc
 
     async def find(
         ctx: Context,
@@ -108,7 +224,8 @@ def create_team_mcp(
         limit: Maximum matches from 1 to 100. Omit to receive every other member.
         detail: "summary" (default) or "full".
         """
-        token, _address = await _session(ctx)
+        del ctx
+        token = _bound_session()
         try:
             return await find_action(runtime, token, query, limit=limit, detail=detail)
         except ValueError as exc:
@@ -134,7 +251,9 @@ def create_team_mcp(
         thread_id: Continue this conversation. Omit to start a new one.
         idempotency_key: Stable key so a retry does not create a second request.
         """
-        token, address = await _session(ctx)
+        token = _bound_session()
+        address = await runtime.caller_address(token)
+        del ctx
         try:
             return await ask_action(
                 runtime,
@@ -166,7 +285,9 @@ def create_team_mcp(
         thread_id: Continue this conversation.
         idempotency_key: Stable key so a retry does not create a second event.
         """
-        token, address = await _session(ctx)
+        token = _bound_session()
+        address = await runtime.caller_address(token)
+        del ctx
         try:
             return await tell_action(
                 runtime,
@@ -187,7 +308,8 @@ def create_team_mcp(
 
         ticket_id: Ticket id from ask. Equal to the request Message id.
         """
-        token, _address = await _session(ctx)
+        del ctx
+        token = _bound_session()
         try:
             return await get_result_action(runtime, token, ticket_id)
         except ValueError as exc:
@@ -207,7 +329,8 @@ def create_team_mcp(
         before: Oldest Message id already seen. Omit for the newest page.
         limit: Page size from 1 to 200. Defaults to 50.
         """
-        token, _address = await _session(ctx)
+        del ctx
+        token = _bound_session()
         try:
             return await get_history_action(
                 runtime, token, thread_id, before=before, limit=limit
@@ -218,6 +341,7 @@ def create_team_mcp(
             raise _tool_error(exc) from exc
 
     async def roster() -> str:
+        """Return the Team roster as JSON text."""
         body = dump_public(await runtime.roster())
         return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
@@ -282,9 +406,13 @@ def create_team_mcp(
             name=name,
             description=inspect.getdoc(fn) or name,
         )
+    for name, model in _TOOL_MODELS.items():
+        advertise_tool_schema(mcp, name, model)
+    close_fixed_extra_tool_schemas(mcp, extra_by_name)
     return mcp
 
 
 def _tool_error(exc: TeamError) -> ToolError:
+    """Wrap a Runtime error as an MCP tool error payload."""
     payload = {"error": exc.to_error_object()}
     return ToolError(json.dumps(payload, separators=(",", ":"), ensure_ascii=False))

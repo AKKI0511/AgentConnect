@@ -535,7 +535,7 @@ class Team:
         self._ensure_started()
         if self._operator_token:
             try:
-                await self.heartbeat(self._operator_token)
+                await self.require_live_session(self._operator_token)
                 return self._operator_token
             except TeamError as exc:
                 if exc.code != "unauthorized":
@@ -939,8 +939,8 @@ class Team:
         if request is not None:
             if not isinstance(request, Mapping):
                 _fail("invalid_request", "join body must be an object")
-            version = request.get("spec_version", spec_version)
-            if version != SPEC_VERSION:
+            version = request.get("spec_version")
+            if isinstance(version, str) and version != SPEC_VERSION:
                 _fail(
                     "unsupported_version", "Client and Runtime contract drafts differ"
                 )
@@ -1162,6 +1162,11 @@ class Team:
             _, now_ts = self._now_pair()
             await self._release_session_leases(session, now_ts)
             await self._delete_session(session)
+
+    async def require_live_session(self, session_token: str) -> str:
+        """Return ``session_token`` if the Session is live. Does not renew it."""
+        await self._require_session(session_token)
+        return session_token
 
     async def heartbeat(self, session_token: str) -> dict[str, Any]:
         """Prove the Client still holds its Session and extend expiry."""

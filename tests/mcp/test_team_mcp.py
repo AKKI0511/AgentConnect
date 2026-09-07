@@ -13,6 +13,7 @@ from agentconnect.mcp.actions import resolve_session
 from agentconnect.mcp.ids import message_id_for_tool
 from agentconnect.mcp.server import create_team_mcp
 from agentconnect.team import Team, TeamError
+from mcp.shared.exceptions import MCPError
 from tests.team.conftest import make_did, profile
 
 
@@ -273,9 +274,13 @@ async def test_runtime_error_is_tool_error():
 async def test_missing_auth_is_operator_and_bad_bearer_is_not():
     team = await Team("content-squad").start()
     try:
-        token = await resolve_session(team, None)
+        token = await resolve_session(team, None, in_process=True)
         address = await team.caller_address(token)
         assert address.startswith("operator@")
+
+        with pytest.raises(TeamError) as exc:
+            await resolve_session(team, None, in_process=False)
+        assert exc.value.code == "unauthorized"
 
         with pytest.raises(TeamError) as exc:
             await resolve_session(team, {"Authorization": "Bearer not-a-session"})
@@ -284,5 +289,117 @@ async def test_missing_auth_is_operator_and_bad_bearer_is_not():
         with pytest.raises(TeamError) as exc:
             await resolve_session(team, {"Authorization": "not-bearer"})
         assert exc.value.code == "unauthorized"
+
+        with pytest.raises(TeamError) as exc:
+            await resolve_session(team, {"Authorization": ""}, in_process=True)
+        assert exc.value.code == "unauthorized"
+
+        with pytest.raises(TeamError) as exc:
+            await resolve_session(
+                team,
+                {"X-Forwarded-For": "203.0.113.10"},
+                in_process=False,
+                peer_host="127.0.0.1",
+            )
+        assert exc.value.code == "unauthorized"
+
+        with pytest.raises(TeamError) as exc:
+            await resolve_session(
+                team,
+                {"X-Forwarded-For": ""},
+                in_process=False,
+                peer_host="127.0.0.1",
+            )
+        assert exc.value.code == "unauthorized"
+    finally:
+        await team.stop()
+
+
+def _tool_failed(result) -> bool:
+    return bool(getattr(result, "is_error", False))
+
+
+@pytest.mark.asyncio
+async def test_raw_find_arguments_rejected_before_coercion():
+    team = await Team("content-squad").start()
+    writer = Writer(name="writer")
+    await writer.join(team)
+    mcp = create_team_mcp(team)
+    try:
+        async with Client(mcp) as client:
+            tools = {item.name: item for item in (await client.list_tools()).tools}
+            schema = getattr(tools["find"], "inputSchema", None) or getattr(
+                tools["find"], "input_schema", None
+            )
+            assert schema is not None
+            dumped = schema if isinstance(schema, dict) else schema
+            if hasattr(schema, "model_dump"):
+                dumped = schema.model_dump()
+            assert dumped.get("additionalProperties") is False
+
+            found = _body(
+                await client.call_tool(
+                    "find", {"query": "someone who can draft a summary"}
+                )
+            )
+            assert found["matches"]
+            assert any(
+                str(item["address"]).startswith("writer@") for item in found["matches"]
+            )
+
+            for arguments in (
+                {"query": "someone who can draft a summary", "limit": "2"},
+                {"query": "someone who can draft a summary", "limit": None},
+                {"query": "someone who can draft a summary", "unknown": True},
+            ):
+                failed = False
+                try:
+                    result = await client.call_tool("find", arguments)
+                except* MCPError:
+                    failed = True
+                else:
+                    failed = _tool_failed(result)
+                assert failed, arguments
+    finally:
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_extra_tool_rejects_undeclared_arguments():
+    team = await Team("content-squad", tools=[ping]).start()
+    mcp = create_team_mcp(team)
+    try:
+        async with Client(mcp) as client:
+            failed = False
+            try:
+                result = await client.call_tool("ping", {"extra": True})
+            except* MCPError:
+                failed = True
+            else:
+                failed = _tool_failed(result)
+            assert failed
+            ok = _body(await client.call_tool("ping", {}))
+            assert ok.get("status") == "ok" or "ok" in json.dumps(ok)
+    finally:
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_in_process_false_without_http_is_unauthorized():
+    team = await Team("content-squad").start()
+    mcp = create_team_mcp(team, in_process=False)
+    try:
+        async with Client(mcp) as client:
+            failed = False
+            try:
+                result = await client.call_tool(
+                    "find", {"query": "someone who can draft a summary"}
+                )
+            except* MCPError:
+                failed = True
+            else:
+                failed = _tool_failed(result)
+            assert failed
     finally:
         await team.stop()

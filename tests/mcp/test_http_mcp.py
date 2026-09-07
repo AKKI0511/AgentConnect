@@ -127,3 +127,141 @@ async def test_http_bearer_runs_as_that_session_and_bad_token_is_not_operator():
         await researcher.leave()
         await writer.leave()
         await team.stop()
+
+
+async def ping() -> dict[str, str]:
+    """Heartbeat extra tool used to prove the shared Session boundary."""
+    return {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_http_roster_and_extra_tool_use_session_boundary():
+    team = await Team("content-squad", tools=[ping]).start()
+    writer = Writer(name="writer")
+    try:
+        origin = await team.serve()
+        await writer.join(origin)
+
+        async with Client(team.mcp_url) as client:
+            roster = await client.read_resource("agentconnect://team/roster")
+            body = json.loads(roster.contents[0].text)
+            names = [item["address"].split("@", 1)[0] for item in body["members"]]
+            assert "writer" in names
+            assert "operator" not in names
+            pinged = _body(await client.call_tool("ping", {}))
+            assert pinged.get("status") == "ok" or "ok" in json.dumps(pinged)
+
+        async with create_mcp_http_client(
+            headers={"Authorization": "Bearer not-a-session"}
+        ) as http:
+            try:
+                async with Client(
+                    streamable_http_client(
+                        team.mcp_url, http_client=http, terminate_on_close=False
+                    )
+                ) as client:
+                    await client.read_resource("agentconnect://team/roster")
+                raise AssertionError("expected roster authentication failure")
+            except* MCPError:
+                pass
+
+        async with create_mcp_http_client(
+            headers={"Authorization": "Bearer not-a-session"}
+        ) as http:
+            try:
+                async with Client(
+                    streamable_http_client(
+                        team.mcp_url, http_client=http, terminate_on_close=False
+                    )
+                ) as client:
+                    await client.call_tool("ping", {})
+                raise AssertionError("expected extra-tool authentication failure")
+            except* MCPError:
+                pass
+
+        async with create_mcp_http_client(
+            headers={"X-Forwarded-For": "203.0.113.10"}
+        ) as http:
+            try:
+                async with Client(
+                    streamable_http_client(
+                        team.mcp_url, http_client=http, terminate_on_close=False
+                    )
+                ) as client:
+                    await client.call_tool(
+                        "find", {"query": "someone who can draft a summary"}
+                    )
+                raise AssertionError("expected forwarded-client authentication failure")
+            except* MCPError:
+                pass
+
+        async with create_mcp_http_client(headers={"X-Forwarded-For": ""}) as http:
+            try:
+                async with Client(
+                    streamable_http_client(
+                        team.mcp_url, http_client=http, terminate_on_close=False
+                    )
+                ) as client:
+                    await client.read_resource("agentconnect://team/roster")
+                raise AssertionError("expected empty forwarded-client failure")
+            except* MCPError:
+                pass
+
+        async with create_mcp_http_client(headers={"Authorization": ""}) as http:
+            try:
+                async with Client(
+                    streamable_http_client(
+                        team.mcp_url, http_client=http, terminate_on_close=False
+                    )
+                ) as client:
+                    await client.call_tool("ping", {})
+                raise AssertionError("expected empty Authorization failure")
+            except* MCPError:
+                pass
+
+        async with create_mcp_http_client(headers={"Authorization": "Bearer"}) as http:
+            try:
+                async with Client(
+                    streamable_http_client(
+                        team.mcp_url, http_client=http, terminate_on_close=False
+                    )
+                ) as client:
+                    await client.call_tool(
+                        "find", {"query": "someone who can draft a summary"}
+                    )
+                raise AssertionError("expected malformed Authorization failure")
+            except* MCPError:
+                pass
+    finally:
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_http_mcp_raw_find_arguments_rejected():
+    team = await Team("content-squad").start()
+    writer = Writer(name="writer")
+    try:
+        origin = await team.serve()
+        await writer.join(origin)
+        async with Client(team.mcp_url) as client:
+            found = _body(
+                await client.call_tool(
+                    "find", {"query": "someone who can draft a summary"}
+                )
+            )
+            assert found["matches"]
+            failed = False
+            try:
+                result = await client.call_tool(
+                    "find",
+                    {"query": "someone who can draft a summary", "limit": "2"},
+                )
+            except* MCPError:
+                failed = True
+            else:
+                failed = bool(getattr(result, "is_error", False))
+            assert failed
+    finally:
+        await writer.leave()
+        await team.stop()

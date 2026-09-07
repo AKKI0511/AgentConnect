@@ -31,6 +31,9 @@ identity proof so the Runtime can stamp the Agent DID.
 without hardcoding an Address. Same five tools as the Team MCP server.
 
 `mcp.py` serves the Team and prints ``team.mcp_url`` for Cursor MCP config.
+Loopback calls with no Authorization header run as ``operator``. A reverse
+proxy in front of that listener needs a Session token. Empty forwarding
+headers and empty or malformed Authorization headers are unauthorized.
 
 `hosted_team/` is a Team file. From that directory, ``agentconnect up``
 starts the Runtime and joins ``Writer``. ``agentconnect ask`` and

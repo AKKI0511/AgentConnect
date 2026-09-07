@@ -2,7 +2,10 @@
 
 ``Team.serve()`` mounts the Team MCP server at ``{origin}/mcp``. Loopback
 calls with no Authorization header run as the reserved ``operator``
-Membership.
+Membership when the HTTP peer is loopback and no forwarded-client header
+is present, including empty ``X-Forwarded-*`` values. A reverse proxy in
+front of that listener is not a trusted loopback path; send a Session
+Bearer token.
 
 Run from the repo root::
 

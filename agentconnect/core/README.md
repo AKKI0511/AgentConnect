@@ -22,6 +22,13 @@ core/
   exceptions.py   Shared exception types
 ```
 
+Validation belongs at the transport edge. After a body is accepted, the
+Runtime stores and forwards mappings; it does not construct schema models
+from those documents a second time. ``public_json_schema(model)`` is the
+wire JSON Schema for a public type: omit-only optional fields, ``JsonInt``
+bounds, and ``additionalProperties: false``. Unmodified pydantic
+``model_json_schema()`` output still treats omit-only fields as nullable.
+
 `BaseAgent` lives in `agentconnect.agent`. The team directory lives in `agentconnect.team.directory`.
 
 ## Address

@@ -203,6 +203,8 @@ data/
 
 # Project specific
 .cursor/
+.agents/
+.codex/
 .cursor-cache/
 .cursor-cache-v2/
 .cursor-cache-v3/

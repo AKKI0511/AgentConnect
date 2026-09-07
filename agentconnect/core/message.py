@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, Mapping, Optional, Union
 
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from agentconnect.core.base import (
+    JsonInt,
     JsonObject,
     JsonValue,
     SchemaModel,
@@ -58,7 +59,14 @@ class MessageBase(SchemaModel):
     trace_id: Uuid
     thread_id: Optional[Uuid] = None
     parent_id: Optional[Uuid] = None
-    seq: Optional[int] = Field(default=None, ge=1)
+    seq: Optional[JsonInt] = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def thread_id_and_seq_together(self) -> MessageBase:
+        """Reject a Message that has only one of ``thread_id`` and ``seq``."""
+        if (self.thread_id is None) != (self.seq is None):
+            raise ValueError("seq is present exactly when thread_id is present")
+        return self
 
 
 class RequestMessage(MessageBase):
@@ -71,7 +79,7 @@ class RequestMessage(MessageBase):
         msg.seq       # set when the Message belongs to a Thread
     """
 
-    kind: Literal["request"] = "request"
+    kind: Literal["request"]
     content: JsonValue
     metadata: Optional[JsonObject] = None
     deadline: Timestamp
@@ -83,7 +91,7 @@ class EventMessage(MessageBase):
     await agent.tell("writer", {"note": "source changed"})
     """
 
-    kind: Literal["event"] = "event"
+    kind: Literal["event"]
     content: JsonValue
     metadata: Optional[JsonObject] = None
 
@@ -91,7 +99,7 @@ class EventMessage(MessageBase):
 class ResponseMessage(MessageBase):
     """Successful reply created by the Runtime."""
 
-    kind: Literal["response"] = "response"
+    kind: Literal["response"]
     content: JsonValue
     parent_id: Uuid
 
@@ -99,7 +107,7 @@ class ResponseMessage(MessageBase):
 class ErrorMessage(MessageBase):
     """Failed reply created by the Runtime."""
 
-    kind: Literal["error"] = "error"
+    kind: Literal["error"]
     error: ErrorObject
     parent_id: Uuid
 
@@ -122,7 +130,7 @@ class Delivery(SchemaModel):
 
     lease_id: Uuid
     lease_expires_at: Timestamp
-    attempt: int = Field(ge=1)
+    attempt: JsonInt = Field(ge=1)
     message: Union[RequestMessage, EventMessage]
     history: list[Message]
     history_ids: Optional[list[Uuid]] = None
@@ -137,9 +145,8 @@ def is_reply_expected(message: Message) -> bool:
     return isinstance(message, RequestMessage)
 
 
-def parse_message(data: Any, *, validate: bool = True) -> Message:
+def parse_message(data: Any) -> Message:
     """Parse a Message mapping. A request requires ``deadline``."""
-    del validate
     if isinstance(
         data,
         (
@@ -169,9 +176,8 @@ def parse_message(data: Any, *, validate: bool = True) -> Message:
         raise ValueError(validation_message(exc)) from exc
 
 
-def parse_delivery(data: Any, *, validate: bool = True) -> Delivery:
+def parse_delivery(data: Any) -> Delivery:
     """Parse a Delivery, including nested Messages."""
-    del validate
     if isinstance(data, Delivery):
         return data
     if not isinstance(data, Mapping):

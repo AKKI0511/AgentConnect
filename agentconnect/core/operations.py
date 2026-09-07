@@ -7,12 +7,15 @@ from typing import Annotated, Any, Literal, Mapping, Optional, Union
 from pydantic import Field, TypeAdapter, ValidationError
 
 from agentconnect.core.base import (
+    JsonFloat,
+    JsonInt,
     JsonObject,
     JsonValue,
     SchemaModel,
+    parse_schema,
     validation_message,
 )
-from agentconnect.core.directory import DirectoryEntry
+from agentconnect.core.directory import DirectoryEntry, FindRequest
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.message import (
     Delivery,
@@ -38,7 +41,6 @@ from agentconnect.core.primitives import (
     Uuid,
 )
 from agentconnect.core.profile import AgentProfile
-from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.ticket import (
     CompletedTicket,
     DeclinedTicket,
@@ -94,8 +96,13 @@ __all__ = [
     "parse_send_request",
     "parse_send_result",
     "parse_reply_request",
+    "parse_lease_request",
     "parse_lease_result",
+    "parse_complete_request",
     "parse_history_result",
+    "parse_find_request",
+    "parse_issue_join_token_request",
+    "parse_revoke_join_token_request",
 ]
 
 
@@ -112,16 +119,17 @@ class JoinChallenge(SchemaModel):
 class JoinRequest(SchemaModel):
     """Input that creates or reconnects a Membership and opens one Instance.
 
-    ``delivery_history="ids"`` puts earlier Message ids on each Delivery
-    instead of Message bodies. Omit it to receive bodies.
+    ``spec_version`` is required on the wire. ``Team.join`` fills it when
+    you pass kwargs. ``delivery_history="ids"`` puts earlier Message ids
+    on each Delivery instead of Message bodies. Omit it to receive bodies.
     """
 
-    spec_version: SpecVersion = SPEC_VERSION
+    spec_version: SpecVersion
     name: AgentName
     agent_did: AgentDid
     profile: AgentProfile
     instance_id: Optional[Uuid] = None
-    max_in_flight: Optional[int] = Field(default=None, ge=1, le=100)
+    max_in_flight: Optional[JsonInt] = Field(default=None, ge=1, le=100)
     join_token: Optional[str] = Field(default=None, min_length=1)
     identity_proof: Optional[str] = Field(default=None, min_length=1)
     delivery_history: Optional[DeliveryHistoryForm] = None
@@ -135,11 +143,11 @@ class RuntimeLimits(SchemaModel):
     items. Both are exact counts this Runtime enforces.
     """
 
-    max_message_bytes: int = Field(ge=1)
-    max_mailbox_depth: int = Field(ge=1)
-    delivery_history_limit: int = Field(ge=0)
-    wait_hold_seconds: float = Field(ge=0)
-    max_held_waits: int = Field(ge=0)
+    max_message_bytes: JsonInt = Field(ge=1)
+    max_mailbox_depth: JsonInt = Field(ge=1)
+    delivery_history_limit: JsonInt = Field(ge=0)
+    wait_hold_seconds: JsonFloat = Field(ge=0)
+    max_held_waits: JsonInt = Field(ge=0)
 
 
 class JoinResult(SchemaModel):
@@ -197,13 +205,14 @@ class RequestSendRequest(SendBase):
         RequestSendRequest(
             id=message_id,
             recipient="writer",
+            kind="request",
             content={"task": "draft this"},
             collect="ticket",
             deadline="2026-08-18T15:10:00Z",
         )
     """
 
-    kind: Literal["request"] = "request"
+    kind: Literal["request"]
     collect: CollectMode
     deadline: Timestamp
     callback: Optional[CallbackTarget] = None
@@ -212,7 +221,7 @@ class RequestSendRequest(SendBase):
 class EventSendRequest(SendBase):
     """Send information without a reply."""
 
-    kind: Literal["event"] = "event"
+    kind: Literal["event"]
 
 
 SendRequest = Union[RequestSendRequest, EventSendRequest]
@@ -221,14 +230,14 @@ SendRequest = Union[RequestSendRequest, EventSendRequest]
 class AcceptedSendResult(SchemaModel):
     """Result for an event."""
 
-    status: Literal["accepted"] = "accepted"
+    status: Literal["accepted"]
     message: EventMessage
 
 
 class TicketedSendResult(SchemaModel):
     """Result for a request."""
 
-    status: Literal["ticketed"] = "ticketed"
+    status: Literal["ticketed"]
     message: RequestMessage
     ticket: Ticket
 
@@ -242,7 +251,7 @@ SendResult = Annotated[
 class LeaseRequest(SchemaModel):
     """Input to pull available work."""
 
-    max_items: Optional[int] = Field(default=None, ge=1, le=100)
+    max_items: Optional[JsonInt] = Field(default=None, ge=1, le=100)
 
 
 class LeaseResult(SchemaModel):
@@ -276,14 +285,14 @@ class ReplyBase(SchemaModel):
 class ReplySuccessRequest(ReplyBase):
     """Complete a Delivery with successful content."""
 
-    outcome: Literal["completed"] = "completed"
+    outcome: Literal["completed"]
     content: JsonValue
 
 
 class ReplyFailureRequest(ReplyBase):
     """Complete a Delivery with a safe error."""
 
-    outcome: Literal["failed"] = "failed"
+    outcome: Literal["failed"]
     error: ErrorObject
 
 
@@ -310,7 +319,7 @@ class GetHistoryRequest(SchemaModel):
 
     thread_id: Uuid
     before: Optional[Uuid] = None
-    limit: Optional[int] = Field(default=None, ge=1, le=200)
+    limit: Optional[JsonInt] = Field(default=None, ge=1, le=200)
 
 
 class HistoryResult(SchemaModel):
@@ -329,7 +338,7 @@ class AskToolRequest(SchemaModel):
 
     recipient: Address
     content: JsonValue
-    deadline_seconds: int = Field(ge=1, le=86400)
+    deadline_seconds: JsonInt = Field(ge=1, le=86400)
     collect: CollectMode = "wait"
     thread_id: Optional[Uuid] = None
     idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -388,12 +397,12 @@ class StatusAgent(SchemaModel):
     Session in the store.
     """
 
-    kind: Literal["agent"] = "agent"
+    kind: Literal["agent"]
     name: AgentName
     address: QualifiedAddress
     online: bool
-    mailbox_depth: int = Field(ge=0)
-    open_tickets: int = Field(ge=0)
+    mailbox_depth: JsonInt = Field(ge=0)
+    open_tickets: JsonInt = Field(ge=0)
 
 
 class StatusPrincipal(SchemaModel):
@@ -402,7 +411,7 @@ class StatusPrincipal(SchemaModel):
     No Mailbox or Ticket counts. ``online`` is read from stored Sessions.
     """
 
-    kind: Literal["principal"] = "principal"
+    kind: Literal["principal"]
     name: AgentName
     address: QualifiedAddress
     online: bool
@@ -420,7 +429,7 @@ class StatusResult(SchemaModel):
     team_name: TeamName
     persistence: PersistenceMode
     origin: Optional[str] = None
-    open_tickets: int = Field(ge=0)
+    open_tickets: JsonInt = Field(ge=0)
     members: list[StatusMember]
 
 
@@ -429,7 +438,7 @@ class IssueJoinTokenRequest(SchemaModel):
 
     name: Optional[AgentName] = None
     agent_did: Optional[AgentDid] = None
-    ttl_seconds: Optional[float] = Field(default=None, ge=1)
+    ttl_seconds: Optional[JsonFloat] = Field(default=None, ge=1)
     single_use: Optional[bool] = None
 
 
@@ -468,15 +477,8 @@ CALLBACK_TARGET_ADAPTER = TypeAdapter(CallbackTarget)
 
 
 def parse_join_request(data: Any) -> JoinRequest:
-    """Parse join input from kwargs or a mapping."""
-    if isinstance(data, JoinRequest):
-        return data
-    if not isinstance(data, Mapping):
-        raise ValueError("join body must be an object")
-    try:
-        return JoinRequest.model_validate(data)
-    except ValidationError as exc:
-        raise ValueError(validation_message(exc)) from exc
+    """Parse join input from a mapping. ``spec_version`` is required."""
+    return parse_schema(JoinRequest, data)
 
 
 def parse_join_result(data: Any) -> JoinResult:
@@ -549,6 +551,35 @@ def parse_lease_result(data: Any) -> LeaseResult:
         return LeaseResult.model_validate({"deliveries": parsed})
     except ValidationError as exc:
         raise ValueError(validation_message(exc)) from exc
+
+
+def parse_lease_request(data: Any) -> LeaseRequest:
+    """Parse lease input. An empty object is valid."""
+    if data is None:
+        data = {}
+    return parse_schema(LeaseRequest, data)
+
+
+def parse_complete_request(data: Any) -> CompleteRequest:
+    """Parse complete input."""
+    return parse_schema(CompleteRequest, data)
+
+
+def parse_find_request(data: Any) -> FindRequest:
+    """Parse Directory find input."""
+    return parse_schema(FindRequest, data)
+
+
+def parse_issue_join_token_request(data: Any) -> IssueJoinTokenRequest:
+    """Parse operator token issuance input."""
+    if data is None:
+        data = {}
+    return parse_schema(IssueJoinTokenRequest, data)
+
+
+def parse_revoke_join_token_request(data: Any) -> RevokeJoinTokenRequest:
+    """Parse operator token revoke input."""
+    return parse_schema(RevokeJoinTokenRequest, data)
 
 
 def parse_history_result(data: Any) -> HistoryResult:

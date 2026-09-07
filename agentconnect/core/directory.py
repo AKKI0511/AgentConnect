@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
-from agentconnect.core.base import SchemaModel
+from agentconnect.core.base import JsonInt, SchemaModel
 from agentconnect.core.primitives import Address, AgentDid, QualifiedAddress, Tag
 from agentconnect.core.profile import AgentProfile
 
@@ -42,7 +42,7 @@ class FindRequest(SchemaModel):
     """Local Directory search input."""
 
     query: str = Field(min_length=1, max_length=1000, pattern=r"\S")
-    limit: Optional[int] = Field(default=None, ge=1, le=100)
+    limit: Optional[JsonInt] = Field(default=None, ge=1, le=100)
     detail: Literal["summary", "full"] = "summary"
 
 

@@ -96,6 +96,16 @@ def test_object_properties_match_pydantic_fields():
         missing = schema_required - model_fields
         if missing:
             mismatches.append(f"{name} missing required fields {sorted(missing)}")
+        python_required = {
+            field_name
+            for field_name, field in py_type.model_fields.items()
+            if field.is_required()
+        }
+        if python_required != schema_required:
+            mismatches.append(
+                f"{name} required schema={sorted(schema_required)} "
+                f"python={sorted(python_required)}"
+            )
     assert mismatches == []
 
 
@@ -274,6 +284,7 @@ def test_required_null_content_survives_python_dump():
         recipient="researcher@content-squad",
         created_at=_TIMESTAMP,
         trace_id=_UUID,
+        kind="request",
         content=None,
         deadline=_TIMESTAMP,
     )
@@ -299,6 +310,7 @@ def test_dump_public_omits_ticket_content_sugar():
         updated_at=_TIMESTAMP,
         deadline=_TIMESTAMP,
         late_reply_count=0,
+        state="completed",
         response=ResponseMessage(
             id=_UUID,
             sender="writer@content-squad",
@@ -307,6 +319,7 @@ def test_dump_public_omits_ticket_content_sugar():
             created_at=_TIMESTAMP,
             trace_id=_UUID,
             parent_id=_UUID,
+            kind="response",
             content="hello",
         ),
     )

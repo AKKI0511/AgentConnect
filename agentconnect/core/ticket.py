@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal, Mapping, Optional, Union
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from agentconnect.core.base import JsonValue, SchemaModel, validation_message
+from agentconnect.core.base import JsonInt, JsonValue, SchemaModel, validation_message
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
 from agentconnect.core.message import ResponseMessage
 from agentconnect.core.primitives import QualifiedAddress, Timestamp, Uuid
@@ -33,7 +33,7 @@ class TicketBase(SchemaModel):
     created_at: Timestamp
     updated_at: Timestamp
     deadline: Timestamp
-    late_reply_count: int = Field(ge=0)
+    late_reply_count: JsonInt = Field(ge=0)
 
     @property
     def content(self) -> JsonValue | None:
@@ -55,13 +55,13 @@ class TicketBase(SchemaModel):
 class OpenTicket(TicketBase):
     """Ticket waiting for its first accepted reply."""
 
-    state: Literal["open"] = "open"
+    state: Literal["open"]
 
 
 class CompletedTicket(TicketBase):
     """Ticket completed by one successful response."""
 
-    state: Literal["completed"] = "completed"
+    state: Literal["completed"]
     response: ResponseMessage
 
     @property
@@ -73,21 +73,21 @@ class CompletedTicket(TicketBase):
 class FailedTicket(TicketBase):
     """Ticket completed by an Agent or Runtime failure."""
 
-    state: Literal["failed"] = "failed"
+    state: Literal["failed"]
     error: ErrorObject
 
 
 class ExpiredTicket(TicketBase):
     """Ticket whose deadline passed before an accepted reply."""
 
-    state: Literal["expired"] = "expired"
+    state: Literal["expired"]
     error: DeadlineExceededError
 
 
 class DeclinedTicket(TicketBase):
     """Ticket the recipient deliberately declined."""
 
-    state: Literal["declined"] = "declined"
+    state: Literal["declined"]
 
 
 Ticket = Annotated[

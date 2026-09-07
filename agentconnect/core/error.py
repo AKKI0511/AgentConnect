@@ -28,4 +28,4 @@ class ErrorObject(SchemaModel):
 class DeadlineExceededError(ErrorObject):
     """Error stored by an expired Ticket."""
 
-    code: Literal["deadline_exceeded"] = "deadline_exceeded"
+    code: Literal["deadline_exceeded"]

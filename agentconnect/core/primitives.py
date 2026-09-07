@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import AfterValidator, Field
 
@@ -60,8 +60,40 @@ def _check_qualified_address(value: str) -> str:
     return value
 
 
-Address = Annotated[str, AfterValidator(_check_address)]
-QualifiedAddress = Annotated[str, AfterValidator(_check_qualified_address)]
+class _AddressJsonSchema:
+    """JSON Schema for Address. pydantic-core cannot compile the lookahead."""
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: Any, handler: Any
+    ) -> dict[str, Any]:
+        """Attach maxLength and the Address pattern without a pydantic regex."""
+        schema = handler(core_schema)
+        schema["type"] = "string"
+        schema["maxLength"] = 317
+        schema["pattern"] = _ADDRESS.pattern
+        return schema
+
+
+class _QualifiedAddressJsonSchema:
+    """JSON Schema for QualifiedAddress. pydantic-core cannot compile the lookahead."""
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: Any, handler: Any
+    ) -> dict[str, Any]:
+        """Attach maxLength and the QualifiedAddress pattern without a pydantic regex."""
+        schema = handler(core_schema)
+        schema["type"] = "string"
+        schema["maxLength"] = 317
+        schema["pattern"] = _QUALIFIED_ADDRESS.pattern
+        return schema
+
+
+Address = Annotated[str, AfterValidator(_check_address), _AddressJsonSchema()]
+QualifiedAddress = Annotated[
+    str, AfterValidator(_check_qualified_address), _QualifiedAddressJsonSchema()
+]
 AgentDid = Annotated[str, Field(pattern=r"^did:key:z[1-9A-HJ-NP-Za-km-z]+$")]
 SessionToken = Annotated[str, Field(min_length=1)]
 Tag = Annotated[

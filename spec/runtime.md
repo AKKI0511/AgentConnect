@@ -187,7 +187,7 @@ The second join is a new Membership even though the DID matches. It cannot read 
 
 ## `heartbeat`
 
-`heartbeat` proves that the Client still holds its Session. The Runtime MAY extend the Session before returning its current `session_expires_at`.
+`heartbeat` proves that the Client still holds its Session. The Runtime MAY extend the Session before returning its current `session_expires_at`. Other Session operations MUST authenticate without changing expiry.
 
 A missed heartbeat may let the Session expire. Session expiry releases active leases and has the same shared-state behavior as `disconnect`.
 

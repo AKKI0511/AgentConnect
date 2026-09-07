@@ -56,5 +56,17 @@ Defines:
 - `sender_did` is stamped on every accepted Message from the Session at acceptance, including work sent by a principal
 - `get_result` authorizes the requesting Membership across Session replacement, in the Runtime, HTTP, MCP, and the Client
 - join challenge nonces and single-use tokens are consumed in the same store transition as a successful join; concurrent use of one token admits at most one Membership; revoke versus join has a defined winner
+- MCP Session binding covers the five tools, additional Team tools, and the roster resource; a missing Authorization header is operator only on an explicitly trusted loopback or in-process hosting path
+- a reverse proxy in front of a loopback listener is not that path; any forwarded-client header, including an empty `X-Forwarded-*` value, with no Session token is unauthorized
+- an empty or malformed Authorization header is unauthorized and is never treated as operator
+- missing HTTP request context does not imply in-process operator trust
+- authenticating a Session does not renew expiry; `heartbeat` is the renewal operation
+- generated JSON Schema and the Python projection reject a Message that has `thread_id` without `seq`, or `seq` without `thread_id`
+- Python models require the same wire fields as JSON Schema, including discriminators such as Message `kind`
+- `Uuid` is a pattern as well as `format: uuid`, so validators that skip optional formats still reject a non-UUID string
+- untrusted HTTP and MCP bodies validate against the public schema once; extra fields, coercible wrong types, and invalid tags fail at that edge
+- MCP tool arguments are checked in their original form before SDK coercion or default insertion
+- advertised MCP tool schemas are the public argument types, so omit-only fields, bounds, enumerations, identifier patterns, and undeclared properties agree with `tools/call`
+- shared schema rejection vectors live in [`schema/rejection.json`](schema/rejection.json); tests also derive structural mutations from the valid controls
 
 This is a draft. No implementation may claim conformance yet.

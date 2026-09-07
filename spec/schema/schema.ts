@@ -26,6 +26,7 @@ export type Timestamp = string;
 /**
  * RFC 9562 UUID used for Messages, Threads, leases, traces, and Instances.
  * @format uuid
+ * @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
  */
 export type Uuid = string;
 
@@ -312,7 +313,9 @@ export interface MessageBase {
    * exactly when `thread_id` is present. The first accepted Message in a
    * Thread is `1`. Each later Message, including a response or error,
    * receives the next integer. History, the delivered window, and `before`
-   * cursors order by this value, not by `created_at`.
+   * cursors order by this value, not by `created_at`. A Message with
+   * `thread_id` and no `seq`, or `seq` and no `thread_id`, is invalid. The
+   * generated JSON Schema encodes that with a oneOf on each Message kind.
    * @minimum 1
    * @multipleOf 1
    */

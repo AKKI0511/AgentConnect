@@ -1,0 +1,375 @@
+{
+  "description": "Shared valid and invalid instances for JSON Schema, the Python projection, and overlapping HTTP and MCP edges. Do not treat a passing name check as conformance.",
+  "vectors": [
+    {
+      "id": "event-unthreaded",
+      "type": "EventMessage",
+      "accept": true,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "event",
+        "content": "note",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "event-threaded",
+      "type": "EventMessage",
+      "accept": true,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "event",
+        "content": "note",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "thread_id": "00000000-0000-4000-8000-000000000003",
+        "seq": 1
+      }
+    },
+    {
+      "id": "request-thread-without-seq",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "thread_id": "00000000-0000-4000-8000-000000000003"
+      }
+    },
+    {
+      "id": "request-seq-without-thread",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "seq": 1
+      }
+    },
+    {
+      "id": "request-seq-integral-float",
+      "type": "RequestMessage",
+      "accept": true,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": null,
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "thread_id": "00000000-0000-4000-8000-000000000003",
+        "seq": 1.0
+      }
+    },
+    {
+      "id": "request-seq-string",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "thread_id": "00000000-0000-4000-8000-000000000003",
+        "seq": "1"
+      }
+    },
+    {
+      "id": "request-seq-boolean",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "thread_id": "00000000-0000-4000-8000-000000000003",
+        "seq": true
+      }
+    },
+    {
+      "id": "request-seq-fraction",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "thread_id": "00000000-0000-4000-8000-000000000003",
+        "seq": 1.5
+      }
+    },
+    {
+      "id": "request-extra-field",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "nonce": "forged"
+      }
+    },
+    {
+      "id": "request-invalid-kind",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "query",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z"
+      }
+    },
+    {
+      "id": "request-missing-deadline",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "request-thread-id-null",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z",
+        "thread_id": null
+      }
+    },
+    {
+      "id": "request-bad-uuid",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "not-a-uuid",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00Z",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z"
+      }
+    },
+    {
+      "id": "request-bad-timestamp",
+      "type": "RequestMessage",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "sender": "researcher@content-squad",
+        "sender_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "recipient": "writer@content-squad",
+        "kind": "request",
+        "content": "work",
+        "created_at": "2026-08-18T15:00:00",
+        "trace_id": "00000000-0000-4000-8000-000000000002",
+        "deadline": "2026-08-18T15:10:00Z"
+      }
+    },
+    {
+      "id": "send-request-missing-collect",
+      "type": "RequestSendRequest",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+        "deadline": "2026-08-18T15:10:00Z"
+      }
+    },
+    {
+      "id": "send-request-extra-field",
+      "type": "RequestSendRequest",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+        "collect": "ticket",
+        "deadline": "2026-08-18T15:10:00Z",
+        "sender": "researcher"
+      }
+    },
+    {
+      "id": "event-send-ok",
+      "type": "EventSendRequest",
+      "accept": true,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "recipient": "writer",
+        "kind": "event",
+        "content": "note"
+      }
+    },
+    {
+      "id": "find-extra-field",
+      "type": "FindRequest",
+      "accept": false,
+      "instance": {
+        "query": "someone who can draft a summary",
+        "publish": true
+      }
+    },
+    {
+      "id": "find-limit-string",
+      "type": "FindRequest",
+      "accept": false,
+      "instance": {
+        "query": "someone who can draft a summary",
+        "limit": "5"
+      }
+    },
+    {
+      "id": "find-limit-boolean",
+      "type": "FindRequest",
+      "accept": false,
+      "instance": {
+        "query": "someone who can draft a summary",
+        "limit": true
+      }
+    },
+    {
+      "id": "find-ok",
+      "type": "FindRequest",
+      "accept": true,
+      "instance": {
+        "query": "someone who can draft a summary"
+      }
+    },
+    {
+      "id": "lease-extra-field",
+      "type": "LeaseRequest",
+      "accept": false,
+      "instance": {
+        "max_items": 1,
+        "wait": true
+      }
+    },
+    {
+      "id": "lease-empty",
+      "type": "LeaseRequest",
+      "accept": true,
+      "instance": {}
+    },
+    {
+      "id": "complete-extra-field",
+      "type": "CompleteRequest",
+      "accept": false,
+      "instance": {
+        "lease_id": "00000000-0000-4000-8000-000000000001",
+        "force": true
+      }
+    },
+    {
+      "id": "join-missing-spec-version",
+      "type": "JoinRequest",
+      "accept": false,
+      "instance": {
+        "name": "writer",
+        "agent_did": "did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
+        "profile": {
+          "summary": "Writes short drafts from notes.",
+          "skills": [
+            {
+              "name": "drafting",
+              "description": "Turn notes into a two-paragraph draft."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "reply-invalid-outcome",
+      "type": "ReplySuccessRequest",
+      "accept": false,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "lease_id": "00000000-0000-4000-8000-000000000002",
+        "outcome": "ok",
+        "content": "done"
+      }
+    },
+    {
+      "id": "ask-tool-deadline-string",
+      "type": "AskToolRequest",
+      "accept": false,
+      "instance": {
+        "recipient": "writer",
+        "content": "draft this",
+        "deadline_seconds": "30"
+      }
+    }
+  ]
+}

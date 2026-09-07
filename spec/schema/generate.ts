@@ -26,8 +26,54 @@ const config: Config = {
   skipTypeCheck: false,
 };
 
+const THREADED_MESSAGE_TYPES = [
+  "RequestMessage",
+  "EventMessage",
+  "ResponseMessage",
+  "ErrorMessage",
+] as const;
+
+/**
+ * `seq` is present exactly when `thread_id` is present. TypeScript keeps both
+ * fields optional on MessageBase; JSON Schema must reject the mixed cases.
+ */
+function bindThreadSequence(
+  definitions: Record<string, unknown> | undefined,
+): void {
+  if (definitions === undefined) {
+    throw new Error("generated schema has no definitions");
+  }
+  const constraint = {
+    oneOf: [
+      { required: ["thread_id", "seq"] },
+      {
+        allOf: [
+          { not: { required: ["thread_id"] } },
+          { not: { required: ["seq"] } },
+        ],
+      },
+    ],
+  };
+  for (const name of THREADED_MESSAGE_TYPES) {
+    const def = definitions[name];
+    if (
+      def === null ||
+      typeof def !== "object" ||
+      !("type" in def) ||
+      def.type !== "object"
+    ) {
+      throw new Error(`missing object definition ${name}`);
+    }
+    const record = def as { allOf?: unknown[] };
+    record.allOf = [...(record.allOf ?? []), constraint];
+  }
+}
+
 function generate(): string {
   const schema = createGenerator(config).createSchema(config.type);
+  bindThreadSequence(
+    schema.definitions as Record<string, unknown> | undefined,
+  );
   const wrapped = {
     ...schema,
     $schema: "http://json-schema.org/draft-07/schema#",

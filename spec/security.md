@@ -116,7 +116,13 @@ The reserved `operator` is a principal Membership. It may also call `status`, `i
 
 Over HTTP and MCP, that operator authority is a property of the Session. The hosting process may call `issue_join_token` and `revoke_join_token` on the Runtime object without a Session; the process is the trust boundary.
 
-A loopback listener with no `Authorization` header is one shared local identity. Every local client that omits the header is the same `operator` Membership, so they share its Tickets, Trace access, and operator operations. That is acceptable because the machine is the trust boundary.
+A loopback listener with no `Authorization` header is one shared local identity only on a trusted loopback hosting path. That path requires an HTTP peer on loopback and no forwarded-client headers. A forwarded-client header is `Forwarded`, `X-Real-IP`, or any `X-Forwarded-*` name. Header presence is enough to refuse operator, including an empty value. Every client on that path that omits the header is the same `operator` Membership, so they share its Tickets, Trace access, and operator operations. The machine is the trust boundary.
+
+A missing header by itself is not local authority. A reverse proxy in front of a loopback listener is not that path. Those requests are `unauthorized` until they send a Session token. A present `Authorization` header that is empty, not `Bearer`, or `Bearer` with no token is `unauthorized`. It is never treated as the operator.
+
+In-process MCP uses the same operator Membership when the server is hosted as in-process and no `Authorization` header is present. Missing HTTP request context does not imply that in-process trust. An HTTP MCP or Runtime listener that cannot see a peer must not become operator.
+
+Authenticating a Session MUST NOT change `session_expires_at`. Only `heartbeat` may extend expiry.
 
 The Runtime authenticates every operation. A Session cannot choose another sender, lease another Membership's Mailbox, complete or reply to a lease held by another Membership, read another Membership's Ticket, or read Thread history for a participant set it is not in.
 
@@ -184,4 +190,11 @@ The Runtime SHOULD avoid distinguishing authentication failures in public error 
 | member Session calls `issue_join_token` | `forbidden` |
 | loopback HTTP with no Authorization | operations run as `operator` |
 | two loopback clients with no Authorization | the same `operator` Membership; they share Tickets, Trace, and operator operations |
+| loopback HTTP with `X-Forwarded-For` and no Authorization | `unauthorized` |
+| loopback HTTP with empty `X-Forwarded-For` and no Authorization | `unauthorized` |
+| loopback HTTP with empty or malformed `Authorization` | `unauthorized`; not `operator` |
+| MCP hosted in-process with no Authorization | the call runs as `operator` |
+| MCP with no HTTP request and in-process trust unset | MCP-level authentication failure; not `operator` |
+| loopback MCP roster read or extra tool with no Authorization | the call runs as `operator` |
+| MCP roster read or extra tool with a bad Bearer token | MCP-level authentication failure; not `operator` |
 | `send` to `operator` | `not_found` |

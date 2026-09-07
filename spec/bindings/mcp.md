@@ -20,25 +20,49 @@ Authorization: Bearer <session_token>
 
 A missing, malformed, expired, replaced, or revoked Session token is an MCP-level authentication failure, except for the loopback operator case below.
 
+This Session binding applies to every tool call, including additional Team tools, and to every resource read, including the roster.
+
 ### Loopback operator
 
-On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned principal Membership named `operator`. The Runtime reserves that name when it starts and keeps a Session for it. Loopback HTTP Runtime routes use the same Membership. The operator has no Profile, Directory entry, or Mailbox.
+On a loopback listener, a call with no `Authorization` header is bound to a Runtime-owned principal Membership named `operator` only on a trusted loopback hosting path. That path requires an HTTP peer on loopback and no forwarded-client headers (`Forwarded`, `X-Real-IP`, or any `X-Forwarded-*` name, including empty values). The Runtime reserves the name when it starts and keeps a Session for it. Loopback HTTP Runtime routes use the same Membership. The operator has no Profile, Directory entry, or Mailbox.
+
+A missing header by itself is not local authority. A reverse proxy in front of a loopback listener is not that path. Those calls MUST send a Session token.
 
 The name `operator` is reserved for this Membership. A join that uses it fails with `name_conflict`.
 
-A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
+A present `Authorization` header is never treated as the operator. It MUST name a valid Session. An empty or malformed `Authorization` header is an MCP-level authentication failure.
+
+In-process MCP uses the same operator Membership when that server is hosted as in-process and no `Authorization` header is present. Missing HTTP request context does not imply that hosting mode.
+
+Authenticating a Session MUST NOT extend expiry. `heartbeat` remains the renewal operation.
 
 ```http
 POST /mcp
 (no Authorization)
 
-→ find, ask, tell, get_result, and get_history run as operator
+→ find, ask, tell, get_result, get_history, additional tools, and roster read run as operator
 ```
 
 ```http
 Authorization: Bearer <session_token of writer>
 
-→ the same tools run as writer
+→ the same tools and the roster run as writer
+```
+
+```http
+POST /mcp
+X-Forwarded-For: 203.0.113.10
+(no Authorization)
+
+→ MCP-level authentication failure
+```
+
+```http
+POST /mcp
+X-Forwarded-For:
+(no Authorization)
+
+→ MCP-level authentication failure
 ```
 
 ## Core tools
@@ -52,6 +76,8 @@ The tool names are:
 - `get_history`
 
 Names and argument meanings are stable within a released contract. This set is deliberately small. A model finds a peer, sends work and collects the result, and reloads a conversation when it needs the earlier context.
+
+The advertised `tools/list` input schema for each of these five tools is that tool's public argument type. A client that validates arguments against the advertised schema MUST accept and reject the same values the server rejects as MCP invalid-params: required fields, omit-only optional fields, bounds, enumerations, identifier patterns, and undeclared properties. JSON `null` is valid only where the public type includes null, such as `content`. Setting `additionalProperties` to `false` is not enough on its own.
 
 ## `find`
 
@@ -70,6 +96,8 @@ Arguments:
 - `query` is required, contains 1 to 1,000 characters, and includes at least one non-whitespace character.
 - `limit` is optional, between `1` and `100`. Omit it to return every remaining member, at most 100.
 - `detail` is optional, `summary` or `full`, and defaults to `summary`.
+
+The server MUST validate these arguments as sent. A string `limit`, JSON `null`, or an undeclared field is an MCP-level invalid-params failure. The advertised tool schema MUST reject the same values.
 
 Result: `FindResult`. Each match is a light card by default so a model can scan a whole Team cheaply. `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail if it needs more than the card shows.
 
@@ -192,6 +220,8 @@ Result: `HistoryResult`. Only a Thread participant may read it. Any other caller
 
 The server publishes the Team roster as an MCP resource at `agentconnect://team/roster`. The body is `TeamRoster`.
 
+Reading the resource uses the same Session binding as a tool call. A missing, malformed, expired, replaced, or revoked Session token is an MCP-level authentication failure, except for the loopback operator case above.
+
 The resource lists every current Agent Membership. Principals, including `operator`, are omitted. It is not a search. Models that need ranking use `find`.
 
 ## Reserved collection strategies
@@ -207,6 +237,8 @@ The server MUST preserve the Runtime error code. It MUST NOT turn `busy`, `not_f
 ## Additional Team tools
 
 A Team may expose its own tools beside the five AgentConnect tools. Those tools are outside this specification and MUST NOT reuse the five reserved names.
+
+Every additional tool call passes the same Session boundary as `find` and the roster resource. The extra tool keeps its own arguments and result. It MUST NOT run when that boundary rejects the caller.
 
 An additional tool that sends work to an Agent must call the Runtime as the authenticated member. It must not bypass sender attribution, Mailboxes, Deliveries, or Tickets.
 

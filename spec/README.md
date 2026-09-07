@@ -80,7 +80,7 @@ The boundaries are strict:
 
 Behavior belongs to the Markdown file named above. Structure belongs to `schema/schema.ts`. Examples explain those two sources; they do not create a third definition.
 
-`schema/schema.json` is generated from TypeScript and must not be edited by hand.
+`schema/schema.json` is generated from TypeScript and must not be edited by hand. `schema/rejection.json` is the shared set of valid and invalid instances. JSON Schema, the Python projection, and the HTTP and MCP edges must agree on those vectors.
 
 ## Normative words
 

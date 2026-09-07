@@ -65,9 +65,13 @@ Missing, malformed, expired, replaced, or revoked Session credentials return `40
 
 ### Loopback operator
 
-On a loopback listener, a call with no `Authorization` header is bound to the reserved `operator` Membership, the same principal Membership loopback MCP uses. A present `Authorization` header is never treated as the operator. It MUST name a valid Session.
+On a loopback listener, a call with no `Authorization` header is bound to the reserved `operator` Membership only on a trusted loopback hosting path: the HTTP peer is loopback, and the request carries no forwarded-client headers (`Forwarded`, `X-Real-IP`, or any `X-Forwarded-*` name, including empty values). Loopback MCP uses the same Membership. A present `Authorization` header is never treated as the operator. It MUST name a valid Session. An empty or malformed `Authorization` header returns `401`.
+
+A missing header by itself is not local authority. Absence of forwarding headers does not prove that no proxy exists; the hosting path must be explicitly trusted. A reverse proxy in front of a loopback listener is not that path. Those requests return `401`. Missing HTTP request context MUST NOT bind the caller as `operator`.
 
 A non-loopback listener MUST NOT bind a missing header to `operator`. That request returns `401`.
+
+Authenticating a Session MUST NOT extend `session_expires_at`. `POST /session/heartbeat` is the renewal operation.
 
 Responses from `/join/challenge`, `/join`, and `/session/heartbeat` MUST include `Cache-Control: no-store`.
 

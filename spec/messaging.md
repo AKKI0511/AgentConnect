@@ -338,6 +338,8 @@ These vectors are normative summaries. An implementation test may express them i
 | request without `deadline` or `collect` | `invalid_request`; no Message, Delivery, or Ticket |
 | Client includes `seq` on send | `invalid_request` |
 | unthreaded Message | `seq` is absent |
+| Message with `thread_id` and no `seq` | invalid |
+| Message with `seq` and no `thread_id` | invalid |
 | two Messages in one Thread with the same `created_at` | ordered by `seq`; the earlier accepted Message has the smaller `seq` |
 | a follow-up produced from several answers | one `parent_id`; those answers share the follow-up's `trace_id` |
 | Thread longer than the window | Delivery `history_complete=false`; `get_history` pages the remainder |

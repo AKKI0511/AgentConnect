@@ -209,13 +209,19 @@ Before acceptance, the Runtime MUST:
 - validate the request against the schema
 - reject a body larger than `max_message_bytes` with `payload_too_large`
 - reject `collect=callback` or `collect=stream` with `unsupported_collect_mode`
+- resolve the Address syntax of the recipient
+- apply the Message idempotency rules below before new-work admission
+
+When the id is an accepted replay from the original sender with unchanged semantic data, `send` returns that stored result and MUST NOT apply new-work admission. A past deadline on that replay is not `invalid_request`.
+
+When the id is new, the Runtime then MUST:
+
 - resolve the recipient within the Team
 - reject a principal recipient, including `operator`, with `not_found`
 - require a future `deadline` on any request
 - validate any `parent_id` and Thread participation
 - reject a full recipient Mailbox with `busy`
 - reject a `collect=wait` `send` that would exceed `max_held_waits` for the sender's Membership with `wait_limit`
-- apply the Message idempotency rules below
 
 After acceptance, the Runtime MUST:
 
@@ -239,7 +245,7 @@ The result depends on the request:
 | request with `collect=ticket` | created | return the current Ticket immediately |
 | request with `collect=wait` | created | hold `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket |
 
-Every request MUST include `collect` and a future `deadline`. A missing or past deadline, or a missing `collect`, fails with `invalid_request`. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid.
+Every new request MUST include `collect` and a future `deadline`. A missing or past deadline on new work, or a missing `collect`, fails with `invalid_request`. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid. An accepted replay of that same request still returns the retained result while the replay record remains, including after that deadline.
 
 `wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. The Client collects the terminal result with `get_result`.
 
@@ -256,6 +262,7 @@ The Runtime wakes a waiting `send` when the Ticket becomes terminal. It MUST NOT
 Message ids are unique across the Team. The Runtime reserves a proposed id against both `send` and `reply` before either operation stores a Message. The Runtime applies these rules:
 
 - replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
+- that replay remains readable after the original deadline while the replay record is retained; new work with a past deadline is still `invalid_request`
 - using an existing id from another Membership, including a later Membership that reuses the original Address, fails with `id_conflict`
 - replaying the original sender's id with different content, recipient, kind, deadline, collection strategy, Thread, parent, or metadata fails with `id_conflict`
 - a replay MUST NOT create another Delivery
@@ -305,9 +312,9 @@ Complete is one transition. The Runtime stores the result, declines the Ticket w
 
 Only a request accepts `reply`. Calling `reply` for an event fails with `invalid_request` and leaves the Delivery active.
 
-`ReplyRequest.id` is the response Message id and is unique across the Team. Replaying the accepted reply with the same id and semantic data returns the existing result. Reusing it for different reply data or from another Membership fails with `id_conflict`.
+`ReplyRequest.id` is the response Message id and is unique across the Team. Replaying the accepted reply with the same id and semantic data returns the existing result. Reusing it for different reply data, a different target request, or from another Membership fails with `id_conflict` and MUST NOT change that other Ticket.
 
-Reply semantic data is `outcome` plus `content` or `error`, using the same JSON equality as `send`. A successful reply with `content=null` is how a handler completes with no content. `lease_id` authorizes the attempt but is not part of the immutable reply Message.
+Reply semantic data is the target request Message id plus `outcome` plus `content` or `error`, using the same JSON equality as `send`. A successful reply with `content=null` is how a handler completes with no content. `lease_id` authorizes the handling attempt and is not part of reply equality or of the immutable reply Message.
 
 The Runtime first verifies that the retained lease belongs to the caller's Membership. An unknown lease or a lease owned by another Membership returns `not_found`. It then checks reply idempotency, terminal Ticket state, and active lease state in that order. This makes an accepted replay stable and makes a distinct reply after Ticket expiry return `ticket_closed`.
 
@@ -496,6 +503,9 @@ Enqueue cost MUST NOT grow with current depth. The Mailbox stores one document p
 | `send` interrupted before commit | no Message, Ticket, or leaseable Mailbox item |
 | concurrent `send` and `lease` | the item is leased only after its Message (and Ticket, for a request) exist |
 | `send` and `reply` using the same Message id | one succeeds; the other returns `id_conflict` |
+| accepted `send` replay after the request deadline, same semantic data | original Message and current Ticket; no second Delivery |
+| new `send` with a past deadline | `invalid_request`; nothing created |
+| same reply id against a different request | `id_conflict`; that other Ticket stays unchanged |
 | new `collect=wait` while the Membership holds `max_held_waits` | `wait_limit`; nothing created |
 | name removed, different DID joins that name, `get_result` on a predecessor Ticket | `not_found` |
 | reconnect of a live Membership, `get_result` on a Ticket its prior Session opened | the current Ticket |

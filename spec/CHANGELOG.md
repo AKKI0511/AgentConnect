@@ -21,6 +21,14 @@ Defines:
 - Thread history ordered by a per-Thread `seq` assigned on acceptance; `parent_id` names the reply or continuation target
 - a Thread participant set of one or more Memberships, fixed at creation and seeded from the first Message
 - `wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket
+- Runtime `send`, Client `ask`, and MCP `ask` share that bounded hold; none of them polls past it for a terminal Ticket
+- `collect=ticket` and an elapsed `wait` hold both return a `TicketedSendResult` whose Ticket may still be `open`
+- an accepted `send` replay after the original deadline returns the retained result; new work with a past deadline is `invalid_request`
+- reply idempotency includes the target request Message id; `lease_id` authorizes the attempt only
+- MCP and Session-bound keyed `ask`/`tell` recover generated Thread and deadline values; changed keyed arguments fail with `id_conflict`
+- ordinary HTTP operations use a finite configured timeout; `collect=wait` send may use a longer finite timeout covering `wait_hold_seconds`; the Session event stream may stay open
+- an HTTP timeout is `unavailable` and does not claim the Runtime rejected or never accepted the operation; a lost send response retries the same Message id
+- foreground Session reconnect while retrying is bounded; background reconnect may continue after that caller returns
 - `max_held_waits` caps concurrent held `wait` sends per Membership; past the cap `send` fails with `wait_limit`
 - Message idempotency compares a SHA-256 hash of canonical JSON, with `1` / `1.0` / `1e0` equal
 - a Mailbox is a lease-based pull port of per-item documents; `max_mailbox_depth` is an exact count of queued plus leased items

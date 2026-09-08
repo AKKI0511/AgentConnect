@@ -161,18 +161,23 @@ For `collect=wait`, `POST /messages` stays open until the Ticket becomes termina
 
 If the hold elapses while the Ticket is still `open`, the body is a ticketed `SendResult` whose Ticket is `open`. The Client then calls `GET /tickets/{message_id}` until the Ticket is terminal.
 
-If the HTTP connection closes after acceptance, the Runtime keeps the Message and Ticket. The Client calls `GET /tickets/{message_id}` after reconnecting.
+If the HTTP connection closes after acceptance, the Runtime keeps the Message and Ticket. The Client retries `POST /messages` with the same id and semantic body, or calls `GET /tickets/{message_id}` after reconnecting. The retry MUST use the current HTTP client. It MUST NOT invent a Message that lacks Runtime-stamped fields. An accepted replay after the original deadline still returns that stored `SendResult`.
 
-Clients SHOULD set their HTTP timeout above `wait_hold_seconds`. Use `collect=ticket` when the caller does not want `send` to hold.
+Clients SHOULD set their HTTP timeout above `wait_hold_seconds` and keep that timeout finite. Ordinary operations, including `heartbeat` and `GET /tickets/{ticket_id}`, use that configured timeout. `POST /messages` with `collect=wait` MAY use a longer finite timeout that covers the hold. `GET /session/events` MAY stay open until the Session ends. Use `collect=ticket` when the caller does not want `send` to hold. A `busy` Mailbox is not a reason to reconnect.
+
+A client timeout is `unavailable` and MAY be retryable. It MUST NOT claim that the Runtime rejected the operation or that acceptance did not occur. After a lost `POST /messages` response, retry the same id and semantic body, or call `GET /tickets/{message_id}`.
+
+A foreground caller that reconnects while retrying MUST bound that wait, including time spent waiting for another reconnect already in progress. Background reconnect MAY continue after that caller returns.
 
 ## Idempotency
 
 Message ids provide idempotency for `POST /messages` and `POST /deliveries/reply`.
 
-- same id and same semantic body follows the original collection behavior without creating another Delivery
+- same id and same semantic body follows the original collection behavior without creating another Delivery, including after the original deadline while the replay record remains
 - same id and changed semantic body, including a changed `collect`, returns `409` with `code=id_conflict`
 - semantic equality is the SHA-256 hash of canonical JSON defined in [runtime.md](../runtime.md)
 - the Runtime MUST NOT create a second Message or Delivery
+- a recovered `SendResult` has the same shape as a first acceptance, including Runtime-stamped Message fields
 
 Other successful retries behave as follows:
 

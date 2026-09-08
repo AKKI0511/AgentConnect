@@ -111,7 +111,7 @@ A request selects one `collect` strategy:
 
 An event creates no Ticket and returns the accepted Message.
 
-`wait` changes how long `send` stays open. It does not change the underlying Message, Delivery, or Ticket.
+`wait` changes how long `send` stays open. It does not change the underlying Message, Delivery, or Ticket. Runtime `send`, Client `ask`, and MCP `ask` share this hold. None of them polls past `wait_hold_seconds` to force a terminal Ticket.
 
 The Runtime reports `wait_hold_seconds` in `JoinResult`. `send` with `collect=wait` stays open until the first of:
 
@@ -120,11 +120,11 @@ The Runtime reports `wait_hold_seconds` in `JoinResult`. `send` with `collect=wa
 
 The Runtime wakes that `send` when the Ticket becomes terminal. It does not poll the Ticket while the hold remains.
 
-When the hold elapses and the Ticket is still `open`, `send` returns that Ticket. The Client then calls `get_result` with the request Message id. A Client that loses its connection during `wait` does the same.
+When the hold elapses and the Ticket is still `open`, `send` returns that Ticket. The caller then uses `get_result` with the request Message id. A caller that loses its connection during `wait` does the same. A later convenience that waits longer than this hold needs its own deadline, cancellation, and capacity limit; this draft has none.
 
 `JoinResult.limits.max_held_waits` caps how many `collect=wait` sends one Membership may hold at once. A new `send` with `collect=wait` past that cap fails with `wait_limit` and creates nothing. `busy` remains the Mailbox-full error.
 
-`ticket` returns immediately even if the recipient has already replied. The returned Ticket may therefore be `open` or terminal.
+`ticket` returns immediately even if the recipient has already replied. The returned Ticket may therefore be `open` or terminal. That is the same `TicketedSendResult` wrapper as an elapsed `wait` hold. Read completion from `ticket.state`, not from the wrapper.
 
 `callback` and `stream` are named so their contract is fixed and adding them later is an addition, not a reshape. Until they are implemented, a `send` that requests them fails with `unsupported_collect_mode` and creates nothing.
 
@@ -321,6 +321,10 @@ These vectors are normative summaries. An implementation test may express them i
 | --- | --- |
 | same `send` id, same request | original Message and current Ticket; one Delivery only |
 | same `send` id, changed content | `id_conflict`; original state unchanged |
+| same `send` id after the original deadline, same semantic data | original Message and current Ticket |
+| new `send` with a past deadline | `invalid_request`; no Message, Delivery, or Ticket |
+| same reply id, same target request and outcome | original reply result; Ticket unchanged |
+| same reply id against a different request | `id_conflict`; that other Ticket stays unchanged |
 | `send` body over `max_message_bytes` | `payload_too_large`; no Message, Delivery, or Ticket |
 | Session disconnect with open Ticket | Ticket remains readable; Message becomes leaseable again if unfinished |
 | lease expires | next attempt has the same Message id and a higher `attempt` |
@@ -329,6 +333,7 @@ These vectors are normative summaries. An implementation test may express them i
 | `1` / `1.0` / `1e0` in `content` on replay | same Message; not `id_conflict` |
 | `collect=wait` while the Membership already holds `max_held_waits` | `wait_limit`; no Message, Delivery, or Ticket |
 | Session joined with `delivery_history=ids` | Delivery `history` is `[]`; `history_ids` lists earlier Message ids |
+| `collect=ticket` while the recipient has not replied | `send` returns `status=ticketed` with an `open` Ticket |
 | `collect=wait` hold elapses while the Ticket is `open` | `send` returns `status=ticketed` with that Ticket; `get_result` still reads it |
 | deadline wins a race | Ticket is `expired`; later reply cannot replace it |
 | `get_result` twice with no intervening write | identical stored Ticket |

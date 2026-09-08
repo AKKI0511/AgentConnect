@@ -131,23 +131,26 @@ Arguments:
 | `thread_id` | optional UUID |
 | `idempotency_key` | optional string, 1 to 200 characters |
 
-The server returns the current `Ticket`, and the Ticket carries its `thread_id`.
+The server returns the current `Ticket`, and the Ticket carries its `thread_id`. `collect` has the same bounded-hold meaning as Runtime `send`.
 
-- `collect=wait` (default) returns a terminal Ticket.
-- `collect=ticket` returns immediately with the current Ticket.
+- `collect=wait` (default) holds until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket, which may still be `open`.
+- `collect=ticket` returns immediately with the current Ticket, which may still be `open`.
 - A pending result is an `open` Ticket, not hidden MCP session state. The model keeps `ticket.id` and passes it to `get_result`.
+- The server MUST NOT keep polling `get_result` after the Runtime wait hold ends.
 
 ### Conversation continuity
 
-Omitting `thread_id` starts a fresh conversation. The server mints a Thread and returns it on the Ticket. Passing that `thread_id` back into a later `ask` or `tell` continues the same conversation, and the recipient receives the earlier turns as Delivery history. To start over, omit `thread_id` again. The model does not invent Thread ids. It reuses the one the server returned.
+Omitting `thread_id` starts a fresh conversation. The server mints a Thread and returns it on the Ticket. A keyed retry with the same omitted `thread_id` reuses that generated Thread. Passing a returned `thread_id` back into a later `ask` or `tell` continues the same conversation, and the recipient receives the earlier turns as Delivery history. To start over, omit `thread_id` and omit `idempotency_key`. The model does not invent Thread ids. It reuses the one the server returned.
 
 ### Idempotency
 
 A model tool call may be retried by the framework. Retry collapsing is opt-in.
 
-When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key returns the original Ticket.
+When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. An omitted `thread_id` is UUID5 of `ask-thread|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key and the same semantic arguments recovers those generated values, including the original absolute deadline, and returns the original Ticket.
 
-When `idempotency_key` is omitted, the server mints a fresh UUID. Two clients, or one client on two connections, that send identical arguments open two Tickets.
+Semantic arguments for `ask` are `recipient`, `content`, `collect`, and a caller-supplied `thread_id`. Changing any of them under the same key fails with `id_conflict`. Repeating the same relative `deadline_seconds` later still replays; the accepted absolute deadline does not move.
+
+When `idempotency_key` is omitted, the server mints a fresh UUID and, when `thread_id` is omitted, a fresh Thread. Two clients, or one client on two connections, that send identical arguments open two Tickets.
 
 ```json
 {"recipient": "writer", "content": "same", "deadline_seconds": 30}
@@ -160,6 +163,12 @@ Two such `ask` calls produce two Tickets, even when their JSON-RPC request ids a
 ```
 
 Two such `ask` calls from the same caller return one Ticket.
+
+```json
+{"recipient": "writer", "content": "other", "deadline_seconds": 30, "idempotency_key": "draft-1"}
+```
+
+After the first keyed `ask` above, this call fails with `id_conflict`.
 
 ## `tell`
 
@@ -178,7 +187,7 @@ Arguments:
 }
 ```
 
-`recipient` and `content` are required. `thread_id` and `idempotency_key` are optional, with the same idempotency behavior as `ask`. A keyed `tell` uses `tell|` in the UUID5 material instead of `ask|`.
+`recipient` and `content` are required. `thread_id` and `idempotency_key` are optional, with the same idempotency behavior as `ask`. A keyed `tell` uses `tell|` in the UUID5 material instead of `ask|`. Changed keyed `recipient`, `content`, or `thread_id` fail with `id_conflict`. The server MUST NOT convert that conflict into a success envelope.
 
 Result: `AcceptedSendResult`.
 

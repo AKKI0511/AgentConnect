@@ -107,8 +107,8 @@ export type DeliveryHistoryForm = "bodies" | "ids";
  * never observes it. Every request carries `collect` and a `deadline` and
  * opens a Ticket. An event is the fire-and-forget kind and names neither.
  *
- * - `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.
- * - `ticket`: return a Ticket immediately and collect the result later.
+ * - `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket. That Ticket may still be `open`.
+ * - `ticket`: return the current Ticket immediately. That Ticket may be `open` or already terminal.
  * - `callback`: return immediately and deliver the result to a target later.
  * - `stream`: receive partial results ending with a final result.
  *
@@ -723,7 +723,11 @@ export interface TicketedSendResult {
   status: "ticketed";
   /** Accepted and Runtime-stamped request. */
   message: RequestMessage;
-  /** Current Ticket. Terminal unless `collect=wait` ended at the wait hold. */
+  /**
+   * Current Ticket. Immediate `collect=ticket` and an elapsed `wait` hold
+   * both return this wrapper; `state` may be `open` or terminal. Completion
+   * is read from the Ticket, not from this result wrapper.
+   */
   ticket: Ticket;
 }
 
@@ -765,9 +769,16 @@ export interface CompleteResult {
 
 /** Fields shared by successful and failed replies. */
 export interface ReplyBase {
-  /** Client-generated id for the response or error Message. */
+  /**
+   * Client-generated id for the response or error Message. Replay equality
+   * includes this id, the target request Message id, and the outcome data.
+   * `lease_id` authorizes the attempt and is not part of that equality.
+   */
   id: Uuid;
-  /** Active lease for the reply-expected request. */
+  /**
+   * Active lease for the reply-expected request. It authorizes this attempt
+   * and is not the durable identity of the reply.
+   */
   lease_id: Uuid;
 }
 
@@ -880,8 +891,10 @@ export interface AskToolRequest {
    */
   deadline_seconds: number;
   /**
-   * Collection strategy for this send. Defaults to `wait`.
-   * `wait` returns a terminal Ticket. `ticket` returns immediately.
+   * Collection strategy for this send. Defaults to `wait`. Same meaning as
+   * Runtime `send` and Client `ask`. `wait` returns the current Ticket after
+   * the Runtime wait hold. `ticket` returns immediately. Either Ticket may
+   * still be `open`.
    */
   collect?: CollectMode;
   /**
@@ -892,7 +905,9 @@ export interface AskToolRequest {
   /**
    * Stable key so a retried tool call does not create a second request. When
    * present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`.
-   * When omitted, the server mints a fresh UUID. Retry collapsing is opt-in.
+   * Equivalent retries reuse the original generated Thread and absolute
+   * deadline. Changed recipient, content, collect, or supplied `thread_id`
+   * fail with `id_conflict`. When omitted, the server mints a fresh UUID.
    * @minLength 1
    * @maxLength 200
    */
@@ -909,7 +924,9 @@ export interface TellToolRequest {
   thread_id?: Uuid;
   /**
    * Stable key so a retried tool call does not create a second event. Same
-   * derivation rule as `AskToolRequest.idempotency_key`.
+   * derivation rule as `AskToolRequest.idempotency_key`. Equivalent retries
+   * return the original accepted event. Changed recipient, content, or
+   * `thread_id` fail with `id_conflict`.
    * @minLength 1
    * @maxLength 200
    */

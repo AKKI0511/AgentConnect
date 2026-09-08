@@ -211,7 +211,7 @@
         "callback",
         "stream"
       ],
-      "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request carries `collect` and a `deadline` and opens a Ticket. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket.\n- `ticket`: return a Ticket immediately and collect the result later.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
+      "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request carries `collect` and a `deadline` and opens a Ticket. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket. That Ticket may still be `open`.\n- `ticket`: return the current Ticket immediately. That Ticket may be `open` or already terminal.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
     },
     "MembershipKind": {
       "type": "string",
@@ -1726,7 +1726,7 @@
         },
         "ticket": {
           "$ref": "#/definitions/Ticket",
-          "description": "Current Ticket. Terminal unless `collect=wait` ended at the wait hold."
+          "description": "Current Ticket. Immediate `collect=ticket` and an elapsed `wait` hold both return this wrapper; `state` may be `open` or terminal. Completion is read from the Ticket, not from this result wrapper."
         }
       },
       "required": [
@@ -1809,11 +1809,11 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Client-generated id for the response or error Message."
+          "description": "Client-generated id for the response or error Message. Replay equality includes this id, the target request Message id, and the outcome data. `lease_id` authorizes the attempt and is not part of that equality."
         },
         "lease_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Active lease for the reply-expected request."
+          "description": "Active lease for the reply-expected request. It authorizes this attempt and is not the durable identity of the reply."
         },
         "outcome": {
           "type": "string",
@@ -1839,11 +1839,11 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Client-generated id for the response or error Message."
+          "description": "Client-generated id for the response or error Message. Replay equality includes this id, the target request Message id, and the outcome data. `lease_id` authorizes the attempt and is not part of that equality."
         },
         "lease_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Active lease for the reply-expected request."
+          "description": "Active lease for the reply-expected request. It authorizes this attempt and is not the durable identity of the reply."
         },
         "outcome": {
           "type": "string",
@@ -2029,7 +2029,7 @@
         },
         "collect": {
           "$ref": "#/definitions/CollectMode",
-          "description": "Collection strategy for this send. Defaults to `wait`. `wait` returns a terminal Ticket. `ticket` returns immediately."
+          "description": "Collection strategy for this send. Defaults to `wait`. Same meaning as Runtime `send` and Client `ask`. `wait` returns the current Ticket after the Runtime wait hold. `ticket` returns immediately. Either Ticket may still be `open`."
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
@@ -2037,7 +2037,7 @@
         },
         "idempotency_key": {
           "type": "string",
-          "description": "Stable key so a retried tool call does not create a second request. When present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. When omitted, the server mints a fresh UUID. Retry collapsing is opt-in.",
+          "description": "Stable key so a retried tool call does not create a second request. When present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. Equivalent retries reuse the original generated Thread and absolute deadline. Changed recipient, content, collect, or supplied `thread_id` fail with `id_conflict`. When omitted, the server mints a fresh UUID.",
           "minLength": 1,
           "maxLength": 200
         }
@@ -2067,7 +2067,7 @@
         },
         "idempotency_key": {
           "type": "string",
-          "description": "Stable key so a retried tool call does not create a second event. Same derivation rule as `AskToolRequest.idempotency_key`.",
+          "description": "Stable key so a retried tool call does not create a second event. Same derivation rule as `AskToolRequest.idempotency_key`. Equivalent retries return the original accepted event. Changed recipient, content, or `thread_id` fail with `id_conflict`.",
           "minLength": 1,
           "maxLength": 200
         }

@@ -18,6 +18,7 @@ from agentconnect.core.operations import (
     CompleteRequest,
     JoinRequest,
     LeaseRequest,
+    RenewRequest,
     ReplySuccessRequest,
     parse_send_request,
 )
@@ -38,6 +39,7 @@ _PARSERS = {
     "FindRequest": lambda data: parse_schema(FindRequest, data),
     "LeaseRequest": lambda data: parse_schema(LeaseRequest, data),
     "CompleteRequest": lambda data: parse_schema(CompleteRequest, data),
+    "RenewRequest": lambda data: parse_schema(RenewRequest, data),
     "JoinRequest": lambda data: parse_schema(JoinRequest, data),
     "AskToolRequest": lambda data: parse_schema(AskToolRequest, data),
     "ReplySuccessRequest": lambda data: parse_schema(ReplySuccessRequest, data),

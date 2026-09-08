@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
@@ -127,7 +128,7 @@ async def test_unsupported_collect_mode_creates_nothing(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_request_without_collect_or_deadline_is_invalid(team: Team):
+async def test_request_without_collect_is_invalid(team: Team):
     writer = await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
     missing_both = {
@@ -136,13 +137,6 @@ async def test_request_without_collect_or_deadline_is_invalid(team: Team):
         "kind": "request",
         "content": "work",
     }
-    missing_deadline = {
-        "id": _id(),
-        "recipient": "writer",
-        "kind": "request",
-        "content": "work",
-        "collect": "ticket",
-    }
     missing_collect = {
         "id": _id(),
         "recipient": "writer",
@@ -150,11 +144,22 @@ async def test_request_without_collect_or_deadline_is_invalid(team: Team):
         "content": "work",
         "deadline": deadline(10),
     }
-    for body in (missing_both, missing_deadline, missing_collect):
+    for body in (missing_both, missing_collect):
         with pytest.raises(TeamError) as exc:
             await team.send(researcher["session_token"], body)
         assert exc.value.code == "invalid_request"
-    assert (await team.lease(writer["session_token"]))["deliveries"] == []
+    omitted_deadline = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "request",
+            "content": "work",
+            "collect": "ticket",
+        },
+    )
+    assert omitted_deadline["ticket"]["deadline"]
+    assert (await team.lease(writer["session_token"]))["deliveries"]
 
 
 @pytest.mark.asyncio
@@ -974,3 +979,157 @@ async def test_delivery_history_ids_omits_bodies(team: Team):
     assert delivery["history_ids"] == [first["message"]["id"]]
     assert delivery["history_complete"] is True
     assert "history_ids" not in first_delivery or first_delivery["history_ids"] == []
+
+
+def _parse_ts(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+@pytest.mark.asyncio
+async def test_omitted_deadline_uses_work_lifetime():
+    runtime = Team(
+        "content-squad",
+        work_lifetime_seconds=2,
+        session_ttl_seconds=30,
+    )
+    await runtime.start()
+    try:
+        await join_member(runtime, "writer")
+        researcher = await join_member(runtime, "researcher")
+        before = datetime.now(timezone.utc)
+        result = await runtime.send(
+            researcher["session_token"],
+            {
+                "id": _id(),
+                "recipient": "writer",
+                "kind": "request",
+                "content": "work",
+                "collect": "ticket",
+            },
+        )
+        stamped = _parse_ts(result["ticket"]["deadline"])
+        remaining = (stamped - before).total_seconds()
+        assert 1.0 <= remaining <= 3.0
+        assert result["message"]["deadline"] == result["ticket"]["deadline"]
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_omitted_child_deadline_inherits_parent_absolute(team: Team):
+    writer = await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    await join_member(team, "editor")
+    root = await team.send(
+        researcher["session_token"],
+        {
+            "id": _id(),
+            "recipient": "writer",
+            "kind": "request",
+            "content": "draft",
+            "collect": "ticket",
+            "deadline": deadline(20),
+        },
+    )
+    delivery = (await team.lease(writer["session_token"]))["deliveries"][0]
+    child = await team.send(
+        writer["session_token"],
+        {
+            "id": _id(),
+            "recipient": "editor",
+            "kind": "request",
+            "content": "tighten",
+            "collect": "ticket",
+            "parent_id": root["message"]["id"],
+        },
+    )
+    assert child["message"]["deadline"] == root["message"]["deadline"]
+    await team.complete(writer["session_token"], delivery["lease_id"])
+
+
+@pytest.mark.asyncio
+async def test_omitted_deadline_replay_survives_lifetime_change():
+    runtime = Team(
+        "content-squad",
+        work_lifetime_seconds=2,
+        session_ttl_seconds=30,
+    )
+    await runtime.start()
+    try:
+        await join_member(runtime, "writer")
+        researcher = await join_member(runtime, "researcher")
+        message_id = _id()
+        body = {
+            "id": message_id,
+            "recipient": "writer",
+            "kind": "request",
+            "content": "work",
+            "collect": "ticket",
+        }
+        first = await runtime.send(researcher["session_token"], body)
+        runtime.work_lifetime_seconds = 3600
+        second = await runtime.send(researcher["session_token"], body)
+        assert first["ticket"]["deadline"] == second["ticket"]["deadline"]
+        assert first["message"]["id"] == second["message"]["id"]
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_wait_ignores_early_timer_wakeup(monkeypatch):
+    import agentconnect.team.runtime as runtime_mod
+
+    runtime = Team(
+        "content-squad",
+        wait_hold_seconds=2.0,
+        session_ttl_seconds=30,
+        lease_ttl_seconds=8,
+    )
+    await runtime.start()
+    real_wait_for = runtime_mod.asyncio.wait_for
+    calls = {"n": 0}
+
+    async def flaky(aw, timeout=None):
+        if calls["n"] == 0:
+            calls["n"] += 1
+            aw.close()
+            raise asyncio.TimeoutError()
+        return await real_wait_for(aw, timeout=timeout)
+
+    monkeypatch.setattr(runtime_mod.asyncio, "wait_for", flaky)
+    try:
+        writer = await join_member(runtime, "writer")
+        researcher = await join_member(runtime, "researcher")
+        send_task = asyncio.create_task(
+            runtime.send(
+                researcher["session_token"],
+                {
+                    "id": _id(),
+                    "recipient": "writer",
+                    "kind": "request",
+                    "content": "work",
+                    "collect": "wait",
+                    "deadline": deadline(8),
+                },
+            )
+        )
+        for _ in range(40):
+            leased = await runtime.lease(writer["session_token"])
+            if leased["deliveries"]:
+                delivery = leased["deliveries"][0]
+                await runtime.reply(
+                    writer["session_token"],
+                    {
+                        "id": _id(),
+                        "lease_id": delivery["lease_id"],
+                        "outcome": "completed",
+                        "content": "done",
+                    },
+                )
+                break
+            await asyncio.sleep(0.05)
+        result = await asyncio.wait_for(send_task, timeout=8)
+        assert result["ticket"]["state"] == "completed"
+        assert calls["n"] >= 1
+    finally:
+        await runtime.stop()

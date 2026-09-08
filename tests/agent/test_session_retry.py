@@ -8,15 +8,13 @@ import time
 import pytest
 
 from agentconnect.agent.errors import SessionError
-from agentconnect.agent.session import Session, _should_reconnect
+from agentconnect.agent.session import Session, _TrackedLease, _should_reconnect
 from agentconnect.transport.runtime import TransportError
 
 
 def test_busy_and_wait_limit_do_not_reconnect():
     assert not _should_reconnect(TransportError("busy", "full", retryable=True))
-    assert not _should_reconnect(
-        TransportError("wait_limit", "held", retryable=True)
-    )
+    assert not _should_reconnect(TransportError("wait_limit", "held", retryable=True))
     assert _should_reconnect(TransportError("unauthorized", "gone"))
     assert _should_reconnect(TransportError("unavailable", "down", retryable=True))
 
@@ -216,3 +214,37 @@ async def test_call_retries_original_send_identity_after_lost_response():
     assert bodies == [original, original]
     assert result["message"]["id"] == original["id"]
     assert second.sends == 1
+
+
+@pytest.mark.asyncio
+async def test_abandon_does_not_await_calling_handler():
+    session = Session.__new__(Session)
+    session._active = {}
+    session._inflight = set()
+    session._capacity = asyncio.Event()
+    other_cancelled = asyncio.Event()
+    started = asyncio.Event()
+
+    async def other():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            other_cancelled.set()
+            raise
+
+    async def caller():
+        other_task = asyncio.create_task(other())
+        await started.wait()
+        current = asyncio.current_task()
+        session._inflight.add(other_task)
+        session._inflight.add(current)
+        session._active["other"] = _TrackedLease(None, "t", task=other_task)
+        session._active["self"] = _TrackedLease(None, "t", task=current)
+        await session._abandon_sdk_handlers()
+        return "ok"
+
+    result = await asyncio.wait_for(caller(), timeout=2)
+    assert result == "ok"
+    assert other_cancelled.is_set()
+    assert session._active == {}

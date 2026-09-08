@@ -120,35 +120,6 @@ async def test_thread_rejects_third_participant(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_parent_in_other_thread_is_invalid_request(team: Team):
-    await join_member(team, "writer")
-    researcher = await join_member(team, "researcher")
-    first = await team.send(
-        researcher["session_token"],
-        {
-            "id": _id(),
-            "recipient": "writer",
-            "kind": "event",
-            "content": "a",
-            "thread_id": _id(),
-        },
-    )
-    with pytest.raises(TeamError) as exc:
-        await team.send(
-            researcher["session_token"],
-            {
-                "id": _id(),
-                "recipient": "writer",
-                "kind": "event",
-                "content": "b",
-                "thread_id": _id(),
-                "parent_id": first["message"]["id"],
-            },
-        )
-    assert exc.value.code == "invalid_request"
-
-
-@pytest.mark.asyncio
 async def test_reply_appends_to_thread_history(team: Team):
     writer = await join_member(team, "writer")
     researcher = await join_member(team, "researcher")

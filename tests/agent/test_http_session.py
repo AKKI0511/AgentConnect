@@ -7,7 +7,7 @@ import socket
 
 import pytest
 
-from agentconnect.agent import SessionError
+from agentconnect.agent import BaseAgent, SessionError
 from agentconnect.team import Team
 from tests.agent.conftest import DeferredAgent, EchoAgent
 
@@ -128,6 +128,99 @@ async def test_busy_mailbox_does_not_replace_http_transport():
             await researcher.ask("writer", "two", deadline_seconds=8, collect="ticket")
         assert exc.value.code == "busy"
         assert researcher._session._transport is transport
+    finally:
+        await writer.leave()
+        await researcher.leave()
+        await team.stop()
+
+
+async def _until_terminal(agent, ticket_id, *, timeout=8.0):
+    loop = asyncio.get_running_loop()
+    limit = loop.time() + timeout
+    ticket = await agent.get_result(ticket_id)
+    while ticket.state == "open" and loop.time() < limit:
+        await asyncio.sleep(0.05)
+        ticket = await agent.get_result(ticket_id)
+    return ticket
+
+
+@pytest.mark.asyncio
+async def test_http_long_running_wait_returns_open_then_completes():
+    team = await Team(
+        "content-squad",
+        wait_hold_seconds=0.15,
+        lease_ttl_seconds=0.2,
+        sweep_interval_seconds=0.05,
+        session_ttl_seconds=30,
+    ).start()
+
+    class AgentC(EchoAgent):
+        async def handle(self, message, ctx):
+            await asyncio.sleep(0.9)
+            return {"from": "c"}
+
+    class AgentB(BaseAgent):
+        async def handle(self, message, ctx):
+            handle = ctx.ticket()
+            inner = await ctx.ask("agent-c", "go", collect="wait")
+            while inner.state == "open":
+                await asyncio.sleep(0.05)
+                inner = await self.get_result(inner.id)
+            if inner.state == "completed":
+                await handle.reply(inner.content)
+            return None
+
+    agent_c = AgentC(name="agent-c")
+    agent_b = AgentB(name="agent-b")
+    researcher = EchoAgent(name="researcher")
+    try:
+        url = await team.serve()
+        await agent_c.join(url)
+        await agent_b.join(url)
+        await researcher.join(url)
+        pending = await researcher.ask(
+            "agent-b", "start", deadline_seconds=8, collect="wait"
+        )
+        assert pending.state == "open"
+        ticket = await _until_terminal(researcher, pending.id, timeout=8)
+        assert ticket.state == "completed"
+        assert ticket.content == {"from": "c"}
+        assert ticket.id == pending.id
+    finally:
+        await researcher.leave()
+        await agent_b.leave()
+        await agent_c.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_http_hard_expiry_returns_expired_ticket():
+    team = await Team(
+        "content-squad",
+        wait_hold_seconds=0.15,
+        lease_ttl_seconds=0.2,
+        sweep_interval_seconds=0.05,
+        session_ttl_seconds=30,
+    ).start()
+
+    class Slow(BaseAgent):
+        async def handle(self, message, ctx):
+            await asyncio.sleep(2)
+            return {"late": True}
+
+    writer = Slow(name="writer")
+    researcher = EchoAgent(name="researcher")
+    try:
+        url = await team.serve()
+        await writer.join(url)
+        await researcher.join(url)
+        pending = await researcher.ask(
+            "writer", "hold", deadline_seconds=0.4, collect="wait"
+        )
+        assert pending.state in {"open", "expired"}
+        ticket = await _until_terminal(researcher, pending.id, timeout=5)
+        assert ticket.state == "expired"
+        assert ticket.id == pending.id
     finally:
         await writer.leave()
         await researcher.leave()

@@ -223,6 +223,14 @@ async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
                     {
                         "recipient": recipient,
                         "content": "draft this",
+                    },
+                    "ok",
+                ),
+                (
+                    "ask",
+                    {
+                        "recipient": recipient,
+                        "content": "draft this",
                         "deadline_seconds": 30,
                     },
                     "ok",
@@ -359,7 +367,9 @@ async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
             kind, result = await _invoke(
                 client, "get_result", {"ticket_id": ticket_body["id"]}
             )
-            assert _schema_accepts(schemas["get_result"], {"ticket_id": ticket_body["id"]})
+            assert _schema_accepts(
+                schemas["get_result"], {"ticket_id": ticket_body["id"]}
+            )
             assert kind == "ok"
             assert _body(result)["id"] == ticket_body["id"]
 

@@ -190,7 +190,7 @@ async def test_fanout_member_sees_own_leg_and_parent_id(team):
             "kind": "request",
             "content": "review",
             "collect": "ticket",
-            "deadline": deadline(20),
+            "deadline": root["message"]["deadline"],
             "parent_id": root["message"]["id"],
         },
     )

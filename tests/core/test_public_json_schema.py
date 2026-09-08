@@ -86,7 +86,7 @@ def test_ask_public_schema_omit_null_bounds_and_identifiers():
         ({**valid, "collect": "nope"}, False),
         ({**valid, "recipient": "!!!"}, False),
         ({**valid, "unknown": True}, False),
-        ({"recipient": "writer", "content": "draft this"}, False),
+        ({"recipient": "writer", "content": "draft this"}, True),
     ]
     for instance, accept in cases:
         assert _accepts(schema, instance) is accept, instance

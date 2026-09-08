@@ -63,7 +63,7 @@ def test_event_is_not_reply_expected():
     assert "seq" not in message
 
 
-def test_send_request_requires_collect_and_deadline():
+def test_send_request_requires_collect():
     with pytest.raises(ValueError):
         parse_send_request(
             {
@@ -73,6 +73,19 @@ def test_send_request_requires_collect_and_deadline():
                 "content": "work",
             }
         )
+
+
+def test_send_request_may_omit_deadline():
+    parsed = parse_send_request(
+        {
+            "id": _UUID,
+            "recipient": "writer",
+            "kind": "request",
+            "content": "work",
+            "collect": "ticket",
+        }
+    )
+    assert parsed.deadline is None
 
 
 def test_threaded_message_keeps_seq():

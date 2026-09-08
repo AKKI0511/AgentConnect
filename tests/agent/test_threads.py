@@ -1,4 +1,4 @@
-"""Threads, history paging, and collect=wait past the Runtime hold."""
+"""Threads, history paging, and collect=wait returning after the Runtime hold."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from tests.agent.conftest import DeferredAgent, EchoAgent
 
 
 @pytest.mark.asyncio
-async def test_ask_wait_polls_until_terminal_after_hold():
+async def test_ask_wait_returns_open_ticket_after_hold():
     runtime = Team("content-squad", wait_hold_seconds=0.05, session_ttl_seconds=30)
     await runtime.start()
     writer = DeferredAgent(name="writer")
@@ -29,10 +29,12 @@ async def test_ask_wait_polls_until_terminal_after_hold():
                 break
             await asyncio.sleep(0.05)
         assert writer.ticket_handle is not None
+        result = await asyncio.wait_for(task, timeout=2)
+        assert result.state == "open"
         await writer.ticket_handle.reply("done after hold")
-        result = await asyncio.wait_for(task, timeout=5)
-        assert result.state == "completed"
-        assert result.content == "done after hold"
+        terminal = await researcher.get_result(result.id)
+        assert terminal.state == "completed"
+        assert terminal.content == "done after hold"
     finally:
         await writer.leave()
         await researcher.leave()

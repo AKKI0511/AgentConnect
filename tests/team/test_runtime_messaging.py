@@ -32,6 +32,7 @@ async def test_send_idempotent_replay_returns_same_message(team: Team):
     second = await team.send(researcher["session_token"], body)
     assert first["message"]["id"] == second["message"]["id"]
     assert first["message"]["created_at"] == second["message"]["created_at"]
+    assert first["message"]["sender_did"] == second["message"]["sender_did"]
     leased = await team.lease(writer["session_token"], max_items=10)
     assert len(leased["deliveries"]) == 1
 
@@ -388,6 +389,102 @@ async def test_reply_idempotent_replay(team: Team):
     second = await team.reply(writer["session_token"], body)
     assert first["ticket"]["response"]["id"] == second["ticket"]["response"]["id"]
     assert second["ticket"]["late_reply_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reply_id_conflict_on_different_request(team: Team):
+    writer = await join_member(team, "writer", max_in_flight=2)
+    researcher = await join_member(team, "researcher")
+    first_id = _id()
+    second_id = _id()
+    await team.send(
+        researcher["session_token"],
+        {
+            "id": first_id,
+            "recipient": "writer",
+            "kind": "request",
+            "content": "one",
+            "collect": "ticket",
+            "deadline": deadline(20),
+        },
+    )
+    await team.send(
+        researcher["session_token"],
+        {
+            "id": second_id,
+            "recipient": "writer",
+            "kind": "request",
+            "content": "two",
+            "collect": "ticket",
+            "deadline": deadline(20),
+        },
+    )
+    deliveries = (await team.lease(writer["session_token"], max_items=2))["deliveries"]
+    by_id = {item["message"]["id"]: item for item in deliveries}
+    reply_id = _id()
+    await team.reply(
+        writer["session_token"],
+        {
+            "id": reply_id,
+            "lease_id": by_id[first_id]["lease_id"],
+            "outcome": "completed",
+            "content": "ok",
+        },
+    )
+    with pytest.raises(TeamError) as exc:
+        await team.reply(
+            writer["session_token"],
+            {
+                "id": reply_id,
+                "lease_id": by_id[second_id]["lease_id"],
+                "outcome": "completed",
+                "content": "ok",
+            },
+        )
+    assert exc.value.code == "id_conflict"
+    other = await team.get_result(researcher["session_token"], second_id)
+    assert other["state"] == "open"
+
+
+@pytest.mark.asyncio
+async def test_send_replay_after_deadline_returns_retained_result(team: Team):
+    await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    body = {
+        "id": _id(),
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+        "collect": "ticket",
+        "deadline": deadline(0.05),
+    }
+    first = await team.send(researcher["session_token"], body)
+    await asyncio.sleep(0.12)
+    second = await team.send(researcher["session_token"], body)
+    assert second["message"]["id"] == first["message"]["id"]
+    assert second["message"]["sender_did"] == first["message"]["sender_did"]
+    assert second["message"]["trace_id"] == first["message"]["trace_id"]
+    assert second["ticket"]["state"] == "expired"
+
+
+@pytest.mark.asyncio
+async def test_new_send_with_past_deadline_is_invalid_request(team: Team):
+    await join_member(team, "writer")
+    researcher = await join_member(team, "researcher")
+    past = deadline(-1)
+    with pytest.raises(TeamError) as exc:
+        await team.send(
+            researcher["session_token"],
+            {
+                "id": _id(),
+                "recipient": "writer",
+                "kind": "request",
+                "content": "work",
+                "collect": "ticket",
+                "deadline": past,
+            },
+        )
+    assert exc.value.code == "invalid_request"
 
 
 @pytest.mark.asyncio

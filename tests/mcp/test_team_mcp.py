@@ -10,7 +10,7 @@ from mcp import Client
 
 from agentconnect.agent import BaseAgent
 from agentconnect.mcp.actions import resolve_session
-from agentconnect.mcp.ids import message_id_for_tool
+from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.mcp.server import create_team_mcp
 from agentconnect.team import Team, TeamError
 from mcp.shared.exceptions import MCPError
@@ -57,20 +57,34 @@ def _error(result) -> dict[str, Any]:
         return structured["error"]
     texts = [getattr(item, "text", "") or "" for item in result.content or []]
     blob = "".join(texts)
-    if blob:
+    parsed = _error_payload(blob)
+    if parsed is not None:
+        return parsed
+    dumped = result.model_dump(mode="json") if hasattr(result, "model_dump") else {}
+    parsed = _error_payload(json.dumps(dumped))
+    if parsed is not None:
+        return parsed
+    raise AssertionError(f"unparseable tool error: {blob or dumped}")
+
+
+def _error_payload(blob: str) -> dict[str, Any] | None:
+    if not blob:
+        return None
+    candidates = [blob]
+    start = blob.find("{")
+    end = blob.rfind("}")
+    if start >= 0 and end > start:
+        candidates.append(blob[start : end + 1])
+    for raw in candidates:
         try:
-            payload = json.loads(blob)
+            payload = json.loads(raw)
         except json.JSONDecodeError:
-            assert "not_found" in blob
-            return {"code": "not_found", "message": blob}
-        if isinstance(payload, dict) and "error" in payload:
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
             return payload["error"]
         if isinstance(payload, dict) and "code" in payload:
             return payload
-    dumped = result.model_dump(mode="json") if hasattr(result, "model_dump") else {}
-    blob = json.dumps(dumped)
-    assert "not_found" in blob
-    return {"code": "not_found", "message": blob}
+    return None
 
 
 @pytest.mark.asyncio
@@ -112,6 +126,18 @@ def test_omitted_key_mints_fresh_ids():
         idempotency_key="draft-1",
     )
     assert keyed == keyed_again
+    thread = thread_id_for_tool(
+        "ask",
+        "operator@content-squad",
+        idempotency_key="draft-1",
+    )
+    thread_again = thread_id_for_tool(
+        "ask",
+        "operator@content-squad",
+        idempotency_key="draft-1",
+    )
+    assert thread == thread_again
+    assert thread != keyed
     tell_keyed = message_id_for_tool(
         "tell",
         "operator@content-squad",
@@ -244,7 +270,102 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
         async with Client(mcp) as client:
             one = _body(await client.call_tool("ask", keyed))
             two = _body(await client.call_tool("ask", keyed))
+            later = dict(keyed)
+            later["deadline_seconds"] = 60
+            two_later = _body(await client.call_tool("ask", later))
             assert one["id"] == two["id"]
+            assert one["thread_id"] == two["thread_id"]
+            assert two_later["id"] == one["id"]
+            assert two_later["deadline"] == one["deadline"]
+
+            conflict = await client.call_tool(
+                "ask",
+                {
+                    "recipient": "writer",
+                    "content": "other",
+                    "deadline_seconds": 30,
+                    "idempotency_key": "draft-1",
+                },
+            )
+            error = _error(conflict)
+            assert error["code"] == "id_conflict"
+    finally:
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_keyed_tell_conflict_is_not_success():
+    team = await Team("content-squad").start()
+    writer = Writer(name="writer")
+    await writer.join(team)
+    mcp = create_team_mcp(team)
+    try:
+        async with Client(mcp) as client:
+            first = _body(
+                await client.call_tool(
+                    "tell",
+                    {
+                        "recipient": "writer",
+                        "content": {"notice": "one"},
+                        "idempotency_key": "note-1",
+                    },
+                )
+            )
+            again = _body(
+                await client.call_tool(
+                    "tell",
+                    {
+                        "recipient": "writer",
+                        "content": {"notice": "one"},
+                        "idempotency_key": "note-1",
+                    },
+                )
+            )
+            assert again["status"] == "accepted"
+            assert again["message"]["id"] == first["message"]["id"]
+            assert again["message"]["sender_did"] == first["message"]["sender_did"]
+            conflict = await client.call_tool(
+                "tell",
+                {
+                    "recipient": "writer",
+                    "content": {"notice": "two"},
+                    "idempotency_key": "note-1",
+                },
+            )
+            error = _error(conflict)
+            assert error["code"] == "id_conflict"
+    finally:
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_ask_wait_hold_can_return_open_ticket():
+    class Hold(BaseAgent):
+        async def handle(self, message, ctx) -> Any:
+            ctx.ticket()
+            return None
+
+    team = await Team("content-squad", wait_hold_seconds=0.05).start()
+    writer = Hold(name="writer")
+    await writer.join(team)
+    mcp = create_team_mcp(team)
+    try:
+        async with Client(mcp) as client:
+            ticket = _body(
+                await client.call_tool(
+                    "ask",
+                    {
+                        "recipient": "writer",
+                        "content": "later",
+                        "deadline_seconds": 8,
+                        "collect": "wait",
+                    },
+                )
+            )
+        assert ticket["state"] == "open"
+        assert "content" not in ticket
     finally:
         await writer.leave()
         await team.stop()

@@ -143,13 +143,90 @@ async def test_team_tools_idempotency_key_reuses_ticket():
             deadline_seconds=30,
             idempotency_key="draft-1",
         )
+        later = await researcher.tools.ask(
+            recipient="writer",
+            content="same",
+            deadline_seconds=60,
+            idempotency_key="draft-1",
+        )
         third = await researcher.tools.ask(
             recipient="writer",
             content="same",
             deadline_seconds=30,
         )
         assert first["id"] == second["id"]
+        assert later["id"] == first["id"]
+        assert later["deadline"] == first["deadline"]
         assert first["id"] != third["id"]
+        with pytest.raises(SessionError) as exc:
+            await researcher.tools.ask(
+                recipient="writer",
+                content="other",
+                deadline_seconds=30,
+                idempotency_key="draft-1",
+            )
+        assert exc.value.code == "id_conflict"
+    finally:
+        await researcher.leave()
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_team_tools_keyed_tell_conflict_is_visible():
+    team = await Team("content-squad").start()
+    writer = Writer(name="writer")
+    researcher = Coordinator(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        first = await researcher.tools.tell(
+            recipient="writer",
+            content={"notice": "one"},
+            idempotency_key="note-1",
+        )
+        again = await researcher.tools.tell(
+            recipient="writer",
+            content={"notice": "one"},
+            idempotency_key="note-1",
+        )
+        assert again["message"]["id"] == first["message"]["id"]
+        assert again["message"]["kind"] == "event"
+        assert "sender_did" in again["message"]
+        with pytest.raises(SessionError) as exc:
+            await researcher.tools.tell(
+                recipient="writer",
+                content={"notice": "two"},
+                idempotency_key="note-1",
+            )
+        assert exc.value.code == "id_conflict"
+    finally:
+        await researcher.leave()
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_team_tools_wait_hold_can_return_open_ticket():
+    class Hold(BaseAgent):
+        async def handle(self, message, ctx) -> Any:
+            ctx.ticket()
+            return None
+
+    team = await Team("content-squad", wait_hold_seconds=0.05).start()
+    writer = Hold(name="writer")
+    researcher = Coordinator(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        ticket = await researcher.tools.ask(
+            recipient="writer",
+            content="later",
+            deadline_seconds=8,
+            collect="wait",
+        )
+        assert ticket["state"] == "open"
+        assert "content" not in ticket
     finally:
         await researcher.leave()
         await writer.leave()

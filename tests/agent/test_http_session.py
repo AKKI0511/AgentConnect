@@ -7,8 +7,9 @@ import socket
 
 import pytest
 
+from agentconnect.agent import SessionError
 from agentconnect.team import Team
-from tests.agent.conftest import EchoAgent
+from tests.agent.conftest import DeferredAgent, EchoAgent
 
 
 def _free_loopback_port() -> int:
@@ -102,4 +103,32 @@ async def test_serve_rejects_non_loopback():
             await team.serve(host="0.0.0.0", port=0)
         assert getattr(exc.value, "code", None) == "invalid_request"
     finally:
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_busy_mailbox_does_not_replace_http_transport():
+    team = await Team(
+        "content-squad",
+        max_mailbox_depth=1,
+        session_ttl_seconds=30,
+    ).start()
+    writer = DeferredAgent(name="writer")
+    researcher = EchoAgent(name="researcher")
+    try:
+        url = await team.serve()
+        await writer.join(url)
+        await researcher.join(url)
+        transport = researcher._session._transport
+        pending = await researcher.ask(
+            "writer", "one", deadline_seconds=8, collect="ticket"
+        )
+        assert pending.state == "open"
+        with pytest.raises(SessionError) as exc:
+            await researcher.ask("writer", "two", deadline_seconds=8, collect="ticket")
+        assert exc.value.code == "busy"
+        assert researcher._session._transport is transport
+    finally:
+        await writer.leave()
+        await researcher.leave()
         await team.stop()

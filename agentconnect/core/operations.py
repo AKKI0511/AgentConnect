@@ -67,6 +67,8 @@ __all__ = [
     "SendResult",
     "LeaseRequest",
     "LeaseResult",
+    "RenewRequest",
+    "RenewResult",
     "CompleteRequest",
     "CompleteResult",
     "ReplyBase",
@@ -98,6 +100,7 @@ __all__ = [
     "parse_reply_request",
     "parse_lease_request",
     "parse_lease_result",
+    "parse_renew_request",
     "parse_complete_request",
     "parse_history_result",
     "parse_find_request",
@@ -141,6 +144,9 @@ class RuntimeLimits(SchemaModel):
     ``max_held_waits`` caps concurrent ``collect=wait`` sends per
     Membership. ``max_mailbox_depth`` caps queued plus leased Mailbox
     items. Both are exact counts this Runtime enforces.
+    ``work_lifetime_seconds`` is the finite cutoff stamped on a new
+    request whose send omitted ``deadline`` and that has no request
+    parent to inherit from.
     """
 
     max_message_bytes: JsonInt = Field(ge=1)
@@ -148,6 +154,7 @@ class RuntimeLimits(SchemaModel):
     delivery_history_limit: JsonInt = Field(ge=0)
     wait_hold_seconds: JsonFloat = Field(ge=0)
     max_held_waits: JsonInt = Field(ge=0)
+    work_lifetime_seconds: JsonFloat = Field(ge=1)
 
 
 class JoinResult(SchemaModel):
@@ -199,8 +206,9 @@ CallbackTarget = Union[AddressCallbackTarget, UrlCallbackTarget]
 class RequestSendRequest(SendBase):
     """Send a request. Always opens a Ticket.
 
-    ``collect`` and ``deadline`` are required. Fire-and-forget work is
-    :class:`EventSendRequest`.
+    ``collect`` is required. ``deadline`` may be omitted; the Runtime
+    stamps the effective cutoff on the accepted Message. Fire-and-forget
+    work is :class:`EventSendRequest`.
 
         RequestSendRequest(
             id=message_id,
@@ -214,7 +222,7 @@ class RequestSendRequest(SendBase):
 
     kind: Literal["request"]
     collect: CollectMode
-    deadline: Timestamp
+    deadline: Optional[Timestamp] = None
     callback: Optional[CallbackTarget] = None
 
 
@@ -266,6 +274,25 @@ class LeaseResult(SchemaModel):
     """Deliveries currently leased to the Session."""
 
     deliveries: list[Delivery]
+
+
+class RenewRequest(SchemaModel):
+    """Input to extend one active Delivery lease.
+
+    RenewRequest(lease_id=delivery.lease_id)
+    """
+
+    lease_id: Uuid
+
+
+class RenewResult(SchemaModel):
+    """Result of a successful ``renew``.
+
+    result.lease_expires_at
+    """
+
+    lease_id: Uuid
+    lease_expires_at: Timestamp
 
 
 class CompleteRequest(SchemaModel):
@@ -352,7 +379,7 @@ class AskToolRequest(SchemaModel):
 
     recipient: Address
     content: JsonValue
-    deadline_seconds: JsonInt = Field(ge=1, le=86400)
+    deadline_seconds: Optional[JsonInt] = Field(default=None, ge=1, le=86400)
     collect: CollectMode = "wait"
     thread_id: Optional[Uuid] = None
     idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -506,7 +533,7 @@ def parse_join_result(data: Any) -> JoinResult:
 
 
 def parse_send_request(data: Any) -> SendRequest:
-    """Parse send input. A request requires ``collect`` and ``deadline``."""
+    """Parse send input. A request requires ``collect``. ``deadline`` may be omitted."""
     if isinstance(data, (RequestSendRequest, EventSendRequest)):
         return data
     if not isinstance(data, Mapping):
@@ -577,6 +604,11 @@ def parse_lease_request(data: Any) -> LeaseRequest:
 def parse_complete_request(data: Any) -> CompleteRequest:
     """Parse complete input."""
     return parse_schema(CompleteRequest, data)
+
+
+def parse_renew_request(data: Any) -> RenewRequest:
+    """Parse renew input."""
+    return parse_schema(RenewRequest, data)
 
 
 def parse_find_request(data: Any) -> FindRequest:

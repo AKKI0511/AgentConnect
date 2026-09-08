@@ -69,20 +69,24 @@ class RuntimeClient:
         recipient: str,
         content: Any,
         *,
-        deadline_seconds: float = 30.0,
+        deadline_seconds: Optional[float] = None,
         collect: str = "wait",
     ) -> dict[str, Any]:
         """POST /messages as a reply-expected request."""
-        deadline = datetime.now(timezone.utc) + timedelta(seconds=deadline_seconds)
-        body = {
+        body: dict[str, Any] = {
             "id": str(uuid4()),
             "recipient": recipient,
             "kind": "request",
             "content": content,
             "collect": collect,
-            "deadline": deadline.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         }
-        timeout = max(self._client.timeout.read or 35.0, deadline_seconds + 10.0)
+        timeout = float(self._client.timeout.read or 35.0)
+        if deadline_seconds is not None:
+            deadline = datetime.now(timezone.utc) + timedelta(seconds=deadline_seconds)
+            body["deadline"] = deadline.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            timeout = max(timeout, deadline_seconds + 10.0)
+        else:
+            timeout = max(timeout, 35.0)
         return self._post("/messages", body, timeout=timeout)
 
     def get_trace(self, trace_id: str) -> dict[str, Any]:

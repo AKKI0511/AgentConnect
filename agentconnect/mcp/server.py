@@ -238,7 +238,7 @@ def create_team_mcp(
         ctx: Context,
         recipient: str,
         content: Any,
-        deadline_seconds: int,
+        deadline_seconds: Optional[int] = None,
         collect: str = "wait",
         thread_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -247,7 +247,7 @@ def create_team_mcp(
 
         recipient: Local Address such as "writer".
         content: The work, text or JSON.
-        deadline_seconds: How long the recipient has, from 1 to 86400.
+        deadline_seconds: Optional work cutoff from 1 to 86400 seconds. Omit to inherit a request parent or the Runtime work lifetime.
         collect: "wait" (default) returns the current Ticket after the Runtime hold, which may still be open. "ticket" returns immediately.
         thread_id: Continue this conversation. Omit to start a new one.
         idempotency_key: Stable key so a retry does not create a second request.

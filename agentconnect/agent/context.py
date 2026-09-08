@@ -23,6 +23,8 @@ class TicketHandle:
 
     The Delivery stays leased until ``reply``, ``fail``, or ``decline``
     succeeds, or the lease expires and another Instance may take it.
+    The Session renews that lease until then, up to the request deadline.
+    The slot still counts toward ``max_in_flight``.
     """
 
     def __init__(self, session: "Session", delivery: Delivery) -> None:
@@ -194,6 +196,13 @@ class Context:
 
         Return from ``handle`` after calling this. Reply with
         ``handle.reply``, ``handle.fail``, or ``handle.decline``.
+        The Session renews the lease until that reply, the request
+        deadline, disconnect, or revocation. This still counts as one
+        in-flight Delivery.
+
+            handle = ctx.ticket()
+            asyncio.create_task(self._finish(handle))
+            return None
         """
         if self._ticket is None:
             self._ticket = TicketHandle(self._session, self._delivery)
@@ -204,7 +213,7 @@ class Context:
         recipient: str,
         content: Any,
         *,
-        deadline_seconds: float = 30.0,
+        deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
@@ -213,6 +222,12 @@ class Context:
         """Send a reply-expected request and collect the result.
 
         Same contract as :meth:`agentconnect.agent.base.BaseAgent.ask`.
+        From a handler this inherits the current Message as ``parent_id``.
+        An omitted deadline inherits that request's stamped cutoff. An
+        explicit child cannot exceed the parent. A new Thread starts when
+        ``recipient`` is not already in this conversation.
+
+            ticket = await ctx.ask("editor", "tighten this draft")
         """
         return await self._session.ask(
             recipient,
@@ -222,6 +237,7 @@ class Context:
             thread_id=thread_id,
             parent_id=parent_id,
             metadata=metadata,
+            handling=self._delivery,
         )
 
     async def tell(
@@ -236,6 +252,7 @@ class Context:
         """Send an event.
 
         Same contract as :meth:`agentconnect.agent.base.BaseAgent.tell`.
+        From a handler this inherits the current Message as ``parent_id``.
         """
         return await self._session.tell(
             recipient,
@@ -243,6 +260,7 @@ class Context:
             thread_id=thread_id,
             parent_id=parent_id,
             metadata=metadata,
+            handling=self._delivery,
         )
 
     async def find(

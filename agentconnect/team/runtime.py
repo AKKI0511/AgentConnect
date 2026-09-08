@@ -31,7 +31,7 @@ join token and an EdDSA identity proof.
     issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
     await writer.join(url, join_token=issued["token"])
 
-``send``, ``lease``, ``complete``, ``reply``, and the other token-taking
+``send``, ``lease``, ``renew``, ``complete``, ``reply``, and the other token-taking
 methods are the Session transport. HTTP, MCP, and the in-process Session
 call them by name. Agent code uses ``BaseAgent``.
 
@@ -48,8 +48,10 @@ are kept for 24 hours after they close, or until that deadline if it is
 later. Thread history is trimmed by count once no open Ticket still
 needs an older Message. A ``collect=wait`` send holds until the Ticket
 is terminal or ``wait_hold_seconds`` elapses, then returns the current
-Ticket. One Membership may hold at most ``max_held_waits`` of those
-sends at once.
+Ticket. Ending that hold does not end accepted work. One Membership may
+hold at most ``max_held_waits`` of those sends at once. A request send
+may omit ``deadline``; the Runtime stamps ``work_lifetime_seconds`` or
+inherits a request parent's absolute deadline.
 
 Expiry is indexed by time. The background sweep pops Sessions, leases,
 Tickets, and join credentials that are due. It does not walk every
@@ -84,6 +86,7 @@ from agentconnect.core.operations import (
     JoinChallenge,
     JoinResult,
     JoinTokenIssued,
+    RenewResult,
     ReplyResult,
     RuntimeLimits,
     StatusResult,
@@ -137,6 +140,7 @@ from agentconnect.team.constants import (
     DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
     DEFAULT_THREAD_MESSAGE_LIMIT,
     DEFAULT_WAIT_HOLD_SECONDS,
+    DEFAULT_WORK_LIFETIME_SECONDS,
     MESSAGE_KINDS_SEND,
     OPERATOR_NAME,
     RESERVED_MCP_TOOL_NAMES,
@@ -230,6 +234,7 @@ class Team:
         delivery_history_limit: int = DEFAULT_DELIVERY_HISTORY_LIMIT,
         wait_hold_seconds: float = DEFAULT_WAIT_HOLD_SECONDS,
         max_held_waits: int = DEFAULT_MAX_HELD_WAITS,
+        work_lifetime_seconds: float = DEFAULT_WORK_LIFETIME_SECONDS,
         session_ttl_seconds: float = DEFAULT_SESSION_TTL_SECONDS,
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
         terminal_ticket_retention_seconds: float = DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
@@ -254,6 +259,10 @@ class Team:
                 is still open; collect the rest with ``get_result``.
             max_held_waits: How many ``collect=wait`` sends one Membership
                 may hold at once. Further waits fail with ``wait_limit``.
+            work_lifetime_seconds: Finite work cutoff stamped on a new
+                request whose send omitted ``deadline`` and that has no
+                request parent to inherit from. This is a cutoff, not a
+                completion estimate.
             embeddings: How Profiles are turned into vectors for ``find``.
                 ``"auto"`` uses a hosted embedding API when a key is
                 already configured, a local ONNX model when
@@ -276,6 +285,10 @@ class Team:
         self.delivery_history_limit = int(delivery_history_limit)
         self.wait_hold_seconds = float(wait_hold_seconds)
         self.max_held_waits = int(max_held_waits)
+        lifetime = float(work_lifetime_seconds)
+        if lifetime < 1:
+            raise ValueError("work_lifetime_seconds must be at least 1")
+        self.work_lifetime_seconds = lifetime
         self.session_ttl_seconds = float(session_ttl_seconds)
         self.lease_ttl_seconds = float(lease_ttl_seconds)
         self.terminal_ticket_retention_seconds = float(
@@ -334,6 +347,7 @@ class Team:
             delivery_history_limit=self.delivery_history_limit,
             wait_hold_seconds=self.wait_hold_seconds,
             max_held_waits=self.max_held_waits,
+            work_lifetime_seconds=self.work_lifetime_seconds,
         )
 
     @property
@@ -1526,15 +1540,18 @@ class Team:
                     f"collect={collect} is not implemented yet",
                 )
         if kind == "request":
-            if collect is None or deadline_raw is None:
-                _fail(
-                    "invalid_request",
-                    "a request needs collect and a deadline",
-                )
-            try:
-                deadline_dt = parse_timestamp(deadline_raw)
-            except ValueError:
-                _fail("invalid_request", "deadline must be RFC 3339 UTC ending in Z")
+            if collect is None:
+                _fail("invalid_request", "a request needs collect")
+            if deadline_raw is None:
+                deadline_dt = None
+            else:
+                try:
+                    deadline_dt = parse_timestamp(deadline_raw)
+                except ValueError:
+                    _fail(
+                        "invalid_request",
+                        "deadline must be RFC 3339 UTC ending in Z",
+                    )
         else:
             deadline_dt = None
             collect = None
@@ -1607,8 +1624,6 @@ class Team:
                 membership_id=sender_membership_id,
                 hold=hold,
             )
-        if kind == "request" and deadline_dt is not None and deadline_dt <= utc_now():
-            _fail("invalid_request", "deadline must be in the future")
 
         recipient_name = recipient.split("@", 1)[0]
         recipient_member = await self._get_member(recipient_name)
@@ -1619,6 +1634,7 @@ class Team:
         now, now_ts = self._now_pair()
         trace_id = new_uuid()
         parent = None
+        parent_thread_id = None
         if parent_id is not None:
             parent = await store.get(f"msg:{parent_id}")
             if parent is None:
@@ -1629,11 +1645,51 @@ class Team:
             }
             if not authorized:
                 _fail("not_found", "parent_id was not found")
+            parent_thread_id = parent.get("thread_id")
             if thread_id is not None:
-                parent_thread = parent.get("thread_id")
-                if parent_thread != thread_id:
-                    _fail("invalid_request", "parent_id is not in the same Thread")
+                if parent_thread_id != thread_id:
+                    existing = await threads_mod.load_thread(store, thread_id)
+                    if existing is not None:
+                        _fail("invalid_request", "parent_id is not in the same Thread")
             trace_id = parent["trace_id"]
+
+        if kind == "request" and deadline_dt is None:
+            inherited = None
+            if parent is not None and parent.get("kind") == "request":
+                inherited = parent.get("deadline")
+            if isinstance(inherited, str):
+                deadline_raw = inherited
+                try:
+                    deadline_dt = parse_timestamp(deadline_raw)
+                except ValueError:
+                    _fail(
+                        "invalid_request",
+                        "deadline must be RFC 3339 UTC ending in Z",
+                    )
+            else:
+                deadline_dt = now + timedelta(seconds=self.work_lifetime_seconds)
+                deadline_raw = format_timestamp(deadline_dt)
+
+        if kind == "request" and deadline_dt is not None and deadline_dt <= now:
+            _fail("invalid_request", "deadline must be in the future")
+
+        if (
+            kind == "request"
+            and deadline_dt is not None
+            and parent is not None
+            and parent.get("kind") == "request"
+        ):
+            parent_deadline = parent.get("deadline")
+            if isinstance(parent_deadline, str):
+                try:
+                    parent_until = parse_timestamp(parent_deadline)
+                except ValueError:
+                    parent_until = None
+                if parent_until is not None and deadline_dt > parent_until:
+                    _fail(
+                        "invalid_request",
+                        "deadline must not be after the parent request deadline",
+                    )
 
         if thread_id is not None:
             thread = await threads_mod.load_thread(store, thread_id)
@@ -1725,6 +1781,9 @@ class Team:
             wait_ttl=self._held_wait_ttl(),
             now_ts=now_ts,
             events=events,
+            parent_thread_id=(
+                parent_thread_id if isinstance(parent_thread_id, str) else None
+            ),
         )
         try:
             accepted = await commit_send(store, commit)
@@ -1804,25 +1863,29 @@ class Team:
             if parse_timestamp(session["expires_at"]) <= utc_now():
                 _fail("unauthorized", "Session is missing or invalid")
             ticket = await self._expire_ticket_if_due(ticket_id)
-            if ticket is not None and tickets_mod.is_terminal(ticket):
+            if ticket is None:
+                _fail("not_found", "Ticket was not found")
+            if tickets_mod.is_terminal(ticket):
                 return ticket
             now = utc_now()
-            remaining_deadline = (deadline_dt - now).total_seconds()
             remaining_hold = (hold_until - now).total_seconds()
-            remaining = min(remaining_deadline, remaining_hold)
-            if remaining <= 0:
+            if remaining_hold <= 0:
+                return ticket
+            remaining_deadline = (deadline_dt - now).total_seconds()
+            if remaining_deadline <= 0:
                 ticket = await self._expire_ticket_if_due(ticket_id)
                 if ticket is None:
                     _fail("not_found", "Ticket was not found")
-                return ticket
+                if tickets_mod.is_terminal(ticket):
+                    return ticket
+                timeout = min(0.05, remaining_hold)
+            else:
+                timeout = min(remaining_deadline, remaining_hold)
             try:
-                await asyncio.wait_for(event.wait(), timeout=remaining)
+                await asyncio.wait_for(event.wait(), timeout=timeout)
                 event.clear()
             except asyncio.TimeoutError:
-                ticket = await self._expire_ticket_if_due(ticket_id)
-                if ticket is None:
-                    _fail("not_found", "Ticket was not found")
-                return ticket
+                continue
 
     # --- lease / complete / reply ---
 
@@ -1934,6 +1997,46 @@ class Team:
                 )
             except ValueError as exc:
                 _fail("internal", str(exc))
+
+    async def renew(self, session_token: str, lease_id: str) -> RenewResult:
+        """Extend one active Delivery lease owned by this Session.
+
+        result = await team.renew(session_token, delivery["lease_id"])
+        result.lease_expires_at
+        """
+        async with self._keys.acquire(f"session:{session_token}"):
+            session = await self._require_session(session_token)
+            try:
+                lease_id = require_uuid(lease_id, field="lease_id")
+            except ValueError:
+                _fail("invalid_request", "lease_id must be a UUID")
+            store = self._ensure_started()
+            now, _now_ts = self._now_pair()
+            record = await mailbox_mod.get_lease(store, lease_id)
+            if record is None or record.get("session_token") != session["token"]:
+                _fail("not_found", "Delivery lease was not found")
+            if not mailbox_mod.lease_is_active(record, now):
+                _fail("lease_expired", "Delivery lease is no longer active")
+            message = await store.get(f"msg:{record['message_id']}")
+            lease_until = now + timedelta(seconds=self.lease_ttl_seconds)
+            if message is not None and message.get("kind") == "request":
+                ticket = await self._expire_ticket_if_due(str(message["id"]))
+                if ticket is None or ticket.get("state") != "open":
+                    _fail("lease_expired", "Delivery lease is no longer active")
+                lease_until = min(lease_until, parse_timestamp(ticket["deadline"]))
+            if lease_until <= now:
+                _fail("lease_expired", "Delivery lease is no longer active")
+            expires_at = format_timestamp(lease_until)
+            updated = await mailbox_mod.renew(
+                store,
+                address=str(record["address"]),
+                message_id=str(record["message_id"]),
+                lease_id=lease_id,
+                expires_at=expires_at,
+            )
+            if updated is None:
+                _fail("lease_expired", "Delivery lease is no longer active")
+            return RenewResult(lease_id=lease_id, lease_expires_at=expires_at)
 
     async def _lease_still_active(self, lease_id: str, now) -> bool:
         store = self._ensure_started()

@@ -109,11 +109,14 @@ def prepare_append(
     recipient: str,
     max_messages: Optional[int] = None,
     keep_ids: Optional[set[str]] = None,
+    parent_thread_id: Optional[str] = None,
 ) -> tuple[dict[str, Any], list[StoreOp], Optional[str]]:
     """Build the Thread write for one Message.
 
     Returns ``(thread, ops, error)``. ``error`` is ``forbidden`` when
-    ``sender`` or ``recipient`` is outside a Thread that already exists.
+    ``sender`` or ``recipient`` is outside a Thread that already exists,
+    or ``invalid_request`` when ``parent_id`` names a Message from
+    another Thread and this Thread already exists.
     Mutates ``message['seq']`` when the Message is new.
     """
     existing = None if record is None else dict(record.value)
@@ -121,6 +124,8 @@ def prepare_append(
         participants = participant_set(existing)
         if sender not in participants or recipient not in participants:
             return existing, [], "forbidden"
+        if parent_thread_id is not None and parent_thread_id != thread_id:
+            return existing, [], "invalid_request"
         thread = copy_thread(existing)
     else:
         thread = ensure_thread(

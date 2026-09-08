@@ -210,6 +210,49 @@ async def extend(
     return result.ok
 
 
+async def renew(
+    store: Store,
+    *,
+    address: str,
+    message_id: str,
+    lease_id: str,
+    expires_at: str,
+) -> Optional[dict[str, Any]]:
+    """Extend an active lease's visibility timeout and expiry index.
+
+    Returns the updated lease record, or None when the lease is no
+    longer the active holder of that Mailbox item.
+    """
+    item_key = mailbox_item_key(address, message_id)
+    lkey = lease_key(lease_id)
+    while True:
+        item_record = await store.get_record(item_key)
+        lease_record = await store.get_record(lkey)
+        if item_record is None or lease_record is None:
+            return None
+        item = dict(item_record.value)
+        lease = dict(lease_record.value)
+        if item.get("lease_id") != lease_id or item.get("state") != "leased":
+            return None
+        if not lease.get("active"):
+            return None
+        item["lease_expires_at"] = expires_at
+        item["available_at"] = expires_at
+        lease["expires_at"] = expires_at
+        result = await store.apply(
+            [
+                Cas(item_key, item_record.version, item),
+                Cas(lkey, lease_record.version, lease),
+                IndexAdd(mailbox_index_key(address), score_of(expires_at), message_id),
+                IndexAdd(expiry_mod.LEASES, score_of(expires_at), lease_id),
+            ]
+        )
+        if result.ok:
+            return lease
+        if result.reason != "cas":
+            return None
+
+
 def acknowledge_ops(address: str, message_id: str, version: int) -> list[StoreOp]:
     """Return the writes that drop a Mailbox item after complete or reply."""
     return [

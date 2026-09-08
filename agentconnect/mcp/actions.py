@@ -147,7 +147,7 @@ async def ask_action(
     recipient: str,
     content: Any,
     *,
-    deadline_seconds: int,
+    deadline_seconds: Optional[int] = None,
     collect: str = "wait",
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
@@ -157,11 +157,12 @@ async def ask_action(
     ``collect`` matches Runtime ``send``. The wait hold may return an
     ``open`` Ticket; call ``get_result`` for the terminal state.
     An omitted ``thread_id`` is minted for the send. A keyed retry
-    recovers the original generated Thread and deadline.
+    recovers the original generated Thread. An omitted deadline inherits
+    a request parent or the Runtime work lifetime.
 
         ticket = await ask_action(
             team, token, "researcher@content-squad",
-            "writer", "draft this", deadline_seconds=30,
+            "writer", "draft this",
         )
         ticket["id"]
     """
@@ -170,9 +171,10 @@ async def ask_action(
     payload: dict[str, Any] = {
         "recipient": recipient,
         "content": content,
-        "deadline_seconds": deadline_seconds,
         "collect": collect,
     }
+    if deadline_seconds is not None:
+        payload["deadline_seconds"] = deadline_seconds
     if thread_id is not None:
         payload["thread_id"] = thread_id
     if idempotency_key is not None:
@@ -195,15 +197,19 @@ async def ask_action(
         send_thread = thread_id_for_tool("ask", caller_address, idempotency_key=key)
     else:
         send_thread = str(uuid.uuid4())
-    deadline = deadline_rfc3339(deadline_s)
+    deadline = deadline_rfc3339(deadline_s) if deadline_s is not None else None
     recovered_before = False
     if key:
         recovered = await _recover_generated_ask(
             runtime, session_token, message_id, arg_thread
         )
         if recovered is not None:
-            send_thread, deadline = recovered
+            send_thread, recovered_deadline = recovered
             recovered_before = True
+            if deadline_s is not None:
+                deadline = recovered_deadline
+            else:
+                deadline = None
     result = await _send_ask(
         runtime,
         session_token,
@@ -223,7 +229,11 @@ async def ask_action(
             raise TeamError(
                 "id_conflict", "Message id is already used with different data"
             )
-        send_thread, deadline = recovered
+        send_thread, recovered_deadline = recovered
+        if deadline_s is not None:
+            deadline = recovered_deadline
+        else:
+            deadline = None
         result = await _send_ask(
             runtime,
             session_token,
@@ -251,25 +261,22 @@ async def _send_ask(
     recipient: str,
     content: Any,
     collect: str,
-    deadline: str,
+    deadline: Optional[str],
     thread_id: str,
     reraise_conflict: bool = False,
 ) -> dict[str, Any] | None:
     try:
-        return dump_public(
-            await runtime.send(
-                session_token,
-                {
-                    "id": message_id,
-                    "recipient": recipient,
-                    "kind": "request",
-                    "content": content,
-                    "collect": collect,
-                    "deadline": deadline,
-                    "thread_id": thread_id,
-                },
-            )
-        )
+        body: dict[str, Any] = {
+            "id": message_id,
+            "recipient": recipient,
+            "kind": "request",
+            "content": content,
+            "collect": collect,
+            "thread_id": thread_id,
+        }
+        if deadline is not None:
+            body["deadline"] = deadline
+        return dump_public(await runtime.send(session_token, body))
     except TeamError as exc:
         if exc.code == "id_conflict" and not reraise_conflict:
             return None

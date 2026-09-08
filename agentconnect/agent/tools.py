@@ -17,9 +17,11 @@ that speak MCP.
             ticket = await self.tools.ask(
                 recipient=peer,
                 content=msg.content,
-                deadline_seconds=30,
             )
-            return ticket["response"]["content"]
+            if ticket["state"] == "completed":
+                return ticket["response"]["content"]
+            ctx.ticket()
+            return None
 
 Callables look up the Session at call time, so ``self.team_tools()`` is safe
 in ``__init__`` before ``join``. ``ask`` and ``tell`` share their argument
@@ -73,7 +75,10 @@ _ASK_PARAMS = {
             "type": "integer",
             "minimum": 1,
             "maximum": 86400,
-            "description": "How long the recipient has. Defaults to 30.",
+            "description": (
+                "Work cutoff in seconds. Omit to inherit a request parent "
+                "or the Runtime work lifetime."
+            ),
         },
         "collect": {
             "type": "string",
@@ -260,7 +265,7 @@ class TeamTools(Sequence[TeamTool]):
         recipient: str,
         content: Any,
         *,
-        deadline_seconds: float = 30.0,
+        deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
@@ -271,16 +276,19 @@ class TeamTools(Sequence[TeamTool]):
 
         Same argument names as :meth:`~agentconnect.agent.base.BaseAgent.ask`.
         ``collect="wait"`` uses the Runtime wait hold and may still return
-        an ``open`` Ticket. Pass ``idempotency_key`` so a retry reuses the
-        same Ticket. Changed keyed arguments raise ``id_conflict``.
+        an ``open`` Ticket. Omit ``deadline_seconds`` to inherit a request
+        parent or the Runtime work lifetime. Pass ``idempotency_key`` so a
+        retry reuses the same Ticket. Changed keyed arguments raise
+        ``id_conflict``.
 
             ticket = await tools.ask(
                 recipient="writer",
                 content={"task": "draft this"},
-                deadline_seconds=30,
             )
             if ticket["state"] == "open":
                 ticket = await tools.get_result(ticket["id"])
+            if ticket["state"] == "completed":
+                ticket["response"]["content"]
         """
         session = self._session()
         address = session.address
@@ -300,6 +308,8 @@ class TeamTools(Sequence[TeamTool]):
             send_thread = thread_id
         elif idempotency_key:
             send_thread = _thread_id("ask", address, idempotency_key)
+        elif session.handling_delivery() is not None:
+            send_thread = None
         else:
             send_thread = str(uuid.uuid4())
         recovered_deadline: Optional[str] = None
@@ -309,11 +319,13 @@ class TeamTools(Sequence[TeamTool]):
             if recovered is not None:
                 send_thread, recovered_deadline = recovered
                 recovered_before = True
+                if deadline_seconds is None:
+                    recovered_deadline = None
         try:
             ticket = await session.ask(
                 recipient,
                 content,
-                deadline_seconds=float(deadline_seconds),
+                deadline_seconds=deadline_seconds,
                 collect=collect,
                 thread_id=send_thread,
                 parent_id=parent_id,
@@ -328,10 +340,12 @@ class TeamTools(Sequence[TeamTool]):
             if recovered is None:
                 raise
             send_thread, recovered_deadline = recovered
+            if deadline_seconds is None:
+                recovered_deadline = None
             ticket = await session.ask(
                 recipient,
                 content,
-                deadline_seconds=float(deadline_seconds),
+                deadline_seconds=deadline_seconds,
                 collect=collect,
                 thread_id=send_thread,
                 parent_id=parent_id,

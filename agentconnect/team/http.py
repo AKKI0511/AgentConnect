@@ -26,6 +26,7 @@ from agentconnect.core.operations import (
     parse_find_request,
     parse_issue_join_token_request,
     parse_lease_request,
+    parse_renew_request,
     parse_revoke_join_token_request,
     parse_schema,
 )
@@ -200,6 +201,15 @@ def create_runtime_app(team: Team) -> FastAPI:
         parsed = _wire(parse_lease_request, body)
         max_items = 1 if parsed.max_items is None else parsed.max_items
         result = await team.lease(token, max_items)
+        return _json(result)
+
+    @app.post(HTTP_PREFIX + "/deliveries/renew")
+    async def renew(request: Request) -> JSONResponse:
+        """Extend one active Delivery lease."""
+        token = _bound_session(request)
+        body = await _json_object(request)
+        parsed = _wire(parse_renew_request, body)
+        result = await team.renew(token, parsed.lease_id)
         return _json(result)
 
     @app.post(HTTP_PREFIX + "/deliveries/complete")

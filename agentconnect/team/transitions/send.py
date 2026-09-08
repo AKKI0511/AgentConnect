@@ -31,6 +31,7 @@ class SendCommit:
     thread_limit: int
     wait_ttl: float
     now_ts: str
+    parent_thread_id: Optional[str] = None
     events: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -154,11 +155,14 @@ async def _plan_send(
             recipient=commit.recipient_membership_id,
             max_messages=commit.thread_limit,
             keep_ids=keep_ids,
+            parent_thread_id=commit.parent_thread_id,
         )
         if error == "forbidden":
             raise SendConflict(
                 "forbidden", "Message is outside this Thread's participant set"
             )
+        if error == "invalid_request":
+            raise SendConflict("invalid_request", "parent_id is not in the same Thread")
         ops.extend(thread_ops)
 
     if commit.ticket is not None:

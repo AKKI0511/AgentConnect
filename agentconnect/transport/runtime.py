@@ -94,6 +94,9 @@ class RuntimeTransport(Protocol):
     async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
         """Pull available work from the Membership Mailbox."""
 
+    async def renew(self, session_token: str, lease_id: str) -> dict[str, Any]:
+        """Extend one active Delivery lease owned by this Session."""
+
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
         """Finish a Delivery without a response Message."""
 

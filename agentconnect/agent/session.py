@@ -15,18 +15,21 @@ import asyncio
 import inspect
 import logging
 import uuid
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.directory import DirectoryEntry, FindResult
-from agentconnect.core.message import parse_delivery
+from agentconnect.core.message import Delivery, parse_delivery
 from agentconnect.core.operations import (
     AcceptedSendResult,
     HeartbeatResult,
     HistoryResult,
     JoinResult,
+    RenewResult,
     TicketedSendResult,
     parse_history_result,
     parse_join_result,
@@ -67,6 +70,38 @@ _NO_RECONNECT_CODES = frozenset(
 )
 _DEFAULT_RECOVERY_SECONDS = 30.0
 CollectMode = Literal["wait", "ticket", "callback", "stream"]
+_handling: ContextVar[Optional[tuple[Any, Delivery]]] = ContextVar(
+    "agentconnect_handling", default=None
+)
+
+
+@dataclass
+class _TrackedLease:
+    """One Delivery this Session still owes a finish or renew for."""
+
+    delivery: Delivery
+    lease_expires_at: str
+    task: Optional[asyncio.Task] = None
+
+
+def _local_name(address: str) -> str:
+    """Return the Agent name from a local or qualified Address."""
+    return str(address).split("@", 1)[0]
+
+
+def _parse_deadline(value: str) -> Optional[datetime]:
+    """Parse a Runtime timestamp, or None when the form is unusable."""
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _lease_id_of(delivery: Any) -> str:
+    """Return the lease id from a Delivery model or mapping."""
+    if isinstance(delivery, Mapping):
+        return str(delivery["lease_id"])
+    return str(delivery.lease_id)
 
 
 def _should_reconnect(exc: TransportError) -> bool:
@@ -123,6 +158,9 @@ class Session:
         self._wake = asyncio.Event()
         self._supervisor: Optional[asyncio.Task] = None
         self._inflight: set[asyncio.Task] = set()
+        self._active: dict[str, _TrackedLease] = {}
+        self._capacity = asyncio.Event()
+        self._renew_wake = asyncio.Event()
         self._reconnect_lock = asyncio.Lock()
 
     @property
@@ -143,12 +181,17 @@ class Session:
         self._stopped = True
         self._connected = False
         self._wake.set()
+        self._renew_wake.set()
+        current = asyncio.current_task()
         for task in list(self._inflight):
-            task.cancel()
-        if self._supervisor is not None:
+            if task is not current:
+                task.cancel()
+        self._active.clear()
+        self._capacity.set()
+        if self._supervisor is not None and self._supervisor is not current:
             self._supervisor.cancel()
-        pending = [task for task in self._inflight]
-        if self._supervisor is not None:
+        pending = [task for task in self._inflight if task is not current]
+        if self._supervisor is not None and self._supervisor is not current:
             pending.append(self._supervisor)
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
@@ -168,35 +211,52 @@ class Session:
         recipient: str,
         content: Any,
         *,
-        deadline_seconds: float = 30.0,
+        deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
         deadline: Optional[str] = None,
+        handling: Optional[Delivery] = None,
     ) -> Ticket:
         """Send a reply-expected request.
 
         ``collect="wait"`` (default) holds until the Ticket is terminal or
         the Runtime wait hold elapses, then returns the current Ticket.
         That Ticket may still be ``open``. Collect the rest with
-        ``get_result``.
+        ``get_result``. Ending the wait does not end accepted work.
 
         ``collect="ticket"`` returns immediately with the current Ticket.
+
+        Called from a handler, this send inherits the current Message as
+        ``parent_id``. An omitted deadline inherits that request's stamped
+        cutoff. An explicit ``deadline_seconds`` becomes an absolute
+        timestamp; the Runtime rejects a child that exceeds the parent.
+        A new Thread starts when ``recipient`` is not the other party in
+        the current Thread.
 
             thread_id = str(uuid.uuid4())
             await session.ask("writer", "outline this", thread_id=thread_id)
             await session.ask("writer", "expand section 2", thread_id=thread_id)
         """
+        thread_id, parent_id, deadline_value = self._child_send_fields(
+            recipient,
+            thread_id=thread_id,
+            parent_id=parent_id,
+            deadline=deadline,
+            deadline_seconds=deadline_seconds,
+            handling=handling,
+        )
         body: dict[str, Any] = {
             "id": message_id or str(uuid.uuid4()),
             "recipient": recipient,
             "kind": "request",
             "content": content,
             "collect": collect,
-            "deadline": deadline or deadline_rfc3339(deadline_seconds),
         }
+        if deadline_value:
+            body["deadline"] = deadline_value
         if thread_id is not None:
             body["thread_id"] = thread_id
         if parent_id is not None:
@@ -219,11 +279,21 @@ class Session:
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
+        handling: Optional[Delivery] = None,
     ) -> AcceptedSendResult:
         """Send an event. No Ticket is created.
 
         await session.tell("writer", {"note": "source changed"})
         """
+        thread_id, parent_id, _deadline = self._child_send_fields(
+            recipient,
+            thread_id=thread_id,
+            parent_id=parent_id,
+            deadline=None,
+            deadline_seconds=None,
+            event=True,
+            handling=handling,
+        )
         body: dict[str, Any] = {
             "id": message_id or str(uuid.uuid4()),
             "recipient": recipient,
@@ -290,6 +360,18 @@ class Session:
             )
         )
 
+    async def complete_delivery(self, delivery: Mapping[str, Any]) -> dict[str, Any]:
+        """Finish a Delivery without a response Message."""
+        lease_id = _lease_id_of(delivery)
+        try:
+            result = await self._call("complete", self._token(), lease_id)
+        except SessionError as exc:
+            if exc.code in {"lease_expired", "ticket_closed", "not_found"}:
+                self._release_local_lease(lease_id)
+            raise
+        self._release_local_lease(lease_id)
+        return result
+
     async def reply_delivery(
         self,
         delivery: Mapping[str, Any],
@@ -299,9 +381,10 @@ class Session:
         error: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, Any]:
         """Finish a leased reply-expected Delivery."""
+        lease_id = _lease_id_of(delivery)
         body: dict[str, Any] = {
             "id": str(uuid.uuid4()),
-            "lease_id": delivery["lease_id"],
+            "lease_id": lease_id,
             "outcome": outcome,
         }
         if outcome == "completed":
@@ -310,11 +393,101 @@ class Session:
             body["error"] = dict(
                 error or {"code": "handler_failed", "message": "failed"}
             )
-        return await self._call("reply", self._token(), body)
+        try:
+            result = await self._call("reply", self._token(), body)
+        except SessionError as exc:
+            if exc.code in {"lease_expired", "ticket_closed", "not_found"}:
+                self._release_local_lease(lease_id)
+            raise
+        self._release_local_lease(lease_id)
+        return result
 
-    async def complete_delivery(self, delivery: Mapping[str, Any]) -> dict[str, Any]:
-        """Finish a Delivery without a response Message."""
-        return await self._call("complete", self._token(), delivery["lease_id"])
+    def handling_delivery(self) -> Optional[Delivery]:
+        """Return the Delivery this Session is handling in this task, if any."""
+        current = _handling.get()
+        if current is None:
+            return None
+        owner, delivery = current
+        if owner is not self:
+            return None
+        return delivery
+
+    def _track(self, delivery: Delivery) -> None:
+        """Count ``delivery`` against ``max_in_flight`` until it is finished."""
+        self._active[delivery.lease_id] = _TrackedLease(
+            delivery, delivery.lease_expires_at
+        )
+        self._renew_wake.set()
+
+    def _release_local_lease(self, lease_id: str) -> None:
+        """Drop local tracking for a finished or dead lease."""
+        if lease_id in self._active:
+            del self._active[lease_id]
+            self._capacity.set()
+
+    def _cancel_tracked(self, lease_id: str) -> None:
+        """Stop SDK-managed handling and abandoned renewal for ``lease_id``."""
+        tracked = self._active.get(lease_id)
+        task = tracked.task if tracked is not None else None
+        self._release_local_lease(lease_id)
+        if task is not None and not task.done():
+            task.cancel()
+
+    def _occupied(self) -> int:
+        """Count each distinct Delivery obligation once.
+
+        A deferred reply lives in ``_active`` after its handler task has
+        finished. A cancelled handler can already be gone from ``_active``
+        while its task is still unwinding in ``_inflight``. Those are two
+        slots. A running handler that appears in both is one slot.
+        """
+        counted_tasks = {
+            tracked.task
+            for tracked in self._active.values()
+            if tracked.task is not None
+        }
+        extra = sum(
+            1
+            for task in self._inflight
+            if not task.done() and task not in counted_tasks
+        )
+        return len(self._active) + extra
+
+    def _room(self) -> int:
+        """Return how many more Deliveries this Session may lease."""
+        return max(0, self.max_in_flight - self._occupied())
+
+    def _child_send_fields(
+        self,
+        recipient: str,
+        *,
+        thread_id: Optional[str],
+        parent_id: Optional[str],
+        deadline: Optional[str],
+        deadline_seconds: Optional[float],
+        event: bool = False,
+        handling: Optional[Delivery] = None,
+    ) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        """Fill parent, Thread, and deadline from the originating Delivery."""
+        origin = handling if handling is not None else self.handling_delivery()
+        if parent_id is None and origin is not None:
+            parent_id = origin.message.id
+        if thread_id is None and origin is not None:
+            message = origin.message
+            current_thread = getattr(message, "thread_id", None)
+            if current_thread and _local_name(recipient) == _local_name(
+                str(message.sender)
+            ):
+                thread_id = str(current_thread)
+            else:
+                thread_id = str(uuid.uuid4())
+        if event:
+            return thread_id, parent_id, None
+        if deadline is not None:
+            return thread_id, parent_id, deadline
+        if deadline_seconds is not None:
+            return thread_id, parent_id, deadline_rfc3339(deadline_seconds)
+        return thread_id, parent_id, None
 
     def _token(self) -> str:
         token = self.session_token
@@ -394,6 +567,8 @@ class Session:
         self.persistence = parsed.persistence
         self.session_expires_at = parsed.session_expires_at
         self._connected = True
+        self._active.clear()
+        self._capacity.set()
         self._wake.set()
         configure = getattr(self._transport, "configure_wait_hold", None)
         if callable(configure):
@@ -409,14 +584,15 @@ class Session:
         heartbeat = asyncio.create_task(self._heartbeat_loop(), name="heartbeat")
         events = asyncio.create_task(self._events_loop(), name="events")
         pull = asyncio.create_task(self._pull_loop(), name="pull")
+        renew = asyncio.create_task(self._renew_loop(), name="renew")
         try:
-            await asyncio.gather(heartbeat, events, pull)
+            await asyncio.gather(heartbeat, events, pull, renew)
         except asyncio.CancelledError:
             raise
         finally:
-            for task in (heartbeat, events, pull):
+            for task in (heartbeat, events, pull, renew):
                 task.cancel()
-            await asyncio.gather(heartbeat, events, pull, return_exceptions=True)
+            await asyncio.gather(heartbeat, events, pull, renew, return_exceptions=True)
 
     async def _heartbeat_loop(self) -> None:
         while not self._stopped:
@@ -457,6 +633,64 @@ class Session:
         except ValueError:
             return 60.0
 
+    def _renew_interval(self) -> float:
+        """Sleep until the soonest tracked lease should be renewed."""
+        if not self._active:
+            return 1.0
+        now = datetime.now(timezone.utc)
+        soonest: Optional[float] = None
+        for tracked in self._active.values():
+            instant = _parse_deadline(tracked.lease_expires_at)
+            if instant is None:
+                continue
+            remaining = (instant - now).total_seconds()
+            if soonest is None or remaining < soonest:
+                soonest = remaining
+        if soonest is None:
+            return 1.0
+        return max(0.05, min(soonest / 3.0, 20.0))
+
+    async def _renew_loop(self) -> None:
+        while not self._stopped:
+            interval = self._renew_interval()
+            try:
+                self._renew_wake.clear()
+                try:
+                    await asyncio.wait_for(self._renew_wake.wait(), timeout=interval)
+                except asyncio.TimeoutError:
+                    pass
+                if self._stopped or not self.session_token:
+                    continue
+                for lease_id in list(self._active):
+                    try:
+                        result = RenewResult.model_validate(
+                            await self._transport.renew(self.session_token, lease_id)
+                        )
+                    except TransportError as exc:
+                        if self._stopped:
+                            return
+                        if exc.code in {"lease_expired", "not_found", "ticket_closed"}:
+                            self._cancel_tracked(lease_id)
+                            continue
+                        if _should_reconnect(exc):
+                            await self._reconnect()
+                            break
+                        logger.warning(
+                            "renew failed address=%s code=%s",
+                            self.address,
+                            exc.code,
+                        )
+                        continue
+                    tracked = self._active.get(lease_id)
+                    if tracked is not None:
+                        tracked.lease_expires_at = result.lease_expires_at
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                if self._stopped:
+                    return
+                logger.debug("renew error address=%s", self.address, exc_info=True)
+
     async def _events_loop(self) -> None:
         while not self._stopped:
             token = self.session_token
@@ -493,14 +727,15 @@ class Session:
             if not self.session_token:
                 await asyncio.sleep(0.05)
                 continue
-            room = max(0, self.max_in_flight - len(self._inflight))
+            room = self._room()
             if room <= 0:
-                if self._inflight:
-                    await asyncio.wait(
-                        self._inflight, return_when=asyncio.FIRST_COMPLETED
-                    )
-                else:
-                    await asyncio.sleep(0.05)
+                self._capacity.clear()
+                if self._room() > 0:
+                    continue
+                try:
+                    await asyncio.wait_for(self._capacity.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
                 continue
             try:
                 leased = parse_lease_result(
@@ -526,11 +761,16 @@ class Session:
                 self._wake.clear()
                 continue
             for delivery in deliveries:
+                parsed = parse_delivery(delivery)
+                self._track(parsed)
                 task = asyncio.create_task(
-                    self._handle(delivery), name=f"delivery:{delivery.lease_id}"
+                    self._handle(parsed), name=f"delivery:{parsed.lease_id}"
                 )
+                tracked = self._active.get(parsed.lease_id)
+                if tracked is not None:
+                    tracked.task = task
                 self._inflight.add(task)
-                task.add_done_callback(self._inflight.discard)
+                task.add_done_callback(self._on_handler_done)
 
     async def _reconnect(self) -> None:
         if self._stopped:
@@ -550,6 +790,7 @@ class Session:
             logger.info(
                 "reconnecting address=%s instance=%s", self.address, self.instance_id
             )
+            await self._abandon_sdk_handlers()
             if isinstance(self._target, str):
                 try:
                     await self._transport.close()
@@ -562,25 +803,62 @@ class Session:
                 logger.warning("reconnect failed address=%s", self.address)
                 await asyncio.sleep(0.2)
 
+    async def _abandon_sdk_handlers(self) -> None:
+        """Cancel other SDK-managed handlers and stop abandoned renewal.
+
+        Do not cancel or await the calling task. A handler operation that
+        triggered this recovery is waiting for it to finish.
+        """
+        current = asyncio.current_task()
+        tasks: list[asyncio.Task] = []
+        seen: set[asyncio.Task] = set()
+        for tracked in list(self._active.values()):
+            task = tracked.task
+            if task is None or task.done() or task is current:
+                continue
+            task.cancel()
+            tasks.append(task)
+            seen.add(task)
+        for task in list(self._inflight):
+            if task.done() or task is current or task in seen:
+                continue
+            task.cancel()
+            tasks.append(task)
+        self._active.clear()
+        self._capacity.set()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _on_handler_done(self, task: asyncio.Task) -> None:
+        """Drop a finished handler task and wake pull when a slot is free."""
+        self._inflight.discard(task)
+        if self._room() > 0:
+            self._capacity.set()
+
     async def _handle(self, delivery: Any) -> None:
         parsed = parse_delivery(delivery)
         message = parsed.message
-        ctx = await self._build_context(parsed)
+        token = _handling.set((self, parsed))
         try:
-            result = await _invoke_handler(self._agent, message, ctx)
+            ctx = await self._build_context(parsed)
+            try:
+                result = await _invoke_handler(self._agent, message, ctx)
+            except Exception as exc:
+                logger.exception(
+                    "handler failed address=%s message_id=%s",
+                    self.address,
+                    message.id,
+                )
+                await self._fail_or_complete(parsed, exc)
+                return
+            if ctx.ticket_taken:
+                return
+            await self._finish_handler(parsed, result)
         except asyncio.CancelledError:
+            self._release_local_lease(parsed.lease_id)
             raise
-        except Exception as exc:
-            logger.exception(
-                "handler failed address=%s message_id=%s",
-                self.address,
-                message.id,
-            )
-            await self._fail_or_complete(parsed, exc)
-            return
-        if ctx.ticket_taken:
-            return
-        await self._finish_handler(parsed, result)
+        finally:
+            _handling.reset(token)
 
     async def _build_context(self, delivery: Any) -> Context:
         from agentconnect.core.message import Delivery as DeliveryModel

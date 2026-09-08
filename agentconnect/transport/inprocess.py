@@ -66,6 +66,13 @@ class InProcessTransport:
         except Exception as exc:
             raise wrap_runtime_error(exc) from exc
 
+    async def renew(self, session_token: str, lease_id: str) -> dict[str, Any]:
+        """Extend one active Delivery lease."""
+        try:
+            return await self._runtime.renew(session_token, lease_id)
+        except Exception as exc:
+            raise wrap_runtime_error(exc) from exc
+
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
         """Finish a Delivery without a response Message."""
         try:

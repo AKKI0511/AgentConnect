@@ -150,6 +150,15 @@ class HttpRuntimeTransport:
             auth=session_token,
         )
 
+    async def renew(self, session_token: str, lease_id: str) -> dict[str, Any]:
+        """POST /deliveries/renew."""
+        return await self._request(
+            "POST",
+            "/deliveries/renew",
+            json={"lease_id": lease_id},
+            auth=session_token,
+        )
+
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
         """POST /deliveries/complete."""
         return await self._request(

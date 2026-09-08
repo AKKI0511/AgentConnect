@@ -12,6 +12,10 @@ DEFAULT_DELIVERY_HISTORY_LIMIT = 50
 DEFAULT_WAIT_HOLD_SECONDS = 25.0
 DEFAULT_MAX_HELD_WAITS = 16
 
+# Finite work cutoff stamped on a new request whose send omitted
+# deadline and that has no request parent to inherit from.
+DEFAULT_WORK_LIFETIME_SECONDS = 3600.0
+
 DEFAULT_SESSION_TTL_SECONDS = 300
 DEFAULT_LEASE_TTL_SECONDS = 60
 DEFAULT_MAX_IN_FLIGHT = 1

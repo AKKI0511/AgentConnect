@@ -384,8 +384,12 @@ def ask(
     address: Annotated[str, typer.Argument(help="Recipient Address.")],
     question: Annotated[str, typer.Argument(help="Request content.")],
     deadline: Annotated[
-        float, typer.Option("--deadline", help="Seconds until the Ticket expires.")
-    ] = 30.0,
+        Optional[float],
+        typer.Option(
+            "--deadline",
+            help="Seconds until the Ticket expires. Omit to use the Runtime work lifetime.",
+        ),
+    ] = None,
     url: Annotated[Optional[str], typer.Option("--url")] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
@@ -398,7 +402,7 @@ def ask(
         except json.JSONDecodeError:
             content = question
     try:
-        with _client(url, timeout=max(35.0, deadline + 10.0)) as client:
+        with _client(url, timeout=max(35.0, (deadline or 0.0) + 10.0)) as client:
             result = client.ask(address, content, deadline_seconds=deadline)
     except TeamError as exc:
         _handle_team_error(exc)

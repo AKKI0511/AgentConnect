@@ -158,7 +158,12 @@ from agentconnect.team.transitions.reply import (
     commit_reply,
     load_reply_replay,
 )
-from agentconnect.team.transitions.send import SendCommit, SendConflict, commit_send
+from agentconnect.team.transitions.send import (
+    SendCommit,
+    SendConflict,
+    commit_send,
+    load_replay,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1524,14 +1529,12 @@ class Team:
             if collect is None or deadline_raw is None:
                 _fail(
                     "invalid_request",
-                    "a request needs collect and a future deadline",
+                    "a request needs collect and a deadline",
                 )
             try:
                 deadline_dt = parse_timestamp(deadline_raw)
             except ValueError:
                 _fail("invalid_request", "deadline must be RFC 3339 UTC ending in Z")
-            if deadline_dt <= utc_now():
-                _fail("invalid_request", "deadline must be in the future")
         else:
             deadline_dt = None
             collect = None
@@ -1576,14 +1579,42 @@ class Team:
             _fail("invalid_request", "send body contains unsupported fields")
 
         store = self._ensure_started()
+        sender = session["address"]
+        sender_did = _session_did(session)
+        sender_membership_id = _membership_id(session)
+        semantic = {
+            "content": content,
+            "recipient": recipient,
+            "kind": kind,
+            "deadline": deadline_raw if deadline_dt is not None else None,
+            "collect": collect,
+            "thread_id": thread_id,
+            "parent_id": parent_id,
+            "metadata": metadata,
+        }
+        request_hash = semantic_hash(semantic)
+        try:
+            replayed = await load_replay(
+                store, message_id, sender_membership_id, request_hash
+            )
+        except SendConflict as exc:
+            _fail(exc.code, exc.message)
+        if replayed is not None:
+            return await self._replay_send_result(
+                replayed,
+                message_id=message_id,
+                collect=collect,
+                membership_id=sender_membership_id,
+                hold=hold,
+            )
+        if kind == "request" and deadline_dt is not None and deadline_dt <= utc_now():
+            _fail("invalid_request", "deadline must be in the future")
+
         recipient_name = recipient.split("@", 1)[0]
         recipient_member = await self._get_member(recipient_name)
         if recipient_member is None or _is_principal(recipient_member):
             _fail("not_found", "Recipient Membership was not found")
 
-        sender = session["address"]
-        sender_did = _session_did(session)
-        sender_membership_id = _membership_id(session)
         recipient_membership_id = _membership_id(recipient_member)
         now, now_ts = self._now_pair()
         trace_id = new_uuid()
@@ -1615,18 +1646,6 @@ class Team:
                     _fail(
                         "forbidden", "Message is outside this Thread's participant set"
                     )
-
-        semantic = {
-            "content": content,
-            "recipient": recipient,
-            "kind": kind,
-            "deadline": deadline_raw if deadline_dt is not None else None,
-            "collect": collect,
-            "thread_id": thread_id,
-            "parent_id": parent_id,
-            "metadata": metadata,
-        }
-        request_hash = semantic_hash(semantic)
 
         message: dict[str, Any] = {
             "id": message_id,
@@ -1713,23 +1732,13 @@ class Team:
             _fail(exc.code, exc.message)
         result = accepted.result
         if accepted.replay:
-            if result.get("status") == "ticketed":
-                current = await self._expire_ticket_if_due(message_id)
-                if current is not None:
-                    result["ticket"] = current
-                if (
-                    collect == "wait"
-                    and current is not None
-                    and current["state"] == "open"
-                ):
-                    if await self._hold_wait_slot(
-                        collect, sender_membership_id, hold, required=False
-                    ):
-                        return result, (
-                            message_id,
-                            parse_timestamp(current["deadline"]),
-                        )
-            return result, None
+            return await self._replay_send_result(
+                result,
+                message_id=message_id,
+                collect=collect,
+                membership_id=sender_membership_id,
+                hold=hold,
+            )
         if accepted.wait:
             hold["acquired"] = True
             hold["name"] = sender_membership_id
@@ -1737,6 +1746,30 @@ class Team:
         self._publish_trace_events(accepted.events)
         if collect == "wait" and hold.get("acquired") and deadline_dt is not None:
             return result, (message_id, deadline_dt)
+        return result, None
+
+    async def _replay_send_result(
+        self,
+        result: dict[str, Any],
+        *,
+        message_id: str,
+        collect: Any,
+        membership_id: str,
+        hold: dict[str, Any],
+    ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
+        """Return a stored send result, holding wait only when a slot is free."""
+        if result.get("status") == "ticketed":
+            current = await self._expire_ticket_if_due(message_id)
+            if current is not None:
+                result["ticket"] = current
+            if collect == "wait" and current is not None and current["state"] == "open":
+                if await self._hold_wait_slot(
+                    collect, membership_id, hold, required=False
+                ):
+                    return result, (
+                        message_id,
+                        parse_timestamp(current["deadline"]),
+                    )
         return result, None
 
     async def _hold_wait_slot(
@@ -2098,12 +2131,20 @@ class Team:
                     _fail(
                         "invalid_request", "content is required for a completed reply"
                     )
-                payload = {"outcome": "completed", "content": body.get("content")}
+                payload = {
+                    "request_id": lease["message_id"],
+                    "outcome": "completed",
+                    "content": body.get("content"),
+                }
             else:
                 error = body.get("error")
                 if not isinstance(error, dict):
                     _fail("invalid_request", "error is required for a failed reply")
-                payload = {"outcome": "failed", "error": error}
+                payload = {
+                    "request_id": lease["message_id"],
+                    "outcome": "failed",
+                    "error": error,
+                }
             try:
                 reply_hash = semantic_hash(payload)
             except (TypeError, ValueError):

@@ -6,10 +6,12 @@ POST for every operation except Ticket and history reads. SSE on
 This binding is the agent Session over HTTP. It is not the gateway
 outbound stack in ``transport/http.py``.
 
-A ``collect=wait`` send uses the client timeout. The Runtime returns
-when the Ticket is terminal or ``wait_hold_seconds`` elapses. If the
-connection drops after acceptance, this client recovers with
-``get_result``.
+Ordinary operations use the configured finite timeout, including
+Ticket reads and heartbeat. A ``collect=wait`` send may use a longer
+finite timeout that covers ``wait_hold_seconds``. The SSE work hint
+stays open until the Session ends. Timeouts are ``unavailable`` and
+do not claim the Runtime rejected the work. A lost send response
+retries the same body.
 """
 
 from __future__ import annotations
@@ -25,6 +27,19 @@ from agentconnect.transport.runtime import TransportError
 AGENTCONNECT_V1 = "/agentconnect/v1"
 
 _RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
+_SEND_TIMEOUT_MESSAGE = (
+    "send timed out; the Runtime may already have accepted the Message"
+)
+
+
+def _is_timeout_failure(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    return isinstance(exc, TransportError) and isinstance(
+        exc.__cause__, httpx.TimeoutException
+    )
+
 
 _HTTP_ERROR_STATUS = {
     400: "invalid_request",
@@ -57,9 +72,17 @@ class HttpRuntimeTransport:
         """Connect to a Runtime origin. ``url`` may omit ``/agentconnect/v1``."""
         self._base = normalize_runtime_url(url)
         self._timeout = timeout
+        self._wait_hold_seconds = 25.0
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout, connect=min(5.0, timeout))
         )
+
+    def configure_wait_hold(self, wait_hold_seconds: float) -> None:
+        """Keep the send timeout finite and above the Runtime wait hold."""
+        self._wait_hold_seconds = max(0.0, float(wait_hold_seconds))
+
+    def _send_timeout(self) -> float:
+        return max(self._timeout, self._wait_hold_seconds + 5.0)
 
     async def join_challenge(self) -> dict[str, Any]:
         """GET /join/challenge."""
@@ -84,60 +107,39 @@ class HttpRuntimeTransport:
     ) -> dict[str, Any]:
         """POST /messages.
 
-        If a ``wait`` connection drops after acceptance, recover the
-        current Ticket with ``get_result``.
+        A dropped wait connection retries the same body so the Runtime
+        returns the stored ``SendResult``. This method does not invent a
+        Message.
         """
         body = dict(request)
+        timeout = self._send_timeout()
         try:
             return await self._request(
                 "POST",
                 "/messages",
                 json=body,
                 auth=session_token,
+                timeout=timeout,
             )
-        except httpx.TimeoutException:
-            ticket_id = body.get("id")
-            if not isinstance(ticket_id, str) or body.get("collect") != "wait":
-                raise TransportError(
-                    "unavailable",
-                    "send timed out before the Runtime accepted it",
-                    retryable=True,
-                )
-            return await self._recover_wait(session_token, ticket_id)
-
-    async def _recover_wait(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """After a dropped wait connection, return the current Ticket."""
-        last_error: TransportError | None = None
-        for _ in range(50):
-            try:
-                ticket = await self.get_result(session_token, ticket_id)
-            except TransportError as exc:
-                if exc.code == "not_found":
-                    last_error = exc
-                    await _sleep(0.1)
-                    continue
+        except (httpx.TimeoutException, TransportError) as exc:
+            if not _is_timeout_failure(exc):
                 raise
-            message: dict[str, Any] = {
-                "id": ticket_id,
-                "sender": ticket.get("requester"),
-                "recipient": ticket.get("recipient"),
-                "kind": "request",
-                "content": None,
-                "created_at": ticket.get("created_at"),
-                "deadline": ticket.get("deadline"),
-            }
-            if ticket.get("thread_id"):
-                message["thread_id"] = ticket["thread_id"]
-            return {
-                "status": "ticketed",
-                "message": message,
-                "ticket": ticket,
-            }
-        raise TransportError(
-            "unavailable",
-            "wait send was interrupted before acceptance",
-            retryable=True,
-        ) from last_error
+            try:
+                return await self._request(
+                    "POST",
+                    "/messages",
+                    json=body,
+                    auth=session_token,
+                    timeout=timeout,
+                )
+            except (httpx.TimeoutException, TransportError) as retry_exc:
+                if _is_timeout_failure(retry_exc):
+                    raise TransportError(
+                        "unavailable",
+                        _SEND_TIMEOUT_MESSAGE,
+                        retryable=True,
+                    ) from retry_exc
+                raise
 
     async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
         """POST /mailbox/lease."""
@@ -278,17 +280,21 @@ class HttpRuntimeTransport:
         if json is not None:
             headers["Content-Type"] = "application/json"
         url = self._base + path
+        request_kwargs: dict[str, Any] = {
+            "headers": headers,
+            "json": None if json is None else dict(json),
+            "params": None if params is None else dict(params),
+        }
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
         try:
-            response = await self._client.request(
-                method,
-                url,
-                headers=headers,
-                json=None if json is None else dict(json),
-                params=None if params is None else dict(params),
-                timeout=timeout,
-            )
-        except httpx.TimeoutException:
-            raise
+            response = await self._client.request(method, url, **request_kwargs)
+        except httpx.TimeoutException as exc:
+            raise TransportError(
+                "unavailable",
+                "Runtime request timed out",
+                retryable=True,
+            ) from exc
         except httpx.RequestError as exc:
             raise TransportError(
                 "unavailable", str(exc) or "Runtime is unreachable", retryable=True
@@ -325,9 +331,3 @@ class HttpRuntimeTransport:
             f"HTTP {status_code}",
             retryable=status_code in _RETRYABLE_STATUS,
         )
-
-
-async def _sleep(seconds: float) -> None:
-    import asyncio
-
-    await asyncio.sleep(seconds)

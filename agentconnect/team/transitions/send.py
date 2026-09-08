@@ -54,14 +54,19 @@ class SendConflict(Exception):
         self.message = message
 
 
-async def load_replay(store: Store, commit: SendCommit) -> Optional[dict[str, Any]]:
+async def load_replay(
+    store: Store,
+    message_id: str,
+    membership_id: str,
+    request_hash: str,
+) -> Optional[dict[str, Any]]:
     """Return a stored send result when this id is already accepted."""
-    existing = await store.get(f"send:{commit.message_id}")
+    existing = await store.get(f"send:{message_id}")
     if existing is None:
         return None
-    if existing.get("membership_id") != commit.membership_id:
+    if existing.get("membership_id") != membership_id:
         raise SendConflict("id_conflict", "Message id is already used")
-    if existing.get("hash") != commit.request_hash:
+    if existing.get("hash") != request_hash:
         raise SendConflict(
             "id_conflict", "Message id is already used with different data"
         )
@@ -77,7 +82,9 @@ async def commit_send(store: Store, commit: SendCommit) -> SendAccepted:
     The Mailbox item becomes leaseable only when this returns. A conflict
     or crash leaves either the full accepted state or no acceptance.
     """
-    replay = await load_replay(store, commit)
+    replay = await load_replay(
+        store, commit.message_id, commit.membership_id, commit.request_hash
+    )
     if replay is not None:
         return SendAccepted(result=replay, replay=True, wait=False, events=[])
 
@@ -103,7 +110,12 @@ async def commit_send(store: Store, commit: SendCommit) -> SendAccepted:
             key = getattr(failed, "key", "")
             reserved = key.startswith(("send:", "msg:", "ticket:")) or ":item:" in key
             if reserved:
-                replayed = await load_replay(store, commit)
+                replayed = await load_replay(
+                    store,
+                    commit.message_id,
+                    commit.membership_id,
+                    commit.request_hash,
+                )
                 if replayed is not None:
                     return SendAccepted(
                         result=replayed, replay=True, wait=False, events=[]

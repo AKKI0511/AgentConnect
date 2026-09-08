@@ -47,7 +47,33 @@ logger = logging.getLogger(__name__)
 
 _RETRY_JOIN_CODES = frozenset({"unavailable"})
 _RECONNECT_CODES = frozenset({"unauthorized", "unavailable"})
+_NO_RECONNECT_CODES = frozenset(
+    {
+        "busy",
+        "wait_limit",
+        "id_conflict",
+        "invalid_request",
+        "invalid_address",
+        "address_outside_team",
+        "forbidden",
+        "not_found",
+        "payload_too_large",
+        "unsupported_collect_mode",
+        "unsupported_version",
+        "name_conflict",
+        "lease_expired",
+        "ticket_closed",
+    }
+)
+_DEFAULT_RECOVERY_SECONDS = 30.0
 CollectMode = Literal["wait", "ticket", "callback", "stream"]
+
+
+def _should_reconnect(exc: TransportError) -> bool:
+    """Reconnect on lost Session or unreachable Runtime, not on busy Mailboxes."""
+    if exc.code in _NO_RECONNECT_CODES:
+        return False
+    return exc.code in _RECONNECT_CODES
 
 
 def bind_transport(target: Any) -> Any:
@@ -148,12 +174,14 @@ class Session:
         parent_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         message_id: Optional[str] = None,
+        deadline: Optional[str] = None,
     ) -> Ticket:
         """Send a reply-expected request.
 
-        ``collect="wait"`` (default) returns a terminal Ticket. If the
-        Runtime's wait hold elapses first, this method keeps calling
-        ``get_result`` until the Ticket is terminal.
+        ``collect="wait"`` (default) holds until the Ticket is terminal or
+        the Runtime wait hold elapses, then returns the current Ticket.
+        That Ticket may still be ``open``. Collect the rest with
+        ``get_result``.
 
         ``collect="ticket"`` returns immediately with the current Ticket.
 
@@ -167,7 +195,7 @@ class Session:
             "kind": "request",
             "content": content,
             "collect": collect,
-            "deadline": deadline_rfc3339(deadline_seconds),
+            "deadline": deadline or deadline_rfc3339(deadline_seconds),
         }
         if thread_id is not None:
             body["thread_id"] = thread_id
@@ -175,25 +203,12 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        result = parse_send_result(
-            await self._call("send", self._transport.send, self._token(), body)
-        )
+        result = parse_send_result(await self._call("send", self._token(), body))
         if not isinstance(result, TicketedSendResult):
             raise SessionError("internal", "request send did not return a Ticket")
         ticket = result.ticket
         object.__setattr__(ticket, "_client_trace_id", result.message.trace_id)
-        if collect == "wait" and ticket.state == "open":
-            ticket = await self._await_ticket(ticket.id)
-            object.__setattr__(ticket, "_client_trace_id", result.message.trace_id)
         return ticket
-
-    async def _await_ticket(self, ticket_id: str) -> Ticket:
-        """Poll ``get_result`` until the Ticket is no longer ``open``."""
-        while True:
-            ticket = await self.get_result(ticket_id)
-            if ticket.state != "open":
-                return ticket
-            await asyncio.sleep(0.05)
 
     async def tell(
         self,
@@ -221,9 +236,7 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        result = parse_send_result(
-            await self._call("send", self._transport.send, self._token(), body)
-        )
+        result = parse_send_result(await self._call("send", self._token(), body))
         if not isinstance(result, AcceptedSendResult):
             raise SessionError("internal", "event send did not return accepted")
         return result
@@ -238,7 +251,6 @@ class Session:
         return FindResult.model_validate(
             await self._call(
                 "find",
-                self._transport.find,
                 self._token(),
                 query,
                 limit=limit,
@@ -249,18 +261,12 @@ class Session:
     async def get_profile(self, address: str) -> DirectoryEntry:
         """Return one Directory entry."""
         return DirectoryEntry.model_validate(
-            await self._call(
-                "get_profile", self._transport.get_profile, self._token(), address
-            )
+            await self._call("get_profile", self._token(), address)
         )
 
     async def get_result(self, ticket_id: str) -> Ticket:
         """Return the current Ticket owned by this Membership."""
-        return parse_ticket(
-            await self._call(
-                "get_result", self._transport.get_result, self._token(), ticket_id
-            )
-        )
+        return parse_ticket(await self._call("get_result", self._token(), ticket_id))
 
     async def get_history(
         self,
@@ -277,7 +283,6 @@ class Session:
         return parse_history_result(
             await self._call(
                 "get_history",
-                self._transport.get_history,
                 self._token(),
                 thread_id,
                 before=before,
@@ -305,16 +310,11 @@ class Session:
             body["error"] = dict(
                 error or {"code": "handler_failed", "message": "failed"}
             )
-        return await self._call("reply", self._transport.reply, self._token(), body)
+        return await self._call("reply", self._token(), body)
 
     async def complete_delivery(self, delivery: Mapping[str, Any]) -> dict[str, Any]:
         """Finish a Delivery without a response Message."""
-        return await self._call(
-            "complete",
-            self._transport.complete,
-            self._token(),
-            delivery["lease_id"],
-        )
+        return await self._call("complete", self._token(), delivery["lease_id"])
 
     def _token(self) -> str:
         token = self.session_token
@@ -395,6 +395,9 @@ class Session:
         self.session_expires_at = parsed.session_expires_at
         self._connected = True
         self._wake.set()
+        configure = getattr(self._transport, "configure_wait_hold", None)
+        if callable(configure):
+            configure(float(parsed.limits.wait_hold_seconds))
         logger.info(
             "joined team=%s address=%s instance=%s",
             self.team_name,
@@ -431,7 +434,7 @@ class Session:
             except TransportError as exc:
                 if self._stopped:
                     return
-                if exc.code in _RECONNECT_CODES or exc.retryable:
+                if _should_reconnect(exc):
                     await self._reconnect()
                     continue
                 logger.warning(
@@ -473,7 +476,7 @@ class Session:
             except TransportError as exc:
                 if self._stopped:
                     return
-                if exc.code in _RECONNECT_CODES or exc.retryable:
+                if _should_reconnect(exc):
                     await self._reconnect()
                     continue
                 await asyncio.sleep(0.2)
@@ -506,7 +509,7 @@ class Session:
             except TransportError as exc:
                 if self._stopped:
                     return
-                if exc.code in _RECONNECT_CODES or exc.retryable:
+                if _should_reconnect(exc):
                     await self._reconnect()
                     continue
                 logger.warning(
@@ -632,20 +635,43 @@ class Session:
                 finish_exc.code,
             )
 
-    async def _call(self, op: str, method, *args, **kwargs) -> dict[str, Any]:
+    async def _invoke(self, op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        method = getattr(self._transport, op)
+        return await method(*args, **kwargs)
+
+    async def _call(self, op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
         try:
-            return await method(*args, **kwargs)
+            return await self._invoke(op, *args, **kwargs)
         except TransportError as exc:
-            if exc.code in _RECONNECT_CODES or exc.retryable:
-                await self._reconnect()
-                if self.session_token:
+            if _should_reconnect(exc):
+                try:
+                    await asyncio.wait_for(
+                        self._reconnect(),
+                        timeout=self._foreground_recovery_seconds(),
+                    )
+                except asyncio.TimeoutError:
+                    raise SessionError(
+                        "unavailable",
+                        "Session recovery timed out; the Runtime may already have accepted the operation",
+                        retryable=True,
+                    ) from exc
+                if self._connected and self.session_token:
+                    retry_args = (self._token(), *args[1:])
                     try:
-                        if op == "send":
-                            return await self._transport.send(self._token(), args[-1])
-                        return await method(self._token(), *args[1:], **kwargs)
+                        return await self._invoke(op, *retry_args, **kwargs)
                     except TransportError as retry_exc:
                         raise SessionError.from_transport(retry_exc) from retry_exc
             raise SessionError.from_transport(exc) from exc
+
+    def _foreground_recovery_seconds(self) -> float:
+        timeout = getattr(self._transport, "_timeout", _DEFAULT_RECOVERY_SECONDS)
+        try:
+            value = float(timeout)
+        except (TypeError, ValueError):
+            return _DEFAULT_RECOVERY_SECONDS
+        if value <= 0:
+            return _DEFAULT_RECOVERY_SECONDS
+        return value
 
 
 _DECLINED = object()

@@ -211,9 +211,10 @@ class BaseAgent:
     ) -> Ticket:
         """Send a reply-expected request through this Session.
 
-        ``collect="wait"`` (default) returns when the Ticket is terminal.
-        ``collect="ticket"`` returns a handle immediately. Read a completed
-        reply as ``ticket.content``.
+        ``collect="wait"`` (default) holds until the Ticket is terminal or
+        the Runtime wait hold elapses, then returns the current Ticket.
+        That Ticket may still be ``open``. Read a completed reply as
+        ``ticket.content``. Collect later with ``get_result``.
 
             ticket = await agent.ask("writer", {"task": "draft this"})
             print(ticket.content)

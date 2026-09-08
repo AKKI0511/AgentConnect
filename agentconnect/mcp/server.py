@@ -61,7 +61,8 @@ _INSTRUCTIONS = (
     "by describing the work. Use ask to send reply-expected work. Use tell "
     "for events. Use get_result to collect a Ticket. Use get_history to page "
     "a conversation. Addresses look like writer or writer@team-name. Keep "
-    "ticket.id and thread_id from results. Do not invent thread ids. Pass "
+    "ticket.id and thread_id from results. ask wait may return an open "
+    "Ticket; call get_result for the rest. Do not invent thread ids. Pass "
     "idempotency_key when you mean to retry the same ask."
 )
 
@@ -242,12 +243,12 @@ def create_team_mcp(
         thread_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Send reply-expected work and return a Ticket.
+        """Send reply-expected work and return the current Ticket.
 
         recipient: Local Address such as "writer".
         content: The work, text or JSON.
         deadline_seconds: How long the recipient has, from 1 to 86400.
-        collect: "wait" (default) returns a terminal Ticket. "ticket" returns immediately.
+        collect: "wait" (default) returns the current Ticket after the Runtime hold, which may still be open. "ticket" returns immediately.
         thread_id: Continue this conversation. Omit to start a new one.
         idempotency_key: Stable key so a retry does not create a second request.
         """

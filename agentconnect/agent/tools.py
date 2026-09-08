@@ -78,7 +78,10 @@ _ASK_PARAMS = {
         "collect": {
             "type": "string",
             "enum": ["wait", "ticket"],
-            "description": "wait (default) returns a terminal Ticket. ticket returns immediately.",
+            "description": (
+                "wait (default) returns the current Ticket after the Runtime "
+                "hold. ticket returns immediately. Either may still be open."
+            ),
         },
         "thread_id": {
             "type": "string",
@@ -189,8 +192,8 @@ class TeamTools(Sequence[TeamTool]):
             TeamTool(
                 name="ask",
                 description=(
-                    "Send reply-expected work. Returns a Ticket. Keep ticket.id and "
-                    "pass it to get_result if the Ticket is still open."
+                    "Send reply-expected work. Returns the current Ticket. Keep "
+                    "ticket.id and pass it to get_result if the Ticket is still open."
                 ),
                 parameters=_ASK_PARAMS,
                 coroutine=self.ask,
@@ -264,17 +267,20 @@ class TeamTools(Sequence[TeamTool]):
         metadata: Optional[Mapping[str, Any]] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Send reply-expected work and return a Ticket as JSON.
+        """Send reply-expected work and return the current Ticket as JSON.
 
         Same argument names as :meth:`~agentconnect.agent.base.BaseAgent.ask`.
-        An omitted ``thread_id`` starts a new conversation. Pass
-        ``idempotency_key`` so a retry reuses the same Ticket.
+        ``collect="wait"`` uses the Runtime wait hold and may still return
+        an ``open`` Ticket. Pass ``idempotency_key`` so a retry reuses the
+        same Ticket. Changed keyed arguments raise ``id_conflict``.
 
             ticket = await tools.ask(
                 recipient="writer",
                 content={"task": "draft this"},
                 deadline_seconds=30,
             )
+            if ticket["state"] == "open":
+                ticket = await tools.get_result(ticket["id"])
         """
         session = self._session()
         address = session.address
@@ -290,7 +296,19 @@ class TeamTools(Sequence[TeamTool]):
             address,
             idempotency_key=idempotency_key,
         )
-        send_thread = thread_id or str(uuid.uuid4())
+        if thread_id is not None:
+            send_thread = thread_id
+        elif idempotency_key:
+            send_thread = _thread_id("ask", address, idempotency_key)
+        else:
+            send_thread = str(uuid.uuid4())
+        recovered_deadline: Optional[str] = None
+        recovered_before = False
+        if idempotency_key:
+            recovered = await _recover_keyed_ask(session, message_id, thread_id)
+            if recovered is not None:
+                send_thread, recovered_deadline = recovered
+                recovered_before = True
         try:
             ticket = await session.ask(
                 recipient,
@@ -301,14 +319,26 @@ class TeamTools(Sequence[TeamTool]):
                 parent_id=parent_id,
                 metadata=metadata,
                 message_id=message_id,
+                deadline=recovered_deadline,
             )
         except SessionError as exc:
-            if exc.code == "id_conflict" and idempotency_key:
-                ticket = await session.get_result(message_id)
-                if collect == "wait" and ticket.state == "open":
-                    ticket = await session._await_ticket(message_id)
-                return dump_public(ticket)
-            raise
+            if exc.code != "id_conflict" or not idempotency_key or recovered_before:
+                raise
+            recovered = await _recover_keyed_ask(session, message_id, thread_id)
+            if recovered is None:
+                raise
+            send_thread, recovered_deadline = recovered
+            ticket = await session.ask(
+                recipient,
+                content,
+                deadline_seconds=float(deadline_seconds),
+                collect=collect,
+                thread_id=send_thread,
+                parent_id=parent_id,
+                metadata=metadata,
+                message_id=message_id,
+                deadline=recovered_deadline,
+            )
         return dump_public(ticket)
 
     async def tell(
@@ -331,24 +361,16 @@ class TeamTools(Sequence[TeamTool]):
             address,
             idempotency_key=idempotency_key,
         )
-        try:
-            return dump_public(
-                await session.tell(
-                    recipient,
-                    content,
-                    thread_id=thread_id,
-                    parent_id=parent_id,
-                    metadata=metadata,
-                    message_id=message_id,
-                )
+        return dump_public(
+            await session.tell(
+                recipient,
+                content,
+                thread_id=thread_id,
+                parent_id=parent_id,
+                metadata=metadata,
+                message_id=message_id,
             )
-        except SessionError as exc:
-            if exc.code == "id_conflict" and idempotency_key:
-                return {
-                    "status": "accepted",
-                    "message": {"id": message_id, "kind": "event"},
-                }
-            raise
+        )
 
     async def get_result(self, ticket_id: str) -> dict[str, Any]:
         """Return the current Ticket this Membership opened."""
@@ -379,3 +401,25 @@ def _message_id(
         material = f"{kind}|{caller_address}|{idempotency_key}"
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentconnect:{material}"))
     return str(uuid.uuid4())
+
+
+def _thread_id(kind: str, caller_address: str, idempotency_key: str) -> str:
+    material = f"{kind}-thread|{caller_address}|{idempotency_key}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentconnect:{material}"))
+
+
+async def _recover_keyed_ask(
+    session: Session, message_id: str, supplied_thread: Optional[str]
+) -> Optional[tuple[str, str]]:
+    """Return stored Thread id and deadline for an accepted keyed ask."""
+    try:
+        ticket = await session.get_result(message_id)
+    except SessionError as exc:
+        if exc.code == "not_found":
+            return None
+        raise
+    thread = supplied_thread or ticket.thread_id
+    deadline = ticket.deadline
+    if not isinstance(thread, str) or not isinstance(deadline, str):
+        return None
+    return thread, deadline

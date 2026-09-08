@@ -13,7 +13,7 @@ Exact request and result shapes are in [schema/schema.ts](schema/schema.ts). Mes
 | Membership | Runtime | until the Team removes it |
 | Session | Runtime | until disconnect, replacement, expiry, or token revocation |
 | Mailbox | Runtime | the Agent Membership's lifetime |
-| Delivery lease | Runtime | until reply, completion, or lease expiry |
+| Delivery lease | Runtime | until reply, completion, or lease expiry; `renew` may move `lease_expires_at` while the lease is active |
 | Ticket | Runtime | open: at least until `deadline`; terminal: until the later of `deadline` and a documented interval after close |
 | Trace events | Runtime | at least while any Message or Ticket that carries that `trace_id` is retained; MAY persist longer; MAY drop the oldest events past a cap |
 | Thread history | Runtime | until the documented retention limit removes it; Messages still needed by an open Ticket are kept |
@@ -59,6 +59,7 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 - `delivery_history_limit`, the Message-count cap for a Delivery history window
 - `wait_hold_seconds`, how long `collect=wait` may keep `send` open
 - `max_held_waits`, how many `collect=wait` sends one Membership may hold at once
+- `work_lifetime_seconds`, the finite work cutoff stamped on a new request whose send omitted `deadline` and that has no request parent to inherit from. This is a cutoff, not a completion estimate.
 
 ## Operations
 
@@ -69,6 +70,7 @@ A Runtime MUST NOT report `durable` unless all listed state survives restart as 
 | `heartbeat` | member Session | renewed Session expiry |
 | `send` | member Session | accepted Message and, when the Message is a request, a Ticket |
 | `lease` | member Session | zero or more exclusive Deliveries |
+| `renew` | member Session | a later `lease_expires_at` for one active Delivery |
 | `complete` | member Session | an event Delivery finished, or a request declined |
 | `reply` | member Session | a request Delivery finished with a response or error |
 | `get_result` | Ticket owner | current Ticket |
@@ -108,7 +110,7 @@ Two concurrent joins that share one token MUST NOT both succeed. The Runtime ser
 
 A Runtime MUST support at least one Instance per Membership. It MAY cap concurrent Instances and reject one past the cap with `busy`. A Client that reconnects without a stable `instance_id` opens a fresh Instance; the Session it lost expires on its own.
 
-`JoinRequest.max_in_flight` declares how many Deliveries this Session can handle concurrently. It defaults to `1`. The Runtime MUST NOT lease more active Deliveries to the Session than this value.
+`JoinRequest.max_in_flight` declares how many Deliveries this Session can handle concurrently. It defaults to `1`. The Runtime MUST NOT lease more active Deliveries to the Session than this value. An active Delivery includes a deferred reply that still holds its lease. Taking a later-reply handle does not raise this cap.
 
 `JoinRequest.delivery_history` selects how each Delivery carries Thread history. Omit it, or send `bodies`, to receive earlier Message objects. Send `ids` to receive only earlier Message ids. The default is `bodies`.
 
@@ -130,7 +132,8 @@ A network Runtime requires both credentials defined in [security.md](security.md
     "max_mailbox_depth": 1000,
     "delivery_history_limit": 50,
     "wait_hold_seconds": 25,
-    "max_held_waits": 16
+    "max_held_waits": 16,
+    "work_lifetime_seconds": 3600
   },
   "spec_version": "1.0.0-draft"
 }
@@ -189,6 +192,8 @@ The second join is a new Membership even though the DID matches. It cannot read 
 
 `heartbeat` proves that the Client still holds its Session. The Runtime MAY extend the Session before returning its current `session_expires_at`. Other Session operations MUST authenticate without changing expiry.
 
+`heartbeat` MUST NOT extend Delivery leases. A live Session is not a live handling attempt. Lease lifetime is `lease`, `renew`, `complete`, `reply`, disconnect, revocation, or expiry.
+
 A missed heartbeat may let the Session expire. Session expiry releases active leases and has the same shared-state behavior as `disconnect`.
 
 ## Expiry
@@ -218,7 +223,10 @@ When the id is new, the Runtime then MUST:
 
 - resolve the recipient within the Team
 - reject a principal recipient, including `operator`, with `not_found`
-- require a future `deadline` on any request
+- stamp a future `deadline` on any new request
+- when the send omits `deadline` and `parent_id` names a request that carries a deadline, copy that parent's absolute deadline
+- when the send omits `deadline` and there is no request parent to inherit from, stamp `now` plus `work_lifetime_seconds`
+- when `parent_id` names a request, reject a child request whose `deadline` is after that parent's `deadline`
 - validate any `parent_id` and Thread participation
 - reject a full recipient Mailbox with `busy`
 - reject a `collect=wait` `send` that would exceed `max_held_waits` for the sender's Membership with `wait_limit`
@@ -245,15 +253,20 @@ The result depends on the request:
 | request with `collect=ticket` | created | return the current Ticket immediately |
 | request with `collect=wait` | created | hold `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket |
 
-Every new request MUST include `collect` and a future `deadline`. A missing or past deadline on new work, or a missing `collect`, fails with `invalid_request`. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid. An accepted replay of that same request still returns the retained result while the replay record remains, including after that deadline.
+Every new request MUST include `collect`. A missing `collect` fails with `invalid_request`. The send MAY omit `deadline`. The Runtime fills an omitted deadline after hashing the semantic request, so an omitted field stays omitted in the hash:
 
-`wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. The Client collects the terminal result with `get_result`.
+- if `parent_id` names a request Message that carries a deadline, copy that absolute timestamp
+- otherwise stamp `now` plus `work_lifetime_seconds`
+
+The accepted Message and Ticket always carry that effective deadline. A past filled deadline on new work fails with `invalid_request`. When `parent_id` names a request Message, a child request whose `deadline` is after that parent's `deadline` fails with `invalid_request` and creates nothing. An explicit shorter child deadline is allowed. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid. An accepted replay of that same request still returns the retained result while the replay record remains, including after that deadline, and including after `work_lifetime_seconds` changes. The stamped deadline is a cutoff, not a completion estimate.
+
+`wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. Accepted work continues until reply, failure, decline, or the Ticket deadline. The Client collects the terminal result with `get_result`.
+
+The Runtime wakes a waiting `send` when the Ticket becomes terminal. It MUST NOT poll the Ticket on a short interval while the hold remains. An early timer wakeup is not a result: the Runtime re-checks the Ticket, the hold, and the work deadline. It returns when the Ticket is terminal, when the hold has elapsed, or when the work deadline has made the Ticket `expired`.
 
 `max_held_waits` bounds how many `collect=wait` sends one Membership may hold at once. A new `send` with `collect=wait` past that cap fails with `wait_limit` and creates nothing. `busy` is only a full Mailbox. A replay of an already accepted `wait` that cannot obtain a hold slot returns the current Ticket immediately.
 
 Transport disconnect after acceptance does not undo the send. The Client recovers the result by calling `get_result` with the request Message id.
-
-The Runtime wakes a waiting `send` when the Ticket becomes terminal. It MUST NOT poll the Ticket on a short interval while the hold remains.
 
 ### Message idempotency
 
@@ -281,6 +294,8 @@ The Mailbox is a lease-based pull port. Claim an item with a timeout, extend tha
 
 Each returned Delivery has an exclusive `lease_id` and `lease_expires_at`, and a bounded Thread history window. The same Delivery MUST NOT be leased to another Session while that lease remains valid, including to another Instance of the same Membership. Lease acquisition is a compare-and-set on the Mailbox item. Two concurrent `lease` calls MUST NOT both receive the same item.
 
+For a request, `lease_expires_at` MUST NOT be later than the Ticket deadline. For an event, it is `now` plus the Runtime lease TTL.
+
 If a lease expires before `complete` or `reply` succeeds:
 
 - the Message becomes available again unless its Ticket is terminal
@@ -288,6 +303,36 @@ If a lease expires before `complete` or `reply` succeeds:
 - a later operation using the expired lease fails with `lease_expired`
 
 First attempts are offered in Message acceptance order per partition. Recovered attempts become available at recovery time. The Runtime does not promise a total order across the Mailbox, nor FIFO between a recovered attempt and Messages that arrived while it was leased.
+
+## `renew`
+
+`renew` extends one active Delivery lease held by the calling Session.
+
+The Mailbox already names this as extending the visibility timeout. `renew` is the bound Client operation that does it. A Client that keeps a Delivery across more than one lease TTL MUST `renew` before `lease_expires_at`, including while a handler is running and while a later reply is still outstanding. The new expiry is bounded by the request deadline.
+
+The Runtime first verifies that the retained lease belongs to the calling Session. An unknown lease, a lease owned by another Membership, or a lease held by another Session of the same Membership returns `not_found`. It then applies these checks in order:
+
+1. An inactive or time-expired lease returns `lease_expired`.
+2. A request whose Ticket is no longer `open` returns `lease_expired`.
+3. Otherwise the Runtime stores a later `lease_expires_at` in one apply with the Mailbox item and the lease expiry index.
+
+The new expiry is `now` plus the Runtime lease TTL, capped by the request Ticket deadline when the Delivery is a request. A renew that would not move expiry into the future returns `lease_expired`. `renew` does not create a Delivery, change `attempt`, or append a Trace event.
+
+```json
+{
+  "lease_id": "c3e1f0a4-2b7d-4e5f-9a1b-8c0d2e3f4a5b",
+  "lease_expires_at": "2026-08-18T15:01:00.000000Z"
+}
+```
+
+| Situation | Required observation |
+| --- | --- |
+| handler runs longer than one lease TTL, Session renews | one `attempt`; `complete` or `reply` succeeds |
+| `heartbeat` while a lease is held | Session expiry moves; `lease_expires_at` does not |
+| `renew` after the lease has expired | `lease_expired`; Message may be leased again with a higher `attempt` |
+| `renew` of another Session's `lease_id` | `not_found`; that lease unchanged |
+| `renew` after the request deadline | `lease_expired`; Ticket is `expired` |
+| deferred reply still holding its lease | Session `max_in_flight` has no extra slot until `reply`, `complete`, disconnect, revocation, or expiry |
 
 ## `complete`
 
@@ -511,6 +556,10 @@ Enqueue cost MUST NOT grow with current depth. The Mailbox stores one document p
 | reconnect of a live Membership, `get_result` on a Ticket its prior Session opened | the current Ticket |
 | two concurrent joins with one single-use unbound token | one Membership; the other `unauthorized` |
 | revoke commits before `join` with that token | `unauthorized`; no Membership created |
+| `renew` of an active lease owned by the Session | `lease_expires_at` moves forward, not past a request deadline |
+| `heartbeat` with an active Delivery lease | Session expiry moves; the lease does not |
+| `renew` of a foreign or replaced Session's lease | `not_found` |
+| A waiting on B while B waits on A, each `max_in_flight=1` | both Tickets become `expired`; neither Session leases a second Delivery. A bounded wait that returns `open` is not success and not a decline. Deferred work still occupies the in-flight slot; a longer work lifetime does not schedule the cycle. |
 
 ## Work notification
 

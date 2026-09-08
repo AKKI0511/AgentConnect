@@ -21,7 +21,9 @@ Four Message kinds exist:
 
 `kind` is a closed set. Application-level typing belongs in `content` or `metadata`, not in a custom kind.
 
-A request always expects a reply. It carries a `deadline`, opens a Ticket, and ends in a terminal Ticket state. An event never expects a reply and creates no Ticket.
+A request always expects a reply. It opens a Ticket and ends in a terminal Ticket state. An accepted Request Message always carries a `deadline`. An event never expects a reply and creates no Ticket.
+
+`RequestSendRequest` may omit `deadline`. The Runtime stamps the effective cutoff on the accepted Message and Ticket: a child with an omitted deadline inherits its request parent's absolute deadline; a root request receives `now` plus `work_lifetime_seconds`. A Request Message without a `deadline` is invalid. The stamped value is a cutoff, not a completion estimate.
 
 `sender` and `recipient` on an accepted Message are canonical qualified Addresses. `sender_did` is the verified DID of the sending Membership, copied from the Session at acceptance. It stays on the Message after a later Directory change, Membership removal, or name reuse. A principal, including `operator`, has a DID and `sender_did` carries it. Clients do not set `sender`, `sender_did`, `created_at`, `trace_id`, or `seq` in `SendRequest`.
 
@@ -47,7 +49,7 @@ A request always expects a reply. It carries a `deadline`, opens a Ticket, and e
 }
 ```
 
-A request without a `deadline` is `invalid_request` and creates nothing.
+A Request Message without a `deadline` is invalid. The Runtime fills an omitted send `deadline` before the Message exists.
 
 ## Message identity and relationships
 
@@ -60,9 +62,10 @@ Every Message id is an RFC 9562 UUID and is unique within the Team. The id has t
 `parent_id` names the Message this one replies to or continues. The field is singular, so the Message relation is a tree:
 
 - a response or error MUST use the request Message id
-- a follow-up request or event MAY name a prior Message in the same Thread
+- a follow-up in the same Thread MAY name a prior Message in that Thread
+- a send that creates a new Thread MAY name an authorized parent from another Thread so the child copies that parent's `trace_id`
 
-A Message produced from several answers names one of those Messages as `parent_id` and records the rest through the shared `trace_id`. Fan-in is expressed by the Trace, not by the parent link.
+A Message produced from several answers names one of those Messages as `parent_id`. Other answers in the same operation share that `trace_id`. Trace membership groups the operation. It does not record which subset of answers a later Message consumed. The reconstructible relation is one parent plus operation-wide correlation.
 
 `thread_id` groups related Messages. It does not replace `parent_id`:
 
@@ -118,7 +121,9 @@ The Runtime reports `wait_hold_seconds` in `JoinResult`. `send` with `collect=wa
 - the Ticket becomes terminal
 - `wait_hold_seconds` elapses after this `send` call
 
-The Runtime wakes that `send` when the Ticket becomes terminal. It does not poll the Ticket while the hold remains.
+The work `deadline` is separate. Ending the hold returns the current Ticket and does not end accepted work.
+
+The Runtime wakes that `send` when the Ticket becomes terminal. It does not poll the Ticket while the hold remains. An early timer wakeup is not a result; the Runtime re-checks and returns only when the Ticket is terminal, the hold has elapsed, or the work deadline has expired the Ticket.
 
 When the hold elapses and the Ticket is still `open`, `send` returns that Ticket. The caller then uses `get_result` with the request Message id. A caller that loses its connection during `wait` does the same. A later convenience that waits longer than this hold needs its own deadline, cancellation, and capacity limit; this draft has none.
 
@@ -276,7 +281,32 @@ A Thread is an opaque UUID shared by related Messages among a fixed participant 
 
 This draft never adds a Membership after creation. A two-party Thread stays two-party because it is seeded from two Memberships. A later Membership that reuses a participant Address is not in the set.
 
-When `parent_id` and `thread_id` are both present, the parent MUST exist in the same Thread. A sender may name only a parent Message it was authorized to receive or created itself. A missing or unauthorized parent returns `not_found`; a visible parent from another Thread returns `invalid_request`.
+A sender may name only a parent Message it was authorized to receive or created itself. A missing or unauthorized parent returns `not_found`.
+
+When `parent_id` and `thread_id` are both present:
+
+- if the parent already belongs to that Thread, the send continues the Thread
+- if the parent belongs to another Thread, the send is allowed only when this `thread_id` does not yet exist. The new Thread is seeded from this send's sender and recipient. The parent's participants are not added. Naming that parent does not grant `get_history` on the parent's Thread
+- if the parent belongs to another Thread and this `thread_id` already exists, the send returns `invalid_request`
+
+An unthreaded send MAY still name an authorized parent. It copies `trace_id` and does not join the parent's Thread.
+
+A child request MUST NOT use a `deadline` later than a request parent. The Runtime rejects that send with `invalid_request`. An event parent has no deadline to copy.
+
+```json
+{
+  "id": "9a1b2c3d-4e5f-4678-9abc-def012345678",
+  "recipient": "editor",
+  "kind": "request",
+  "content": "tighten the draft",
+  "collect": "ticket",
+  "deadline": "2026-08-18T15:10:00Z",
+  "thread_id": "7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+  "parent_id": "15c44926-4c2a-4a01-a13b-95152da9a859"
+}
+```
+
+That send is the `writer` → `editor` hop in the T1/T2 example above. `editor` cannot `get_history` on T1.
 
 On acceptance the Runtime assigns `seq`, an integer that starts at `1` for the first Message in the Thread and increases by one for each later Message, including a response or error. `seq` is present exactly when `thread_id` is present. Two Messages accepted in the same tick still receive distinct values in acceptance order.
 
@@ -346,7 +376,11 @@ These vectors are normative summaries. An implementation test may express them i
 | Message with `thread_id` and no `seq` | invalid |
 | Message with `seq` and no `thread_id` | invalid |
 | two Messages in one Thread with the same `created_at` | ordered by `seq`; the earlier accepted Message has the smaller `seq` |
-| a follow-up produced from several answers | one `parent_id`; those answers share the follow-up's `trace_id` |
+| a follow-up produced from several answers | one `parent_id`; those answers share the follow-up's `trace_id`; trace membership does not identify which answers were consumed |
+| new Thread with an authorized parent from another Thread | child copies `trace_id`; child participants cannot `get_history` the parent Thread |
+| existing Thread with a parent from another Thread | `invalid_request` |
+| unauthorized `parent_id` | `not_found`; no history revealed |
+| child request `deadline` after a request parent's `deadline` | `invalid_request`; nothing created |
 | Thread longer than the window | Delivery `history_complete=false`; `get_history` pages the remainder |
 | Thread window exceeds `max_message_bytes` | Delivery `history` truncated by size; `history_complete=false` |
 | `get_history` for a non-participant | `not_found`; no history revealed |

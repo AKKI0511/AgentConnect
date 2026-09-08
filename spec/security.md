@@ -104,6 +104,7 @@ The Session is bound to one Instance of one Membership. It authorizes only that 
 - `heartbeat`
 - `send`
 - `lease`
+- `renew`
 - `complete`
 - `reply`
 - `get_result` for Tickets opened by that Membership, including after Session replacement
@@ -122,9 +123,9 @@ A missing header by itself is not local authority. A reverse proxy in front of a
 
 In-process MCP uses the same operator Membership when the server is hosted as in-process and no `Authorization` header is present. Missing HTTP request context does not imply that in-process trust. An HTTP MCP or Runtime listener that cannot see a peer must not become operator.
 
-Authenticating a Session MUST NOT change `session_expires_at`. Only `heartbeat` may extend expiry.
+Authenticating a Session MUST NOT change `session_expires_at`. Only `heartbeat` may extend Session expiry. `heartbeat` does not extend Delivery leases.
 
-The Runtime authenticates every operation. A Session cannot choose another sender, lease another Membership's Mailbox, complete or reply to a lease held by another Membership, read another Membership's Ticket, or read Thread history for a participant set it is not in.
+The Runtime authenticates every operation. A Session cannot choose another sender, lease another Membership's Mailbox, complete, reply to, or renew a lease held by another Membership, read another Membership's Ticket, or read Thread history for a participant set it is not in.
 
 Session tokens are bearer credentials. Clients MUST keep them out of Message content, metadata, logs, and exception text.
 
@@ -136,7 +137,7 @@ Removing a Membership, or revoking its join token, invalidates every Session of 
 
 - a `send` waiting for a Ticket MUST stop and return `unauthorized`
 - an open event stream MUST close
-- a held lease MUST stop being completable
+- a held lease MUST stop being completable and MUST stop being renewable
 
 This is the kill switch: cutting a compromised member off from sending and receiving is the same mechanism as revoking its Sessions.
 

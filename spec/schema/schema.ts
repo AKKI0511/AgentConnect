@@ -104,8 +104,10 @@ export type DeliveryHistoryForm = "bodies" | "ids";
 /**
  * How the sender collects the result of a request. It is a choice made on
  * the `send` call and is not stored on the immutable Message; the recipient
- * never observes it. Every request carries `collect` and a `deadline` and
- * opens a Ticket. An event is the fire-and-forget kind and names neither.
+ * never observes it. Every request send carries `collect` and opens a
+ * Ticket. The send may omit `deadline`; the accepted Request Message always
+ * carries the effective cutoff the Runtime stamped. An event is the
+ * fire-and-forget kind and names neither.
  *
  * - `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket. That Ticket may still be `open`.
  * - `ticket`: return the current Ticket immediately. That Ticket may be `open` or already terminal.
@@ -302,10 +304,12 @@ export interface MessageBase {
   thread_id?: Uuid;
   /**
    * Message this one replies to or continues. Singular: the Message relation
-   * is a tree. A response or error MUST name the request. A follow-up request
-   * or event MAY name a prior Message in the same Thread. A result merged
-   * from several answers names one parent and records the other inputs
-   * through the shared `trace_id`.
+   * is a tree. A response or error MUST name the request. A follow-up in the
+   * same Thread MAY name a prior Message in that Thread. A send that creates
+   * a new Thread MAY name an authorized parent from another Thread so the
+   * child copies `trace_id`. A result merged from several answers names one
+   * parent. Shared `trace_id` correlates the operation; it does not record
+   * which subset of answers were consumed.
    */
   parent_id?: Uuid;
   /**
@@ -559,7 +563,8 @@ export interface JoinRequest {
    */
   instance_id?: Uuid;
   /**
-   * Maximum active Delivery leases for this Session. Defaults to 1.
+   * Maximum active Delivery leases for this Session, including deferred
+   * replies that still hold a lease. Defaults to 1.
    * @minimum 1
    * @maximum 100
    * @multipleOf 1
@@ -625,6 +630,15 @@ export interface RuntimeLimits {
    * @multipleOf 1
    */
   max_held_waits: number;
+  /**
+   * Seconds of work the Runtime stamps on a new request whose send omitted
+   * `deadline` and that has no request parent to inherit from. This is a
+   * cutoff, not a completion estimate or a promise that the recipient will
+   * finish. A child request cannot exceed its request parent's stamped
+   * deadline.
+   * @minimum 1
+   */
+  work_lifetime_seconds: number;
 }
 
 /** Result of a successful join. */
@@ -686,16 +700,24 @@ export type CallbackTarget =
     };
 
 /**
- * Send a request. Always opens a Ticket. `collect` and `deadline` are
- * required. Fire-and-forget work is `EventSendRequest`.
+ * Send a request. Always opens a Ticket. `collect` is required.
+ * `deadline` may be omitted: the Runtime fills it at acceptance from the
+ * request parent or from `work_lifetime_seconds`. The accepted Message
+ * and Ticket always carry that effective cutoff. Fire-and-forget work is
+ * `EventSendRequest`.
  */
 export interface RequestSendRequest extends SendBase {
   /** Send work to be handled. */
   kind: "request";
   /** How the sender collects the result. */
   collect: CollectMode;
-  /** Future absolute deadline for the Ticket. */
-  deadline: Timestamp;
+  /**
+   * Future absolute work cutoff for the Ticket. Omit to inherit a request
+   * parent's stamped deadline, or to receive `now` plus
+   * `work_lifetime_seconds` for a root request. This is a cutoff, not a
+   * completion estimate.
+   */
+  deadline?: Timestamp;
   /** Required only when `collect` is `callback`. */
   callback?: CallbackTarget;
 }
@@ -749,6 +771,20 @@ export interface LeaseRequest {
 export interface LeaseResult {
   /** Zero or more newly leased attempts. */
   deliveries: Delivery[];
+}
+
+/** Input to extend one active Delivery lease. */
+export interface RenewRequest {
+  /** Active lease owned by the calling Session. */
+  lease_id: Uuid;
+}
+
+/** Result of a successful `renew`. */
+export interface RenewResult {
+  /** Lease that was extended. */
+  lease_id: Uuid;
+  /** New time after which this attempt is no longer active. */
+  lease_expires_at: Timestamp;
 }
 
 /**
@@ -884,12 +920,14 @@ export interface AskToolRequest {
   /** Work input. */
   content: JsonValue;
   /**
-   * Relative deadline from 1 to 86400 seconds.
+   * Relative work cutoff from 1 to 86400 seconds. Omit to inherit a request
+   * parent's stamped deadline, or to receive the Runtime work lifetime on a
+   * root request.
    * @minimum 1
    * @maximum 86400
    * @multipleOf 1
    */
-  deadline_seconds: number;
+  deadline_seconds?: number;
   /**
    * Collection strategy for this send. Defaults to `wait`. Same meaning as
    * Runtime `send` and Client `ask`. `wait` returns the current Ticket after
@@ -1162,6 +1200,8 @@ export interface AgentConnectPublicSchema {
   send_result?: SendResult;
   lease_request?: LeaseRequest;
   lease_result?: LeaseResult;
+  renew_request?: RenewRequest;
+  renew_result?: RenewResult;
   complete_request?: CompleteRequest;
   complete_result?: CompleteResult;
   reply_request?: ReplyRequest;

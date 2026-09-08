@@ -32,6 +32,7 @@ Every schema-defined public object rejects fields not declared on that object.
 | `heartbeat` | `POST /session/heartbeat` | none | `HeartbeatResult` |
 | `send` | `POST /messages` | `SendRequest` | `SendResult` |
 | `lease` | `POST /mailbox/lease` | `LeaseRequest` | `LeaseResult` |
+| `renew` | `POST /deliveries/renew` | `RenewRequest` | `RenewResult` |
 | `complete` | `POST /deliveries/complete` | `CompleteRequest` | `CompleteResult` |
 | `reply` | `POST /deliveries/reply` | `ReplyRequest` | `ReplyResult` |
 | `get_result` | `GET /tickets/{ticket_id}` | none | `Ticket` |
@@ -71,7 +72,7 @@ A missing header by itself is not local authority. Absence of forwarding headers
 
 A non-loopback listener MUST NOT bind a missing header to `operator`. That request returns `401`.
 
-Authenticating a Session MUST NOT extend `session_expires_at`. `POST /session/heartbeat` is the renewal operation.
+Authenticating a Session MUST NOT extend `session_expires_at`. `POST /session/heartbeat` is the Session renewal operation. It does not extend Delivery leases. `POST /deliveries/renew` extends one active lease.
 
 Responses from `/join/challenge`, `/join`, and `/session/heartbeat` MUST include `Cache-Control: no-store`.
 
@@ -153,17 +154,17 @@ Content-Type: application/json
 }
 ```
 
-`collect` is a send-time field. It selects how the sender collects the result and is not stored on the accepted Message.
+`collect` is a send-time field. It selects how the sender collects the result and is not stored on the accepted Message. `deadline` on the send body is optional. The Runtime stamps the effective cutoff on the accepted Message and Ticket.
 
 ## Waiting sends
 
-For `collect=wait`, `POST /messages` stays open until the Ticket becomes terminal or `wait_hold_seconds` elapses, whichever is first. The response is HTTP `200` with `SendResult` in either case, including `open`, `failed`, `expired`, and `declined` Tickets.
+For `collect=wait`, `POST /messages` stays open until the Ticket becomes terminal or `wait_hold_seconds` elapses, whichever is first. The response is HTTP `200` with `SendResult` in either case, including `open`, `failed`, `expired`, and `declined` Tickets. An `open` Ticket means accepted work is still running. The work deadline is independent of this hold.
 
 If the hold elapses while the Ticket is still `open`, the body is a ticketed `SendResult` whose Ticket is `open`. The Client then calls `GET /tickets/{message_id}` until the Ticket is terminal.
 
 If the HTTP connection closes after acceptance, the Runtime keeps the Message and Ticket. The Client retries `POST /messages` with the same id and semantic body, or calls `GET /tickets/{message_id}` after reconnecting. The retry MUST use the current HTTP client. It MUST NOT invent a Message that lacks Runtime-stamped fields. An accepted replay after the original deadline still returns that stored `SendResult`.
 
-Clients SHOULD set their HTTP timeout above `wait_hold_seconds` and keep that timeout finite. Ordinary operations, including `heartbeat` and `GET /tickets/{ticket_id}`, use that configured timeout. `POST /messages` with `collect=wait` MAY use a longer finite timeout that covers the hold. `GET /session/events` MAY stay open until the Session ends. Use `collect=ticket` when the caller does not want `send` to hold. A `busy` Mailbox is not a reason to reconnect.
+Clients SHOULD set their HTTP timeout above `wait_hold_seconds` and keep that timeout finite. Ordinary operations, including `heartbeat`, `POST /deliveries/renew`, and `GET /tickets/{ticket_id}`, use that configured timeout. `POST /messages` with `collect=wait` MAY use a longer finite timeout that covers the hold. `GET /session/events` MAY stay open until the Session ends. Use `collect=ticket` when the caller does not want `send` to hold. A `busy` Mailbox is not a reason to reconnect.
 
 A client timeout is `unavailable` and MAY be retryable. It MUST NOT claim that the Runtime rejected the operation or that acceptance did not occur. After a lost `POST /messages` response, retry the same id and semantic body, or call `GET /tickets/{message_id}`.
 
@@ -182,6 +183,7 @@ Message ids provide idempotency for `POST /messages` and `POST /deliveries/reply
 Other successful retries behave as follows:
 
 - `complete` returns the stored `CompleteResult` while its lease record is retained
+- `renew` of an active lease returns a later `lease_expires_at`
 - `heartbeat` may return a later Session expiry
 - `disconnect` followed by a retry with the invalidated Session returns `401`
 

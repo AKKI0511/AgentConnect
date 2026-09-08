@@ -24,7 +24,7 @@ The current draft defines one Team and the Agents that belong to it:
 
 - Team membership, authenticated Sessions, and concurrent Instances of one Membership
 - Agent names, Addresses, Profiles, and local discovery
-- Messages, Mailboxes, pull delivery, and exclusive leases
+- Messages, Mailboxes, pull delivery, exclusive leases, and `renew`
 - reply-expected work, collection strategies, and Tickets
 - Threads, bounded delivered history, and paged history retrieval
 - the Session event stream

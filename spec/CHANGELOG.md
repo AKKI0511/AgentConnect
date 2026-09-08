@@ -16,11 +16,15 @@ Defines:
 - `find` with no `limit` returns every other member of a small Team, ordered, and caps a large Team at 100
 - Skills as natural-language claims with examples and tags, without input or output schemas
 - request, event, response, and error Messages, with `trace_id` correlating one causal operation while `thread_id` groups a conversation
-- a request always expects a reply, carries a `deadline`, and opens a Ticket; an event is the fire-and-forget kind
+- a request always expects a reply, opens a Ticket, and carries a `deadline` on the accepted Message; the send may omit `deadline` and the Runtime stamps a work cutoff
 - collection strategy (`wait`, `ticket`, and reserved `callback` and `stream`) on the `send`, not on the Message
-- Thread history ordered by a per-Thread `seq` assigned on acceptance; `parent_id` names the reply or continuation target
+- `parent_id` may name an authorized Message from another Thread when the send creates a new Thread; that parent does not grant history of the parent's Thread
+- a shared `trace_id` correlates one operation; it does not record which subset of sibling answers a merge consumed
+- `heartbeat` extends Session expiry only; Delivery leases are extended by `renew`
+- a child request deadline must not be after a request parent's deadline; an omitted child deadline inherits that parent's absolute deadline
 - a Thread participant set of one or more Memberships, fixed at creation and seeded from the first Message
-- `wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket
+- `wait` holds `send` until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket without ending accepted work
+- an omitted root deadline uses configurable `work_lifetime_seconds`; the stamped value is a cutoff, not a completion estimate
 - Runtime `send`, Client `ask`, and MCP `ask` share that bounded hold; none of them polls past it for a terminal Ticket
 - `collect=ticket` and an elapsed `wait` hold both return a `TicketedSendResult` whose Ticket may still be `open`
 - an accepted `send` replay after the original deadline returns the retained result; new work with a past deadline is `invalid_request`
@@ -33,7 +37,7 @@ Defines:
 - Message idempotency compares a SHA-256 hash of canonical JSON, with `1` / `1.0` / `1e0` equal
 - a Mailbox is a lease-based pull port of per-item documents; `max_mailbox_depth` is an exact count of queued plus leased items
 - `join` may request Delivery history as Message ids instead of bodies
-- pull delivery with exclusive leases, at-least-once handling, and a reported message-size limit
+- pull delivery with exclusive leases, `renew` to extend a lease up to the request deadline, at-least-once handling, and a reported message-size limit
 - requester-owned Tickets with five states, including an explicit `declined` when a recipient chooses not to answer
 - Ticket and Thread retention that outlasts an open Ticket deadline
 - Thread grouping, a delivered history window bounded by count and by `max_message_bytes`, and paged history retrieval with `get_history`
@@ -68,7 +72,7 @@ Defines:
 - a reverse proxy in front of a loopback listener is not that path; any forwarded-client header, including an empty `X-Forwarded-*` value, with no Session token is unauthorized
 - an empty or malformed Authorization header is unauthorized and is never treated as operator
 - missing HTTP request context does not imply in-process operator trust
-- authenticating a Session does not renew expiry; `heartbeat` is the renewal operation
+- authenticating a Session does not renew expiry; `heartbeat` is the Session renewal operation and does not extend Delivery leases
 - generated JSON Schema and the Python projection reject a Message that has `thread_id` without `seq`, or `seq` without `thread_id`
 - Python models require the same wire fields as JSON Schema, including discriminators such as Message `kind`
 - `Uuid` is a pattern as well as `format: uuid`, so validators that skip optional formats still reject a non-UUID string

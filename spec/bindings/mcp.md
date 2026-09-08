@@ -34,7 +34,7 @@ A present `Authorization` header is never treated as the operator. It MUST name 
 
 In-process MCP uses the same operator Membership when that server is hosted as in-process and no `Authorization` header is present. Missing HTTP request context does not imply that hosting mode.
 
-Authenticating a Session MUST NOT extend expiry. `heartbeat` remains the renewal operation.
+Authenticating a Session MUST NOT extend expiry. `heartbeat` remains the Session renewal operation. It does not extend Delivery leases.
 
 ```http
 POST /mcp
@@ -105,7 +105,7 @@ The tool searches only the caller's Team and excludes the caller.
 
 ## `ask`
 
-`ask` sends a reply-expected request. The server generates the request Message id and converts `deadline_seconds` into an absolute UTC deadline. `collect` has the same meaning as on Runtime `send` and on Client `ask`.
+`ask` sends a reply-expected request. The server generates the request Message id. When `deadline_seconds` is present, the server converts it into an absolute UTC deadline. When it is omitted, the Runtime inherits a request parent's stamped deadline or applies `work_lifetime_seconds`. `collect` has the same meaning as on Runtime `send` and on Client `ask`.
 
 Arguments:
 
@@ -126,7 +126,7 @@ Arguments:
 | --- | --- |
 | `recipient` | required Address |
 | `content` | required JSON value |
-| `deadline_seconds` | required integer from `1` to `86400` |
+| `deadline_seconds` | optional integer from `1` to `86400`. Omit to inherit a request parent deadline or the Runtime work lifetime |
 | `collect` | optional `wait` or `ticket`, default `wait` |
 | `thread_id` | optional UUID |
 | `idempotency_key` | optional string, 1 to 200 characters |
@@ -146,9 +146,9 @@ Omitting `thread_id` starts a fresh conversation. The server mints a Thread and 
 
 A model tool call may be retried by the framework. Retry collapsing is opt-in.
 
-When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. An omitted `thread_id` is UUID5 of `ask-thread|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key and the same semantic arguments recovers those generated values, including the original absolute deadline, and returns the original Ticket.
+When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. An omitted `thread_id` is UUID5 of `ask-thread|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key and the same semantic arguments recovers those generated values and returns the original Ticket, including its original stamped deadline.
 
-Semantic arguments for `ask` are `recipient`, `content`, `collect`, and a caller-supplied `thread_id`. Changing any of them under the same key fails with `id_conflict`. Repeating the same relative `deadline_seconds` later still replays; the accepted absolute deadline does not move.
+Semantic arguments for `ask` are `recipient`, `content`, `collect`, a caller-supplied `thread_id`, and whether `deadline_seconds` was supplied. Changing any of them under the same key fails with `id_conflict`. Repeating the same relative `deadline_seconds` later still replays; the accepted absolute deadline does not move. Repeating an omitted `deadline_seconds` also replays.
 
 When `idempotency_key` is omitted, the server mints a fresh UUID and, when `thread_id` is omitted, a fresh Thread. Two clients, or one client on two connections, that send identical arguments open two Tickets.
 

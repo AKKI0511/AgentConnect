@@ -249,6 +249,27 @@
       }
     },
     {
+      "id": "send-request-omitted-deadline",
+      "type": "RequestSendRequest",
+      "accept": true,
+      "instance": {
+        "id": "00000000-0000-4000-8000-000000000011",
+        "recipient": "writer",
+        "kind": "request",
+        "content": "work",
+        "collect": "ticket"
+      }
+    },
+    {
+      "id": "ask-tool-omitted-deadline",
+      "type": "AskToolRequest",
+      "accept": true,
+      "instance": {
+        "recipient": "writer",
+        "content": "draft this"
+      }
+    },
+    {
       "id": "send-request-extra-field",
       "type": "RequestSendRequest",
       "accept": false,
@@ -330,6 +351,23 @@
       "instance": {
         "lease_id": "00000000-0000-4000-8000-000000000001",
         "force": true
+      }
+    },
+    {
+      "id": "renew-valid",
+      "type": "RenewRequest",
+      "accept": true,
+      "instance": {
+        "lease_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "id": "renew-extra-field",
+      "type": "RenewRequest",
+      "accept": false,
+      "instance": {
+        "lease_id": "00000000-0000-4000-8000-000000000001",
+        "ttl_seconds": 30
       }
     },
     {

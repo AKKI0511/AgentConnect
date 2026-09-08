@@ -17,7 +17,8 @@ by describing the work. Semantic ranking is on with no extra setup.
 `threads.py` continues a conversation with ``thread_id``. The handler reads
 ``ctx.history``. Older turns are paged with ``get_history``, ordered by
 per-Thread ``seq``. ``collect="ticket"`` returns a handle; ``collect="wait"``
-returns the terminal Ticket.
+returns the current Ticket after the Runtime hold, which may still be
+``open``. Use ``get_result`` for the terminal state.
 
 `history_ids.py` joins the writer with ``delivery_history="ids"``. Each
 Delivery carries earlier Message ids on ``ctx.history_ids`` and leaves

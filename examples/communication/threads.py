@@ -2,8 +2,8 @@
 
 ``ask(..., thread_id=...)`` groups turns. The handler reads recent turns
 from ``ctx.history`` and pages the rest with ``get_history``.
-``collect="ticket"`` returns immediately; ``collect="wait"`` returns a
-terminal Ticket, even if the Runtime's wait hold elapsed first.
+``collect="ticket"`` returns immediately; ``collect="wait"`` returns the
+current Ticket after the Runtime hold, which may still be ``open``.
 
 The Runtime assigns ``seq`` when it accepts a Message, in the same
 commit as the Message itself.

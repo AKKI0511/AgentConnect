@@ -235,7 +235,15 @@ class AcceptedSendResult(SchemaModel):
 
 
 class TicketedSendResult(SchemaModel):
-    """Result for a request."""
+    """Result for a request.
+
+    ``ticket`` is the current Ticket. Immediate ``collect=ticket`` and an
+    elapsed ``wait`` hold both use this wrapper. ``state`` may be ``open``
+    or terminal.
+
+        result.ticket.state
+        result.ticket.id
+    """
 
     status: Literal["ticketed"]
     message: RequestMessage
@@ -276,7 +284,11 @@ class CompleteResult(SchemaModel):
 
 
 class ReplyBase(SchemaModel):
-    """Fields shared by successful and failed replies."""
+    """Fields shared by successful and failed replies.
+
+    Replay equality includes ``id``, the target request Message id, and
+    the outcome data. ``lease_id`` authorizes the attempt.
+    """
 
     id: Uuid
     lease_id: Uuid
@@ -333,7 +345,9 @@ class AskToolRequest(SchemaModel):
     """MCP ``ask`` arguments.
 
     Omit ``idempotency_key`` to mint a fresh Message id. Pass a key only
-    when a retry must collapse onto the same Ticket.
+    when a retry must collapse onto the same Ticket. ``collect="wait"``
+    returns the current Ticket after the Runtime hold, which may still
+    be ``open``.
     """
 
     recipient: Address

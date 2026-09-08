@@ -61,9 +61,11 @@ class Coordinator(BaseAgent):
         ticket = await self.tools.ask(
             recipient=peer,
             content=msg.content,
-            deadline_seconds=30,
         )
-        return ticket["response"]["content"]
+        if ticket["state"] == "completed":
+            return ticket["response"]["content"]
+        ctx.ticket()
+        return None
 
 
 async def main() -> None:
@@ -90,7 +92,8 @@ async def main() -> None:
         )
         print(f"asked: {recipient}")
         print(f"ticket: {ticket['state']}")
-        print(f"reply: {ticket['response']['content']}")
+        if ticket["state"] == "completed":
+            print(f"reply: {ticket['response']['content']}")
     finally:
         await coordinator.leave()
         await writer.leave()

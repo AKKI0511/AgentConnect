@@ -93,7 +93,9 @@ async def main() -> None:
             collect="wait",
         )
         print(f"asked: {recipient}")
-        print(f"reply: {ticket.content}")
+        print(f"ticket state: {ticket.state}")
+        if ticket.state == "completed":
+            print(f"reply: {ticket.content}")
     finally:
         await researcher.leave()
         await writer.leave()

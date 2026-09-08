@@ -20,6 +20,12 @@ per-Thread ``seq``. ``collect="ticket"`` returns a handle; ``collect="wait"``
 returns the current Ticket after the Runtime hold, which may still be
 ``open``. Use ``get_result`` for the terminal state.
 
+`fanout.py` has a writer ask an editor from ``handle``. That child send
+keeps the incoming Message as ``parent_id``, inherits the parent deadline
+when omitted, and opens a new Thread so the editor does not inherit the
+researcher/writer history. Inspect ``ticket.state`` before reading
+content. An ``open`` Ticket is still accepted work, not a decline.
+
 `history_ids.py` joins the writer with ``delivery_history="ids"``. Each
 Delivery carries earlier Message ids on ``ctx.history_ids`` and leaves
 ``ctx.history`` empty. Page bodies with ``get_history`` when you need them.
@@ -64,6 +70,7 @@ poetry run python examples/communication/tools.py
 poetry run python examples/communication/http_session.py
 poetry run python examples/communication/join_auth.py
 poetry run python examples/communication/threads.py
+poetry run python examples/communication/fanout.py
 poetry run python examples/communication/mcp.py
 poetry run python examples/communication/trace.py
 ```

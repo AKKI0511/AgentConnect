@@ -125,7 +125,8 @@ async def main() -> None:
             "Draft a two-paragraph summary of today's notes.",
         )
         print(f"ticket: {ticket.state}")
-        print(f"reply: {ticket.content}")
+        if ticket.state == "completed":
+            print(f"reply: {ticket.content}")
     finally:
         await coordinator.leave()
         await writer.leave()

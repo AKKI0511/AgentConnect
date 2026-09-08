@@ -39,7 +39,9 @@ async def main() -> None:
 
     try:
         result = await researcher.ask("writer", "ping", deadline_seconds=10)
-        print(f"first ask: {result.state} {result.content}")
+        print(f"first ask: {result.state}")
+        if result.state == "completed":
+            print(result.content)
 
         await writer.leave()
         print("writer left; membership remains, mailbox still accepts mail")
@@ -56,7 +58,9 @@ async def main() -> None:
             if ticket.state != "open":
                 break
             await asyncio.sleep(0.1)
-        print(f"after writer rejoined: {ticket.state} {ticket.content}")
+        print(f"after writer rejoined: {ticket.state}")
+        if ticket.state == "completed":
+            print(ticket.content)
 
         extra = Echo(name="editor")
         await extra.join(url)

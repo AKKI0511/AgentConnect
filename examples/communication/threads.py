@@ -52,7 +52,9 @@ async def main() -> None:
             "outline the draft",
             thread_id=thread_id,
         )
-        print("first:", first.content)
+        print("first state:", first.state)
+        if first.state == "completed":
+            print("first:", first.content)
 
         pending = await researcher.ask(
             "writer",
@@ -65,7 +67,9 @@ async def main() -> None:
         while ticket.state == "open":
             await asyncio.sleep(0.05)
             ticket = await researcher.get_result(pending.id)
-        print("second:", ticket.content)
+        print("second state:", ticket.state)
+        if ticket.state == "completed":
+            print("second:", ticket.content)
 
         page = await researcher.get_history(thread_id)
         print("history:", [(msg.kind, msg.seq) for msg in page.messages])

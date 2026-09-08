@@ -64,7 +64,8 @@ async def main() -> None:
             collect="wait",
         )
         print(f"ticket state: {ticket.state}")
-        print(f"response: {ticket.content}")
+        if ticket.state == "completed":
+            print(f"response: {ticket.content}")
 
         operator = await team.ensure_operator_session()
         snapshot = await team.status(operator)

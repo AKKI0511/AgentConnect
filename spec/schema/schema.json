@@ -1422,7 +1422,7 @@
       "properties": {
         "max_message_bytes": {
           "type": "number",
-          "description": "Maximum accepted size in bytes of a `send` body's UTF-8 JSON encoding. A larger `send` fails with `payload_too_large`. The same budget caps a Delivery `history` window: the window's UTF-8 JSON encoding MUST NOT exceed this value.",
+          "description": "Maximum accepted size in bytes of a `send` or `reply` body's UTF-8 JSON encoding. A larger body fails with `payload_too_large`. HTTP applies the same budget to every JSON request body before fully buffering it. The budget also caps a Delivery `history` window of Message bodies.",
           "minimum": 1,
           "multipleOf": 1
         },
@@ -1451,8 +1451,30 @@
         },
         "work_lifetime_seconds": {
           "type": "number",
-          "description": "Seconds of work the Runtime stamps on a new request whose send omitted `deadline` and that has no request parent to inherit from. This is a cutoff, not a completion estimate or a promise that the recipient will finish. A child request cannot exceed its request parent's stamped deadline.",
+          "description": "Seconds of work the Runtime stamps on a new request whose send omitted `deadline` and that has no request parent to inherit from. This is a cutoff, not a completion estimate or a promise that the recipient will finish. A child request cannot exceed its request parent's stamped deadline. MUST NOT exceed `max_deadline_seconds`.",
           "minimum": 1
+        },
+        "max_deadline_seconds": {
+          "type": "number",
+          "description": "Maximum seconds from acceptance until a new request `deadline`. An explicit deadline further in the future fails with `invalid_request`.",
+          "minimum": 1
+        },
+        "max_open_tickets": {
+          "type": "number",
+          "description": "Maximum open Tickets one Membership may have as requester. A further new request fails with `busy`. Replays of accepted work do not consume another slot.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "replay_horizon_seconds": {
+          "type": "number",
+          "description": "Seconds after an obligation ends during which an identical `send`, `reply`, or `complete` retry returns the original result. For a request that interval starts when the Ticket becomes terminal and is taken as the later of this duration after close and the Ticket `deadline`. For an event it starts at acceptance. After it ends the Runtime MAY delete the replay record. The id may be used for new work only when no Delivery, Ticket, Thread history entry, or replay record still names it.",
+          "minimum": 1
+        },
+        "max_retained_bytes": {
+          "type": "number",
+          "description": "Maximum UTF-8 JSON bytes of retained Message bodies this Runtime keeps. A new `send` or `reply` that would pass the cap fails with `busy`. Live work, Ticket and replay windows, and remaining Thread history stay.",
+          "minimum": 1,
+          "multipleOf": 1
         }
       },
       "required": [
@@ -1461,7 +1483,11 @@
         "delivery_history_limit",
         "wait_hold_seconds",
         "max_held_waits",
-        "work_lifetime_seconds"
+        "work_lifetime_seconds",
+        "max_deadline_seconds",
+        "max_open_tickets",
+        "replay_horizon_seconds",
+        "max_retained_bytes"
       ],
       "additionalProperties": false,
       "description": "Fixed operational limits a Runtime reports at join."
@@ -1536,7 +1562,7 @@
         "volatile",
         "durable"
       ],
-      "description": "How a Runtime survives process exit. `durable` keeps Memberships, Sessions, Mailboxes, Messages, Tickets, and Thread history."
+      "description": "How a Runtime survives process exit. `durable` means a Runtime process restart recovers retained store data. Redis server crash and replica failover are deployment configuration, not this value."
     },
     "HeartbeatResult": {
       "type": "object",

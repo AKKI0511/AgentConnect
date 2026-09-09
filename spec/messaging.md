@@ -97,7 +97,14 @@ The Runtime assigns a per-Thread sequence on acceptance. That sequence is not a 
 
 ## Message size
 
-The Runtime reports `max_message_bytes` in `JoinResult`. A `send` whose body exceeds that size, measured as its UTF-8 JSON encoding, fails with `payload_too_large` and creates no Message, Delivery, or Ticket. This bounds both a single Delivery and the amplification of large `content` through retained Thread history.
+The Runtime reports `max_message_bytes` in `JoinResult`. That budget applies to every Message-producing request body, measured as UTF-8 JSON:
+
+- `send` of a request or event
+- `reply` with `outcome=completed` or `outcome=failed`, including error content
+
+A body over that size fails with `payload_too_large` and creates no Message. An oversized `send` also creates no Delivery or Ticket. An oversized `reply` leaves the request Ticket `open` and the Delivery lease active, so the Client can retry with a smaller body.
+
+HTTP bindings MUST reject a request whose `Content-Length` exceeds `max_message_bytes` before reading the rest of the body. When `Content-Length` is absent, the Runtime stops reading after `max_message_bytes` bytes. That ingress bound applies to every JSON request body, not only `send`.
 
 ## Sending and collecting
 
@@ -199,7 +206,7 @@ A Client maps a handler outcome according to the delivered Message:
 
 Declining is a first-class, benign outcome. A recipient may read a request and choose not to answer, the way a person ignores a message that does not warrant a reply. The Ticket becomes `declined`, which is explicit to the requester and is not a failure. A Client declines by calling `complete` on a request Delivery, so an SDK that maps a handler returning nothing to `complete` produces `declined`. To answer with deliberately empty content instead, the Client replies with `outcome=completed` and `content=null`.
 
-A handler failure becomes an `ErrorObject` with `code=handler_failed`. The Client SHOULD include a safe message for the requester and MUST NOT expose secrets or an unfiltered stack trace. An Agent application failure code belongs in that object's `details`, not in `code`.
+A handler failure becomes an `ErrorObject` with `code=handler_failed`. The default Client mapping MUST use a short generic message. It MUST NOT copy an exception string, stack trace, or secret into the requester's Ticket. Diagnostic text MAY be written to a local log. An Agent that wants the requester to see a specific phrase uses an explicit fail with that phrase. An Agent application failure code belongs in that object's `details`, not in `code`.
 
 ## Ticket
 
@@ -238,13 +245,22 @@ The first accepted reply wins. Idempotent replay of that same reply returns the 
 
 `get_result` is repeatable. Reads with no intervening state transition or late reply return identical data while the Ticket is retained.
 
-### Ticket retention
+### Ticket retention and replay horizon
 
-An open Ticket, the request Message it names, and any Thread Messages needed to resolve it MUST remain readable until at least the Ticket `deadline`. A Runtime MUST NOT evict that data because a generic retention interval elapsed while the Ticket is still `open`.
+An open Ticket, the request Message it names, the send replay record for that id, and any Thread Messages needed to resolve it MUST remain readable until at least the Ticket `deadline`. A Runtime MUST NOT evict that data because a generic retention interval elapsed while the Ticket is still `open`.
 
-After a Ticket becomes terminal, the Runtime retains it until the later of the Ticket `deadline` and a documented interval after the terminal transition. `get_result` returns `not_found` only after that retention ends.
+`JoinResult.limits.replay_horizon_seconds` is the documented interval after an obligation ends during which an identical retry returns the original result:
 
-Count and age limits on Thread history apply only to Messages that no open Ticket still needs.
+- for a request, the obligation ends when the Ticket becomes terminal. The Runtime retains the Ticket, request Message, response or error Message, and send/reply/complete replay records until the later of the Ticket `deadline` and that interval after the terminal transition
+- for an event, the obligation ends at acceptance. The Runtime retains the send replay record for that interval after `created_at`
+
+`get_result` returns `not_found` only after that retention ends. An identical `send`, `reply`, or `complete` retry within the window returns the original result even after the request deadline.
+
+After the window the Runtime MAY delete replay records. Duplicate protection is guaranteed for that finite window. A later `send` with that id is new work only when no Delivery, Ticket, Thread history entry, or replay record still names it. While any of those remain, reuse fails with `id_conflict`. Once every owner has released the id, the Runtime does not keep a tombstone. Ordinary Clients use a fresh id for new work.
+
+Count and age limits on Thread history apply only to Messages that are not queued or leased, that no Ticket still needs, and that are not required by a live replay record.
+
+Removing an id from a Thread's id list is not enough. The Runtime MUST delete the Message body once no live Delivery, Ticket, replay record, or remaining Thread entry owns it. A failed cleanup write MUST NOT be treated as success; the Runtime retries or leaves the index entries so a later sweep can finish the reclaim.
 
 ### Completed Ticket example
 
@@ -339,7 +355,9 @@ This keeps every Delivery bounded no matter how long a Thread grows.
 - a well-formed UUID that is missing from the retained transcript, including one retention has removed, is treated as "return the newest page"
 - a value that is not a UUID fails with `invalid_request`
 
-The Runtime MAY limit Thread retention by age or Message count. It MUST document the limit. It MUST NOT drop a Message that an open Ticket still needs in order to resolve. When retention has removed the oldest Messages, `get_history` returns the oldest that remain and MUST NOT fabricate the missing ones. Retention removes history only; it does not change Message, Delivery, or Ticket state.
+The Runtime MAY limit Thread retention by age or Message count. It MUST document the limit. It MUST NOT drop a Message that an open Ticket, a live Delivery, or a live replay record still needs. When retention has removed the oldest Messages, `get_history` returns the oldest that remain and MUST NOT fabricate the missing ones. Dropping an id from the Thread also deletes that Message body unless another owner still holds it.
+
+`get_history` reads only the requested page. It MUST NOT load the whole transcript in order to slice it. A Delivery that joined with `delivery_history=ids` MUST NOT load Message bodies to build `history_ids`. Thread append MUST NOT enumerate every retained Message in the Team.
 
 The current draft defines grouping, the delivered window, and paged retrieval. It does not define an explicit Thread object or a close operation; a Thread ends by retention.
 
@@ -351,11 +369,18 @@ These vectors are normative summaries. An implementation test may express them i
 | --- | --- |
 | same `send` id, same request | original Message and current Ticket; one Delivery only |
 | same `send` id, changed content | `id_conflict`; original state unchanged |
-| same `send` id after the original deadline, same semantic data | original Message and current Ticket |
+| same `send` id after the original deadline, same semantic data, within the replay window | original Message and current Ticket |
 | new `send` with a past deadline | `invalid_request`; no Message, Delivery, or Ticket |
 | same reply id, same target request and outcome | original reply result; Ticket unchanged |
 | same reply id against a different request | `id_conflict`; that other Ticket stays unchanged |
 | `send` body over `max_message_bytes` | `payload_too_large`; no Message, Delivery, or Ticket |
+| `reply` body over `max_message_bytes` | `payload_too_large`; Ticket stays `open`; lease stays active |
+| HTTP JSON body with `Content-Length` over `max_message_bytes` | `413` / `payload_too_large` before the rest of the body is read |
+| default handler exception | Ticket `failed` with `handler_failed`; message is generic; exception text is not on the Ticket |
+| identical `send` after `replay_horizon_seconds` while a Delivery, Ticket, history entry, or replay record still names the id | `id_conflict`; original Thread and bodies unchanged |
+| identical `send` after every owner has released the id | new work; original Ticket is `not_found` |
+| new request `deadline` after now plus `max_deadline_seconds` | `invalid_request`; nothing created |
+| new request while the Membership already has `max_open_tickets` open | `busy`; nothing created |
 | Session disconnect with open Ticket | Ticket remains readable; Message becomes leaseable again if unfinished |
 | lease expires | next attempt has the same Message id and a higher `attempt` |
 | reply copies request `trace_id` | response and request share one `trace_id` |
@@ -386,7 +411,15 @@ These vectors are normative summaries. An implementation test may express them i
 | `get_history` for a non-participant | `not_found`; no history revealed |
 | `get_history` `before` a well-formed UUID not in the retained transcript | newest page; same shape as omitting `before` |
 | `get_history` `before` a non-UUID | `invalid_request` |
-| open Ticket whose deadline has not passed | `get_result` returns the Ticket after the terminal-retention interval would have elapsed |
+| open Ticket whose deadline has not passed | `get_result` returns the Ticket after `replay_horizon_seconds` would have elapsed |
+| Thread count trim with queued or leased Messages over the limit | those bodies stay; later `lease` still delivers them |
+| Thread count trim of ids no Delivery, Ticket, or replay record still needs | those Message bodies are gone; `get_history` does not return them |
+| `send` that would pass `max_retained_bytes` | `busy`; nothing created |
+| `complete` retry after `replay_horizon_seconds` while the Ticket `deadline` has not passed | original declined Ticket |
+| failed reply after Ticket retention ends | the error Message, reply replay, and byte reservation are gone |
+| unthreaded event completed after its send replay ended | Message body and byte charge are gone |
+| unthreaded event completed while send replay remains | body stays until that replay ends |
+| threaded event after send replay ends and complete | body stays; `get_history` still returns it |
 | two Instances handle consecutive turns of one Thread | each Delivery is leased to one Instance; the later Delivery's `history` contains the earlier turn |
 | another Membership submits a retained `lease_id` | `not_found`; no Delivery or Ticket state changes |
 | `collect=callback` or `collect=stream` | `unsupported_collect_mode`; nothing created |

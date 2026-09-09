@@ -89,7 +89,11 @@ export type JsonValue =
 /** JSON object with application-defined keys. */
 export type JsonObject = { [key: string]: JsonValue };
 
-/** How a Runtime survives process exit. `durable` keeps Memberships, Sessions, Mailboxes, Messages, Tickets, and Thread history. */
+/**
+ * How a Runtime survives process exit. `durable` means a Runtime process
+ * restart recovers retained store data. Redis server crash and replica
+ * failover are deployment configuration, not this value.
+ */
 export type PersistenceMode = "volatile" | "durable";
 
 /**
@@ -591,10 +595,10 @@ export interface JoinRequest {
 /** Fixed operational limits a Runtime reports at join. */
 export interface RuntimeLimits {
   /**
-   * Maximum accepted size in bytes of a `send` body's UTF-8 JSON encoding.
-   * A larger `send` fails with `payload_too_large`. The same budget caps a
-   * Delivery `history` window: the window's UTF-8 JSON encoding MUST NOT
-   * exceed this value.
+   * Maximum accepted size in bytes of a `send` or `reply` body's UTF-8 JSON
+   * encoding. A larger body fails with `payload_too_large`. HTTP applies the
+   * same budget to every JSON request body before fully buffering it. The
+   * budget also caps a Delivery `history` window of Message bodies.
    * @minimum 1
    * @multipleOf 1
    */
@@ -635,10 +639,43 @@ export interface RuntimeLimits {
    * `deadline` and that has no request parent to inherit from. This is a
    * cutoff, not a completion estimate or a promise that the recipient will
    * finish. A child request cannot exceed its request parent's stamped
-   * deadline.
+   * deadline. MUST NOT exceed `max_deadline_seconds`.
    * @minimum 1
    */
   work_lifetime_seconds: number;
+  /**
+   * Maximum seconds from acceptance until a new request `deadline`. An
+   * explicit deadline further in the future fails with `invalid_request`.
+   * @minimum 1
+   */
+  max_deadline_seconds: number;
+  /**
+   * Maximum open Tickets one Membership may have as requester. A further
+   * new request fails with `busy`. Replays of accepted work do not consume
+   * another slot.
+   * @minimum 1
+   * @multipleOf 1
+   */
+  max_open_tickets: number;
+  /**
+   * Seconds after an obligation ends during which an identical `send`,
+   * `reply`, or `complete` retry returns the original result. For a request
+   * that interval starts when the Ticket becomes terminal and is taken as
+   * the later of this duration after close and the Ticket `deadline`. For
+   * an event it starts at acceptance. After it ends the Runtime MAY delete
+   * the replay record. The id may be used for new work only when no
+   * Delivery, Ticket, Thread history entry, or replay record still names it.
+   * @minimum 1
+   */
+  replay_horizon_seconds: number;
+  /**
+   * Maximum UTF-8 JSON bytes of retained Message bodies this Runtime keeps.
+   * A new `send` or `reply` that would pass the cap fails with `busy`.
+   * Live work, Ticket and replay windows, and remaining Thread history stay.
+   * @minimum 1
+   * @multipleOf 1
+   */
+  max_retained_bytes: number;
 }
 
 /** Result of a successful join. */

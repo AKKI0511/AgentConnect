@@ -13,10 +13,12 @@ Exact request and result shapes are in [schema/schema.ts](schema/schema.ts). Mes
 | Membership | Runtime | until the Team removes it |
 | Session | Runtime | until disconnect, replacement, expiry, or token revocation |
 | Mailbox | Runtime | the Agent Membership's lifetime |
-| Delivery lease | Runtime | until reply, completion, or lease expiry; `renew` may move `lease_expires_at` while the lease is active |
-| Ticket | Runtime | open: at least until `deadline`; terminal: until the later of `deadline` and a documented interval after close |
-| Trace events | Runtime | at least while any Message or Ticket that carries that `trace_id` is retained; MAY persist longer; MAY drop the oldest events past a cap |
-| Thread history | Runtime | until the documented retention limit removes it; Messages still needed by an open Ticket are kept |
+| Delivery lease | Runtime | until reply, completion, or lease expiry; `renew` may move `lease_expires_at` while the lease is active. An inactive lease and its `complete` replay survive for the same window as the Ticket they belong to, or `replay_horizon_seconds` after an event Delivery finishes |
+| Ticket | Runtime | open: at least until `deadline`; terminal: until the later of `deadline` and `replay_horizon_seconds` after close |
+| Send, reply, and complete replay records | Runtime | the same window as the Ticket they belong to, or `replay_horizon_seconds` after an event is accepted |
+| Trace events | Runtime | at least while any Message or Ticket that carries that `trace_id` is retained; MAY persist longer; MAY drop the oldest events past a cap; MUST drop the Trace when no remaining Message or Ticket owns it |
+| Thread history | Runtime | until the documented count or age limit removes it; Messages still needed by a queued or leased Delivery, an open Ticket, or a live replay record are kept. Dropping an id deletes that Message body unless another owner still holds it |
+| Message bodies | Runtime | while a queued or leased Delivery, a Ticket, a replay record, or remaining Thread history owns them |
 | Agent working memory | Client | outside this specification |
 
 Membership is durable with respect to Client presence. An offline Agent keeps its Address, Profile, Mailbox, Tickets, and retained Thread history.
@@ -45,21 +47,29 @@ Every Runtime reports one `persistence` value in `JoinResult`.
 
 | Value | Required behavior |
 | --- | --- |
-| `volatile` | Shared state survives Client disconnects but may be lost when the Runtime process exits. |
-| `durable` | Memberships, Sessions, Mailboxes, accepted Messages, open Tickets, Trace events, and retained Thread history survive a Runtime restart. |
+| `volatile` | Shared state survives Client disconnects but may be lost when the Runtime process exits. Restart recovery is empty. |
+| `durable` | Memberships, Sessions, Mailboxes, accepted Messages, open Tickets, replay records, Trace events, and retained Thread history survive a Runtime process restart when the store still holds that data. |
 
-A Runtime MUST NOT report `durable` unless all listed state survives restart as one consistent state. A partially persistent Runtime reports `volatile`.
+A Runtime MUST NOT report `durable` unless a Runtime process restart recovers the listed retained store data as one consistent state. A partially persistent Runtime reports `volatile`.
+
+`durable` does not describe Redis server crash, disk persistence, or replica failover. Those depend on store configuration and deployment. This draft does not require replica coordination.
 
 ## Reported limits
 
 `JoinResult.limits` reports the fixed operational limits a Client must respect:
 
-- `max_message_bytes`, the largest accepted `send` body, and the byte budget for a Delivery `history` window of Message bodies
+- `max_message_bytes`, the largest accepted `send` or `reply` body, the HTTP JSON ingress budget, and the byte budget for a Delivery `history` window of Message bodies
 - `max_mailbox_depth`, queued plus leased Mailbox items past which `send` returns `busy`
 - `delivery_history_limit`, the Message-count cap for a Delivery history window
 - `wait_hold_seconds`, how long `collect=wait` may keep `send` open
 - `max_held_waits`, how many `collect=wait` sends one Membership may hold at once
-- `work_lifetime_seconds`, the finite work cutoff stamped on a new request whose send omitted `deadline` and that has no request parent to inherit from. This is a cutoff, not a completion estimate.
+- `work_lifetime_seconds`, the finite work cutoff stamped on a new request whose send omitted `deadline` and that has no request parent to inherit from. This is a cutoff, not a completion estimate. It MUST NOT exceed `max_deadline_seconds`
+- `max_deadline_seconds`, how far in the future a new request `deadline` may be
+- `max_open_tickets`, how many open Tickets one Membership may hold as requester
+- `replay_horizon_seconds`, how long after an obligation ends an identical retry still returns the original result
+- `max_retained_bytes`, the cap on retained Message-body bytes, past which new `send` or `reply` returns `busy`
+
+These are resource bounds, not per-Agent peer or tool policy. `find` still returns at most 100 matches. Outstanding join challenges are finite; past that cap `join/challenge` returns `busy`.
 
 ## Operations
 
@@ -133,7 +143,11 @@ A network Runtime requires both credentials defined in [security.md](security.md
     "delivery_history_limit": 50,
     "wait_hold_seconds": 25,
     "max_held_waits": 16,
-    "work_lifetime_seconds": 3600
+    "work_lifetime_seconds": 3600,
+    "max_deadline_seconds": 86400,
+    "max_open_tickets": 1000,
+    "replay_horizon_seconds": 86400,
+    "max_retained_bytes": 67108864
   },
   "spec_version": "1.0.0-draft"
 }
@@ -198,11 +212,12 @@ A missed heartbeat may let the Session expire. Session expiry releases active le
 
 ## Expiry
 
-Sessions, Delivery leases, open Ticket deadlines, terminal Ticket retention, join challenges, and join tokens expire from a time-ordered index. Each sweep processes items whose time is due.
+Sessions, Delivery leases, open Ticket deadlines, replay-horizon records, join challenges, and join tokens expire from a time-ordered index. Each sweep reads a bounded batch of ids whose time is due. Cost follows due work, not the number of unexpired records.
 
 | Situation | Required observation |
 | --- | --- |
 | one Session past `expires_at` among many unexpired Sessions | the expired Session is `unauthorized`; the others remain valid |
+| many unexpired Tickets and a few due Tickets | the sweep expires only the due Tickets; work is proportional to that due set |
 
 ## `send`
 
@@ -213,6 +228,7 @@ Before acceptance, the Runtime MUST:
 - authenticate the Session
 - validate the request against the schema
 - reject a body larger than `max_message_bytes` with `payload_too_large`
+- reject a new request whose `deadline` is after now plus `max_deadline_seconds` with `invalid_request`
 - reject `collect=callback` or `collect=stream` with `unsupported_collect_mode`
 - resolve the Address syntax of the recipient
 - apply the Message idempotency rules below before new-work admission
@@ -229,6 +245,8 @@ When the id is new, the Runtime then MUST:
 - when `parent_id` names a request, reject a child request whose `deadline` is after that parent's `deadline`
 - validate any `parent_id` and Thread participation
 - reject a full recipient Mailbox with `busy`
+- reject a new request that would give the sender more than `max_open_tickets` open Tickets with `busy`
+- reject a `send` that would pass `max_retained_bytes` with `busy`
 - reject a `collect=wait` `send` that would exceed `max_held_waits` for the sender's Membership with `wait_limit`
 
 After acceptance, the Runtime MUST:
@@ -258,7 +276,7 @@ Every new request MUST include `collect`. A missing `collect` fails with `invali
 - if `parent_id` names a request Message that carries a deadline, copy that absolute timestamp
 - otherwise stamp `now` plus `work_lifetime_seconds`
 
-The accepted Message and Ticket always carry that effective deadline. A past filled deadline on new work fails with `invalid_request`. When `parent_id` names a request Message, a child request whose `deadline` is after that parent's `deadline` fails with `invalid_request` and creates nothing. An explicit shorter child deadline is allowed. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid. An accepted replay of that same request still returns the retained result while the replay record remains, including after that deadline, and including after `work_lifetime_seconds` changes. The stamped deadline is a cutoff, not a completion estimate.
+The accepted Message and Ticket always carry that effective deadline. A past filled deadline on new work fails with `invalid_request`. A filled or explicit deadline after now plus `max_deadline_seconds` fails with `invalid_request`. When `parent_id` names a request Message, a child request whose `deadline` is after that parent's `deadline` fails with `invalid_request` and creates nothing. An explicit shorter child deadline is allowed. When the deadline passes, the Ticket becomes `expired`, the Delivery stops being leaseable, and an active lease for that Message is no longer valid. An accepted replay of that same request still returns the retained result while the replay record remains, including after that deadline, and including after `work_lifetime_seconds` changes. After the replay window, a later send with that id is new work only when no remaining owner names it; otherwise reuse fails with `id_conflict`. The stamped deadline is a cutoff, not a completion estimate.
 
 `wait_hold_seconds` is a bound on the `send` call, not on the Ticket. A `wait` that returns an `open` Ticket has already accepted the Message. Accepted work continues until reply, failure, decline, or the Ticket deadline. The Client collects the terminal result with `get_result`.
 
@@ -275,7 +293,8 @@ Transport disconnect after acceptance does not undo the send. The Client recover
 Message ids are unique across the Team. The Runtime reserves a proposed id against both `send` and `reply` before either operation stores a Message. The Runtime applies these rules:
 
 - replaying the same id from the original sender with the same semantic request returns the existing Message and follows the original collection behavior: an event returns the accepted Message, `collect=ticket` returns the current Ticket, and `collect=wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses
-- that replay remains readable after the original deadline while the replay record is retained; new work with a past deadline is still `invalid_request`
+- that replay remains readable after the original deadline while the replay record is retained, which is at least the later of the Ticket `deadline` and `replay_horizon_seconds` after the Ticket becomes terminal; new work with a past deadline is still `invalid_request`
+- after that window, a later `send` with that id is new work only when no Delivery, Ticket, Thread history entry, or replay record still names it. While any remain, reuse fails with `id_conflict`. The Runtime does not keep a permanent tombstone
 - using an existing id from another Membership, including a later Membership that reuses the original Address, fails with `id_conflict`
 - replaying the original sender's id with different content, recipient, kind, deadline, collection strategy, Thread, parent, or metadata fails with `id_conflict`
 - a replay MUST NOT create another Delivery
@@ -357,6 +376,8 @@ Complete is one transition. The Runtime stores the result, declines the Ticket w
 
 Only a request accepts `reply`. Calling `reply` for an event fails with `invalid_request` and leaves the Delivery active.
 
+A `reply` body larger than `max_message_bytes` fails with `payload_too_large` before the Runtime creates a response Message. The Ticket stays `open` and the lease stays active.
+
 `ReplyRequest.id` is the response Message id and is unique across the Team. Replaying the accepted reply with the same id and semantic data returns the existing result. Reusing it for different reply data, a different target request, or from another Membership fails with `id_conflict` and MUST NOT change that other Ticket.
 
 Reply semantic data is the target request Message id plus `outcome` plus `content` or `error`, using the same JSON equality as `send`. A successful reply with `content=null` is how a handler completes with no content. `lease_id` authorizes the handling attempt and is not part of reply equality or of the immutable reply Message.
@@ -390,7 +411,7 @@ The operation is read-only. Reading an open or terminal Ticket any number of tim
 - `limit` is between `1` and `200` and defaults to `50`.
 - `has_more` is `true` when older retained Messages remain before this page.
 
-Only a Membership in the Thread's participant set may read it. The set stores Membership identities, not Address spellings. Any other caller, including a replacement that reuses a participant Address, receives `not_found`, revealing no history. When retention has removed the oldest Messages, `get_history` returns the oldest that remain.
+Only a Membership in the Thread's participant set may read it. The set stores Membership identities, not Address spellings. Any other caller, including a replacement that reuses a participant Address, receives `not_found`, revealing no history. When retention has removed the oldest Messages, `get_history` returns the oldest that remain. The page is assembled from the requested id window. The Runtime MUST NOT load every retained Message in the Thread in order to slice it.
 
 ## `find`
 
@@ -548,7 +569,13 @@ Enqueue cost MUST NOT grow with current depth. The Mailbox stores one document p
 | `send` interrupted before commit | no Message, Ticket, or leaseable Mailbox item |
 | concurrent `send` and `lease` | the item is leased only after its Message (and Ticket, for a request) exist |
 | `send` and `reply` using the same Message id | one succeeds; the other returns `id_conflict` |
-| accepted `send` replay after the request deadline, same semantic data | original Message and current Ticket; no second Delivery |
+| accepted `send` replay after the request deadline, same semantic data, within the replay window | original Message and current Ticket; no second Delivery |
+| identical `send` after `replay_horizon_seconds` while a Delivery, Ticket, history entry, or replay record still names the id | `id_conflict`; original state unchanged |
+| identical `send` after every owner has released the id | new work; original Ticket is gone |
+| new request `deadline` after now plus `max_deadline_seconds` | `invalid_request`; nothing created |
+| new request while the Membership already has `max_open_tickets` open | `busy`; nothing created |
+| `send` that would pass `max_retained_bytes` | `busy`; nothing created |
+| `reply` body over `max_message_bytes` | `payload_too_large`; Ticket `open`; lease active |
 | new `send` with a past deadline | `invalid_request`; nothing created |
 | same reply id against a different request | `id_conflict`; that other Ticket stays unchanged |
 | new `collect=wait` while the Membership holds `max_held_waits` | `wait_limit`; nothing created |
@@ -578,10 +605,10 @@ A Runtime MAY notify a Session that work is available so the Client can `lease` 
 | `address_outside_team` | Address is valid but does not name the current Team. |
 | `not_found` | Named resource is absent or intentionally undisclosed. |
 | `name_conflict` | The requested Agent name and DID conflict with an existing Membership binding. |
-| `id_conflict` | A reused Message id carries different data. |
-| `busy` | Recipient Mailbox is full, or no more Instances may join. |
+| `id_conflict` | A reused Message id carries different data, or aliases an id that is still retained. |
+| `busy` | Recipient Mailbox is full, no more Instances may join, the Membership already holds `max_open_tickets` open Tickets, retained Message bodies would exceed `max_retained_bytes`, or too many join challenges are outstanding. |
 | `wait_limit` | The Membership already holds `max_held_waits` `collect=wait` sends. |
-| `payload_too_large` | A `send` body exceeds `max_message_bytes`. |
+| `payload_too_large` | A `send` or `reply` body, or an HTTP JSON request body, exceeds `max_message_bytes`. |
 | `lease_expired` | Delivery lease is no longer active. |
 | `ticket_closed` | `reply` tried to change a terminal Ticket. |
 | `unavailable` | Runtime cannot currently perform the operation. |

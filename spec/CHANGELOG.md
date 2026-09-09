@@ -37,7 +37,15 @@ Defines:
 - Message idempotency compares a SHA-256 hash of canonical JSON, with `1` / `1.0` / `1e0` equal
 - a Mailbox is a lease-based pull port of per-item documents; `max_mailbox_depth` is an exact count of queued plus leased items
 - `join` may request Delivery history as Message ids instead of bodies
-- pull delivery with exclusive leases, `renew` to extend a lease up to the request deadline, at-least-once handling, and a reported message-size limit
+- Message size bound on `send` and `reply`, HTTP ingress bound before buffering, and generic default handler-failure text
+- `max_deadline_seconds`, `max_open_tickets`, `replay_horizon_seconds`, and `max_retained_bytes` reported in `JoinResult.limits`
+- replay horizon after which result bodies and id reservations may be deleted when no Delivery, Ticket, history entry, or replay record still names the id
+- an unthreaded event body and its byte charge are gone once no live Delivery, Ticket, replay record, or Thread entry owns it
+- Thread trim deletes Message bodies that no live Delivery, Ticket, or replay record owns
+- `complete` replay lasts until the later of the Ticket deadline and `replay_horizon_seconds` after close
+- `get_history` and ids-only Delivery windows read only the requested ids
+- expiry cost follows due work from a time-ordered index
+- `durable` means Runtime process restart recovers retained store data; Redis crash and replica failover are deployment configuration
 - requester-owned Tickets with five states, including an explicit `declined` when a recipient chooses not to answer
 - Ticket and Thread retention that outlasts an open Ticket deadline
 - Thread grouping, a delivered history window bounded by count and by `max_message_bytes`, and paged history retrieval with `get_history`

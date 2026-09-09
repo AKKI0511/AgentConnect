@@ -234,7 +234,7 @@ The Runtime MUST close the stream when the Session is invalidated.
 
 - A non-loopback Runtime MUST use HTTPS.
 - A Runtime MUST NOT redirect a request carrying a Session token, `join_token`, or `identity_proof` to another origin.
-- A Runtime MUST reject a `send` body larger than `max_message_bytes` with `413` and `code=payload_too_large`.
+- A Runtime MUST reject a JSON request body larger than `max_message_bytes` with `413` and `code=payload_too_large`. When `Content-Length` is present and exceeds that budget, the Runtime MUST fail before reading the rest of the body. When `Content-Length` is absent, it MUST stop reading after `max_message_bytes` bytes. The bound applies to every JSON route, including `send` and `reply`.
 - Clients SHOULD honor `Retry-After` on `429` and `503`.
 - Clients MAY retry `GET` requests and idempotent Message writes after connection failure.
 - JSON timestamps use UTC RFC 3339 form with a trailing `Z`.

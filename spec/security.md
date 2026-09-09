@@ -66,6 +66,8 @@ Before joining, the Client fetches a short-lived `JoinChallenge`:
 
 The nonce MUST contain at least 128 bits of cryptographically random data encoded for JSON. A nonce is accepted once, in the same store transition as a successful join. Reuse fails even before `expires_at`. A join that fails before that transition leaves the nonce unused.
 
+The Runtime keeps a finite number of unused challenges. Past that cap, `join/challenge` fails with `busy`. Expired challenges leave the cap.
+
 The `audience` prefix `agentconnect:` is the only brand-coupled token in the security surface. It is Runtime machinery, not part of any Address or Message.
 
 ### Identity proof

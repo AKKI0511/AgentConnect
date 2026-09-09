@@ -762,7 +762,7 @@ async def test_reply_on_event_is_invalid_request(team: Team):
 async def test_open_ticket_survives_short_terminal_retention():
     runtime = Team(
         "content-squad",
-        terminal_ticket_retention_seconds=0.05,
+        replay_horizon_seconds=1,
         sweep_interval_seconds=0.05,
     )
     await runtime.start()

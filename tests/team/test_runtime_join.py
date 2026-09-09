@@ -20,6 +20,11 @@ async def test_join_assigns_qualified_address_and_session(team: Team):
     assert result["limits"]["wait_hold_seconds"] == 25.0
     assert result["limits"]["max_held_waits"] == 16
     assert result["limits"]["work_lifetime_seconds"] == 3600.0
+    assert result["limits"]["max_deadline_seconds"] == 86400.0
+    assert result["limits"]["max_open_tickets"] == 1000
+    assert result["limits"]["replay_horizon_seconds"] == 2.0
+    assert result["limits"]["max_retained_bytes"] == 67108864
+    assert result["limits"]["max_message_bytes"] == 1048576
     assert result["spec_version"] == "1.0.0-draft"
     assert result["session_token"]
     assert result["instance_id"]

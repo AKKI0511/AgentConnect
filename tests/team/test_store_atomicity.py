@@ -89,3 +89,17 @@ async def test_apply_is_all_or_nothing():
     assert result.ok is False
     assert await store.get("msg") is None
     assert await store.get("ticket") == {"state": "open"}
+
+
+@pytest.mark.asyncio
+async def test_index_range_skips_unrelated_future_members():
+    store = MemoryStore()
+    await store.open()
+    for index in range(4000):
+        await store.index_add("idx", 1_000_000.0 + index, f"future-{index}")
+    await store.index_add("idx", 1.0, "due-a")
+    await store.index_add("idx", 2.0, "due-b")
+    due = await store.index_range("idx", max_score=10.0)
+    assert due == ["due-a", "due-b"]
+    page = await store.index_range("idx", max_score=1_000_000.0 + 5000, limit=2)
+    assert page == ["due-a", "due-b"]

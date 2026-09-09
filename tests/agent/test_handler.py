@@ -57,7 +57,8 @@ async def test_raise_fails_request(team: Team):
         ticket = await researcher.ask("writer", "please", deadline_seconds=5)
         assert ticket.state == "failed"
         assert ticket.error.code == "handler_failed"
-        assert ticket.content is None
+        assert ticket.error.message == "The handler failed."
+        assert "exploded" not in ticket.error.message
     finally:
         await writer.leave()
         await researcher.leave()

@@ -58,7 +58,7 @@ async def team():
         lease_ttl_seconds=0.4,
         session_ttl_seconds=30,
         sweep_interval_seconds=0.05,
-        terminal_ticket_retention_seconds=2,
+        replay_horizon_seconds=2,
         thread_message_limit=50,
     )
     await runtime.start()

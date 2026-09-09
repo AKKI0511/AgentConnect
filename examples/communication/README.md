@@ -59,6 +59,13 @@ poetry run python examples/communication/aiagent.py
 `join_auth.py` starts a Team with ``require_join_auth=True``. The operator
 issues a token bound to one Agent DID. A different Agent cannot use it.
 
+`bounds.py` starts a Team with a small ``max_message_bytes``. An oversized
+``tell`` fails with ``payload_too_large``. An uncaught handler exception
+fails the Ticket with generic text; the exception string does not leave
+the Writer process. Message-id retries are unique for the documented
+replay window; after that window a still-retained history entry rejects
+reuse with ``id_conflict``.
+
 ```python
 issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
 await Writer(name="writer").join(url, join_token=issued["token"])
@@ -69,6 +76,7 @@ poetry run python examples/communication/discovery.py
 poetry run python examples/communication/tools.py
 poetry run python examples/communication/http_session.py
 poetry run python examples/communication/join_auth.py
+poetry run python examples/communication/bounds.py
 poetry run python examples/communication/threads.py
 poetry run python examples/communication/fanout.py
 poetry run python examples/communication/mcp.py

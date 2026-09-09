@@ -141,12 +141,23 @@ class JoinRequest(SchemaModel):
 class RuntimeLimits(SchemaModel):
     """Fixed operational limits a Runtime reports at join.
 
-    ``max_held_waits`` caps concurrent ``collect=wait`` sends per
-    Membership. ``max_mailbox_depth`` caps queued plus leased Mailbox
-    items. Both are exact counts this Runtime enforces.
-    ``work_lifetime_seconds`` is the finite cutoff stamped on a new
-    request whose send omitted ``deadline`` and that has no request
-    parent to inherit from.
+    ``max_message_bytes`` bounds ``send``, ``reply``, and HTTP JSON
+    ingress. ``max_held_waits`` caps concurrent ``collect=wait`` sends
+    per Membership. ``max_mailbox_depth`` caps queued plus leased
+    Mailbox items. ``max_open_tickets`` caps open Tickets one
+    Membership may hold as requester. ``work_lifetime_seconds`` is the
+    finite cutoff stamped on a new request whose send omitted
+    ``deadline`` and that has no request parent to inherit from.
+    ``max_deadline_seconds`` is the farthest a new request deadline may
+    be. ``replay_horizon_seconds`` is how long an identical retry still
+    returns the original result after the obligation ends, taken as the
+    later of that interval after close and the Ticket deadline for a
+    request. After the window, reuse of the id is new work only when no
+    remaining owner names it.
+    ``max_retained_bytes`` caps retained Message-body storage.
+
+        result.limits.max_message_bytes
+        result.limits.replay_horizon_seconds
     """
 
     max_message_bytes: JsonInt = Field(ge=1)
@@ -155,6 +166,10 @@ class RuntimeLimits(SchemaModel):
     wait_hold_seconds: JsonFloat = Field(ge=0)
     max_held_waits: JsonInt = Field(ge=0)
     work_lifetime_seconds: JsonFloat = Field(ge=1)
+    max_deadline_seconds: JsonFloat = Field(ge=1)
+    max_open_tickets: JsonInt = Field(ge=1)
+    replay_horizon_seconds: JsonFloat = Field(ge=1)
+    max_retained_bytes: JsonInt = Field(ge=1)
 
 
 class JoinResult(SchemaModel):

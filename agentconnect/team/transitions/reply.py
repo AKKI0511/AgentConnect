@@ -5,13 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import agentconnect.team.expiry as expiry_mod
 import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.retention as retention_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
 import agentconnect.team.trace as trace_mod
+from agentconnect.team.codec import timestamp_score
 from agentconnect.team.errors import IDENTITY_MISSING
 from agentconnect.team.store.base import Store
-from agentconnect.team.store.ops import Cas, DeleteIfVersion, Insert, StoreOp
+from agentconnect.team.store.ops import Cas, DeleteIfVersion, IndexAdd, Insert, StoreOp
 
 
 @dataclass
@@ -30,6 +33,8 @@ class ReplyCommit:
     mailbox_version: int
     lease: dict[str, Any]
     retention_seconds: float
+    replay_horizon_seconds: float
+    retained_bytes_limit: int
     thread_limit: int
     now_ts: str
     events: list[dict[str, Any]] = field(default_factory=list)
@@ -54,6 +59,22 @@ class ReplyConflict(Exception):
         self.message = message
 
 
+async def assemble_reply_result(
+    store: Store, record: dict[str, Any]
+) -> Optional[dict[str, Any]]:
+    """Build the public reply result from the Ticket and canonical body."""
+    nested = record.get("result")
+    if isinstance(nested, dict) and isinstance(nested.get("ticket"), dict):
+        return dict(nested)
+    ticket_id = record.get("ticket_id")
+    if not isinstance(ticket_id, str):
+        return None
+    ticket = await tickets_mod.load_ticket(store, ticket_id)
+    if ticket is None:
+        return None
+    return {"ticket": await tickets_mod.hydrate_ticket(store, ticket)}
+
+
 async def load_reply_replay(
     store: Store,
     reply_id: str,
@@ -70,10 +91,7 @@ async def load_reply_replay(
         raise ReplyConflict(
             "id_conflict", "Message id is already used with different data"
         )
-    result = existing.get("result")
-    if isinstance(result, dict):
-        return dict(result)
-    return None
+    return await assemble_reply_result(store, existing)
 
 
 async def commit_reply(store: Store, commit: ReplyCommit) -> ReplyAccepted:
@@ -119,14 +137,23 @@ async def commit_reply(store: Store, commit: ReplyCommit) -> ReplyAccepted:
         raise ReplyConflict("internal", "reply acceptance failed")
 
 
+def _public_reply_ticket(
+    ticket: dict[str, Any], message: dict[str, Any]
+) -> dict[str, Any]:
+    out = dict(ticket)
+    out.pop("result_message_id", None)
+    if out.get("state") == "completed":
+        out["response"] = message
+    return out
+
+
 async def _plan_reply(
     store: Store, commit: ReplyCommit
 ) -> tuple[list[StoreOp], dict[str, Any], list[dict[str, Any]]]:
     message = dict(commit.reply_message)
     ops: list[StoreOp] = []
-    keep_ids = await tickets_mod.retained_message_ids(store)
-    keep_ids.add(commit.reply_id)
-    keep_ids.add(str(commit.ticket["id"]))
+    protect = {commit.reply_id, str(commit.ticket["id"])}
+    dropped: list[str] = []
     thread_id = message.get("thread_id")
     if isinstance(thread_id, str):
         record = await store.get_record(threads_mod.thread_key(thread_id))
@@ -136,25 +163,29 @@ async def _plan_reply(
             raise ReplyConflict("internal", IDENTITY_MISSING)
         if not isinstance(recipient_mid, str) or not recipient_mid:
             raise ReplyConflict("internal", IDENTITY_MISSING)
-        _thread, thread_ops, error = threads_mod.prepare_append(
+        thread, thread_ops, error = threads_mod.prepare_append(
             record,
             thread_id=thread_id,
             message=message,
             sender=sender_mid,
             recipient=recipient_mid,
             max_messages=commit.thread_limit,
-            keep_ids=keep_ids,
         )
         if error == "forbidden":
             raise ReplyConflict(
                 "forbidden", "Message is outside this Thread's participant set"
             )
+        kept, dropped = await threads_mod.drop_unprotected_ids(
+            store,
+            list(thread.get("message_ids") or []),
+            max_messages=commit.thread_limit,
+            protect=protect,
+        )
+        thread["message_ids"] = kept
         ops.extend(thread_ops)
 
     ticket = dict(commit.ticket)
-    if "response" in ticket:
-        ticket["response"] = message
-    result = {"ticket": ticket}
+    result = {"ticket": _public_reply_ticket(ticket, message)}
     ops.extend(
         [
             Insert(f"msg:{commit.reply_id}", message),
@@ -164,7 +195,7 @@ async def _plan_reply(
                     "sender": commit.sender,
                     "membership_id": commit.membership_id,
                     "hash": commit.reply_hash,
-                    "result": result,
+                    "ticket_id": str(ticket["id"]),
                 },
             ),
         ]
@@ -183,10 +214,35 @@ async def _plan_reply(
             commit.mailbox_version,
         )
     )
-    ops.extend(mailbox_mod.deactivate_lease_ops(commit.lease))
+    until = retention_mod.obligation_retain_until(
+        commit.now_ts,
+        horizon_seconds=commit.replay_horizon_seconds,
+        ticket=ticket,
+    )
+    ops.extend(mailbox_mod.deactivate_lease_ops(commit.lease, retain_until=until))
+    body_ops, freed = await retention_mod.release_body_deletes(
+        store,
+        dropped,
+        ignore=retention_mod.IgnoreOwners(thread=True),
+    )
+    live_ops, live_freed = await retention_mod.release_body_deletes(
+        store,
+        [commit.mailbox_message_id],
+        ignore=retention_mod.IgnoreOwners(live=True),
+    )
+    ops.extend(body_ops)
+    ops.extend(live_ops)
+    added = retention_mod.message_bytes(message)
+    byte_ops = await retention_mod.plan_retained_bytes(
+        store, added - freed - live_freed, commit.retained_bytes_limit
+    )
+    if byte_ops is None:
+        raise ReplyConflict("busy", "Team retained storage is full")
+    ops.extend(byte_ops)
     events = list(commit.events)
     if events:
         trace_id = str(events[0]["trace_id"])
         trace_record = await store.get_record(trace_mod.trace_key(trace_id))
         ops.extend(trace_mod.append_event_ops(trace_record, events))
+        ops.append(IndexAdd(expiry_mod.TRACES, timestamp_score(until), trace_id))
     return ops, result, events

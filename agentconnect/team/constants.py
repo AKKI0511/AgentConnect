@@ -16,17 +16,34 @@ DEFAULT_MAX_HELD_WAITS = 16
 # deadline and that has no request parent to inherit from.
 DEFAULT_WORK_LIFETIME_SECONDS = 3600.0
 
+# Farthest a new request deadline may be from acceptance.
+DEFAULT_MAX_DEADLINE_SECONDS = 24 * 60 * 60
+
+# Open Tickets one Membership may hold as requester.
+DEFAULT_MAX_OPEN_TICKETS = 1000
+
+# UTF-8 JSON bytes of retained Message bodies.
+DEFAULT_MAX_RETAINED_BYTES = 64 * 1024 * 1024
+
+# Unused join challenges kept at once.
+DEFAULT_MAX_JOIN_CHALLENGES = 128
+
+# Due items processed in one expiry sweep.
+SWEEP_BATCH = 256
+
 DEFAULT_SESSION_TTL_SECONDS = 300
 DEFAULT_LEASE_TTL_SECONDS = 60
 DEFAULT_MAX_IN_FLIGHT = 1
 DEFAULT_MAX_INSTANCES = 100
 
-# Open Tickets are kept until at least their deadline. Terminal Tickets are
-# kept this long after they close (or until the deadline, whichever is later).
-DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS = 24 * 60 * 60
+# Open Tickets are kept until at least their deadline. Terminal Tickets,
+# request replay records, and event send replays are kept this long after
+# the obligation ends (or until the Ticket deadline, whichever is later).
+DEFAULT_REPLAY_HORIZON_SECONDS = 24 * 60 * 60
+DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS = DEFAULT_REPLAY_HORIZON_SECONDS
 
-# Thread history is trimmed to this many Messages once no open Ticket
-# still references an older Message.
+# Thread history is trimmed to this many Messages once no live Delivery
+# or Ticket window still references an older Message.
 DEFAULT_THREAD_MESSAGE_LIMIT = 10_000
 
 SWEEP_INTERVAL_SECONDS = 0.5

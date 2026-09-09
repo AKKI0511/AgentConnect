@@ -15,8 +15,11 @@ from agentconnect.team.codec import format_timestamp, parse_timestamp, timestamp
 from agentconnect.team.constants import TICKET_TERMINAL
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store, StoreRecord
+from agentconnect.team.retention import RETAIN_MESSAGES_SET, open_ticket_count_key
 from agentconnect.team.store.ops import (
     Cas,
+    DecrementFloor,
+    DeleteIfVersion,
     IndexAdd,
     IndexRemove,
     Insert,
@@ -28,7 +31,6 @@ from agentconnect.team.store.ops import (
 TICKET_KEY_PREFIX = "ticket:"
 OPEN_TICKETS_SET = "tickets:open"
 ALL_TICKETS_SET = "tickets"
-RETAIN_MESSAGES_SET = "retain:messages"
 
 
 def ticket_key(ticket_id: str) -> str:
@@ -73,17 +75,22 @@ def new_open_ticket(
 def mark_completed(
     ticket: dict[str, Any], response: dict[str, Any], now_ts: str
 ) -> dict[str, Any]:
-    """Mark the Ticket completed with the winning response Message."""
+    """Mark the Ticket completed. The response body stays at ``msg:{id}``."""
     ticket = dict(ticket)
     ticket["state"] = "completed"
     ticket["updated_at"] = now_ts
-    ticket["response"] = response
+    ticket["result_message_id"] = response["id"]
     ticket.pop("error", None)
+    ticket.pop("response", None)
     return ticket
 
 
 def mark_failed(
-    ticket: dict[str, Any], error: dict[str, Any], now_ts: str
+    ticket: dict[str, Any],
+    error: dict[str, Any],
+    now_ts: str,
+    *,
+    result_message_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Mark the Ticket failed with a handler error."""
     ticket = dict(ticket)
@@ -91,6 +98,8 @@ def mark_failed(
     ticket["updated_at"] = now_ts
     ticket["error"] = error
     ticket.pop("response", None)
+    if result_message_id is not None:
+        ticket["result_message_id"] = result_message_id
     return ticket
 
 
@@ -204,9 +213,16 @@ def cas_ticket_ops(
                     ticket_id,
                 )
             )
-        response = ticket.get("response")
-        if isinstance(response, dict) and isinstance(response.get("id"), str):
-            ops.append(SetAdd(RETAIN_MESSAGES_SET, str(response["id"])))
+            requester = ticket.get("requester_membership_id")
+            if isinstance(requester, str) and requester:
+                ops.append(DecrementFloor(open_ticket_count_key(requester)))
+        result_id = ticket.get("result_message_id")
+        if not isinstance(result_id, str):
+            response = ticket.get("response")
+            if isinstance(response, dict) and isinstance(response.get("id"), str):
+                result_id = str(response["id"])
+        if isinstance(result_id, str) and result_id:
+            ops.append(SetAdd(RETAIN_MESSAGES_SET, result_id))
     return ops
 
 
@@ -265,6 +281,18 @@ async def cas_ticket(
     return result.ok
 
 
+async def hydrate_ticket(store: Store, ticket: dict[str, Any]) -> dict[str, Any]:
+    """Assemble the public Ticket, loading a completed response from ``msg:``."""
+    out = dict(ticket)
+    result_id = out.pop("result_message_id", None)
+    if out.get("state") == "completed" and "response" not in out:
+        if isinstance(result_id, str) and result_id:
+            body = await store.get(f"msg:{result_id}")
+            if isinstance(body, dict):
+                out["response"] = body
+    return out
+
+
 async def load_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:
     """Load a Ticket, or None if it is missing."""
     record = await store.get(ticket_key(ticket_id))
@@ -278,17 +306,38 @@ async def load_ticket_record(store: Store, ticket_id: str) -> Optional[StoreReco
     return await store.get_record(ticket_key(ticket_id))
 
 
+def delete_ticket_ops(ticket: dict[str, Any], version: int) -> list[StoreOp]:
+    """Return the writes that remove a Ticket and its indexes at ``version``."""
+    ticket_id = str(ticket["id"])
+    ops: list[StoreOp] = [
+        DeleteIfVersion(ticket_key(ticket_id), version),
+        SetRemove(OPEN_TICKETS_SET, ticket_id),
+        SetRemove(ALL_TICKETS_SET, ticket_id),
+        IndexRemove(expiry_mod.OPEN_TICKETS, ticket_id),
+        IndexRemove(expiry_mod.TERMINAL_TICKETS, ticket_id),
+        SetRemove(RETAIN_MESSAGES_SET, ticket_id),
+    ]
+    result_id = ticket.get("result_message_id")
+    if not isinstance(result_id, str):
+        response = ticket.get("response")
+        if isinstance(response, dict) and isinstance(response.get("id"), str):
+            result_id = str(response["id"])
+    if isinstance(result_id, str) and result_id:
+        ops.append(SetRemove(RETAIN_MESSAGES_SET, result_id))
+    return ops
+
+
 async def delete_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:
     """Remove a Ticket, drop indexes, and return the deleted record if any."""
-    ticket = await load_ticket(store, ticket_id)
+    record = await load_ticket_record(store, ticket_id)
+    ticket = None if record is None else dict(record.value)
+    if record is not None and ticket is not None:
+        await store.apply(delete_ticket_ops(ticket, record.version))
+        return ticket
     await store.delete(ticket_key(ticket_id))
     await store.set_remove(OPEN_TICKETS_SET, ticket_id)
     await store.set_remove(ALL_TICKETS_SET, ticket_id)
     await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
     await expiry_mod.cancel(store, expiry_mod.TERMINAL_TICKETS, ticket_id)
     await drop_retained_message(store, ticket_id)
-    if ticket is not None:
-        response = ticket.get("response")
-        if isinstance(response, dict) and isinstance(response.get("id"), str):
-            await drop_retained_message(store, str(response["id"]))
     return ticket

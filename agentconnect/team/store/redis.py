@@ -161,6 +161,20 @@ class RedisStore(Store):
             return None
         return record.value
 
+    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+        """Return values for ``keys`` with one MGET."""
+        if not keys:
+            return []
+        client = await self._client()
+        raws = await client.mget([self._key(key) for key in keys])
+        out: list[Any | None] = []
+        for raw in raws:
+            if raw is None:
+                out.append(None)
+            else:
+                out.append(_unwrap(raw).value)
+        return out
+
     async def get_record(self, key: str) -> StoreRecord | None:
         """Return value and version at ``key``, or None."""
         client = await self._client()
@@ -304,6 +318,11 @@ class RedisStore(Store):
         client = await self._client()
         members = await client.smembers(self._set_key(key))
         return sorted(str(item) for item in members)
+
+    async def set_is_member(self, key: str, member: str) -> bool:
+        """Return True when ``member`` is in the Redis set at ``key``."""
+        client = await self._client()
+        return bool(await client.sismember(self._set_key(key), member))
 
     async def index_add(self, key: str, score: float, member: str) -> None:
         """Add or update ``member`` in the Redis sorted set at ``key``."""

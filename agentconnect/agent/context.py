@@ -59,10 +59,12 @@ class TicketHandle:
         code: str = "handler_failed",
         details: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, Any]:
-        """Fail the request with a safe error the requester can see.
+        """Fail the request with a message the requester can see.
 
         ``code`` is ``handler_failed`` unless the caller passes another
         well-known code. An Agent application code belongs in ``details``.
+        This path keeps the given ``message``. Uncaught exceptions in
+        ``handle`` do not; they store ``The handler failed.``
         """
         self._ensure_open()
         extra = dict(details or {})

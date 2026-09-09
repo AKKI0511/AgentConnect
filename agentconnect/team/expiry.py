@@ -21,8 +21,11 @@ When = Union[datetime, str]
 
 SESSIONS = "expiry:sessions"
 LEASES = "expiry:leases"
+INACTIVE_LEASES = "expiry:leases:inactive"
 OPEN_TICKETS = "expiry:tickets:open"
 TERMINAL_TICKETS = "expiry:tickets:terminal"
+REPLAYS = "expiry:replays"
+TRACES = "expiry:traces"
 JOIN_CHALLENGES = "expiry:join_challenges"
 JOIN_TOKENS = "expiry:join_tokens"
 

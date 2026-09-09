@@ -23,7 +23,9 @@ Handler outcomes:
 
 - return a JSON value to reply to a request
 - return None to decline that request, or to finish an event
-- raise to fail the request (the requester sees ``handler_failed``)
+- raise to fail the request. The requester sees ``handler_failed`` with
+  the generic text ``The handler failed.`` Diagnostics stay in this
+  process log. Pass a specific message with ``ctx.ticket().fail(...)``.
 - call ``ctx.ticket()`` and answer later through the returned handle.
   The Session renews that Delivery lease until the reply, the request
   deadline, disconnect, or revocation. The slot still counts toward

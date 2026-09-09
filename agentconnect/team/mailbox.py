@@ -28,6 +28,7 @@ from typing import Any, Literal, Optional
 
 from agentconnect.team.codec import new_uuid, parse_timestamp, timestamp_score
 import agentconnect.team.expiry as expiry_mod
+from agentconnect.team.retention import LIVE_MESSAGES_SET
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.ops import (
     Cas,
@@ -98,6 +99,7 @@ def enqueue_ops(
             message_id,
             max_depth,
         ),
+        SetAdd(LIVE_MESSAGES_SET, message_id),
     ]
 
 
@@ -258,6 +260,7 @@ def acknowledge_ops(address: str, message_id: str, version: int) -> list[StoreOp
     return [
         DeleteIfVersion(mailbox_item_key(address, message_id), version),
         IndexRemove(mailbox_index_key(address), message_id),
+        SetRemove(LIVE_MESSAGES_SET, message_id),
     ]
 
 
@@ -312,6 +315,7 @@ async def drop_item(store: Store, address: str, message_id: str) -> None:
         [
             Delete(mailbox_item_key(address, message_id)),
             IndexRemove(mailbox_index_key(address), message_id),
+            SetRemove(LIVE_MESSAGES_SET, message_id),
         ]
     )
 
@@ -324,6 +328,7 @@ async def drop_mailbox(store: Store, address: str) -> None:
     )
     for message_id in message_ids:
         await store.delete(mailbox_item_key(address, message_id))
+        await store.set_remove(LIVE_MESSAGES_SET, message_id)
     await store.delete(index_key)
 
 
@@ -389,12 +394,18 @@ async def get_lease(store: Store, lease_id: str) -> Optional[dict[str, Any]]:
     return record
 
 
-async def deactivate_lease(store: Store, lease_id: str) -> None:
-    """Mark a lease inactive and drop it from the active set."""
+async def deactivate_lease(store: Store, lease_id: str, *, retain_until: str) -> None:
+    """Mark a lease inactive and keep it until ``retain_until``.
+
+    Successful ``complete``/``reply``, lease timeout, and Session loss
+    all keep the record so a late ``reply`` can still see it. The sweep
+    deletes it when ``retain_until`` is due.
+    """
     record = await store.get(lease_key(lease_id))
     ops: list[StoreOp] = [
         SetRemove(LEASES_SET, lease_id),
         IndexRemove(expiry_mod.LEASES, lease_id),
+        IndexAdd(expiry_mod.INACTIVE_LEASES, score_of(retain_until), lease_id),
     ]
     if record is not None:
         inactive = dict(record)
@@ -403,8 +414,8 @@ async def deactivate_lease(store: Store, lease_id: str) -> None:
     await store.apply(ops)
 
 
-def deactivate_lease_ops(lease: dict[str, Any]) -> list[StoreOp]:
-    """Return the writes that mark ``lease`` inactive."""
+def deactivate_lease_ops(lease: dict[str, Any], *, retain_until: str) -> list[StoreOp]:
+    """Return the writes that mark ``lease`` inactive until ``retain_until``."""
     inactive = dict(lease)
     inactive["active"] = False
     lease_id = str(inactive["lease_id"])
@@ -412,6 +423,7 @@ def deactivate_lease_ops(lease: dict[str, Any]) -> list[StoreOp]:
         Put(lease_key(lease_id), inactive),
         SetRemove(LEASES_SET, lease_id),
         IndexRemove(expiry_mod.LEASES, lease_id),
+        IndexAdd(expiry_mod.INACTIVE_LEASES, score_of(retain_until), lease_id),
     ]
 
 

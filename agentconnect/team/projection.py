@@ -11,7 +11,11 @@ from collections.abc import Mapping
 from typing import Any
 
 _MESSAGE_INTERNAL = ("sender_membership_id", "recipient_membership_id")
-_TICKET_INTERNAL = ("requester_membership_id", "recipient_membership_id")
+_TICKET_INTERNAL = (
+    "requester_membership_id",
+    "recipient_membership_id",
+    "result_message_id",
+)
 _EVENT_INTERNAL = ("actor_membership_id",)
 
 

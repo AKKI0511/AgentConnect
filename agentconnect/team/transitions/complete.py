@@ -5,11 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import agentconnect.team.expiry as expiry_mod
 import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.retention as retention_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.trace as trace_mod
+from agentconnect.team.codec import timestamp_score
 from agentconnect.team.store.base import Store
-from agentconnect.team.store.ops import Cas, DeleteIfVersion, Put, StoreOp
+from agentconnect.team.store.ops import Cas, DeleteIfVersion, IndexAdd, Put, StoreOp
 
 
 @dataclass
@@ -25,6 +28,9 @@ class CompleteCommit:
     mailbox_version: int
     lease: dict[str, Any]
     retention_seconds: float
+    replay_horizon_seconds: float
+    retained_bytes_limit: int
+    now_ts: str
     events: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -47,15 +53,28 @@ class CompleteConflict(Exception):
         self.message = message
 
 
+async def assemble_complete_result(
+    store: Store, record: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the public complete result from the Ticket id, if any."""
+    nested = record.get("result")
+    if isinstance(nested, dict):
+        return dict(nested)
+    ticket_id = record.get("ticket_id")
+    if not isinstance(ticket_id, str):
+        return {}
+    ticket = await tickets_mod.load_ticket(store, ticket_id)
+    if ticket is None:
+        return {}
+    return {"ticket": await tickets_mod.hydrate_ticket(store, ticket)}
+
+
 async def load_complete_replay(store: Store, lease_id: str) -> Optional[dict[str, Any]]:
     """Return a stored complete result for this lease, if any."""
     existing = await store.get(f"complete:{lease_id}")
     if existing is None:
         return None
-    result = existing.get("result")
-    if isinstance(result, dict):
-        return dict(result)
-    return existing if isinstance(existing, dict) else None
+    return await assemble_complete_result(store, existing)
 
 
 async def commit_complete(store: Store, commit: CompleteCommit) -> CompleteAccepted:
@@ -87,8 +106,11 @@ async def commit_complete(store: Store, commit: CompleteCommit) -> CompleteAccep
 async def _plan_complete(
     store: Store, commit: CompleteCommit
 ) -> tuple[list[StoreOp], dict[str, Any], list[dict[str, Any]]]:
+    complete_record: dict[str, Any] = {}
+    if commit.ticket is not None:
+        complete_record["ticket_id"] = str(commit.ticket["id"])
     ops: list[StoreOp] = [
-        Put(f"complete:{commit.lease_id}", {"result": commit.result}),
+        Put(f"complete:{commit.lease_id}", complete_record),
     ]
     if commit.ticket is not None and commit.ticket_version is not None:
         ops.extend(
@@ -105,10 +127,24 @@ async def _plan_complete(
             commit.mailbox_version,
         )
     )
-    ops.extend(mailbox_mod.deactivate_lease_ops(commit.lease))
+    ops.extend(
+        await retention_mod.plan_release_ops(
+            store,
+            [commit.mailbox_message_id],
+            byte_limit=commit.retained_bytes_limit,
+            ignore=retention_mod.IgnoreOwners(live=True),
+        )
+    )
+    until = retention_mod.obligation_retain_until(
+        commit.now_ts,
+        horizon_seconds=commit.replay_horizon_seconds,
+        ticket=commit.ticket,
+    )
+    ops.extend(mailbox_mod.deactivate_lease_ops(commit.lease, retain_until=until))
     events = list(commit.events)
     if events:
         trace_id = str(events[0]["trace_id"])
         trace_record = await store.get_record(trace_mod.trace_key(trace_id))
         ops.extend(trace_mod.append_event_ops(trace_record, events))
+        ops.append(IndexAdd(expiry_mod.TRACES, timestamp_score(until), trace_id))
     return ops, commit.result, events

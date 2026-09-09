@@ -48,6 +48,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+HANDLER_FAILURE_MESSAGE = "The handler failed."
+
 _RETRY_JOIN_CODES = frozenset({"unavailable"})
 _RECONNECT_CODES = frozenset({"unauthorized", "unavailable"})
 _NO_RECONNECT_CODES = frozenset(
@@ -886,6 +888,23 @@ class Session:
             else:
                 await self.complete_delivery(delivery)
         except SessionError as exc:
+            if exc.code == "payload_too_large" and reply_expected:
+                try:
+                    await self.reply_delivery(
+                        delivery,
+                        outcome="failed",
+                        error={
+                            "code": "handler_failed",
+                            "message": HANDLER_FAILURE_MESSAGE,
+                        },
+                    )
+                except SessionError as finish_exc:
+                    logger.warning(
+                        "fail delivery failed address=%s code=%s",
+                        self.address,
+                        finish_exc.code,
+                    )
+                return
             logger.warning(
                 "finish delivery failed address=%s code=%s", self.address, exc.code
             )
@@ -894,15 +913,16 @@ class Session:
         from agentconnect.core.message import is_reply_expected
 
         reply_expected = is_reply_expected(delivery.message)
-        safe = str(exc) or "handler failed"
-        if len(safe) > 2000:
-            safe = safe[:2000]
+        del exc
         try:
             if reply_expected:
                 await self.reply_delivery(
                     delivery,
                     outcome="failed",
-                    error={"code": "handler_failed", "message": safe},
+                    error={
+                        "code": "handler_failed",
+                        "message": HANDLER_FAILURE_MESSAGE,
+                    },
                 )
             else:
                 await self.complete_delivery(delivery)

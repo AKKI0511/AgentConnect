@@ -43,15 +43,21 @@ Pass ``store="memory"`` (the default) for a process-local Team. Pass a
 Redis URL when Memberships, Sessions, mailboxes, open Tickets, and
 Thread history must survive a Runtime restart.
 
-Open Tickets are retained until at least their deadline. Terminal Tickets
-are kept for 24 hours after they close, or until that deadline if it is
-later. Thread history is trimmed by count once no open Ticket still
-needs an older Message. A ``collect=wait`` send holds until the Ticket
-is terminal or ``wait_hold_seconds`` elapses, then returns the current
-Ticket. Ending that hold does not end accepted work. One Membership may
-hold at most ``max_held_waits`` of those sends at once. A request send
-may omit ``deadline``; the Runtime stamps ``work_lifetime_seconds`` or
-inherits a request parent's absolute deadline.
+Open Tickets are retained until at least their deadline. Terminal
+Tickets, replay records, and event send replays last until the later of
+that deadline and ``replay_horizon_seconds`` after the obligation ends.
+``send`` and ``reply`` share ``max_message_bytes``. HTTP JSON bodies use
+the same cap before the Runtime buffers the rest of the request. Thread
+history is trimmed by count once no live Delivery, open Ticket, or
+Ticket replay window still needs an older Message. Dropping an id
+deletes that body only when no remaining owner names it. A
+``collect=wait`` send holds until the Ticket is terminal or
+``wait_hold_seconds`` elapses, then returns the current Ticket. Ending
+that hold does not end accepted work.
+One Membership may hold at most ``max_held_waits`` of those sends at
+once. A request send may omit ``deadline``; the Runtime stamps
+``work_lifetime_seconds`` or inherits a request parent's absolute
+deadline. A new request deadline may not pass ``max_deadline_seconds``.
 
 Expiry is indexed by time. The background sweep pops Sessions, leases,
 Tickets, and join credentials that are due. It does not walk every
@@ -108,6 +114,7 @@ from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
 import agentconnect.team.auth as auth_mod
 import agentconnect.team.mailbox as mailbox_mod
 import agentconnect.team.projection as projection_mod
+import agentconnect.team.retention as retention_mod
 import agentconnect.team.sessions as sessions_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
@@ -131,19 +138,24 @@ from agentconnect.team.constants import (
     DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
     DEFAULT_JOIN_TOKEN_TTL_SECONDS,
     DEFAULT_LEASE_TTL_SECONDS,
+    DEFAULT_MAX_DEADLINE_SECONDS,
     DEFAULT_MAX_HELD_WAITS,
     DEFAULT_MAX_IN_FLIGHT,
     DEFAULT_MAX_INSTANCES,
+    DEFAULT_MAX_JOIN_CHALLENGES,
     DEFAULT_MAX_MAILBOX_DEPTH,
     DEFAULT_MAX_MESSAGE_BYTES,
+    DEFAULT_MAX_OPEN_TICKETS,
+    DEFAULT_MAX_RETAINED_BYTES,
+    DEFAULT_REPLAY_HORIZON_SECONDS,
     DEFAULT_SESSION_TTL_SECONDS,
-    DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
     DEFAULT_THREAD_MESSAGE_LIMIT,
     DEFAULT_WAIT_HOLD_SECONDS,
     DEFAULT_WORK_LIFETIME_SECONDS,
     MESSAGE_KINDS_SEND,
     OPERATOR_NAME,
     RESERVED_MCP_TOOL_NAMES,
+    SWEEP_BATCH,
     SWEEP_INTERVAL_SECONDS,
 )
 from agentconnect.team.errors import IDENTITY_MISSING, TeamError
@@ -154,6 +166,7 @@ from agentconnect.team.transitions.complete import (
     CompleteCommit,
     CompleteConflict,
     commit_complete,
+    load_complete_replay,
 )
 from agentconnect.team.transitions.join import JoinConflict, JoinPlan, commit_join
 from agentconnect.team.transitions.reply import (
@@ -235,11 +248,15 @@ class Team:
         wait_hold_seconds: float = DEFAULT_WAIT_HOLD_SECONDS,
         max_held_waits: int = DEFAULT_MAX_HELD_WAITS,
         work_lifetime_seconds: float = DEFAULT_WORK_LIFETIME_SECONDS,
+        max_deadline_seconds: float = DEFAULT_MAX_DEADLINE_SECONDS,
+        max_open_tickets: int = DEFAULT_MAX_OPEN_TICKETS,
+        replay_horizon_seconds: float = DEFAULT_REPLAY_HORIZON_SECONDS,
+        max_retained_bytes: int = DEFAULT_MAX_RETAINED_BYTES,
         session_ttl_seconds: float = DEFAULT_SESSION_TTL_SECONDS,
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
-        terminal_ticket_retention_seconds: float = DEFAULT_TERMINAL_TICKET_RETENTION_SECONDS,
         thread_message_limit: int = DEFAULT_THREAD_MESSAGE_LIMIT,
         max_instances: int = DEFAULT_MAX_INSTANCES,
+        max_join_challenges: int = DEFAULT_MAX_JOIN_CHALLENGES,
         sweep_interval_seconds: float = SWEEP_INTERVAL_SECONDS,
         require_join_auth: bool = False,
         join_challenge_ttl_seconds: float = DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
@@ -262,7 +279,17 @@ class Team:
             work_lifetime_seconds: Finite work cutoff stamped on a new
                 request whose send omitted ``deadline`` and that has no
                 request parent to inherit from. This is a cutoff, not a
-                completion estimate.
+                completion estimate. Must not exceed
+                ``max_deadline_seconds``.
+            max_deadline_seconds: Farthest a new request deadline may be
+                from acceptance.
+            max_open_tickets: Open Tickets one Membership may hold as
+                requester.
+            replay_horizon_seconds: How long an identical send, reply, or
+                complete still returns the original result after the
+                obligation ends.
+            max_retained_bytes: Cap on UTF-8 JSON bytes of retained
+                Message bodies.
             embeddings: How Profiles are turned into vectors for ``find``.
                 ``"auto"`` uses a hosted embedding API when a key is
                 already configured, a local ONNX model when
@@ -288,14 +315,28 @@ class Team:
         lifetime = float(work_lifetime_seconds)
         if lifetime < 1:
             raise ValueError("work_lifetime_seconds must be at least 1")
+        horizon = float(max_deadline_seconds)
+        if horizon < 1:
+            raise ValueError("max_deadline_seconds must be at least 1")
+        if lifetime > horizon:
+            raise ValueError(
+                "work_lifetime_seconds must not exceed max_deadline_seconds"
+            )
         self.work_lifetime_seconds = lifetime
+        self.max_deadline_seconds = horizon
+        self.max_open_tickets = int(max_open_tickets)
+        replay = float(replay_horizon_seconds)
+        if replay < 1:
+            raise ValueError("replay_horizon_seconds must be at least 1")
+        self.replay_horizon_seconds = replay
+        self.max_retained_bytes = int(max_retained_bytes)
+        if self.max_retained_bytes < 1:
+            raise ValueError("max_retained_bytes must be at least 1")
         self.session_ttl_seconds = float(session_ttl_seconds)
         self.lease_ttl_seconds = float(lease_ttl_seconds)
-        self.terminal_ticket_retention_seconds = float(
-            terminal_ticket_retention_seconds
-        )
         self.thread_message_limit = int(thread_message_limit)
         self.max_instances = int(max_instances)
+        self.max_join_challenges = int(max_join_challenges)
         self.sweep_interval_seconds = float(sweep_interval_seconds)
         self.require_join_auth = bool(require_join_auth)
         self.join_challenge_ttl_seconds = float(join_challenge_ttl_seconds)
@@ -348,6 +389,10 @@ class Team:
             wait_hold_seconds=self.wait_hold_seconds,
             max_held_waits=self.max_held_waits,
             work_lifetime_seconds=self.work_lifetime_seconds,
+            max_deadline_seconds=self.max_deadline_seconds,
+            max_open_tickets=self.max_open_tickets,
+            replay_horizon_seconds=self.replay_horizon_seconds,
+            max_retained_bytes=self.max_retained_bytes,
         )
 
     @property
@@ -511,6 +556,7 @@ class Team:
             store,
             self.name,
             ttl_seconds=self.join_challenge_ttl_seconds,
+            max_outstanding=self.max_join_challenges,
         )
         return JoinChallenge.model_validate(record)
 
@@ -741,7 +787,6 @@ class Team:
         recipient: str,
     ) -> dict[str, Any]:
         store = self._ensure_started()
-        keep_ids = await tickets_mod.retained_message_ids(store)
         return await threads_mod.append_message(
             store,
             thread_id=thread_id,
@@ -749,23 +794,42 @@ class Team:
             sender=sender,
             recipient=recipient,
             max_messages=self.thread_message_limit,
-            keep_ids=keep_ids,
         )
 
     async def _trim_thread(self, thread_id: str) -> None:
         store = self._ensure_started()
-        thread = await threads_mod.load_thread(store, thread_id)
-        if thread is None:
-            return
-        keep_ids = await tickets_mod.retained_message_ids(store)
-        trimmed = threads_mod.trim_thread_ids(
-            list(thread.get("message_ids") or []),
-            keep_ids=keep_ids,
-            max_messages=self.thread_message_limit,
-        )
-        if trimmed != list(thread.get("message_ids") or []):
-            thread["message_ids"] = trimmed
-            await threads_mod.save_thread(store, thread)
+        from agentconnect.team.store.ops import Cas
+
+        while True:
+            record = await store.get_record(threads_mod.thread_key(thread_id))
+            if record is None:
+                return
+            thread = dict(record.value)
+            ids = list(thread.get("message_ids") or [])
+            kept, dropped = await threads_mod.drop_unprotected_ids(
+                store, ids, max_messages=self.thread_message_limit
+            )
+            if not dropped:
+                return
+            thread["message_ids"] = kept
+            ops = [Cas(threads_mod.thread_key(thread_id), record.version, thread)]
+            body_ops, freed = await retention_mod.release_body_deletes(
+                store,
+                dropped,
+                ignore=retention_mod.IgnoreOwners(thread=True),
+            )
+            ops.extend(body_ops)
+            if freed:
+                extra = await retention_mod.plan_retained_bytes(
+                    store, -freed, self.max_retained_bytes
+                )
+                if extra:
+                    ops.extend(extra)
+            applied = await store.apply(ops)
+            if applied.ok:
+                return
+            if applied.reason != "cas":
+                return
 
     async def _session_tokens_for(self, membership_name: str) -> list[str]:
         store = self._ensure_started()
@@ -909,7 +973,13 @@ class Team:
             await mailbox_mod.return_item(
                 store, lease["address"], lease["message_id"], lease_id, now_ts
             )
-            await mailbox_mod.deactivate_lease(store, lease_id)
+            await mailbox_mod.deactivate_lease(
+                store,
+                lease_id,
+                retain_until=retention_mod.replay_until(
+                    now_ts, horizon_seconds=self.replay_horizon_seconds
+                ),
+            )
         session["lease_ids"] = []
         self._signal_work(session["membership_name"])
 
@@ -1488,6 +1558,12 @@ class Team:
                 finally:
                     self._drop_waiter(ticket_id, waiter)
                     self._drop_session_wake(session_token, waiter)
+            store = self._ensure_started()
+            if isinstance(result.get("ticket"), dict):
+                result = dict(result)
+                result["ticket"] = await tickets_mod.hydrate_ticket(
+                    store, result["ticket"]
+                )
             try:
                 return parse_send_result(projection_mod.public_send_result(result))
             except ValueError as exc:
@@ -1673,6 +1749,14 @@ class Team:
         if kind == "request" and deadline_dt is not None and deadline_dt <= now:
             _fail("invalid_request", "deadline must be in the future")
 
+        if kind == "request" and deadline_dt is not None:
+            latest = now + timedelta(seconds=self.max_deadline_seconds)
+            if deadline_dt > latest:
+                _fail(
+                    "invalid_request",
+                    "deadline exceeds max_deadline_seconds",
+                )
+
         if (
             kind == "request"
             and deadline_dt is not None
@@ -1777,6 +1861,9 @@ class Team:
             ticket=ticket,
             max_depth=self.max_mailbox_depth,
             max_held_waits=self.max_held_waits,
+            max_open_tickets=self.max_open_tickets,
+            retained_bytes_limit=self.max_retained_bytes,
+            replay_horizon_seconds=self.replay_horizon_seconds,
             thread_limit=self.thread_message_limit,
             wait_ttl=self._held_wait_ttl(),
             now_ts=now_ts,
@@ -2045,17 +2132,12 @@ class Team:
             return False
         return mailbox_mod.lease_is_active(record, now)
 
-    async def _thread_messages(self, thread_id: str) -> list[dict[str, Any]]:
+    async def _thread_message_ids(self, thread_id: str) -> list[str]:
         store = self._ensure_started()
         thread = await threads_mod.load_thread(store, thread_id)
         if thread is None:
             return []
-        messages: list[dict[str, Any]] = []
-        for message_id in thread.get("message_ids") or []:
-            stored = await store.get(f"msg:{message_id}")
-            if stored is not None:
-                messages.append(stored)
-        return messages
+        return [str(item) for item in (thread.get("message_ids") or [])]
 
     async def _delivery_payload(
         self, message: dict[str, Any], *, history_form: str
@@ -2066,28 +2148,34 @@ class Team:
             if history_form == "ids":
                 payload["history_ids"] = []
             return payload
-        messages = [
-            projection_mod.public_message(item)
-            for item in await self._thread_messages(str(thread_id))
-        ]
-        if history_form == "ids":
-            ids, complete = threads_mod.history_id_window(
-                messages,
-                delivered_id=message["id"],
-                limit=self.delivery_history_limit,
-            )
-            return {
-                "history": [],
-                "history_ids": ids,
-                "history_complete": complete,
-            }
-        history, complete = threads_mod.history_window(
-            messages,
+        ids = await self._thread_message_ids(str(thread_id))
+        page_ids, complete = threads_mod.history_ids_before(
+            ids,
             delivered_id=message["id"],
             limit=self.delivery_history_limit,
-            max_bytes=self.max_message_bytes,
         )
-        return {"history": history, "history_complete": complete}
+        if history_form == "ids":
+            return {
+                "history": [],
+                "history_ids": page_ids,
+                "history_complete": complete,
+            }
+        store = self._ensure_started()
+        records = await store.get_many([f"msg:{item}" for item in page_ids])
+        history = [
+            projection_mod.public_message(item)
+            for item in records
+            if isinstance(item, dict)
+        ]
+        byte_complete = True
+        while history and json_size(history) > self.max_message_bytes:
+            history = history[1:]
+            byte_complete = False
+        bodies_complete = all(item is not None for item in records)
+        return {
+            "history": history,
+            "history_complete": complete and byte_complete and bodies_complete,
+        }
 
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
         """Finish a Delivery without a response Message.
@@ -2108,10 +2196,10 @@ class Team:
                 or lease.get("membership_name") != session["membership_name"]
             ):
                 _fail("not_found", "lease_id was not found")
-            existing = await store.get(f"complete:{lease_id}")
+            existing = await load_complete_replay(store, lease_id)
             if existing is not None:
                 return CompleteResult.model_validate(
-                    projection_mod.public_ticket_result(existing["result"])
+                    projection_mod.public_ticket_result(existing)
                 )
             now, now_ts = self._now_pair()
             message = await store.get(f"msg:{lease['message_id']}")
@@ -2170,7 +2258,10 @@ class Team:
                         mailbox_message_id=str(lease["message_id"]),
                         mailbox_version=item_record.version,
                         lease=lease,
-                        retention_seconds=self.terminal_ticket_retention_seconds,
+                        retention_seconds=self.replay_horizon_seconds,
+                        replay_horizon_seconds=self.replay_horizon_seconds,
+                        retained_bytes_limit=self.max_retained_bytes,
+                        now_ts=now_ts,
                         events=events,
                     ),
                 )
@@ -2190,7 +2281,9 @@ class Team:
         """Finish a reply-expected Delivery with content or an error.
 
         The response Message, Ticket, Thread append, and lease
-        acknowledgement commit together.
+        acknowledgement commit together. A body larger than
+        ``max_message_bytes`` fails with ``payload_too_large`` and leaves
+        the Ticket ``open`` and the lease active.
 
             result = await team.reply(
                 token,
@@ -2203,6 +2296,10 @@ class Team:
             )
             result["ticket"]["state"]
         """
+        if not isinstance(request, Mapping):
+            _fail("invalid_request", "reply body must be an object")
+        if json_size(dict(request)) > self.max_message_bytes:
+            _fail("payload_too_large", "reply body exceeds max_message_bytes")
         try:
             parsed_reply = parse_reply_request(request)
         except ValueError as exc:
@@ -2328,7 +2425,10 @@ class Team:
                 reply_message["thread_id"] = message["thread_id"]
             if outcome == "failed":
                 next_ticket = tickets_mod.mark_failed(
-                    dict(ticket), reply_message["error"], now_ts
+                    dict(ticket),
+                    reply_message["error"],
+                    now_ts,
+                    result_message_id=reply_id,
                 )
             else:
                 next_ticket = tickets_mod.mark_completed(
@@ -2373,7 +2473,9 @@ class Team:
                         mailbox_message_id=str(lease["message_id"]),
                         mailbox_version=item_record.version,
                         lease=lease,
-                        retention_seconds=self.terminal_ticket_retention_seconds,
+                        retention_seconds=self.replay_horizon_seconds,
+                        replay_horizon_seconds=self.replay_horizon_seconds,
+                        retained_bytes_limit=self.max_retained_bytes,
                         thread_limit=self.thread_message_limit,
                         now_ts=now_ts,
                         events=events,
@@ -2410,8 +2512,18 @@ class Team:
         await mailbox_mod.acknowledge(
             store, lease["address"], lease["message_id"], lease["lease_id"]
         )
-        await mailbox_mod.deactivate_lease(store, lease["lease_id"])
-        del now_ts
+        await retention_mod.reclaim_unowned_bodies(
+            store,
+            [str(lease["message_id"])],
+            byte_limit=self.max_retained_bytes,
+        )
+        await mailbox_mod.deactivate_lease(
+            store,
+            lease["lease_id"],
+            retain_until=retention_mod.replay_until(
+                now_ts, horizon_seconds=self.replay_horizon_seconds
+            ),
+        )
         await self._drop_lease_from_session(session, lease["lease_id"])
 
     async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
@@ -2428,6 +2540,8 @@ class Team:
             session
         ):
             _fail("not_found", "Ticket was not found")
+        store = self._ensure_started()
+        ticket = await tickets_mod.hydrate_ticket(store, ticket)
         return parse_ticket(projection_mod.public_ticket(ticket))
 
     async def get_history(
@@ -2466,12 +2580,10 @@ class Team:
             thread
         ):
             _fail("not_found", "Thread was not found")
-        messages: list[dict[str, Any]] = []
-        for message_id in thread.get("message_ids") or []:
-            stored = await store.get(f"msg:{message_id}")
-            if stored is not None:
-                messages.append(stored)
-        page, has_more = threads_mod.page_history(messages, before=before, limit=n)
+        ids = [str(item) for item in (thread.get("message_ids") or [])]
+        page_ids, has_more = threads_mod.page_history_ids(ids, before=before, limit=n)
+        records = await store.get_many([f"msg:{item}" for item in page_ids])
+        page = [item for item in records if isinstance(item, dict)]
         try:
             return parse_history_result(
                 projection_mod.public_history_result(
@@ -2680,7 +2792,7 @@ class Team:
                 store,
                 expired,
                 record.version,
-                retention_seconds=self.terminal_ticket_retention_seconds,
+                retention_seconds=self.replay_horizon_seconds,
             ):
                 await mailbox_mod.drop_item(store, str(expired["recipient"]), ticket_id)
                 self._notify(expired["id"])
@@ -2729,7 +2841,8 @@ class Team:
         store = self._ensure_started()
         now, now_ts = self._now_pair()
         await auth_mod.sweep_join_state(store, now=now)
-        for token in await expiry_mod.due(store, expiry_mod.SESSIONS, now):
+        batch = SWEEP_BATCH
+        for token in await expiry_mod.due(store, expiry_mod.SESSIONS, now, limit=batch):
             async with self._keys.acquire(f"session:{token}"):
                 session = await self._get_session(token)
                 if session is None:
@@ -2742,7 +2855,9 @@ class Team:
                     continue
                 await self._release_session_leases(session, now_ts)
                 await self._delete_session(session)
-        for lease_id in await expiry_mod.due(store, expiry_mod.LEASES, now):
+        for lease_id in await expiry_mod.due(
+            store, expiry_mod.LEASES, now, limit=batch
+        ):
             lease = await mailbox_mod.get_lease(store, lease_id)
             if lease is None:
                 await expiry_mod.cancel(store, expiry_mod.LEASES, lease_id)
@@ -2756,8 +2871,16 @@ class Team:
                 store, lease["address"], lease["message_id"], lease_id, now_ts
             )
             self._signal_work(lease["membership_name"])
-            await mailbox_mod.deactivate_lease(store, lease_id)
-        for ticket_id in await expiry_mod.due(store, expiry_mod.OPEN_TICKETS, now):
+            await mailbox_mod.deactivate_lease(
+                store,
+                lease_id,
+                retain_until=retention_mod.replay_until(
+                    now_ts, horizon_seconds=self.replay_horizon_seconds
+                ),
+            )
+        for ticket_id in await expiry_mod.due(
+            store, expiry_mod.OPEN_TICKETS, now, limit=batch
+        ):
             ticket = await self._expire_ticket_if_due(ticket_id)
             if ticket is None or ticket.get("state") != "open":
                 await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
@@ -2765,7 +2888,9 @@ class Team:
                 await expiry_mod.schedule(
                     store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
                 )
-        for ticket_id in await expiry_mod.due(store, expiry_mod.TERMINAL_TICKETS, now):
+        for ticket_id in await expiry_mod.due(
+            store, expiry_mod.TERMINAL_TICKETS, now, limit=batch
+        ):
             ticket = await tickets_mod.load_ticket(store, ticket_id)
             if ticket is None:
                 await expiry_mod.cancel(store, expiry_mod.TERMINAL_TICKETS, ticket_id)
@@ -2773,9 +2898,27 @@ class Team:
             if ticket["state"] == "open":
                 continue
             thread_id = ticket.get("thread_id")
-            await tickets_mod.delete_ticket(store, ticket_id)
+            await retention_mod.reclaim_ticket_records(
+                store, ticket, byte_limit=self.max_retained_bytes
+            )
             if isinstance(thread_id, str):
                 await self._trim_thread(thread_id)
+        for message_id in await expiry_mod.due(
+            store, expiry_mod.REPLAYS, now, limit=batch
+        ):
+            await retention_mod.reclaim_event_replay(
+                store, message_id, byte_limit=self.max_retained_bytes
+            )
+        for lease_id in await expiry_mod.due(
+            store, expiry_mod.INACTIVE_LEASES, now, limit=batch
+        ):
+            await retention_mod.reclaim_inactive_lease(
+                store, lease_id, byte_limit=self.max_retained_bytes
+            )
+        for trace_id in await expiry_mod.due(
+            store, expiry_mod.TRACES, now, limit=batch
+        ):
+            await retention_mod.reclaim_trace(store, trace_id)
 
 
 def _is_loopback(host: str) -> bool:

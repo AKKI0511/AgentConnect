@@ -62,6 +62,13 @@ class Store(ABC):
     async def get(self, key: str) -> Any | None:
         """Return the JSON-compatible value at ``key``, or None."""
 
+    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+        """Return values for ``keys`` in the same order. Missing keys are None.
+
+        Backends SHOULD issue one round trip. The default loops :meth:`get`.
+        """
+        return [await self.get(key) for key in keys]
+
     @abstractmethod
     async def get_record(self, key: str) -> StoreRecord | None:
         """Return value and version at ``key``, or None."""
@@ -97,6 +104,13 @@ class Store(ABC):
     @abstractmethod
     async def set_members(self, key: str) -> list[str]:
         """Return the members of the set at ``key``."""
+
+    async def set_is_member(self, key: str, member: str) -> bool:
+        """Return True when ``member`` is in the set at ``key``.
+
+        Backends SHOULD use a membership check. The default reads the set.
+        """
+        return member in await self.set_members(key)
 
     @abstractmethod
     async def index_add(self, key: str, score: float, member: str) -> None:

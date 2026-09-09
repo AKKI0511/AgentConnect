@@ -30,6 +30,7 @@ from agentconnect.core.operations import (
     parse_revoke_join_token_request,
     parse_schema,
 )
+from agentconnect.team.constants import DEFAULT_MAX_MESSAGE_BYTES
 from agentconnect.team.errors import TeamError
 from agentconnect.team.runtime import Team
 from agentconnect.team.session_auth import session_token_for_request
@@ -397,12 +398,43 @@ def create_runtime_app(team: Team) -> FastAPI:
 
 
 async def _json_object(request: Request, *, empty_ok: bool = False) -> dict[str, Any]:
-    """Read a JSON object body, or ``{}`` when ``empty_ok`` and the body is empty."""
-    try:
-        body = await request.json()
-    except Exception:
-        if empty_ok and (request.headers.get("content-length") in {None, "0"}):
+    """Read a JSON object body, capped at the Team ``max_message_bytes``.
+
+    When ``Content-Length`` exceeds that budget this fails before the rest
+    of the body is read. When it is absent, reading stops after the cap.
+    """
+    team = getattr(request.app.state, "team", None)
+    max_bytes = int(getattr(team, "max_message_bytes", DEFAULT_MAX_MESSAGE_BYTES))
+    length_header = request.headers.get("content-length")
+    if length_header is not None:
+        try:
+            length = int(length_header)
+        except ValueError:
+            raise TeamError("invalid_request", "Request body must be a JSON object")
+        if length < 0:
+            raise TeamError("invalid_request", "Request body must be a JSON object")
+        if length > max_bytes:
+            raise TeamError(
+                "payload_too_large", "Request body exceeds max_message_bytes"
+            )
+        if length == 0 and empty_ok:
             return {}
+    chunks = bytearray()
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        if len(chunks) + len(chunk) > max_bytes:
+            raise TeamError(
+                "payload_too_large", "Request body exceeds max_message_bytes"
+            )
+        chunks.extend(chunk)
+    if not chunks:
+        if empty_ok:
+            return {}
+        raise TeamError("invalid_request", "Request body must be a JSON object")
+    try:
+        body = json.loads(bytes(chunks))
+    except Exception:
         raise TeamError("invalid_request", "Request body must be a JSON object")
     if body is None and empty_ok:
         return {}

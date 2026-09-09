@@ -3,11 +3,79 @@
 from __future__ import annotations
 
 import asyncio
+import bisect
 from typing import Any, Optional, Sequence
 
 from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.apply import Overlay, apply_ops
 from agentconnect.team.store.ops import ApplyResult, StoreOp
+
+
+class SortedIndex:
+    """Membership scores with range reads that skip unrelated members.
+
+    ``index_range`` walks only the requested score window. Add and remove
+    are ``O(log n)``.
+    """
+
+    def __init__(self) -> None:
+        """Create an empty score index."""
+        self._score: dict[str, float] = {}
+        self._order: list[tuple[float, str]] = []
+
+    def __len__(self) -> int:
+        """Return the number of members."""
+        return len(self._score)
+
+    def __contains__(self, member: str) -> bool:
+        """Return True when ``member`` is in the index."""
+        return member in self._score
+
+    def score_of(self, member: str) -> float | None:
+        """Return the score for ``member``, or None."""
+        value = self._score.get(member)
+        return None if value is None else float(value)
+
+    def add(self, member: str, score: float) -> None:
+        """Insert or replace ``member`` at ``score``."""
+        previous = self._score.get(member)
+        if previous is not None:
+            self._remove_order(previous, member)
+        numbered = float(score)
+        self._score[member] = numbered
+        bisect.insort(self._order, (numbered, member))
+
+    def remove(self, member: str) -> None:
+        """Drop ``member`` if present."""
+        previous = self._score.pop(member, None)
+        if previous is None:
+            return
+        self._remove_order(previous, member)
+
+    def range(
+        self,
+        *,
+        min_score: float,
+        max_score: float,
+        limit: Optional[int] = None,
+    ) -> list[str]:
+        """Return members with scores in ``[min_score, max_score]``, lowest first."""
+        start = bisect.bisect_left(self._order, (min_score,))
+        out: list[str] = []
+        for index in range(start, len(self._order)):
+            score, member = self._order[index]
+            if score > max_score:
+                break
+            out.append(member)
+            if limit is not None and len(out) >= max(0, int(limit)):
+                break
+        return out
+
+    def _remove_order(self, score: float, member: str) -> None:
+        needle = (float(score), member)
+        index = bisect.bisect_left(self._order, needle)
+        if index < len(self._order) and self._order[index] == needle:
+            self._order.pop(index)
 
 
 class MemoryStore(Store):
@@ -25,7 +93,7 @@ class MemoryStore(Store):
         self._lock = asyncio.Lock()
         self._docs: dict[str, tuple[Any, int]] = {}
         self._sets: dict[str, set[str]] = {}
-        self._indexes: dict[str, dict[str, float]] = {}
+        self._indexes: dict[str, SortedIndex] = {}
 
     async def open(self) -> None:
         """No-op. The store is ready after construction."""
@@ -42,6 +110,15 @@ class MemoryStore(Store):
             if record is None:
                 return None
             return _clone(record[0])
+
+    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+        """Return copied values for ``keys`` in one lock acquisition."""
+        async with self._lock:
+            out: list[Any | None] = []
+            for key in keys:
+                record = self._docs.get(key)
+                out.append(None if record is None else _clone(record[0]))
+            return out
 
     async def get_record(self, key: str) -> StoreRecord | None:
         """Return a copied value and its version, or None."""
@@ -76,9 +153,9 @@ class MemoryStore(Store):
 
     def _index_score_unlocked(self, key: str, member: str) -> float | None:
         index = self._indexes.get(key)
-        if index is None or member not in index:
+        if index is None:
             return None
-        return float(index[member])
+        return index.score_of(member)
 
     def _index_card_unlocked(self, key: str) -> int:
         index = self._indexes.get(key)
@@ -107,13 +184,15 @@ class MemoryStore(Store):
         for key, scores in overlay.index_add.items():
             if not scores:
                 continue
-            self._indexes.setdefault(key, {}).update(scores)
+            index = self._indexes.setdefault(key, SortedIndex())
+            for member, score in scores.items():
+                index.add(member, score)
         for key, members in overlay.index_rem.items():
             index = self._indexes.get(key)
             if index is None:
                 continue
             for member in members:
-                index.pop(member, None)
+                index.remove(member)
             if not index:
                 self._indexes.pop(key, None)
 
@@ -171,10 +250,16 @@ class MemoryStore(Store):
                 return []
             return sorted(members)
 
+    async def set_is_member(self, key: str, member: str) -> bool:
+        """Return True when ``member`` is in the set at ``key``."""
+        async with self._lock:
+            bucket = self._sets.get(key)
+            return bool(bucket and member in bucket)
+
     async def index_add(self, key: str, score: float, member: str) -> None:
         """Add or update ``member`` in the sorted index at ``key``."""
         async with self._lock:
-            self._indexes.setdefault(key, {})[member] = float(score)
+            self._indexes.setdefault(key, SortedIndex()).add(member, float(score))
 
     async def index_remove(self, key: str, member: str) -> None:
         """Remove ``member`` from the sorted index at ``key``."""
@@ -182,7 +267,7 @@ class MemoryStore(Store):
             index = self._indexes.get(key)
             if index is None:
                 return
-            index.pop(member, None)
+            index.remove(member)
             if not index:
                 self._indexes.pop(key, None)
 
@@ -196,18 +281,10 @@ class MemoryStore(Store):
     ) -> list[str]:
         """Return members with scores in ``[min_score, max_score]``, lowest first."""
         async with self._lock:
-            index = self._indexes.get(key) or {}
-            ordered = sorted(
-                (
-                    (score, member)
-                    for member, score in index.items()
-                    if min_score <= score <= max_score
-                )
-            )
-            members = [member for _score, member in ordered]
-            if limit is None:
-                return members
-            return members[: max(0, int(limit))]
+            index = self._indexes.get(key)
+            if index is None:
+                return []
+            return index.range(min_score=min_score, max_score=max_score, limit=limit)
 
     async def index_card(self, key: str) -> int:
         """Return the number of members in the sorted index at ``key``."""
@@ -220,13 +297,13 @@ class MemoryStore(Store):
     ) -> bool:
         """Add ``member`` when the index has fewer than ``max_card`` members."""
         async with self._lock:
-            index = self._indexes.setdefault(key, {})
+            index = self._indexes.setdefault(key, SortedIndex())
             if member in index:
-                index[member] = float(score)
+                index.add(member, float(score))
                 return True
             if len(index) >= max_card:
                 return False
-            index[member] = float(score)
+            index.add(member, float(score))
             return True
 
     async def increment_if_below(

@@ -22,14 +22,22 @@ from agentconnect.core.identity import (
     issue_membership_attestation,
     verify_identity_proof,
 )
-from agentconnect.team.codec import format_timestamp, parse_timestamp, utc_now
+from agentconnect.team.codec import (
+    format_timestamp,
+    parse_timestamp,
+    timestamp_score,
+    utc_now,
+)
 from agentconnect.team.errors import TeamError
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.ops import (
     Cas,
     DeleteIfVersion,
+    IndexAddIfCardBelow,
     IndexRemove,
+    Insert,
+    SetAdd,
     SetRemove,
     StoreOp,
 )
@@ -85,27 +93,47 @@ async def create_join_challenge(
     team_name: str,
     *,
     ttl_seconds: float,
+    max_outstanding: int,
     now=None,
 ) -> dict[str, str]:
-    """Mint a one-time join challenge and persist it."""
+    """Mint a one-time join challenge and persist it.
+
+    ``max_outstanding`` caps unused challenges. Past that cap this
+    raises ``busy``.
+    """
     instant = now or utc_now()
-    nonce = secrets.token_urlsafe(24)
     expires = instant + timedelta(seconds=float(ttl_seconds))
-    record = {
-        "nonce": nonce,
-        "audience": f"agentconnect:{team_name}",
-        "expires_at": format_timestamp(expires),
-    }
-    await store.put(f"{CHALLENGE_PREFIX}{nonce}", record)
-    await store.set_add(CHALLENGES_SET, nonce)
-    await expiry_mod.schedule(
-        store, expiry_mod.JOIN_CHALLENGES, nonce, record["expires_at"]
-    )
-    return {
-        "nonce": nonce,
-        "audience": record["audience"],
-        "expires_at": record["expires_at"],
-    }
+    expires_at = format_timestamp(expires)
+    while True:
+        nonce = secrets.token_urlsafe(24)
+        record = {
+            "nonce": nonce,
+            "audience": f"agentconnect:{team_name}",
+            "expires_at": expires_at,
+        }
+        applied = await store.apply(
+            [
+                Insert(f"{CHALLENGE_PREFIX}{nonce}", record),
+                SetAdd(CHALLENGES_SET, nonce),
+                IndexAddIfCardBelow(
+                    expiry_mod.JOIN_CHALLENGES,
+                    timestamp_score(expires_at),
+                    nonce,
+                    int(max_outstanding),
+                ),
+            ]
+        )
+        if applied.ok:
+            return {
+                "nonce": nonce,
+                "audience": record["audience"],
+                "expires_at": expires_at,
+            }
+        if applied.reason == "busy":
+            raise TeamError("busy", "too many outstanding join challenges")
+        if applied.reason == "exists":
+            continue
+        raise TeamError("internal", "join challenge failed")
 
 
 async def load_challenge(store: Store, nonce: str) -> Optional[dict[str, Any]]:

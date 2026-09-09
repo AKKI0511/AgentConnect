@@ -5,12 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import agentconnect.team.expiry as expiry_mod
 import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.retention as retention_mod
 import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
 import agentconnect.team.trace as trace_mod
+from agentconnect.team.codec import timestamp_score
 from agentconnect.team.store.base import Store
-from agentconnect.team.store.ops import IncrementIfBelow, Insert, StoreOp
+from agentconnect.team.store.ops import (
+    IncrementIfBelow,
+    IndexAdd,
+    Insert,
+    StoreOp,
+)
 
 
 @dataclass
@@ -28,6 +36,9 @@ class SendCommit:
     ticket: Optional[dict[str, Any]]
     max_depth: int
     max_held_waits: int
+    max_open_tickets: int
+    retained_bytes_limit: int
+    replay_horizon_seconds: float
     thread_limit: int
     wait_ttl: float
     now_ts: str
@@ -55,6 +66,23 @@ class SendConflict(Exception):
         self.message = message
 
 
+async def assemble_send_result(
+    store: Store, message_id: str, record: dict[str, Any]
+) -> Optional[dict[str, Any]]:
+    """Build the public send result from the canonical body and Ticket."""
+    message = await store.get(f"msg:{message_id}")
+    if not isinstance(message, dict):
+        return None
+    collect = record.get("collect")
+    if collect in {"ticket", "wait"}:
+        ticket = await tickets_mod.load_ticket(store, message_id)
+        if ticket is None:
+            return None
+        ticket = await tickets_mod.hydrate_ticket(store, ticket)
+        return {"status": "ticketed", "message": message, "ticket": ticket}
+    return {"status": "accepted", "message": message}
+
+
 async def load_replay(
     store: Store,
     message_id: str,
@@ -71,10 +99,10 @@ async def load_replay(
         raise SendConflict(
             "id_conflict", "Message id is already used with different data"
         )
-    result = existing.get("result")
-    if isinstance(result, dict):
-        return dict(result)
-    return None
+    assembled = existing.get("result")
+    if isinstance(assembled, dict) and isinstance(assembled.get("message"), dict):
+        return dict(assembled)
+    return await assemble_send_result(store, message_id, existing)
 
 
 async def commit_send(store: Store, commit: SendCommit) -> SendAccepted:
@@ -102,9 +130,16 @@ async def commit_send(store: Store, commit: SendCommit) -> SendAccepted:
         if applied.reason == "busy":
             raise SendConflict("busy", "Recipient Mailbox is full")
         if applied.reason == "limit":
+            failed = ops[applied.op_index] if applied.op_index is not None else None
+            key = str(getattr(failed, "key", "") or "")
+            if key.startswith("held_waits:"):
+                raise SendConflict(
+                    "wait_limit",
+                    "this Membership already holds the maximum number of waits",
+                )
             raise SendConflict(
-                "wait_limit",
-                "this Membership already holds the maximum number of waits",
+                "busy",
+                "this Membership already holds the maximum number of open Tickets",
             )
         if applied.reason == "exists":
             failed = ops[applied.op_index] if applied.op_index is not None else None
@@ -141,20 +176,25 @@ async def _plan_send(
                 ttl_seconds=commit.wait_ttl,
             )
         )
+    if commit.ticket is not None:
+        ops.append(
+            IncrementIfBelow(
+                retention_mod.open_ticket_count_key(commit.membership_id),
+                commit.max_open_tickets,
+            )
+        )
 
-    keep_ids = await tickets_mod.retained_message_ids(store)
-    keep_ids.add(commit.message_id)
     thread_id = message.get("thread_id")
+    dropped: list[str] = []
     if isinstance(thread_id, str):
         record = await store.get_record(threads_mod.thread_key(thread_id))
-        _thread, thread_ops, error = threads_mod.prepare_append(
+        thread, thread_ops, error = threads_mod.prepare_append(
             record,
             thread_id=thread_id,
             message=message,
             sender=commit.membership_id,
             recipient=commit.recipient_membership_id,
             max_messages=commit.thread_limit,
-            keep_ids=keep_ids,
             parent_thread_id=commit.parent_thread_id,
         )
         if error == "forbidden":
@@ -163,6 +203,13 @@ async def _plan_send(
             )
         if error == "invalid_request":
             raise SendConflict("invalid_request", "parent_id is not in the same Thread")
+        kept, dropped = await threads_mod.drop_unprotected_ids(
+            store,
+            list(thread.get("message_ids") or []),
+            max_messages=commit.thread_limit,
+            protect={commit.message_id},
+        )
+        thread["message_ids"] = kept
         ops.extend(thread_ops)
 
     if commit.ticket is not None:
@@ -179,14 +226,9 @@ async def _plan_send(
         "membership_id": commit.membership_id,
         "hash": commit.request_hash,
         "collect": commit.collect,
-        "result": result,
     }
-    ops.extend(
-        [
-            Insert(f"send:{commit.message_id}", send_record),
-            Insert(f"msg:{commit.message_id}", message),
-        ]
-    )
+    ops.append(Insert(f"send:{commit.message_id}", send_record))
+    ops.append(Insert(f"msg:{commit.message_id}", message))
     if commit.ticket is not None:
         ops.extend(tickets_mod.insert_ticket_ops(commit.ticket))
     ops.extend(
@@ -198,10 +240,37 @@ async def _plan_send(
         )
     )
 
+    body_ops, freed = await retention_mod.release_body_deletes(
+        store,
+        dropped,
+        ignore=retention_mod.IgnoreOwners(thread=True),
+    )
+    ops.extend(body_ops)
+    added = retention_mod.message_bytes(message)
+    byte_ops = await retention_mod.plan_retained_bytes(
+        store, added - freed, commit.retained_bytes_limit
+    )
+    if byte_ops is None:
+        raise SendConflict("busy", "Team retained storage is full")
+    ops.extend(byte_ops)
+
+    until = retention_mod.replay_until(
+        commit.now_ts, horizon_seconds=commit.replay_horizon_seconds
+    )
+    if commit.ticket is None:
+        ops.append(
+            IndexAdd(
+                expiry_mod.REPLAYS,
+                timestamp_score(until),
+                commit.message_id,
+            )
+        )
+
     events = list(commit.events)
     if events:
         trace_id = str(events[0]["trace_id"])
         trace_record = await store.get_record(trace_mod.trace_key(trace_id))
         ops.extend(trace_mod.append_event_ops(trace_record, events))
+        ops.append(IndexAdd(expiry_mod.TRACES, timestamp_score(until), trace_id))
 
     return ops, result, events

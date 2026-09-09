@@ -16,6 +16,7 @@ from typing import Any, Optional
 from agentconnect.team.codec import json_size
 from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.ops import Cas, Insert, SetAdd, StoreOp
+from agentconnect.team.retention import LIVE_MESSAGES_SET, RETAIN_MESSAGES_SET
 
 THREAD_KEY_PREFIX = "thread:"
 THREADS_SET = "threads"
@@ -118,6 +119,9 @@ def prepare_append(
     or ``invalid_request`` when ``parent_id`` names a Message from
     another Thread and this Thread already exists.
     Mutates ``message['seq']`` when the Message is new.
+    ``max_messages`` and ``keep_ids`` are accepted for callers that trim
+    after this returns. This function does not load retained Message
+    bodies or enumerate Team-wide keep sets.
     """
     existing = None if record is None else dict(record.value)
     if existing is not None:
@@ -137,13 +141,7 @@ def prepare_append(
     allocate_seq(thread, message)
     if message["id"] not in thread["message_ids"]:
         thread["message_ids"].append(message["id"])
-    retained = keep_ids or set()
-    if max_messages is not None:
-        thread["message_ids"] = trim_thread_ids(
-            list(thread["message_ids"] or []),
-            keep_ids=retained,
-            max_messages=max_messages,
-        )
+    del max_messages, keep_ids
     key = thread_key(thread_id)
     if record is None:
         ops: list[StoreOp] = [Insert(key, thread), SetAdd(THREADS_SET, thread_id)]
@@ -167,7 +165,8 @@ async def append_message(
     Compare-and-set on the Thread document assigns ``seq``. Two concurrent
     appends receive distinct values in the order the store accepts them.
     When ``max_messages`` is set, oldest Messages not in ``keep_ids`` are
-    dropped from the transcript on the same write.
+    dropped from the id list on the same write. Bodies are deleted by the
+    caller.
     """
     key = thread_key(thread_id)
     while True:
@@ -220,6 +219,28 @@ def history_window(
     return window, complete
 
 
+def history_ids_before(
+    message_ids: list[str],
+    *,
+    delivered_id: str,
+    limit: int,
+) -> tuple[list[str], bool]:
+    """Return earlier Message ids before ``delivered_id``, capped by ``limit``.
+
+    ``message_ids`` is seq order. No bodies are read.
+    """
+    try:
+        index = message_ids.index(delivered_id)
+        earlier = message_ids[:index]
+    except ValueError:
+        earlier = list(message_ids)
+    complete_count = len(earlier)
+    if limit <= 0:
+        return [], complete_count == 0
+    window = earlier[-limit:]
+    return window, len(window) == complete_count
+
+
 def history_id_window(
     messages: list[dict[str, Any]],
     *,
@@ -231,16 +252,35 @@ def history_id_window(
     Ordered by ``seq``. No byte budget; ids are small.
     """
     ordered = sorted(messages, key=_sort_key)
-    earlier: list[str] = []
-    for message in ordered:
-        if message["id"] == delivered_id:
-            break
-        earlier.append(message["id"])
-    complete_count = len(earlier)
-    if limit <= 0:
-        return [], complete_count == 0
-    window = earlier[-limit:]
-    return window, len(window) == complete_count
+    return history_ids_before(
+        [message["id"] for message in ordered],
+        delivered_id=delivered_id,
+        limit=limit,
+    )
+
+
+def page_history_ids(
+    message_ids: list[str],
+    *,
+    before: Optional[str],
+    limit: int,
+) -> tuple[list[str], bool]:
+    """Return one page of retained ids, oldest of the page first.
+
+    ``message_ids`` is seq order. Omit ``before`` to read the newest page.
+    A ``before`` id that is not in the list returns that newest page.
+    """
+    if before is not None:
+        try:
+            index = message_ids.index(before)
+        except ValueError:
+            index = len(message_ids)
+        older = message_ids[:index]
+    else:
+        older = message_ids
+    page = older[-limit:] if limit else []
+    has_more = (len(older) - len(page)) > 0
+    return page, has_more
 
 
 def page_history(
@@ -257,18 +297,10 @@ def page_history(
     True when older retained Messages remain before this page.
     """
     ordered = sorted(messages, key=_sort_key)
-    if before is not None:
-        index = next((i for i, msg in enumerate(ordered) if msg["id"] == before), None)
-        if index is None:
-            slice_end = len(ordered)
-        else:
-            slice_end = index
-        older = ordered[:slice_end]
-    else:
-        older = ordered
-    page = older[-limit:] if limit else []
-    start = len(older) - len(page)
-    has_more = start > 0
+    ids = [message["id"] for message in ordered]
+    page_ids, has_more = page_history_ids(ids, before=before, limit=limit)
+    by_id = {message["id"]: message for message in ordered}
+    page = [by_id[item] for item in page_ids if item in by_id]
     return page, has_more
 
 
@@ -293,3 +325,33 @@ def trim_thread_ids(
             continue
         kept.append(message_id)
     return kept
+
+
+async def drop_unprotected_ids(
+    store: Store,
+    message_ids: list[str],
+    *,
+    max_messages: int,
+    protect: Optional[set[str]] = None,
+) -> tuple[list[str], list[str]]:
+    """Return ``(kept, dropped)`` without loading the whole retain set.
+
+    Each candidate uses a membership check on live Mailbox work and on
+    ``retain:messages``. Queued or leased ids stay in the Thread.
+    """
+    if max_messages < 0 or len(message_ids) <= max_messages:
+        return list(message_ids), []
+    held = protect or set()
+    kept: list[str] = []
+    dropped: list[str] = []
+    budget = len(message_ids) - max_messages
+    for message_id in message_ids:
+        if budget > 0 and message_id not in held:
+            live = await store.set_is_member(LIVE_MESSAGES_SET, message_id)
+            needed = await store.set_is_member(RETAIN_MESSAGES_SET, message_id)
+            if not live and not needed:
+                dropped.append(message_id)
+                budget -= 1
+                continue
+        kept.append(message_id)
+    return kept, dropped

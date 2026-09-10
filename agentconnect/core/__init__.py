@@ -1,6 +1,12 @@
 """Core nouns: the Python projection of the public schema, plus Address and identity.
 
 This package has no I/O and imports no sibling AgentConnect packages.
+
+Public names here are the schema vocabulary: Message, Ticket, Profile, Skill,
+Address, and the operation request and result types. Identity proofs and
+join JWTs live on :class:`~agentconnect.core.identity.AgentIdentity` and
+``agentconnect.core.identity``. Legacy exception classes stay in
+``agentconnect.core.exceptions`` and are not part of this export list.
 """
 
 from agentconnect.core.address import (
@@ -28,30 +34,7 @@ from agentconnect.core.directory import (
     GetProfileRequest,
 )
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
-from agentconnect.core.exceptions import (
-    AgentError,
-    CapabilityError,
-    CommunicationError,
-    ConfigurationError,
-    RegistrationError,
-    SecurityError,
-)
-from agentconnect.core.identity import (
-    AgentIdentity,
-    MembershipAttestationClaims,
-    VerificationStatus,
-    decode_eddsa_jwt,
-    did_key_from_public_bytes,
-    encode_eddsa_jwt,
-    is_ed25519_did_key,
-    issue_identity_proof,
-    issue_membership_attestation,
-    public_bytes_from_did_key,
-    public_key_pem_from_did,
-    split_jwt,
-    verify_identity_proof,
-    verify_membership_attestation,
-)
+from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.kinds import MessageKind
 from agentconnect.core.message import (
     Delivery,
@@ -163,26 +146,7 @@ __all__ = [
     "GetProfileRequest",
     "DeadlineExceededError",
     "ErrorObject",
-    "AgentError",
-    "CapabilityError",
-    "CommunicationError",
-    "ConfigurationError",
-    "RegistrationError",
-    "SecurityError",
     "AgentIdentity",
-    "MembershipAttestationClaims",
-    "VerificationStatus",
-    "decode_eddsa_jwt",
-    "did_key_from_public_bytes",
-    "encode_eddsa_jwt",
-    "is_ed25519_did_key",
-    "issue_identity_proof",
-    "issue_membership_attestation",
-    "public_bytes_from_did_key",
-    "public_key_pem_from_did",
-    "split_jwt",
-    "verify_identity_proof",
-    "verify_membership_attestation",
     "MessageKind",
     "Delivery",
     "ErrorMessage",

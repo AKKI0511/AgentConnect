@@ -56,9 +56,6 @@ __all__ = [
     "JoinResult",
     "HeartbeatResult",
     "SendBase",
-    "AddressCallbackTarget",
-    "UrlCallbackTarget",
-    "CallbackTarget",
     "RequestSendRequest",
     "EventSendRequest",
     "SendRequest",
@@ -193,7 +190,10 @@ class HeartbeatResult(SchemaModel):
 
 
 class SendBase(SchemaModel):
-    """Fields shared by request and event sends."""
+    """Fields shared by request and event sends.
+
+    ``id`` is Client-generated and becomes the accepted Message id.
+    """
 
     id: Uuid
     recipient: Address
@@ -203,27 +203,12 @@ class SendBase(SchemaModel):
     metadata: Optional[JsonObject] = None
 
 
-class AddressCallbackTarget(SchemaModel):
-    """Callback target that delivers the result as a Message."""
-
-    address: Address
-
-
-class UrlCallbackTarget(SchemaModel):
-    """Callback target that POSTs the result to an HTTPS URL."""
-
-    url: str = Field(min_length=1)
-
-
-CallbackTarget = Union[AddressCallbackTarget, UrlCallbackTarget]
-
-
 class RequestSendRequest(SendBase):
     """Send a request. Always opens a Ticket.
 
-    ``collect`` is required. ``deadline`` may be omitted; the Runtime
-    stamps the effective cutoff on the accepted Message. Fire-and-forget
-    work is :class:`EventSendRequest`.
+    ``collect`` is ``wait`` or ``ticket``. ``deadline`` may be omitted;
+    the Runtime stamps the effective cutoff on the accepted Message.
+    Fire-and-forget work is :class:`EventSendRequest`.
 
         RequestSendRequest(
             id=message_id,
@@ -238,7 +223,6 @@ class RequestSendRequest(SendBase):
     kind: Literal["request"]
     collect: CollectMode
     deadline: Optional[Timestamp] = None
-    callback: Optional[CallbackTarget] = None
 
 
 class EventSendRequest(SendBase):
@@ -387,9 +371,9 @@ class AskToolRequest(SchemaModel):
     """MCP ``ask`` arguments.
 
     Omit ``idempotency_key`` to mint a fresh Message id. Pass a key only
-    when a retry must collapse onto the same Ticket. ``collect="wait"``
-    returns the current Ticket after the Runtime hold, which may still
-    be ``open``.
+    when a retry must collapse onto the same Ticket. ``collect`` is
+    ``wait`` (default) or ``ticket``. ``wait`` returns the current Ticket
+    after the Runtime hold, which may still be ``open``.
     """
 
     recipient: Address
@@ -527,9 +511,8 @@ class ToolErrorResult(SchemaModel):
     error: ErrorObject
 
 
-SEND_RESULT_ADAPTER = TypeAdapter(SendResult)
-REPLY_REQUEST_ADAPTER = TypeAdapter(ReplyRequest)
-CALLBACK_TARGET_ADAPTER = TypeAdapter(CallbackTarget)
+SEND_RESULT_ADAPTER: TypeAdapter[SendResult] = TypeAdapter(SendResult)
+REPLY_REQUEST_ADAPTER: TypeAdapter[ReplyRequest] = TypeAdapter(ReplyRequest)
 
 
 def parse_join_request(data: Any) -> JoinRequest:
@@ -554,16 +537,14 @@ def parse_send_request(data: Any) -> SendRequest:
     if not isinstance(data, Mapping):
         raise ValueError("send body must be an object")
     kind = data.get("kind")
-    if kind == "event":
-        cls: type[SchemaModel] = EventSendRequest
-    elif kind == "request":
-        cls = RequestSendRequest
-    else:
-        raise ValueError("kind must be request or event")
     try:
-        return cls.model_validate(data)
+        if kind == "event":
+            return EventSendRequest.model_validate(data)
+        if kind == "request":
+            return RequestSendRequest.model_validate(data)
     except ValidationError as exc:
         raise ValueError(validation_message(exc)) from exc
+    raise ValueError("kind must be request or event")
 
 
 def parse_send_result(data: Any) -> SendResult:

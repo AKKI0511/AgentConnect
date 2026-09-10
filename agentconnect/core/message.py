@@ -45,10 +45,12 @@ __all__ = [
 class MessageBase(SchemaModel):
     """Fields shared by every accepted Message.
 
-    ``sender_did`` is the verified DID copied from the Session at
-    acceptance. ``seq`` is present exactly when ``thread_id`` is
-    present. History and ``before`` cursors order by ``seq``, not by
-    ``created_at``.
+    ``id`` is Client-proposed on ``send`` and ``reply`` and stored
+    unchanged at acceptance. The Runtime sets canonical Addresses,
+    ``sender_did``, ``created_at``, ``trace_id``, and ``seq`` when
+    ``thread_id`` is present. ``seq`` is present exactly when
+    ``thread_id`` is present. History and ``before`` cursors order by
+    ``seq``, not by ``created_at``.
     """
 
     id: Uuid
@@ -160,20 +162,18 @@ def parse_message(data: Any) -> Message:
     if not isinstance(data, Mapping):
         raise ValueError("message must be an object")
     kind = data.get("kind")
-    if kind == "request":
-        cls: type[SchemaModel] = RequestMessage
-    elif kind == "event":
-        cls = EventMessage
-    elif kind == "response":
-        cls = ResponseMessage
-    elif kind == "error":
-        cls = ErrorMessage
-    else:
-        raise ValueError("kind must be request, event, response, or error")
     try:
-        return cls.model_validate(data)
+        if kind == "request":
+            return RequestMessage.model_validate(data)
+        if kind == "event":
+            return EventMessage.model_validate(data)
+        if kind == "response":
+            return ResponseMessage.model_validate(data)
+        if kind == "error":
+            return ErrorMessage.model_validate(data)
     except ValidationError as exc:
         raise ValueError(validation_message(exc)) from exc
+    raise ValueError("kind must be request, event, response, or error")
 
 
 def parse_delivery(data: Any) -> Delivery:
@@ -194,5 +194,5 @@ def parse_delivery(data: Any) -> Delivery:
         raise ValueError(validation_message(exc)) from exc
 
 
-MESSAGE_ADAPTER = TypeAdapter(Message)
-MAILBOX_MESSAGE_ADAPTER = TypeAdapter(MailboxMessage)
+MESSAGE_ADAPTER: TypeAdapter[Message] = TypeAdapter(Message)
+MAILBOX_MESSAGE_ADAPTER: TypeAdapter[MailboxMessage] = TypeAdapter(MailboxMessage)

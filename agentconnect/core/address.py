@@ -12,8 +12,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Optional, Union
 
-INVALID_ADDRESS = "invalid_address"
-ADDRESS_OUTSIDE_TEAM = "address_outside_team"
+INVALID_ADDRESS: Literal["invalid_address"] = "invalid_address"
+ADDRESS_OUTSIDE_TEAM: Literal["address_outside_team"] = "address_outside_team"
 
 AddressErrorCode = Literal["invalid_address", "address_outside_team"]
 

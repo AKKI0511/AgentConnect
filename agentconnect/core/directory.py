@@ -20,7 +20,11 @@ __all__ = [
 
 
 class DirectoryEntry(SchemaModel):
-    """Full Directory record for one Membership, returned by ``get_profile``."""
+    """Full Directory record for one Membership.
+
+    Runtime ``get_profile`` returns Address, DID, and Profile together.
+    The Client method is :meth:`~agentconnect.agent.base.BaseAgent.get_entry`.
+    """
 
     address: QualifiedAddress
     agent_did: AgentDid

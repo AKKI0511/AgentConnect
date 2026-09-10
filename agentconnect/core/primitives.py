@@ -103,12 +103,11 @@ Tag = Annotated[
 SkillExample = Annotated[str, Field(min_length=1, max_length=500, pattern=r"\S")]
 
 PersistenceMode = Literal["volatile", "durable"]
-CollectMode = Literal["wait", "ticket", "callback", "stream"]
+CollectMode = Literal["wait", "ticket"]
 MembershipKind = Literal["agent", "principal"]
 TicketState = Literal["open", "completed", "failed", "expired", "declined"]
 ErrorCode = Literal[
     "unsupported_version",
-    "unsupported_collect_mode",
     "unauthorized",
     "forbidden",
     "invalid_request",

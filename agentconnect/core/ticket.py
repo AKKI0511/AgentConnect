@@ -24,32 +24,25 @@ __all__ = [
 
 
 class TicketBase(SchemaModel):
-    """Fields shared by every Ticket state."""
+    """Fields shared by every Ticket state.
+
+    Read completion from ``state``. A completed Ticket carries
+    ``response``; a failed or expired Ticket carries ``error``. Do not
+    treat missing content as pending, declined, and failed at once.
+
+    ``trace_id`` is the request Message's causal id, retained so
+    ``get_result`` can feed ``get_trace`` after Session replacement.
+    """
 
     id: Uuid
     requester: QualifiedAddress
     recipient: QualifiedAddress
     thread_id: Optional[Uuid] = None
+    trace_id: Uuid
     created_at: Timestamp
     updated_at: Timestamp
     deadline: Timestamp
     late_reply_count: JsonInt = Field(ge=0)
-
-    @property
-    def content(self) -> JsonValue | None:
-        """Response body when this Ticket is completed, otherwise None.
-
-        Client SDK sugar. Wire dumps use schema fields only.
-        """
-        return None
-
-    @property
-    def trace_id(self) -> str | None:
-        """Causal id of the request that opened this Ticket.
-
-        Set on Tickets returned by ``ask``. ``get_result`` does not stamp it.
-        """
-        return getattr(self, "_client_trace_id", None)
 
 
 class OpenTicket(TicketBase):
@@ -66,7 +59,7 @@ class CompletedTicket(TicketBase):
 
     @property
     def content(self) -> JsonValue:
-        """The response body."""
+        """The response body. Present only on a completed Ticket."""
         return self.response.content
 
 
@@ -95,7 +88,7 @@ Ticket = Annotated[
     Field(discriminator="state"),
 ]
 
-TICKET_ADAPTER = TypeAdapter(Ticket)
+TICKET_ADAPTER: TypeAdapter[Ticket] = TypeAdapter(Ticket)
 
 
 def parse_ticket(data: Any) -> Ticket:

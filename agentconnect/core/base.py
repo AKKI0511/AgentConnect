@@ -25,11 +25,11 @@ from pydantic import (
 )
 from typing_extensions import Annotated, TypeAliasType
 
-JsonValue = TypeAliasType(
+JsonValue = TypeAliasType(  # type: ignore[misc]
     "JsonValue",
-    Union[str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]],
+    Union[str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]],  # type: ignore[misc]
 )
-JsonObject = dict[str, JsonValue]
+JsonObject = dict[str, JsonValue]  # type: ignore[misc]
 
 TSchema = TypeVar("TSchema", bound="SchemaModel")
 

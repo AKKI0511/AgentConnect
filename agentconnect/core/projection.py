@@ -29,9 +29,7 @@ from agentconnect.core.message import (
 )
 from agentconnect.core.operations import (
     AcceptedSendResult,
-    AddressCallbackTarget,
     AskToolRequest,
-    CallbackTarget,
     CompleteRequest,
     CompleteResult,
     EventSendRequest,
@@ -68,7 +66,6 @@ from agentconnect.core.operations import (
     ToolErrorResult,
     TraceEvent,
     TraceResult,
-    UrlCallbackTarget,
 )
 from agentconnect.core.primitives import (
     Address,
@@ -145,7 +142,6 @@ PUBLIC_SCHEMA_TYPES: dict[str, Any] = {
     "RuntimeLimits": RuntimeLimits,
     "JoinResult": JoinResult,
     "HeartbeatResult": HeartbeatResult,
-    "CallbackTarget": CallbackTarget,
     "RequestSendRequest": RequestSendRequest,
     "EventSendRequest": EventSendRequest,
     "SendRequest": SendRequest,
@@ -187,6 +183,3 @@ PUBLIC_SCHEMA_TYPES: dict[str, Any] = {
 
 # Present in schema.json as a generation root, not an exchanged object.
 SCHEMA_WRAPPER_NAME = "AgentConnectPublicSchema"
-
-# Union members that exist only as Python classes for CallbackTarget.
-CALLBACK_TARGET_VARIANTS = (AddressCallbackTarget, UrlCallbackTarget)

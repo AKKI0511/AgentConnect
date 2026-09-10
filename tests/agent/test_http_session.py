@@ -161,7 +161,7 @@ async def test_http_long_running_wait_returns_open_then_completes():
 
     class AgentB(BaseAgent):
         async def handle(self, message, ctx):
-            handle = ctx.ticket()
+            handle = ctx.defer()
             inner = await ctx.ask("agent-c", "go", collect="wait")
             while inner.state == "open":
                 await asyncio.sleep(0.05)

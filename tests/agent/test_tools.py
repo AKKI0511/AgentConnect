@@ -99,7 +99,7 @@ async def test_team_tools_find_then_ask_without_hardcoded_address():
 async def test_team_tools_collect_ticket_returns_json_without_content_sugar():
     class Hold(BaseAgent):
         async def handle(self, message, ctx) -> Any:
-            ctx.ticket()
+            ctx.defer()
             return None
 
     team = await Team("content-squad").start()
@@ -210,7 +210,7 @@ async def test_team_tools_keyed_tell_conflict_is_visible():
 async def test_team_tools_wait_hold_can_return_open_ticket():
     class Hold(BaseAgent):
         async def handle(self, message, ctx) -> Any:
-            ctx.ticket()
+            ctx.defer()
             return None
 
     team = await Team("content-squad", wait_hold_seconds=0.05).start()

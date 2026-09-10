@@ -118,7 +118,7 @@ async def test_ctx_ask_inherits_parent_thread_and_deadline():
             seen["writer_thread"] = message.thread_id
             inner = await ctx.ask("editor", "tighten", collect="wait")
             if inner.state != "completed":
-                ctx.ticket()
+                ctx.defer()
                 return None
             return inner.content
 
@@ -240,7 +240,7 @@ async def test_cycle_at_concurrency_one_expires_by_deadline():
             nested = await ctx.ask(self.peer, "pong", collect="wait")
             if nested.state == "completed":
                 return nested.content
-            ctx.ticket()
+            ctx.defer()
             return None
 
     agent_a = Cycle("agent-b", name="agent-a")
@@ -338,7 +338,7 @@ async def test_saved_context_ask_keeps_delivery_parent():
     class Writer(EchoAgent):
         async def handle(self, message, ctx):
             seen["writer_id"] = message.id
-            handle = ctx.ticket()
+            handle = ctx.defer()
             asyncio.create_task(self._later(ctx, handle))
             return None
 
@@ -535,7 +535,7 @@ async def test_long_running_wait_returns_open_then_completes():
 
     class AgentB(BaseAgent):
         async def handle(self, message, ctx):
-            handle = ctx.ticket()
+            handle = ctx.defer()
             inner = await ctx.ask("agent-c", "go", collect="wait")
             while inner.state == "open":
                 await asyncio.sleep(0.05)
@@ -665,7 +665,7 @@ async def test_third_delivery_waits_for_deferred_and_unwinding_slots():
         async def handle(self, message, ctx):
             self.seen.append(message.content)
             if message.content == "defer":
-                self.deferred = ctx.ticket()
+                self.deferred = ctx.defer()
                 return None
             if message.content == "slow":
                 self.slow_started.set()
@@ -760,7 +760,7 @@ async def test_handler_reconnect_does_not_await_itself():
             if message.content != "go":
                 return {"echo": message.content}
             if self.asked:
-                ctx.ticket()
+                ctx.defer()
                 return None
             self.asked = True
             inner = await ctx.ask("echo", "ping", collect="wait")

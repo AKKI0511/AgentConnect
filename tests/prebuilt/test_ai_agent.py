@@ -61,7 +61,7 @@ async def test_aiagent_chat_keeps_conversation_history():
 
 
 @pytest.mark.asyncio
-async def test_aiagent_process_message_reads_ctx_history():
+async def test_aiagent_handle_reads_ctx_history():
     recorded: list[list[dict[str, Any]]] = []
     turns = [text_turn("first reply"), text_turn("second reply")]
 
@@ -82,8 +82,10 @@ async def test_aiagent_process_message_reads_ctx_history():
         thread_id = "11111111-1111-1111-1111-111111111111"
         first = await asker.ask("researcher", "one", thread_id=thread_id)
         second = await asker.ask("researcher", "two", thread_id=thread_id)
-        assert first.content == "first reply"
-        assert second.content == "second reply"
+        assert first.state == "completed"
+        assert first.response.content == "first reply"
+        assert second.state == "completed"
+        assert second.response.content == "second reply"
         assert len(recorded) == 2
         second_contents = [str(item.get("content")) for item in recorded[1]]
         assert any("one" in content for content in second_contents)
@@ -108,7 +110,7 @@ async def test_aiagent_team_tools_find_without_hardcoded_address():
     try:
         result = await writer.ask("researcher", "who can draft?")
         assert result.state == "completed"
-        assert "writer" in str(result.content)
+        assert "writer" in str(result.response.content)
     finally:
         await researcher.leave()
         await writer.leave()

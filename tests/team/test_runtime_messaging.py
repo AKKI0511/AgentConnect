@@ -34,6 +34,8 @@ async def test_send_idempotent_replay_returns_same_message(team: Team):
     assert first["message"]["id"] == second["message"]["id"]
     assert first["message"]["created_at"] == second["message"]["created_at"]
     assert first["message"]["sender_did"] == second["message"]["sender_did"]
+    assert first["ticket"]["trace_id"] == first["message"]["trace_id"]
+    assert second["ticket"]["trace_id"] == first["ticket"]["trace_id"]
     leased = await team.lease(writer["session_token"], max_items=10)
     assert len(leased["deliveries"]) == 1
 
@@ -108,7 +110,7 @@ async def test_payload_too_large_mailbox_stays_empty():
 
 
 @pytest.mark.asyncio
-async def test_unsupported_collect_mode_creates_nothing(team: Team):
+async def test_unknown_collect_creates_nothing(team: Team):
     writer = await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
     with pytest.raises(TeamError) as exc:
@@ -123,7 +125,7 @@ async def test_unsupported_collect_mode_creates_nothing(team: Team):
                 "deadline": deadline(10),
             },
         )
-    assert exc.value.code == "unsupported_collect_mode"
+    assert exc.value.code == "invalid_request"
     assert (await team.lease(writer["session_token"]))["deliveries"] == []
 
 
@@ -804,7 +806,7 @@ async def test_open_ticket_survives_short_terminal_retention():
 
 
 @pytest.mark.asyncio
-async def test_callback_collect_is_unsupported(team: Team):
+async def test_callback_collect_is_invalid(team: Team):
     await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
     with pytest.raises(TeamError) as exc:
@@ -819,7 +821,7 @@ async def test_callback_collect_is_unsupported(team: Team):
                 "deadline": deadline(10),
             },
         )
-    assert exc.value.code == "unsupported_collect_mode"
+    assert exc.value.code == "invalid_request"
 
 
 @pytest.mark.asyncio

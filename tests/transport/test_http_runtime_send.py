@@ -49,6 +49,7 @@ def _send_result() -> dict[str, Any]:
             "updated_at": _TS,
             "deadline": "2026-08-18T15:10:00Z",
             "late_reply_count": 0,
+            "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
         },
     }
 

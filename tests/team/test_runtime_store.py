@@ -8,8 +8,8 @@ import uuid
 import pytest
 import pytest_asyncio
 
-from agentconnect.team import RedisStore, Team
-from agentconnect.team.store import Cas, Insert
+from agentconnect.team import Team
+from agentconnect.team.store import Cas, Insert, RedisStore
 from tests.team.conftest import deadline, join_member, profile, make_did
 
 

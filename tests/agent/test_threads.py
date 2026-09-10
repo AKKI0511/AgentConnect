@@ -84,7 +84,7 @@ async def test_threaded_ask_exposes_history_and_paging(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_unsupported_collect_fails_loudly(team: Team):
+async def test_unknown_collect_is_invalid(team: Team):
     writer = EchoAgent(name="writer")
     researcher = EchoAgent(name="researcher")
     await writer.join(team)
@@ -97,7 +97,7 @@ async def test_unsupported_collect_fails_loudly(team: Team):
                 deadline_seconds=5,
                 collect="stream",
             )
-        assert exc.value.code == "unsupported_collect_mode"
+        assert exc.value.code == "invalid_request"
     finally:
         await writer.leave()
         await researcher.leave()

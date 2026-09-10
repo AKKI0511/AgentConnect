@@ -310,6 +310,7 @@ def test_dump_public_omits_ticket_content_sugar():
         updated_at=_TIMESTAMP,
         deadline=_TIMESTAMP,
         late_reply_count=0,
+        trace_id=_UUID,
         state="completed",
         response=ResponseMessage(
             id=_UUID,
@@ -326,6 +327,7 @@ def test_dump_public_omits_ticket_content_sugar():
     dumped = dump_public(ticket)
     assert ticket.content == "hello"
     assert "content" not in dumped
+    assert dumped["trace_id"] == _UUID
     assert dumped["response"]["content"] == "hello"
 
 

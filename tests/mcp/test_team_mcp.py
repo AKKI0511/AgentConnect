@@ -220,7 +220,7 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
 async def test_ask_collect_ticket_returns_open_without_waiting():
     class Hold(BaseAgent):
         async def handle(self, message, ctx) -> Any:
-            ctx.ticket()
+            ctx.defer()
             return None
 
     team = await Team("content-squad").start()
@@ -344,7 +344,7 @@ async def test_keyed_tell_conflict_is_not_success():
 async def test_ask_wait_hold_can_return_open_ticket():
     class Hold(BaseAgent):
         async def handle(self, message, ctx) -> Any:
-            ctx.ticket()
+            ctx.defer()
             return None
 
     team = await Team("content-squad", wait_hold_seconds=0.05).start()

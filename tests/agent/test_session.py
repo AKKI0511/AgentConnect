@@ -76,7 +76,7 @@ async def test_join_retries_until_team_starts():
 
 
 @pytest.mark.asyncio
-async def test_find_and_get_profile(team: Team):
+async def test_find_and_get_entry(team: Team):
     writer = EchoAgent(
         name="writer",
         profile={
@@ -98,7 +98,7 @@ async def test_find_and_get_profile(team: Team):
         addresses = [match.address for match in found.matches]
         assert "writer@content-squad" in addresses
         assert "researcher@content-squad" not in addresses
-        entry = await researcher.get_profile("writer")
+        entry = await researcher.get_entry("writer")
         assert entry.address == "writer@content-squad"
         assert entry.profile.skills[0].name == "drafting"
     finally:

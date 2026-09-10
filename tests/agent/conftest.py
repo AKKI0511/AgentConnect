@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest_asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.agent.context import DeferredReply
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
 class EchoAgent(BaseAgent):
     """Replies to reply-expected requests by echoing ``content``."""
 
-    async def handle(self, message, ctx) -> Any:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> JsonValue | None:
         if message.kind == "request" and getattr(message, "deadline", None):
             return {"echo": message.content}
         return None
@@ -22,14 +23,14 @@ class EchoAgent(BaseAgent):
 class DeclineAgent(BaseAgent):
     """Reads every Delivery and answers nothing."""
 
-    async def handle(self, message, ctx) -> None:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> None:
         return None
 
 
 class BoomAgent(BaseAgent):
     """Raises on every Delivery."""
 
-    async def handle(self, message, ctx) -> None:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> None:
         raise RuntimeError("handler exploded")
 
 
@@ -38,12 +39,12 @@ class DeferredAgent(BaseAgent):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.ticket_handle = None
-        self.seen = None
+        self.ticket_handle: DeferredReply | None = None
+        self.seen: MailboxMessage | None = None
 
-    async def handle(self, message, ctx):
+    async def handle(self, message: MailboxMessage, ctx: Context) -> JsonValue | None:
         self.seen = message
-        self.ticket_handle = ctx.ticket()
+        self.ticket_handle = ctx.defer()
         return None
 
 

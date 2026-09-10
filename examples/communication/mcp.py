@@ -17,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
@@ -35,7 +37,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."

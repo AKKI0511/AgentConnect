@@ -39,6 +39,7 @@ from agentconnect.core.operations import (
     GetResultRequest,
     TellToolRequest,
 )
+from agentconnect.core.primitives import CollectMode
 from agentconnect.mcp.actions import (
     TeamRuntime,
     ask_action,
@@ -239,7 +240,7 @@ def create_team_mcp(
         recipient: str,
         content: Any,
         deadline_seconds: Optional[int] = None,
-        collect: str = "wait",
+        collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:

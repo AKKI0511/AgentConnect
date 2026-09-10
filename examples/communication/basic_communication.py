@@ -12,25 +12,26 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill
+from agentconnect.core.base import JsonValue
 from agentconnect.team import Team
 
 
 class Writer(BaseAgent):
     """Turns a request into a short draft and returns it."""
 
-    profile = {
-        "summary": "Writes short drafts from notes.",
-        "skills": [
-            {
-                "name": "drafting",
-                "description": "Turn research notes into a two-paragraph draft.",
-            }
+    profile = AgentProfile(
+        summary="Writes short drafts from notes.",
+        skills=[
+            Skill(
+                name="drafting",
+                description="Turn research notes into a two-paragraph draft.",
+            )
         ],
-        "tags": ["writing"],
-    }
+        tags=["writing"],
+    )
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         task = msg.content
@@ -40,7 +41,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Asks a teammate to draft, then prints the Ticket."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return None
 
 
@@ -65,7 +66,7 @@ async def main() -> None:
         )
         print(f"ticket state: {ticket.state}")
         if ticket.state == "completed":
-            print(f"response: {ticket.content}")
+            print(f"response: {ticket.response.content}")
 
         operator = await team.ensure_operator_session()
         snapshot = await team.status(operator)

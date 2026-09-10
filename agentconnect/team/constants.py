@@ -51,8 +51,7 @@ SWEEP_INTERVAL_SECONDS = 0.5
 DEFAULT_JOIN_CHALLENGE_TTL_SECONDS = 60
 DEFAULT_JOIN_TOKEN_TTL_SECONDS = 3600
 
-COLLECT_IMPLEMENTED = frozenset({"wait", "ticket"})
-COLLECT_NAMED = frozenset({"wait", "ticket", "callback", "stream"})
+COLLECT_MODES = frozenset({"wait", "ticket"})
 MESSAGE_KINDS_SEND = frozenset({"request", "event"})
 TICKET_TERMINAL = frozenset({"completed", "failed", "expired", "declined"})
 

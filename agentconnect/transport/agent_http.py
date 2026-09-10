@@ -50,7 +50,6 @@ _HTTP_ERROR_STATUS = {
     413: "payload_too_large",
     429: "busy",
     500: "internal",
-    501: "unsupported_collect_mode",
     503: "unavailable",
 }
 

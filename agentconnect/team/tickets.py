@@ -52,6 +52,7 @@ def new_open_ticket(
     deadline: str,
     requester_membership_id: str,
     recipient_membership_id: str,
+    trace_id: str,
     thread_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build an open Ticket whose id is the request Message id."""
@@ -64,6 +65,7 @@ def new_open_ticket(
         "updated_at": created_at,
         "deadline": deadline,
         "late_reply_count": 0,
+        "trace_id": trace_id,
         "requester_membership_id": requester_membership_id,
         "recipient_membership_id": recipient_membership_id,
     }

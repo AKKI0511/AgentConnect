@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 
 
 class Writer(BaseAgent):
@@ -26,7 +26,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx) -> Any:
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         """Reply to a request with a draft line."""
         if msg.kind != "request":
             return None

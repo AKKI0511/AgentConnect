@@ -13,15 +13,16 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect import BaseAgent, Context, MailboxMessage
+from agentconnect.core.base import JsonValue
 from agentconnect.team import Team
 
 
 class Echo(BaseAgent):
     """Returns whatever ``content`` arrived on a reply-expected request."""
 
-    async def handle(self, msg, ctx):
-        if msg.kind == "request" and getattr(msg, "deadline", None):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
+        if msg.kind == "request":
             return {"echo": msg.content}
         return None
 
@@ -41,7 +42,7 @@ async def main() -> None:
         result = await researcher.ask("writer", "ping", deadline_seconds=10)
         print(f"first ask: {result.state}")
         if result.state == "completed":
-            print(result.content)
+            print(result.response.content)
 
         await writer.leave()
         print("writer left; membership remains, mailbox still accepts mail")
@@ -60,7 +61,7 @@ async def main() -> None:
             await asyncio.sleep(0.1)
         print(f"after writer rejoined: {ticket.state}")
         if ticket.state == "completed":
-            print(ticket.content)
+            print(ticket.response.content)
 
         extra = Echo(name="editor")
         await extra.join(url)

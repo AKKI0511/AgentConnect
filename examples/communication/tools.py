@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
@@ -31,7 +33,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."
@@ -55,7 +57,7 @@ class Coordinator(BaseAgent):
         super().__init__(name=name)
         self.tools = self.team_tools()
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         found = await self.tools.find(query=str(msg.content))
         peer = found["matches"][0]["address"]
         ticket = await self.tools.ask(
@@ -64,7 +66,7 @@ class Coordinator(BaseAgent):
         )
         if ticket["state"] == "completed":
             return ticket["response"]["content"]
-        ctx.ticket()
+        ctx.defer()
         return None
 
 

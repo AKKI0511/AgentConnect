@@ -1,16 +1,16 @@
-.PHONY: install install-core install-dev install-demo lint format test clean build publish all install-hooks hooks docs docs-clean docs-html docs-coverage
+.PHONY: install install-core install-dev install-demo lint format test typecheck clean build publish all install-hooks hooks docs docs-clean docs-html docs-coverage
 
 install-core:
 	poetry install
 
 install-dev:
-	poetry install --with dev --extras "aiagent telegram payments cli embeddings index"
+	poetry install --with dev --extras "aiagent telegram payments cli embeddings index redis serve"
 
 install-demo:
-	poetry install --with demo --extras "aiagent telegram payments cli embeddings index"
+	poetry install --with demo --extras "aiagent telegram payments cli embeddings index redis serve"
 
 install-all:
-	poetry install --with dev,demo,research --extras "aiagent telegram payments cli embeddings index"
+	poetry install --with dev,demo,research --extras "aiagent telegram payments cli embeddings index redis serve"
 
 install-docs:
 	poetry install --with docs
@@ -29,6 +29,9 @@ lint:
 
 format:
 	poetry run black agentconnect/ demos/
+
+typecheck:
+	poetry run mypy
 
 test:
 	poetry run pytest tests/ -q

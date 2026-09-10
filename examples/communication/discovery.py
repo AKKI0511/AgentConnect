@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
@@ -31,7 +33,7 @@ class Reviewer(BaseAgent):
         "tags": ["legal", "contracts"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return "Reviewed. Flag the indemnity cap and the missing termination clause."
 
 
@@ -49,7 +51,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return f"Draft complete for {msg.content!r}."
 
 
@@ -67,7 +69,7 @@ class Researcher(BaseAgent):
         "tags": ["research"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return None
 
 
@@ -95,7 +97,7 @@ async def main() -> None:
         print(f"asked: {recipient}")
         print(f"ticket state: {ticket.state}")
         if ticket.state == "completed":
-            print(f"reply: {ticket.content}")
+            print(f"reply: {ticket.response.content}")
     finally:
         await researcher.leave()
         await writer.leave()

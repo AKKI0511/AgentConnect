@@ -125,7 +125,13 @@ class RedisStore(Store):
     async def _client(self):
         if self._redis is not None:
             return self._redis
-        from redis.asyncio import Redis
+        try:
+            from redis.asyncio import Redis
+        except ImportError as exc:
+            raise ImportError(
+                "Redis store requires the redis extra. "
+                "Install with: pip install 'agentconnect[redis]'"
+            ) from exc
 
         self._redis = Redis.from_url(self._url, decode_responses=True)
         self._cas = self._redis.register_script(_CAS_LUA)

@@ -1,49 +1,57 @@
 """
-AgentConnect - A decentralized framework for autonomous agent collaboration.
+AgentConnect is a runtime for Teams of independent AI agents.
 
-This package provides tools for creating, managing, and connecting independent AI agents
-capable of dynamic discovery and secure, autonomous communication across distributed networks.
+Install the embedded core, then add extras for serving, Redis, CLI, MCP,
+and model helpers:
 
-Key components:
+    pip install agentconnect
+    pip install 'agentconnect[serve]'
+    pip install 'agentconnect[aiagent]'
 
-- **core**: nouns with no I/O (Message, Address, identity, Profile, kinds)
-- **agent**: client SDK (`BaseAgent`)
-- **team**: runtime, tickets, and directory
-- **transport**: in-process and HTTP delivery
-- **mcp**: team tool surface
-- **gateway**: inbound work from outside the process
-- **index**: optional published-directory service and client
-- **prebuilt**: optional helpers (``AIAgent``, ``HumanAgent``, Telegram) behind extras
+    from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill, Team
 
-Key differentiators:
+    class Writer(BaseAgent):
+        profile = AgentProfile(
+            summary="Writes short drafts from notes.",
+            skills=[
+                Skill(
+                    name="drafting",
+                    description="Turn notes into a two-paragraph draft.",
+                )
+            ],
+        )
 
-- **Decentralized Architecture**: Agents operate as independent, autonomous peers rather than in a hierarchy
-- **Dynamic Discovery**: Agents find each other based on capabilities, not pre-defined connections
-- **Independent Operation**: Each agent can have its own internal multi-agent system
-- **Secure Communication**: Built-in cryptographic message signing and verification
-- **Horizontal Scalability**: Designed for thousands of independent, collaborating agents
+        async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+            if msg.kind != "request":
+                return None
+            return f"Draft complete for {msg.content!r}."
 
-For detailed usage examples, see the README.md or visit the documentation.
+    team = await Team("content-squad").start()
+    await Writer(name="writer").join(team)
 """
 
 from importlib import metadata
+from typing import TYPE_CHECKING, Any
 
 try:
     __version__ = metadata.version(__package__)
 except metadata.PackageNotFoundError:  # running from source without install
     __version__ = "0"
 
-# Only the version is exported by default; names below load on attribute access.
+# Only the version is imported by default; names below load on attribute access.
 __all__ = [
     "__version__",
-    "BaseAgent",
-    "Context",
-    "Message",
-    "SessionError",
-    "Team",
-    "TeamError",
     "AgentIdentity",
     "AgentProfile",
+    "BaseAgent",
+    "Context",
+    "MailboxMessage",
+    "Message",
+    "SessionError",
+    "Skill",
+    "Team",
+    "TeamError",
+    "Ticket",
 ]
 
 import logging
@@ -52,19 +60,33 @@ import logging
 # and ensure the library never emits logs unless the application configures logging.
 logging.getLogger("agentconnect").addHandler(logging.NullHandler())
 
+if TYPE_CHECKING:
+    from agentconnect.agent.base import BaseAgent
+    from agentconnect.agent.context import Context
+    from agentconnect.agent.errors import SessionError
+    from agentconnect.core.identity import AgentIdentity
+    from agentconnect.core.message import MailboxMessage, Message
+    from agentconnect.core.profile import AgentProfile, Skill
+    from agentconnect.core.ticket import Ticket
+    from agentconnect.team.errors import TeamError
+    from agentconnect.team.runtime import Team
+
 _LAZY_EXPORTS = {
     "BaseAgent": ("agentconnect.agent.base", "BaseAgent"),
     "Context": ("agentconnect.agent.context", "Context"),
+    "MailboxMessage": ("agentconnect.core.message", "MailboxMessage"),
     "Message": ("agentconnect.core.message", "Message"),
     "SessionError": ("agentconnect.agent.errors", "SessionError"),
     "Team": ("agentconnect.team.runtime", "Team"),
     "TeamError": ("agentconnect.team.errors", "TeamError"),
     "AgentIdentity": ("agentconnect.core.identity", "AgentIdentity"),
     "AgentProfile": ("agentconnect.core.profile", "AgentProfile"),
+    "Skill": ("agentconnect.core.profile", "Skill"),
+    "Ticket": ("agentconnect.core.ticket", "Ticket"),
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Load Team and Agent types without importing the whole package tree."""
     target = _LAZY_EXPORTS.get(name)
     if target is None:
@@ -73,3 +95,7 @@ def __getattr__(name: str):
     from importlib import import_module
 
     return getattr(import_module(module_name), attr)
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

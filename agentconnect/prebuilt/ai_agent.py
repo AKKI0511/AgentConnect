@@ -51,7 +51,8 @@ from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.identity import AgentIdentity
-from agentconnect.core.message import Message
+from agentconnect.core.message import MailboxMessage
+from agentconnect.core.profile import AgentProfile
 from agentconnect.prebuilt.loop import (
     CompletionFn,
     DEFAULT_MAX_ROUNDS,
@@ -90,7 +91,7 @@ class AIAgent(BaseAgent):
         name: str,
         *,
         model: str,
-        profile: Any = None,
+        profile: AgentProfile | Mapping[str, Any] | None = None,
         identity: Optional[AgentIdentity] = None,
         instructions: str = (
             "You are a helpful teammate. Use tools when they help you do the work."
@@ -144,18 +145,17 @@ class AIAgent(BaseAgent):
         self._complete: CompletionFn = complete or _litellm_complete
         self._chats: dict[str, list[dict[str, Any]]] = {}
 
-    async def handle(self, message: Message, ctx: Optional[Context] = None) -> Any:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> str:
         """Answer one Delivery with the model loop.
 
         Thread history comes from ``ctx.history``. Team tools attach when a
         Session exists and ``include_team_tools`` is True.
         """
-        history = ctx.history if ctx is not None else []
         address = self.address
         user_text = _message_text(message)
         return await self.complete(
             user_text,
-            history=history,
+            history=ctx.history,
             current=message,
             include_team_tools=self.include_team_tools,
             self_address=address,

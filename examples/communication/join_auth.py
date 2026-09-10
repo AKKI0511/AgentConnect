@@ -22,14 +22,16 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
 class Echo(BaseAgent):
     """Returns whatever ``content`` arrived on a reply-expected request."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind == "request" and getattr(msg, "deadline", None):
             return {"echo": msg.content}
         return None

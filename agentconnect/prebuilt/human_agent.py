@@ -19,12 +19,14 @@ incoming work and reads a reply from stdin. It needs the ``cli`` extra
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, Optional
+from collections.abc import Awaitable, Callable
+from typing import Optional
 
 from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context
+from agentconnect.core.base import JsonValue
 from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.message import MailboxMessage
 
 _EXIT = frozenset({"exit", "quit", "bye"})
 
@@ -75,20 +77,14 @@ class HumanAgent(BaseAgent):
         self.prompt = prompt
         self._read_line = read_line or _ainput
 
-    async def handle(self, message: Any, ctx: Optional[Context] = None) -> Any:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> JsonValue:
         """Print the Delivery and wait for a typed reply.
 
         Empty input declines a request. ``exit``, ``quit``, or ``bye`` also
         declines.
         """
-        sender = getattr(message, "sender", None)
-        if sender is None and isinstance(message, Mapping):
-            sender = message.get("sender")
-        content = getattr(message, "content", None)
-        if content is None and isinstance(message, Mapping):
-            content = message.get("content")
-        sender = sender or "teammate"
-        print(f"{sender}: {content}")
+        sender = message.sender or "teammate"
+        print(f"{sender}: {message.content}")
         print("-" * 40)
         try:
             typed = await self._read_line(self.prompt)
@@ -118,7 +114,10 @@ class HumanAgent(BaseAgent):
             if text.lower() in _EXIT:
                 return
             ticket = await self.ask(recipient, text)
-            print(f"{recipient}: {ticket.content}")
+            if ticket.state == "completed":
+                print(f"{recipient}: {ticket.response.content}")
+            else:
+                print(f"{recipient}: {ticket.state}")
             print("-" * 40)
 
 

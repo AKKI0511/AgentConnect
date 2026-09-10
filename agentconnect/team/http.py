@@ -54,7 +54,6 @@ _STATUS = {
     "busy": 429,
     "wait_limit": 429,
     "internal": 500,
-    "unsupported_collect_mode": 501,
     "unavailable": 503,
 }
 

@@ -8,6 +8,12 @@ poetry install
 poetry run python examples/communication/basic_communication.py
 ```
 
+HTTP, MCP, and join-auth examples need the ``serve`` extra. The model-backed
+example needs ``aiagent``::
+
+    poetry install --extras "serve aiagent"
+
+
 `basic_communication.py` starts an embedded Team and two Agents in one process.
 After they talk, it prints ``status`` so you can see which members are online.
 
@@ -89,6 +95,6 @@ From ``examples/communication/hosted_team``::
 
 
 A handler can return a value (reply), return nothing (decline a request, or
-finish an event), raise (fail the request), or call ``ctx.ticket()`` and answer
+finish an event), raise (fail the request), or call ``ctx.defer()`` and answer
 later. ``join`` retries while the Team is coming up and reconnects if the Team
 restarts.

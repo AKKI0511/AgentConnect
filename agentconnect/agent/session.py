@@ -12,17 +12,17 @@ copy's Session. Two copies must not share an ``instance_id``.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.directory import DirectoryEntry, FindResult
+from agentconnect.core.identity import issue_identity_proof
 from agentconnect.core.message import Delivery, parse_delivery
 from agentconnect.core.operations import (
     AcceptedSendResult,
@@ -36,7 +36,7 @@ from agentconnect.core.operations import (
     parse_lease_result,
     parse_send_result,
 )
-from agentconnect.core.primitives import DeliveryHistoryForm
+from agentconnect.core.primitives import CollectMode, DeliveryHistoryForm
 from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.ticket import Ticket, parse_ticket
 from agentconnect.transport.agent_http import HttpRuntimeTransport
@@ -63,7 +63,6 @@ _NO_RECONNECT_CODES = frozenset(
         "forbidden",
         "not_found",
         "payload_too_large",
-        "unsupported_collect_mode",
         "unsupported_version",
         "name_conflict",
         "lease_expired",
@@ -71,7 +70,6 @@ _NO_RECONNECT_CODES = frozenset(
     }
 )
 _DEFAULT_RECOVERY_SECONDS = 30.0
-CollectMode = Literal["wait", "ticket", "callback", "stream"]
 _handling: ContextVar[Optional[tuple[Any, Delivery]]] = ContextVar(
     "agentconnect_handling", default=None
 )
@@ -242,6 +240,8 @@ class Session:
             await session.ask("writer", "outline this", thread_id=thread_id)
             await session.ask("writer", "expand section 2", thread_id=thread_id)
         """
+        if collect not in ("wait", "ticket"):
+            raise SessionError("invalid_request", "collect must be wait or ticket")
         thread_id, parent_id, deadline_value = self._child_send_fields(
             recipient,
             thread_id=thread_id,
@@ -268,9 +268,7 @@ class Session:
         result = parse_send_result(await self._call("send", self._token(), body))
         if not isinstance(result, TicketedSendResult):
             raise SessionError("internal", "request send did not return a Ticket")
-        ticket = result.ticket
-        object.__setattr__(ticket, "_client_trace_id", result.message.trace_id)
-        return ticket
+        return result.ticket
 
     async def tell(
         self,
@@ -330,14 +328,18 @@ class Session:
             )
         )
 
-    async def get_profile(self, address: str) -> DirectoryEntry:
-        """Return one Directory entry."""
+    async def get_entry(self, address: str) -> DirectoryEntry:
+        """Return one Directory entry (Address, DID, and Profile)."""
         return DirectoryEntry.model_validate(
             await self._call("get_profile", self._token(), address)
         )
 
     async def get_result(self, ticket_id: str) -> Ticket:
-        """Return the current Ticket owned by this Membership."""
+        """Return the current Ticket owned by this Membership.
+
+        The Ticket includes the request ``trace_id``, so a later Session
+        can still call ``get_trace`` after leave and rejoin.
+        """
         return parse_ticket(await self._call("get_result", self._token(), ticket_id))
 
     async def get_history(
@@ -362,7 +364,9 @@ class Session:
             )
         )
 
-    async def complete_delivery(self, delivery: Mapping[str, Any]) -> dict[str, Any]:
+    async def complete_delivery(
+        self, delivery: Delivery | Mapping[str, Any]
+    ) -> dict[str, Any]:
         """Finish a Delivery without a response Message."""
         lease_id = _lease_id_of(delivery)
         try:
@@ -376,7 +380,7 @@ class Session:
 
     async def reply_delivery(
         self,
-        delivery: Mapping[str, Any],
+        delivery: Delivery | Mapping[str, Any],
         *,
         outcome: str,
         content: Any = None,
@@ -551,7 +555,9 @@ class Session:
             return
         challenge = await challenge_fn()
         try:
-            body["identity_proof"] = self._agent.prove_join(challenge)
+            body["identity_proof"] = issue_identity_proof(
+                self._agent.identity, challenge
+            )
         except ValueError as exc:
             raise SessionError(
                 "unauthorized", "Join credentials are missing or invalid"
@@ -844,7 +850,7 @@ class Session:
         try:
             ctx = await self._build_context(parsed)
             try:
-                result = await _invoke_handler(self._agent, message, ctx)
+                result = await self._agent.handle(message, ctx)
             except Exception as exc:
                 logger.exception(
                     "handler failed address=%s message_id=%s",
@@ -853,7 +859,7 @@ class Session:
                 )
                 await self._fail_or_complete(parsed, exc)
                 return
-            if ctx.ticket_taken:
+            if ctx._deferred is not None:
                 return
             await self._finish_handler(parsed, result)
         except asyncio.CancelledError:
@@ -984,33 +990,3 @@ def _handler_content(result: Any) -> Any:
     if content_attr is not None and kind_attr is not None:
         return content_attr
     return result
-
-
-async def _invoke_handler(agent: "BaseAgent", message: Any, ctx: Context) -> Any:
-    method = agent.process_message
-    if _accepts_ctx(method):
-        return await method(message, ctx)
-    return await method(message)
-
-
-def _accepts_ctx(method: Any) -> bool:
-    try:
-        signature = inspect.signature(method)
-    except (TypeError, ValueError):
-        return True
-    params = [
-        param
-        for param in signature.parameters.values()
-        if param.kind
-        in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.KEYWORD_ONLY,
-        )
-        and param.name != "self"
-    ]
-    if any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in params):
-        return True
-    names = [param.name for param in params]
-    return "ctx" in names or len(params) >= 2

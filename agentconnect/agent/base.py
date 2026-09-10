@@ -4,8 +4,23 @@ Join a running Team in-process or by URL. The Session pulls work, maps
 handler outcomes onto Runtime ``reply`` / ``complete``, and reconnects
 when the Team comes back.
 
+    from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill
+    from agentconnect.team import Team
+
     class Researcher(BaseAgent):
-        async def handle(self, msg, ctx):
+        profile = AgentProfile(
+            summary="Finds sources and asks a writer to draft.",
+            skills=[
+                Skill(
+                    name="research",
+                    description="Turn a question into notes a writer can use.",
+                )
+            ],
+        )
+
+        async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+            if msg.kind != "request":
+                return None
             return f"noted: {msg.content}"
 
     team = await Team("content-squad").start()
@@ -25,8 +40,8 @@ Handler outcomes:
 - return None to decline that request, or to finish an event
 - raise to fail the request. The requester sees ``handler_failed`` with
   the generic text ``The handler failed.`` Diagnostics stay in this
-  process log. Pass a specific message with ``ctx.ticket().fail(...)``.
-- call ``ctx.ticket()`` and answer later through the returned handle.
+  process log. Pass a specific message with ``ctx.defer().fail(...)``.
+- call ``ctx.defer()`` and answer later through the returned handle.
   The Session renews that Delivery lease until the reply, the request
   deadline, disconnect, or revocation. The slot still counts toward
   ``max_in_flight``.
@@ -40,24 +55,28 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.identity import load_or_create_identity
-from agentconnect.agent.session import CollectMode, Session
+from agentconnect.agent.session import Session
 from agentconnect.agent.tools import TeamTools
 from agentconnect.core.address import parse_agent_name
+from agentconnect.core.base import JsonValue
 from agentconnect.core.directory import DirectoryEntry, FindResult
-from agentconnect.core.identity import AgentIdentity, issue_identity_proof
-from agentconnect.core.message import Message
+from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.message import MailboxMessage
 from agentconnect.core.operations import AcceptedSendResult, HistoryResult
-from agentconnect.core.primitives import DeliveryHistoryForm
+from agentconnect.core.primitives import CollectMode, DeliveryHistoryForm
 from agentconnect.core.profile import AgentProfile
 from agentconnect.core.ticket import Ticket
 
 logger = logging.getLogger(__name__)
+
+_ProfileArg = AgentProfile | Mapping[str, Any] | None
 
 
 class BaseAgent:
@@ -69,13 +88,14 @@ class BaseAgent:
     to persist the Agent key across process restarts.
     """
 
-    profile: Any = None
+    profile: AgentProfile
+    _session_ttl_hint: float
 
     def __init__(
         self,
         name: str,
         *,
-        profile: Any = None,
+        profile: _ProfileArg = None,
         identity: Optional[AgentIdentity] = None,
         identity_path: Optional[str | Path] = None,
         instance_id: Optional[str] = None,
@@ -87,8 +107,9 @@ class BaseAgent:
 
         Args:
             name: Agent name, unique within the Team.
-            profile: Discovery Profile (mapping or ``AgentProfile``). A class
-                attribute named ``profile`` is used when this is omitted.
+            profile: Discovery :class:`~agentconnect.core.profile.AgentProfile`
+                or a mapping with the same fields. A class attribute named
+                ``profile`` is used when this is omitted.
             identity: Optional keypair. A valid ``did:key`` on it is reused;
                 otherwise the SDK mints one for join. Do not pass this
                 together with ``identity_path``. Callers that persist the
@@ -133,7 +154,10 @@ class BaseAgent:
         self.agent_did = self.identity.did
         env_token = os.environ.get("AGENTCONNECT_JOIN_TOKEN")
         self.join_token = join_token if join_token is not None else env_token
-        self.profile = profile if profile is not None else type(self).profile
+        self.profile = _discovery_profile(
+            profile if profile is not None else _class_profile(type(self)),
+            self._agent_name,
+        )
         if instance_id is None:
             self.instance_id = str(uuid.uuid4())
         else:
@@ -189,7 +213,7 @@ class BaseAgent:
             team_or_url,
             instance_id=self.instance_id,
             agent_did=self.agent_did,
-            profile=_discovery_profile(self.profile, self._agent_name),
+            profile=self.profile.to_public_dict(),
             max_in_flight=self.max_in_flight,
             delivery_history=self.delivery_history,
         )
@@ -220,13 +244,14 @@ class BaseAgent:
         ``collect="wait"`` (default) holds until the Ticket is terminal or
         the Runtime wait hold elapses, then returns the current Ticket.
         That Ticket may still be ``open``. Ending the wait does not end
-        accepted work. Read a completed reply as ``ticket.content``.
-        Collect later with ``get_result``. Omit ``deadline_seconds`` to
-        inherit a request parent or use the Runtime work lifetime.
+        accepted work. Read a completed reply as ``ticket.response.content``
+        after checking ``ticket.state``. Collect later with ``get_result``.
+        Omit ``deadline_seconds`` to inherit a request parent or use the
+        Runtime work lifetime.
 
             ticket = await agent.ask("writer", {"task": "draft this"})
             if ticket.state == "completed":
-                print(ticket.content)
+                print(ticket.response.content)
 
             pending = await agent.ask("writer", "long job", collect="ticket")
             ticket = await agent.get_result(pending.id)
@@ -271,18 +296,20 @@ class BaseAgent:
     ) -> FindResult:
         """Search this Team's Directory, excluding this Agent.
 
-        found = await agent.find("someone who can review a contract")
+        found = await agent.find("someone who can draft a summary")
         found.matches[0].address
         """
         return await self._require_session().find(query, limit=limit, detail=detail)
 
-    async def get_profile(self, address: str) -> DirectoryEntry:
+    async def get_entry(self, address: str) -> DirectoryEntry:
         """Return the Directory entry for ``address``.
 
-        entry = await agent.get_profile("writer")
-        entry.profile.summary
+        The entry includes Address, DID, and Profile.
+
+            entry = await agent.get_entry("writer")
+            entry.profile.summary
         """
-        return await self._require_session().get_profile(address)
+        return await self._require_session().get_entry(address)
 
     async def get_result(self, ticket_id: str) -> Ticket:
         """Return a Ticket this Membership opened.
@@ -327,53 +354,47 @@ class BaseAgent:
                 recipient=found["matches"][0]["address"],
                 content=msg.content,
             )
-            return ticket["response"]["content"]
+            if ticket["state"] == "completed":
+                return ticket["response"]["content"]
         """
         return TeamTools(self._require_session)
 
-    async def handle(self, message: Message, ctx: Context | None = None) -> Any:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> JsonValue | None:
         """Handle one Delivery.
 
-        Override this. ``message`` is the delivered Runtime Message
-        (``id``, ``sender``, ``recipient``, ``kind``, ``content``, ...).
-        ``ctx`` is a :class:`~agentconnect.agent.context.Context`.
+        Override this. ``message`` is the delivered request or event.
+        ``ctx`` is always a :class:`~agentconnect.agent.context.Context`.
 
         Return a value to reply, return None to decline or finish, raise
-        to fail, or call ``ctx.ticket()`` and answer later.
+        to fail, or call ``ctx.defer()`` and answer later.
         """
         return None
-
-    async def process_message(
-        self, message: Message, ctx: Context | None = None
-    ) -> Any:
-        """Alias for :meth:`handle`. Override ``handle`` in new code."""
-        return await self.handle(message, ctx)
 
     def _require_session(self) -> Session:
         if self._session is None or not self._session.session_token:
             raise SessionError("unauthorized", "Agent has not joined a Team")
         return self._session
 
-    def prove_join(self, challenge: Mapping[str, Any]) -> str:
-        """Return an EdDSA JWT proving control of this Agent's DID.
 
-        Pass the result as ``identity_proof`` on join. The Session does
-        this automatically when joining a URL or with a join token.
+def _class_profile(cls: type) -> _ProfileArg:
+    """Return a Profile declared on the Agent class, if any."""
+    for klass in cls.__mro__:
+        if "profile" not in klass.__dict__:
+            continue
+        value = klass.__dict__["profile"]
+        if isinstance(value, (AgentProfile, Mapping)):
+            return value
+    return None
 
-            challenge = await team.join_challenge()
-            proof = agent.prove_join(challenge)
-        """
-        return issue_identity_proof(self.identity, challenge)
 
-
-def _discovery_profile(profile: Any, name: str) -> dict[str, Any]:
+def _discovery_profile(profile: _ProfileArg, name: str) -> AgentProfile:
     """Return the discovery Profile the Runtime accepts on join."""
     fallback = {
         "summary": f"{name} handles work for this team.",
         "skills": [{"name": "generic", "description": f"Work handled by {name}."}],
     }
     if profile is None:
-        return AgentProfile.model_validate(fallback).to_public_dict()
+        return AgentProfile.model_validate(fallback)
     if isinstance(profile, AgentProfile):
-        return profile.to_public_dict()
-    return AgentProfile.model_validate(profile).to_public_dict()
+        return profile
+    return AgentProfile.model_validate(profile)

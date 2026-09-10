@@ -20,7 +20,7 @@ that speak MCP.
             )
             if ticket["state"] == "completed":
                 return ticket["response"]["content"]
-            ctx.ticket()
+            ctx.defer()
             return None
 
 Callables look up the Session at call time, so ``self.team_tools()`` is safe
@@ -38,8 +38,9 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 from agentconnect.agent.errors import SessionError
-from agentconnect.agent.session import CollectMode, Session
+from agentconnect.agent.session import Session
 from agentconnect.core.base import dump_public
+from agentconnect.core.primitives import CollectMode
 
 _FIND_PARAMS = {
     "type": "object",
@@ -296,7 +297,7 @@ class TeamTools(Sequence[TeamTool]):
             raise SessionError("unauthorized", "Agent has not joined a Team")
         if collect not in {"wait", "ticket"}:
             raise SessionError(
-                "unsupported_collect_mode",
+                "invalid_request",
                 "ask collect must be wait or ticket",
             )
         message_id = _message_id(

@@ -18,24 +18,26 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
 class Writer(BaseAgent):
     """Replies with the prior Thread contents it was given on this Delivery."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
-        prior = [getattr(item, "content", None) for item in ctx.history]
+        prior = [item.content for item in ctx.history]
         return {"this": msg.content, "prior": prior}
 
 
 class Researcher(BaseAgent):
     """Sends threaded work and prints Tickets. Does not handle inbound work."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return None
 
 
@@ -54,7 +56,7 @@ async def main() -> None:
         )
         print("first state:", first.state)
         if first.state == "completed":
-            print("first:", first.content)
+            print("first:", first.response.content)
 
         pending = await researcher.ask(
             "writer",
@@ -69,7 +71,7 @@ async def main() -> None:
             ticket = await researcher.get_result(pending.id)
         print("second state:", ticket.state)
         if ticket.state == "completed":
-            print("second:", ticket.content)
+            print("second:", ticket.response.content)
 
         page = await researcher.get_history(thread_id)
         print("history:", [(msg.kind, msg.seq) for msg in page.messages])

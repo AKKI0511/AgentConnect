@@ -132,8 +132,7 @@ from agentconnect.team.codec import (
 )
 from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.team.constants import (
-    COLLECT_IMPLEMENTED,
-    COLLECT_NAMED,
+    COLLECT_MODES,
     DEFAULT_DELIVERY_HISTORY_LIMIT,
     DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
     DEFAULT_JOIN_TOKEN_TTL_SECONDS,
@@ -161,7 +160,7 @@ from agentconnect.team.constants import (
 from agentconnect.team.errors import IDENTITY_MISSING, TeamError
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.locks import KeyedLock
-from agentconnect.team.store import MemoryStore, RedisStore, Store
+from agentconnect.team.store import MemoryStore, Store
 from agentconnect.team.transitions.complete import (
     CompleteCommit,
     CompleteConflict,
@@ -638,8 +637,15 @@ class Team:
 
     async def _serve_http(self, host: str, port: int) -> str:
         await self.ensure_operator_session()
-        from agentconnect.team.http import create_runtime_app
-        import uvicorn
+        try:
+            from agentconnect.team.http import create_runtime_app
+            import uvicorn
+        except ImportError:
+            _fail(
+                "unavailable",
+                "HTTP serving requires the serve extra. "
+                "Install with: pip install 'agentconnect[serve]'",
+            )
 
         app = create_runtime_app(self)
         config = uvicorn.Config(
@@ -701,6 +707,8 @@ class Team:
 
     @staticmethod
     def _is_redis_arg(store: StoreArg) -> bool:
+        from agentconnect.team.store.redis import RedisStore
+
         if isinstance(store, RedisStore):
             return True
         return isinstance(store, str) and store.startswith("redis")
@@ -712,6 +720,8 @@ class Team:
         if isinstance(store, Store):
             return store
         if isinstance(store, str) and store.startswith("redis"):
+            from agentconnect.team.store.redis import RedisStore
+
             return RedisStore(store, prefix=f"ac:{self.name}")
         raise ValueError("store must be 'memory', a Redis URL, or a Store")
 
@@ -1608,13 +1618,8 @@ class Team:
             if collect is not None or deadline_raw is not None:
                 _fail("invalid_request", "an event cannot carry collect or deadline")
         if collect is not None:
-            if collect not in COLLECT_NAMED:
-                _fail("invalid_request", "collect is not a known collection strategy")
-            if collect not in COLLECT_IMPLEMENTED:
-                _fail(
-                    "unsupported_collect_mode",
-                    f"collect={collect} is not implemented yet",
-                )
+            if collect not in COLLECT_MODES:
+                _fail("invalid_request", "collect must be wait or ticket")
         if kind == "request":
             if collect is None:
                 _fail("invalid_request", "a request needs collect")
@@ -1666,7 +1671,6 @@ class Team:
             "metadata",
             "collect",
             "deadline",
-            "callback",
         }
         if extra:
             _fail("invalid_request", "send body contains unsupported fields")
@@ -1817,6 +1821,7 @@ class Team:
                 created_at=now_ts,
                 deadline=deadline_raw,
                 thread_id=thread_id,
+                trace_id=trace_id,
                 requester_membership_id=sender_membership_id,
                 recipient_membership_id=recipient_membership_id,
             )

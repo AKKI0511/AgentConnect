@@ -6,7 +6,7 @@ the Team Store. There is no vector database and no setting to turn search on.
     team = await Team("content-squad").start()
     found = await agent.find("someone who can review a contract")
     found["matches"][0]["address"]
-    entry = await agent.get_profile("reviewer")
+    entry = await agent.get_entry("reviewer")
 
 Pass ``embeddings=`` to :class:`~agentconnect.team.runtime.Team` only when you
 want a specific backend. ``"auto"`` is the default.

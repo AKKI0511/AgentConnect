@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
@@ -32,7 +34,7 @@ class Editor(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         return {"edit": msg.content, "parent_id": msg.parent_id}
@@ -52,16 +54,16 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         edited = await ctx.ask("editor", f"tighten: {msg.content}")
         if edited.state != "completed":
-            ctx.ticket()
+            ctx.defer()
             return None
         return {
             "draft": msg.content,
-            "edited": edited.content,
+            "edited": edited.response.content,
             "child_parent": msg.id,
         }
 
@@ -69,7 +71,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Sends work and prints Tickets. Does not handle inbound work."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return None
 
 
@@ -85,7 +87,7 @@ async def main() -> None:
         ticket = await researcher.ask("writer", "outline the launch note")
         print("ticket:", ticket.state)
         if ticket.state == "completed":
-            print("content:", ticket.content)
+            print("content:", ticket.response.content)
     finally:
         await researcher.leave()
         await writer.leave()

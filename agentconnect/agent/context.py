@@ -1,8 +1,9 @@
 """Handler Context: delivery facts plus verbs to call teammates mid-handling.
 
-A handler receives ``(msg, ctx)``. ``msg`` is the delivered Message.
-``ctx`` carries verified facts about this Delivery and the methods
-to ask, tell, find, page history, or take a Ticket and answer later.
+A handler receives ``(msg, ctx)``. ``msg`` is the delivered
+:class:`~agentconnect.core.message.MailboxMessage`. ``ctx`` is required
+and carries verified facts about this Delivery plus ``ask``, ``tell``,
+``find``, ``get_entry``, history paging, and :meth:`Context.defer`.
 """
 
 from __future__ import annotations
@@ -12,19 +13,27 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional
 from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.message import Delivery, MailboxMessage, Message
 from agentconnect.core.operations import AcceptedSendResult, HistoryResult
+from agentconnect.core.primitives import CollectMode
 from agentconnect.core.ticket import Ticket
 
 if TYPE_CHECKING:
-    from agentconnect.agent.session import CollectMode, Session
+    from agentconnect.agent.session import Session
 
 
-class TicketHandle:
+class DeferredReply:
     """Answer a reply-expected Delivery after ``handle`` returns.
 
-    The Delivery stays leased until ``reply``, ``fail``, or ``decline``
-    succeeds, or the lease expires and another Instance may take it.
-    The Session renews that lease until then, up to the request deadline.
-    The slot still counts toward ``max_in_flight``.
+    Call :meth:`Context.defer` to obtain this handle, then return from
+    ``handle``. The Delivery stays leased until ``reply``, ``fail``, or
+    ``decline`` succeeds, or the lease expires and another Instance may
+    take it. The Session renews that lease until then, up to the request
+    deadline. The slot still counts toward ``max_in_flight``.
+
+        handle = ctx.defer()
+        asyncio.create_task(self._finish(handle))
+        return None
+
+        await handle.reply({"draft": "..."})
     """
 
     def __init__(self, session: "Session", delivery: Delivery) -> None:
@@ -110,7 +119,7 @@ class Context:
         """Attach delivery facts from one leased attempt."""
         self._session = session
         self._delivery = delivery
-        self._ticket: Optional[TicketHandle] = None
+        self._deferred: Optional[DeferredReply] = None
 
     @property
     def sender(self) -> str:
@@ -188,12 +197,7 @@ class Context:
         """True when ``history`` already contains every earlier retained Message."""
         return self._delivery.history_complete
 
-    @property
-    def ticket_taken(self) -> bool:
-        """True after ``ticket()``; the Session will not auto-complete this Delivery."""
-        return self._ticket is not None
-
-    def ticket(self) -> TicketHandle:
+    def defer(self) -> DeferredReply:
         """Keep the Delivery leased and answer later.
 
         Return from ``handle`` after calling this. Reply with
@@ -202,13 +206,13 @@ class Context:
         deadline, disconnect, or revocation. This still counts as one
         in-flight Delivery.
 
-            handle = ctx.ticket()
+            handle = ctx.defer()
             asyncio.create_task(self._finish(handle))
             return None
         """
-        if self._ticket is None:
-            self._ticket = TicketHandle(self._session, self._delivery)
-        return self._ticket
+        if self._deferred is None:
+            self._deferred = DeferredReply(self._session, self._delivery)
+        return self._deferred
 
     async def ask(
         self,
@@ -275,9 +279,15 @@ class Context:
         """
         return await self._session.find(query, limit=limit, detail=detail)
 
-    async def get_profile(self, address: str) -> DirectoryEntry:
-        """Return the Directory entry for ``address`` in this Team."""
-        return await self._session.get_profile(address)
+    async def get_entry(self, address: str) -> DirectoryEntry:
+        """Return the Directory entry for ``address`` in this Team.
+
+        The entry includes Address, DID, and Profile.
+
+            entry = await ctx.get_entry("writer")
+            entry.profile.summary
+        """
+        return await self._session.get_entry(address)
 
     async def get_history(
         self, *, before: Optional[str] = None, limit: int = 50

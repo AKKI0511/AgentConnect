@@ -15,7 +15,9 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 
 
@@ -25,7 +27,7 @@ class Writer(BaseAgent):
     def __init__(self) -> None:
         super().__init__(name="writer", delivery_history="ids")
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         prior_ids = list(ctx.history_ids or [])
@@ -35,7 +37,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Sends threaded work and prints Tickets. Does not handle inbound work."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return None
 
 

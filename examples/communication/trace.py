@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
 from agentconnect.team.errors import TeamError
 
@@ -27,7 +29,7 @@ class Writer(BaseAgent):
         ],
     }
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind == "request":
             raise TeamError("handler_failed", "the draft could not be written")
         return None
@@ -36,7 +38,7 @@ class Writer(BaseAgent):
 class Researcher(BaseAgent):
     """Sends one request and does not handle inbound work."""
 
-    async def handle(self, msg, ctx):
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         return None
 
 

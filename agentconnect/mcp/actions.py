@@ -19,6 +19,7 @@ from agentconnect.core.operations import (
     GetResultRequest,
     TellToolRequest,
 )
+from agentconnect.core.primitives import CollectMode
 from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.team.errors import TeamError
 from agentconnect.team.session_auth import session_token_for_request
@@ -148,7 +149,7 @@ async def ask_action(
     content: Any,
     *,
     deadline_seconds: Optional[int] = None,
-    collect: str = "wait",
+    collect: CollectMode = "wait",
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -182,8 +183,6 @@ async def ask_action(
     parsed = parse_schema(AskToolRequest, payload)
     deadline_s = parsed.deadline_seconds
     collect = parsed.collect
-    if collect not in {"wait", "ticket"}:
-        raise ValueError("collect must be wait or ticket")
     arg_thread = parsed.thread_id
     key = parsed.idempotency_key
     message_id = message_id_for_tool(
@@ -260,7 +259,7 @@ async def _send_ask(
     message_id: str,
     recipient: str,
     content: Any,
-    collect: str,
+    collect: CollectMode,
     deadline: Optional[str],
     thread_id: str,
     reraise_conflict: bool = False,

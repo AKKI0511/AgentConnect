@@ -15,7 +15,9 @@ import asyncio
 import os
 from typing import Any
 
-from agentconnect.agent import BaseAgent
+from agentconnect.agent import BaseAgent, Context
+from agentconnect.core.base import JsonValue
+from agentconnect.core.message import MailboxMessage
 from agentconnect.prebuilt import AIAgent
 from agentconnect.team import Team
 
@@ -34,7 +36,7 @@ class Writer(BaseAgent):
         "tags": ["writing"],
     }
 
-    async def handle(self, msg, ctx) -> Any:
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> JsonValue | None:
         if msg.kind != "request":
             return None
         return f"Draft complete for {msg.content!r}."
@@ -126,7 +128,7 @@ async def main() -> None:
         )
         print(f"ticket: {ticket.state}")
         if ticket.state == "completed":
-            print(f"reply: {ticket.content}")
+            print(f"reply: {ticket.response.content}")
     finally:
         await coordinator.leave()
         await writer.leave()

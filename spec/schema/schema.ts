@@ -115,14 +115,8 @@ export type DeliveryHistoryForm = "bodies" | "ids";
  *
  * - `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket. That Ticket may still be `open`.
  * - `ticket`: return the current Ticket immediately. That Ticket may be `open` or already terminal.
- * - `callback`: return immediately and deliver the result to a target later.
- * - `stream`: receive partial results ending with a final result.
- *
- * The current draft implements `wait` and `ticket`. `callback` and `stream`
- * are named so their contract is fixed, and a `send` that requests them fails
- * with `unsupported_collect_mode` until they are implemented.
  */
-export type CollectMode = "wait" | "ticket" | "callback" | "stream";
+export type CollectMode = "wait" | "ticket";
 
 /** Membership kind reported by `status`. */
 export type MembershipKind = "agent" | "principal";
@@ -141,7 +135,6 @@ export type TicketState =
  */
 export type ErrorCode =
   | "unsupported_version"
-  | "unsupported_collect_mode"
   | "unauthorized"
   | "forbidden"
   | "invalid_request"
@@ -278,13 +271,21 @@ export interface DeadlineExceededError extends ErrorObject {
 }
 
 /**
- * Fields shared by every accepted Message. The Runtime sets the Message `id`
- * (acceptance is keyed on it), the canonical Addresses, `sender_did`,
- * `created_at`, `trace_id`, and `seq` when `thread_id` is present. A Client
- * cannot set the Runtime-owned fields.
+ * Fields shared by every accepted Message.
+ *
+ * `id` is proposed by the Client on `send` and `reply`. After acceptance it
+ * is the stored Message id and the idempotency key. The Runtime does not
+ * mint a different id. It enforces uniqueness and replay equality, and it
+ * sets the canonical Addresses, `sender_did`, `created_at`, `trace_id`, and
+ * `seq` when `thread_id` is present. A Client cannot set those Runtime-owned
+ * fields. MCP `ask` and `tell` generate the id in the Client-equivalent
+ * binding, then send it the same way.
  */
 export interface MessageBase {
-  /** Immutable Message id and idempotency key. */
+  /**
+   * Immutable Message id and idempotency key. Client-proposed on `send` or
+   * `reply`, then stored unchanged when the Runtime accepts the Message.
+   */
   id: Uuid;
   /** Canonical qualified Address set by the Runtime. */
   sender: QualifiedAddress;
@@ -434,11 +435,15 @@ export interface TicketBase {
   recipient: QualifiedAddress;
   /**
    * Thread the request belongs to, when it has one. Kept on the Ticket so the
-   * requester can continue the conversation from the result alone. The
-   * request's `trace_id` is not repeated here; it is a Message field, read
-   * from the request or the stored response.
+   * requester can continue the conversation from the result alone.
    */
   thread_id?: Uuid;
+  /**
+   * Causal id of the request this Ticket records. Copied from the request
+   * Message at acceptance so `get_result` can feed `get_trace` after Session
+   * replacement, including when the Ticket has no stored response.
+   */
+  trace_id: Uuid;
   /** Request acceptance time. */
   created_at: Timestamp;
   /** Time of the last state transition or late-reply observation. */
@@ -503,7 +508,10 @@ export type Ticket =
   | ExpiredTicket
   | DeclinedTicket;
 
-/** Full Directory record for one Membership, returned by `get_profile`. */
+/**
+ * Full Directory record for one Membership. Runtime `get_profile` returns
+ * this object: Address, DID, and Profile together. It is not a bare Profile.
+ */
 export interface DirectoryEntry {
   /** Canonical qualified Address. */
   address: QualifiedAddress;
@@ -708,7 +716,10 @@ export interface HeartbeatResult {
 
 /** Fields shared by request and event sends. */
 export interface SendBase {
-  /** Client-generated Message id and idempotency key. */
+  /**
+   * Client-generated Message id and idempotency key. The Runtime stores this
+   * value as the accepted Message `id`.
+   */
   id: Uuid;
   /** Local or same-Team qualified Address. */
   recipient: Address;
@@ -722,20 +733,6 @@ export interface SendBase {
   metadata?: JsonObject;
 }
 
-/** Target that receives a `callback` result. Reserved until callback lands. */
-export type CallbackTarget =
-  | {
-      /** Local or same-Team Address that receives the result as a Message. */
-      address: Address;
-    }
-  | {
-      /**
-       * Absolute HTTPS URL the Runtime POSTs the result to.
-       * @format uri
-       */
-      url: string;
-    };
-
 /**
  * Send a request. Always opens a Ticket. `collect` is required.
  * `deadline` may be omitted: the Runtime fills it at acceptance from the
@@ -746,7 +743,7 @@ export type CallbackTarget =
 export interface RequestSendRequest extends SendBase {
   /** Send work to be handled. */
   kind: "request";
-  /** How the sender collects the result. */
+  /** How the sender collects the result. `wait` or `ticket`. */
   collect: CollectMode;
   /**
    * Future absolute work cutoff for the Ticket. Omit to inherit a request
@@ -755,8 +752,6 @@ export interface RequestSendRequest extends SendBase {
    * completion estimate.
    */
   deadline?: Timestamp;
-  /** Required only when `collect` is `callback`. */
-  callback?: CallbackTarget;
 }
 
 /** Send information without a reply. */
@@ -966,10 +961,10 @@ export interface AskToolRequest {
    */
   deadline_seconds?: number;
   /**
-   * Collection strategy for this send. Defaults to `wait`. Same meaning as
-   * Runtime `send` and Client `ask`. `wait` returns the current Ticket after
-   * the Runtime wait hold. `ticket` returns immediately. Either Ticket may
-   * still be `open`.
+   * Collection strategy for this send. Defaults to `wait`. Same closed set
+   * as Runtime `send` and Client `ask`: `wait` or `ticket`. `wait` returns
+   * the current Ticket after the Runtime wait hold. `ticket` returns
+   * immediately. Either Ticket may still be `open`.
    */
   collect?: CollectMode;
   /**
@@ -1232,7 +1227,6 @@ export interface AgentConnectPublicSchema {
   runtime_limits?: RuntimeLimits;
   join_result?: JoinResult;
   heartbeat_result?: HeartbeatResult;
-  callback_target?: CallbackTarget;
   send_request?: SendRequest;
   send_result?: SendResult;
   lease_request?: LeaseRequest;

@@ -229,7 +229,7 @@ Before acceptance, the Runtime MUST:
 - validate the request against the schema
 - reject a body larger than `max_message_bytes` with `payload_too_large`
 - reject a new request whose `deadline` is after now plus `max_deadline_seconds` with `invalid_request`
-- reject `collect=callback` or `collect=stream` with `unsupported_collect_mode`
+- reject a `collect` other than `wait` or `ticket` with `invalid_request`
 - resolve the Address syntax of the recipient
 - apply the Message idempotency rules below before new-work admission
 
@@ -597,7 +597,6 @@ A Runtime MAY notify a Session that work is available so the Client can `lease` 
 | Code | Meaning |
 | --- | --- |
 | `unsupported_version` | Client and Runtime contract drafts differ. |
-| `unsupported_collect_mode` | A collection strategy is named but not implemented yet. |
 | `unauthorized` | Session or join authentication failed. |
 | `forbidden` | Authenticated caller lacks authority for the operation. |
 | `invalid_request` | Request shape or a conditional requirement is invalid. |

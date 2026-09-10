@@ -98,7 +98,6 @@ Every non-success response has an `ErrorObject` body.
 | `payload_too_large` | `413` |
 | `busy`, `wait_limit` | `429` |
 | `internal` | `500` |
-| `unsupported_collect_mode` | `501` |
 | `unavailable` | `503` |
 
 Ticket failure codes such as `handler_failed` and `deadline_exceeded` are returned inside a successful `200` Ticket response. They do not describe HTTP failure.
@@ -149,7 +148,8 @@ Content-Type: application/json
     "created_at": "2026-08-18T15:00:00Z",
     "updated_at": "2026-08-18T15:00:00Z",
     "deadline": "2026-08-18T15:10:00Z",
-    "late_reply_count": 0
+    "late_reply_count": 0,
+    "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28"
   }
 }
 ```

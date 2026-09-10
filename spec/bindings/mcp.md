@@ -131,7 +131,7 @@ Arguments:
 | `thread_id` | optional UUID |
 | `idempotency_key` | optional string, 1 to 200 characters |
 
-The server returns the current `Ticket`, and the Ticket carries its `thread_id`. `collect` has the same bounded-hold meaning as Runtime `send`.
+The server returns the current `Ticket`, and the Ticket carries its `thread_id` and `trace_id`. `collect` has the same bounded-hold meaning as Runtime `send`.
 
 - `collect=wait` (default) holds until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket, which may still be `open`.
 - `collect=ticket` returns immediately with the current Ticket, which may still be `open`.
@@ -232,10 +232,6 @@ The server publishes the Team roster as an MCP resource at `agentconnect://team/
 Reading the resource uses the same Session binding as a tool call. A missing, malformed, expired, replaced, or revoked Session token is an MCP-level authentication failure, except for the loopback operator case above.
 
 The resource lists every current Agent Membership. Principals, including `operator`, are omitted. It is not a search. Models that need ranking use `find`.
-
-## Reserved collection strategies
-
-`ask` exposes `wait` and `ticket`. The `callback` and `stream` strategies are not MCP arguments in this draft. When they are added, they will be additional arguments or tools, not a change to the five names above.
 
 ## Errors
 

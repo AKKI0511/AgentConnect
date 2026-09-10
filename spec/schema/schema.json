@@ -95,9 +95,6 @@
         "heartbeat_result": {
           "$ref": "#/definitions/HeartbeatResult"
         },
-        "callback_target": {
-          "$ref": "#/definitions/CallbackTarget"
-        },
         "send_request": {
           "$ref": "#/definitions/SendRequest"
         },
@@ -213,11 +210,9 @@
       "type": "string",
       "enum": [
         "wait",
-        "ticket",
-        "callback",
-        "stream"
+        "ticket"
       ],
-      "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request send carries `collect` and opens a Ticket. The send may omit `deadline`; the accepted Request Message always carries the effective cutoff the Runtime stamped. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket. That Ticket may still be `open`.\n- `ticket`: return the current Ticket immediately. That Ticket may be `open` or already terminal.\n- `callback`: return immediately and deliver the result to a target later.\n- `stream`: receive partial results ending with a final result.\n\nThe current draft implements `wait` and `ticket`. `callback` and `stream` are named so their contract is fixed, and a `send` that requests them fails with `unsupported_collect_mode` until they are implemented."
+      "description": "How the sender collects the result of a request. It is a choice made on the `send` call and is not stored on the immutable Message; the recipient never observes it. Every request send carries `collect` and opens a Ticket. The send may omit `deadline`; the accepted Request Message always carries the effective cutoff the Runtime stamped. An event is the fire-and-forget kind and names neither.\n\n- `wait`: keep `send` open until the Ticket is terminal or `wait_hold_seconds` elapses, then return the current Ticket. That Ticket may still be `open`.\n- `ticket`: return the current Ticket immediately. That Ticket may be `open` or already terminal."
     },
     "MembershipKind": {
       "type": "string",
@@ -250,7 +245,6 @@
       "type": "string",
       "enum": [
         "unsupported_version",
-        "unsupported_collect_mode",
         "unauthorized",
         "forbidden",
         "invalid_request",
@@ -468,7 +462,7 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Immutable Message id and idempotency key."
+          "description": "Immutable Message id and idempotency key. Client-proposed on `send` or `reply`, then stored unchanged when the Runtime accepts the Message."
         },
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -589,7 +583,7 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Immutable Message id and idempotency key."
+          "description": "Immutable Message id and idempotency key. Client-proposed on `send` or `reply`, then stored unchanged when the Runtime accepts the Message."
         },
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -698,7 +692,7 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Immutable Message id and idempotency key."
+          "description": "Immutable Message id and idempotency key. Client-proposed on `send` or `reply`, then stored unchanged when the Runtime accepts the Message."
         },
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -793,7 +787,7 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Immutable Message id and idempotency key."
+          "description": "Immutable Message id and idempotency key. Client-proposed on `send` or `reply`, then stored unchanged when the Runtime accepts the Message."
         },
         "sender": {
           "$ref": "#/definitions/QualifiedAddress",
@@ -988,7 +982,11 @@
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Causal id of the request this Ticket records. Copied from the request Message at acceptance so `get_result` can feed `get_trace` after Session replacement, including when the Ticket has no stored response."
         },
         "created_at": {
           "$ref": "#/definitions/Timestamp",
@@ -1022,6 +1020,7 @@
         "recipient",
         "requester",
         "state",
+        "trace_id",
         "updated_at"
       ],
       "additionalProperties": false,
@@ -1044,7 +1043,11 @@
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Causal id of the request this Ticket records. Copied from the request Message at acceptance so `get_result` can feed `get_trace` after Session replacement, including when the Ticket has no stored response."
         },
         "created_at": {
           "$ref": "#/definitions/Timestamp",
@@ -1083,6 +1086,7 @@
         "requester",
         "response",
         "state",
+        "trace_id",
         "updated_at"
       ],
       "additionalProperties": false,
@@ -1105,7 +1109,11 @@
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Causal id of the request this Ticket records. Copied from the request Message at acceptance so `get_result` can feed `get_trace` after Session replacement, including when the Ticket has no stored response."
         },
         "created_at": {
           "$ref": "#/definitions/Timestamp",
@@ -1144,6 +1152,7 @@
         "recipient",
         "requester",
         "state",
+        "trace_id",
         "updated_at"
       ],
       "additionalProperties": false,
@@ -1166,7 +1175,11 @@
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Causal id of the request this Ticket records. Copied from the request Message at acceptance so `get_result` can feed `get_trace` after Session replacement, including when the Ticket has no stored response."
         },
         "created_at": {
           "$ref": "#/definitions/Timestamp",
@@ -1205,6 +1218,7 @@
         "recipient",
         "requester",
         "state",
+        "trace_id",
         "updated_at"
       ],
       "additionalProperties": false,
@@ -1227,7 +1241,11 @@
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone. The request's `trace_id` is not repeated here; it is a Message field, read from the request or the stored response."
+          "description": "Thread the request belongs to, when it has one. Kept on the Ticket so the requester can continue the conversation from the result alone."
+        },
+        "trace_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Causal id of the request this Ticket records. Copied from the request Message at acceptance so `get_result` can feed `get_trace` after Session replacement, including when the Ticket has no stored response."
         },
         "created_at": {
           "$ref": "#/definitions/Timestamp",
@@ -1261,6 +1279,7 @@
         "recipient",
         "requester",
         "state",
+        "trace_id",
         "updated_at"
       ],
       "additionalProperties": false,
@@ -1288,7 +1307,7 @@
         "profile"
       ],
       "additionalProperties": false,
-      "description": "Full Directory record for one Membership, returned by `get_profile`."
+      "description": "Full Directory record for one Membership. Runtime `get_profile` returns this object: Address, DID, and Profile together. It is not a bare Profile."
     },
     "DirectoryMatch": {
       "type": "object",
@@ -1578,38 +1597,6 @@
       "additionalProperties": false,
       "description": "Result of a successful Session heartbeat."
     },
-    "CallbackTarget": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "address": {
-              "$ref": "#/definitions/Address",
-              "description": "Local or same-Team Address that receives the result as a Message."
-            }
-          },
-          "required": [
-            "address"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "url": {
-              "type": "string",
-              "description": "Absolute HTTPS URL the Runtime POSTs the result to.",
-              "format": "uri"
-            }
-          },
-          "required": [
-            "url"
-          ],
-          "additionalProperties": false
-        }
-      ],
-      "description": "Target that receives a `callback` result. Reserved until callback lands."
-    },
     "SendRequest": {
       "anyOf": [
         {
@@ -1626,7 +1613,7 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Client-generated Message id and idempotency key."
+          "description": "Client-generated Message id and idempotency key. The Runtime stores this value as the accepted Message `id`."
         },
         "recipient": {
           "$ref": "#/definitions/Address",
@@ -1655,15 +1642,11 @@
         },
         "collect": {
           "$ref": "#/definitions/CollectMode",
-          "description": "How the sender collects the result."
+          "description": "How the sender collects the result. `wait` or `ticket`."
         },
         "deadline": {
           "$ref": "#/definitions/Timestamp",
           "description": "Future absolute work cutoff for the Ticket. Omit to inherit a request parent's stamped deadline, or to receive `now` plus `work_lifetime_seconds` for a root request. This is a cutoff, not a completion estimate."
-        },
-        "callback": {
-          "$ref": "#/definitions/CallbackTarget",
-          "description": "Required only when `collect` is `callback`."
         }
       },
       "required": [
@@ -1681,7 +1664,7 @@
       "properties": {
         "id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Client-generated Message id and idempotency key."
+          "description": "Client-generated Message id and idempotency key. The Runtime stores this value as the accepted Message `id`."
         },
         "recipient": {
           "$ref": "#/definitions/Address",
@@ -2099,7 +2082,7 @@
         },
         "collect": {
           "$ref": "#/definitions/CollectMode",
-          "description": "Collection strategy for this send. Defaults to `wait`. Same meaning as Runtime `send` and Client `ask`. `wait` returns the current Ticket after the Runtime wait hold. `ticket` returns immediately. Either Ticket may still be `open`."
+          "description": "Collection strategy for this send. Defaults to `wait`. Same closed set as Runtime `send` and Client `ask`: `wait` or `ticket`. `wait` returns the current Ticket after the Runtime wait hold. `ticket` returns immediately. Either Ticket may still be `open`."
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",

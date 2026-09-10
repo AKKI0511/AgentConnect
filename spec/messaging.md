@@ -53,7 +53,7 @@ A Request Message without a `deadline` is invalid. The Runtime fills an omitted 
 
 ## Message identity and relationships
 
-Every Message id is an RFC 9562 UUID and is unique within the Team. The id has three jobs:
+Every Message id is an RFC 9562 UUID and is unique within the Team. The Client proposes the id on `send` and on `reply`. The Runtime stores that value as the accepted Message id, or rejects the operation. It does not mint a different id. The id has three jobs:
 
 - it identifies the immutable Message
 - it is the idempotency key for `send` or `reply`
@@ -89,7 +89,7 @@ They coincide in the simple case and diverge the moment work fans out:
 
 > `researcher` asks `writer` in conversation `T1`; that request opens trace `X`. To answer, `writer` asks `editor` in a new conversation `T2`; because that request is caused by the first, it copies trace `X` while living in thread `T2`, so trace `X` now spans `T1` and `T2`. Later `researcher` asks `writer` something unrelated in `T1`, opening trace `Y`. One Thread holds several traces, and one trace spans several Threads.
 
-So `thread_id` groups history for the participants, `trace_id` groups a debugging timeline for one operation, and `parent_id` is the reply or continuation target. A Delivery's Message carries `thread_id` and `trace_id` so a handler knows both which conversation it is in and which operation it serves. A Ticket carries only `thread_id`, because the conversation is what a requester continues; the request's `trace_id` is read from the request or from the stored response, not duplicated onto the Ticket.
+So `thread_id` groups history for the participants, `trace_id` groups a debugging timeline for one operation, and `parent_id` is the reply or continuation target. A Delivery's Message carries `thread_id` and `trace_id` so a handler knows both which conversation it is in and which operation it serves. A Ticket carries both: `thread_id` so the requester can continue the conversation from the result alone, and the request's `trace_id` so `get_result` can feed `get_trace` after Session replacement, including when the Ticket has no stored response.
 
 `get_trace` reconstructs that timeline as `TraceEvent` values, in the order the Runtime recorded them. Event `type` is one of `accepted`, `ticket_opened`, `leased`, `completed`, `replied`, and `ticket_closed`. `completed` is a `complete` that finished the Delivery. `ticket_closed` is recorded when a Ticket expires without a `reply` or `complete`. When the Message named by an event has a `parent_id`, the event copies it so a Client can draw the request tree from the list.
 
@@ -116,10 +116,8 @@ A request selects one `collect` strategy:
 | --- | --- | --- |
 | `wait` | yes | accepted Message plus current Ticket; `send` stays open until the Ticket is terminal or `wait_hold_seconds` elapses |
 | `ticket` | yes | accepted Message plus current Ticket, returned immediately |
-| `callback` | yes | reserved; fails with `unsupported_collect_mode` in this draft |
-| `stream` | yes | reserved; fails with `unsupported_collect_mode` in this draft |
 
-An event creates no Ticket and returns the accepted Message.
+An event creates no Ticket and returns the accepted Message. Any other `collect` value is `invalid_request` and creates nothing.
 
 `wait` changes how long `send` stays open. It does not change the underlying Message, Delivery, or Ticket. Runtime `send`, Client `ask`, and MCP `ask` share this hold. None of them polls past `wait_hold_seconds` to force a terminal Ticket.
 
@@ -137,8 +135,6 @@ When the hold elapses and the Ticket is still `open`, `send` returns that Ticket
 `JoinResult.limits.max_held_waits` caps how many `collect=wait` sends one Membership may hold at once. A new `send` with `collect=wait` past that cap fails with `wait_limit` and creates nothing. `busy` remains the Mailbox-full error.
 
 `ticket` returns immediately even if the recipient has already replied. The returned Ticket may therefore be `open` or terminal. That is the same `TicketedSendResult` wrapper as an elapsed `wait` hold. Read completion from `ticket.state`, not from the wrapper.
-
-`callback` and `stream` are named so their contract is fixed and adding them later is an addition, not a reshape. Until they are implemented, a `send` that requests them fails with `unsupported_collect_mode` and creates nothing.
 
 ## Delivery
 
@@ -275,6 +271,7 @@ Removing an id from a Thread's id list is not enough. The Runtime MUST delete th
   "updated_at": "2026-08-18T15:00:08Z",
   "deadline": "2026-08-18T15:10:00Z",
   "late_reply_count": 0,
+  "trace_id": "e26e64ce-f7f1-47c4-a323-e3a3867e7d28",
   "response": {
     "id": "2f45a4a6-9bbf-4f7b-bb8a-451a7285bf22",
     "sender": "writer@content-squad",
@@ -422,7 +419,7 @@ These vectors are normative summaries. An implementation test may express them i
 | threaded event after send replay ends and complete | body stays; `get_history` still returns it |
 | two Instances handle consecutive turns of one Thread | each Delivery is leased to one Instance; the later Delivery's `history` contains the earlier turn |
 | another Membership submits a retained `lease_id` | `not_found`; no Delivery or Ticket state changes |
-| `collect=callback` or `collect=stream` | `unsupported_collect_mode`; nothing created |
+| unknown `collect` | `invalid_request`; nothing created |
 | send that would add a third Membership to an existing Thread | `forbidden` |
 | name removed, different DID joins that name, `get_history` on a predecessor Thread | `not_found` |
 | operator `send`, delivered `sender_did` | the operator Membership DID |

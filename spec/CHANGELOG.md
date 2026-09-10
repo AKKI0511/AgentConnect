@@ -17,7 +17,7 @@ Defines:
 - Skills as natural-language claims with examples and tags, without input or output schemas
 - request, event, response, and error Messages, with `trace_id` correlating one causal operation while `thread_id` groups a conversation
 - a request always expects a reply, opens a Ticket, and carries a `deadline` on the accepted Message; the send may omit `deadline` and the Runtime stamps a work cutoff
-- collection strategy (`wait`, `ticket`, and reserved `callback` and `stream`) on the `send`, not on the Message
+- collection strategy (`wait` or `ticket`) on the `send`, not on the Message; an unknown collect is `invalid_request`
 - `parent_id` may name an authorized Message from another Thread when the send creates a new Thread; that parent does not grant history of the parent's Thread
 - a shared `trace_id` correlates one operation; it does not record which subset of sibling answers a merge consumed
 - `heartbeat` extends Session expiry only; Delivery leases are extended by `renew`
@@ -58,7 +58,7 @@ Defines:
 - a Membership that may act is not the same as an Agent that may be hired: a principal has no Profile, Directory entry, or Mailbox, and a `send` naming it fails `not_found`
 - the reserved `operator` is a principal; the Runtime reserves the name when it starts; `find` and the roster omit it; it stays visible in `status`
 - `status` member rows are a discriminated union on `kind`; a principal omits Mailbox depth and open-Ticket counts
-- MCP `ask` uses `collect` (`wait` or `ticket`) with the same meaning as Client `ask`; there is no `wait_seconds`
+- MCP `ask` uses `collect` (`wait` or `ticket`) with the same meaning as Client `ask`; there is no `wait_seconds`, `callback`, or `stream` collect mode
 - loopback MCP and HTTP calls with no Authorization header bind to that shared `operator` identity; the machine is the trust boundary
 - over HTTP and MCP, operator authority is the Session; the hosting process may issue and revoke join tokens on the Runtime object without a Session
 - `ErrorObject.code` is the closed `ErrorCode` set; an Agent application failure code belongs in `details` of a `handler_failed` error
@@ -71,10 +71,11 @@ Defines:
 - Sessions survive a `durable` restart; `status` `online` is read from stored Sessions
 - Expiry for Sessions, leases, Tickets, and join credentials is processed from a time-ordered index of due items
 - documented TypeScript structures and generated JSON Schema
-- send and reply acceptance is one transition: a Mailbox item is not leaseable until its Message (and Ticket, for a request) exist; Message ids are reserved across `send` and `reply`
+- send and reply acceptance is one transition: a Mailbox item is not leaseable until its Message (and Ticket, for a request) exist; Message ids are Client-proposed and reserved across `send` and `reply`
 - each Membership has an immutable identity distinct from its Address and Agent DID; removing a name and admitting another DID creates a new Membership that cannot inherit Tickets, history, Trace visibility, or queued work
 - `sender_did` is stamped on every accepted Message from the Session at acceptance, including work sent by a principal
 - `get_result` authorizes the requesting Membership across Session replacement, in the Runtime, HTTP, MCP, and the Client
+- every Ticket carries the request Message's `trace_id`, so `get_result` can feed `get_trace` after Session replacement in every Ticket state
 - join challenge nonces and single-use tokens are consumed in the same store transition as a successful join; concurrent use of one token admits at most one Membership; revoke versus join has a defined winner
 - MCP Session binding covers the five tools, additional Team tools, and the roster resource; a missing Authorization header is operator only on an explicitly trusted loopback or in-process hosting path
 - a reverse proxy in front of a loopback listener is not that path; any forwarded-client header, including an empty `X-Forwarded-*` value, with no Session token is unauthorized

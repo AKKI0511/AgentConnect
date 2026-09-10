@@ -139,7 +139,7 @@ git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
 
 # Install dependencies
-poetry install --with demo,dev --extras "telegram payments cli"
+poetry install --with demo,dev --extras "aiagent telegram payments cli embeddings index redis serve"
 
 # Set up environment
 copy example.env .env  # Windows

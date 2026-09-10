@@ -37,7 +37,7 @@ await Researcher(name="researcher").join(team)
 found = await researcher.find("someone who can verify a contract")
 found.matches[0].address  # reviewer@content-squad
 
-entry = await researcher.get_profile("reviewer")
+entry = await researcher.get_entry("reviewer")
 entry.profile.summary
 ```
 
@@ -46,7 +46,7 @@ Omit ``limit`` to receive every other member, ordered, up to 100. Pass
 and the complete Profile to each match.
 
 The Runtime never injects a Profile into handler input. Call ``find`` or
-``get_profile`` when the Agent should read one.
+``get_entry`` when the Agent should read one.
 
 ## Embedding backends
 

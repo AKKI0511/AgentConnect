@@ -15,7 +15,7 @@ an optional helper on a LiteLLM tool loop.
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-poetry install --with dev --extras "aiagent telegram payments cli embeddings index"
+poetry install --with dev --extras "aiagent telegram payments cli embeddings index redis serve"
 copy example.env .env  # Windows
 cp example.env .env    # Linux/Mac
 ```
@@ -75,7 +75,9 @@ async def main():
             "researcher",
             "Summarize RAG in three short bullets.",
         )
-        print(ticket.content)
+        print(ticket.state)
+        if ticket.state == "completed":
+            print(ticket.response.content)
     finally:
         await assistant.leave()
         await researcher.leave()

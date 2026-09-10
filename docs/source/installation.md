@@ -16,7 +16,7 @@ Clone the repository and install dependencies using Poetry:
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-poetry install --with demo,dev --extras "telegram payments cli"  # For development (recommended)
+poetry install --with dev --extras "aiagent telegram payments cli embeddings index redis serve"  # For development (recommended)
 # For production only:
 # poetry install --without dev
 ```

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360" role="img" aria-labelledby="title desc">
+  <title id="title">Different harnesses, independent teammates</title>
+  <desc id="desc">Four peer agents use LangChain, Google ADK, Claude Agent SDK, and Cursor SDK through their own adapters. All exchange work and messages through AgentConnect Runtime, which helps them find teammates, deliver messages, track work, keep conversation history, and share tools. Each agent controls its own execution.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M1 1 L7 4 L1 7" fill="none" stroke="#6c8ba9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Arial, sans-serif; text-anchor:middle; }
+    .agent { fill:#092b56; font-size:22px; font-weight:650; }
+    .body { fill:#52677d; font-size:18px; }
+    .wire { fill:none; stroke:#6c8ba9; stroke-width:1.6; }
+    .icon { fill:#eaf6fb; stroke:#0088b4; stroke-width:1.5; }
+    .stroke { fill:none; stroke:#0088b4; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+  </style>
+
+  <rect x="80" y="48" width="135" height="76" rx="12" fill="#f5f8fc" stroke="#d4e0ed" stroke-width="1.3"/>
+  <g transform="translate(102 75)"><circle class="icon" cx="0" cy="0" r="10"/><circle cx="0" cy="0" r="3" fill="#0088b4"/></g>
+  <text class="agent" x="159" y="82">Agent A</text>
+  <text x="147.5" y="108" fill="#52677d" font-size="16">LangChain</text>
+  <path class="wire" d="M147.5 133 V166" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <rect x="235" y="48" width="135" height="76" rx="12" fill="#f5f8fc" stroke="#d4e0ed" stroke-width="1.3"/>
+  <g transform="translate(257 75)"><path class="stroke" d="M-7 -5 Q0 -15 7 -5 M7 5 Q0 15 -7 5"/><rect class="icon" x="-12" y="-4" width="8" height="8" rx="2"/><rect class="icon" x="4" y="-4" width="8" height="8" rx="2"/><path class="stroke" d="M-3 0 H3"/></g>
+  <text class="agent" x="314" y="82">Agent B</text>
+  <text x="302.5" y="108" fill="#52677d" font-size="16">Google ADK</text>
+  <path class="wire" d="M302.5 133 V166" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <rect x="390" y="48" width="135" height="76" rx="12" fill="#f5f8fc" stroke="#d4e0ed" stroke-width="1.3"/>
+  <g transform="translate(412 75)"><path class="stroke" d="M0 -9 L-10 8 H10 Z"/><circle class="icon" cx="0" cy="-9" r="4"/><circle class="icon" cx="-10" cy="8" r="4"/><circle class="icon" cx="10" cy="8" r="4"/></g>
+  <text class="agent" x="469" y="82">Agent C</text>
+  <text x="457.5" y="108" fill="#52677d" font-size="14">Claude Agent SDK</text>
+  <path class="wire" d="M457.5 133 V166" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <rect x="545" y="48" width="135" height="76" rx="12" fill="#f5f8fc" stroke="#d4e0ed" stroke-width="1.3"/>
+  <g transform="translate(567 75)"><path class="stroke" d="M-5 -7 L-12 0 L-5 7 M5 -7 L12 0 L5 7 M2 -9 L-2 9"/></g>
+  <text class="agent" x="624" y="82">Agent D</text>
+  <text x="612.5" y="108" fill="#52677d" font-size="16">Cursor SDK</text>
+  <path class="wire" d="M612.5 133 V166" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+
+  <rect x="80" y="178" width="600" height="120" rx="14" fill="#eaf6fb" stroke="#0088b4" stroke-width="1.4"/>
+  <text x="380" y="207" fill="#092b56" font-size="23" font-weight="700">AgentConnect Runtime</text>
+  <text x="380" y="235" fill="#092b56" font-size="20">Find teammates · Deliver messages</text>
+  <path d="M104 250 H656" stroke="#d4e0ed" stroke-width="1"/>
+  <text class="body" x="380" y="278">Track work · Keep conversation history · Share tools</text>
+</svg>

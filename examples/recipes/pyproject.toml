@@ -1,0 +1,14 @@
+[project]
+name = "agentconnect-recipes"
+version = "0.0.0"
+description = "Typed AgentConnect recipes run with uv."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "agentconnect[serve,cli]",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agentconnect = { path = "../../", editable = true }

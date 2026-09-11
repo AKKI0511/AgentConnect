@@ -1,314 +1,158 @@
 <div align="center">
 
-<picture>
-  <img src="docs/source/_static/long_logo.png" alt="AgentConnect Logo" width="80%"/>
-</picture>
+<img src="docs/source/_static/long_logo.png" alt="AgentConnect" width="520">
 
-*A Decentralized Framework for Autonomous Agent Collaboration*
+<p><strong>Your agents. Any harness. One team.</strong></p>
 
-**Build and connect independent AI agents that discover, interact, and collaborate securely.**
+<p>A messaging runtime for teams of independent AI agents.</p>
 
-[![CI](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/main.yml)
-[![Docs](https://github.com/AKKI0511/AgentConnect/actions/workflows/docs.yml/badge.svg)](https://github.com/AKKI0511/AgentConnect/actions/workflows/docs.yml)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://AKKI0511.github.io/AgentConnect/)
-[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+<p>
+<a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%20%7C%203.12-087ea4" alt="Python 3.11 and 3.12"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-087ea4" alt="Apache 2.0 license"></a>
+<a href="#project-status"><img src="https://img.shields.io/badge/status-v0.5%20development-e3a008" alt="v0.5 in development"></a>
+</p>
 
-[Installation](#quick-start) •
-[Documentation](https://AKKI0511.github.io/AgentConnect/) •
-[Examples](#examples) •
-[Contributing](CONTRIBUTING.md)
+<p>
+<a href="#connect-your-harness">Connect an agent</a> ·
+<a href="#try-a-team">Try it</a> ·
+<a href="examples/README.md">Examples</a> ·
+<a href="spec/README.md">Specification</a>
+</p>
 
 </div>
 
-## 📖 Overview
+AgentConnect connects independently built agents so they can find teammates, exchange messages, and help each other with their work. They participate as peers, each with its own models, tools, memory, and way of working.
 
-**AgentConnect provides a framework for building decentralized networks of truly autonomous AI agents, enabling the next generation of collaborative AI.**
+A teammate can be one model call, a tool-using assistant, or an entire multi-agent system. It joins with one identity, a profile describing what it does, and an address others can reach. You can change its internals or add more specialists without rebuilding how they communicate.
 
-Move beyond traditional, centrally controlled systems and embrace an ecosystem where independent agents can:
+The Runtime maintains the directory, delivers messages, tracks outstanding work, and holds shared conversation history. Each agent decides when to continue its own work, ask for help, or wait for an answer.
 
-*   **Discover peers on-demand:** Locate partners by searching rich **Agent Profiles** instead of hard-wired endpoints.
-*   **Interact Securely (A2A):** Leverage built-in cryptographic verification for **trustworthy Agent-to-Agent** communication.
-*   **Execute Complex Workflows:** Request services, exchange value, and achieve goals collectively.
-*   **Autonomous Operation:** Each agent hosts its own logic—no central brain required.
-*   **Scale Limitlessly:** Support thousands of agents interacting seamlessly.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+    <img src="assets/architecture.svg" width="620" alt="Four peer agents use LangChain, Google ADK, Claude Agent SDK, and Cursor SDK through their own adapters. AgentConnect Runtime helps them find teammates, deliver messages, track work, keep conversation history, and share tools.">
+  </picture>
+</p>
 
-### Why AgentConnect?
+## Give agents the tools to collaborate
 
-AgentConnect delivers unique advantages over classic multi-agent approaches:
+AgentConnect supplies the tools an agent needs to work with others. They let it find help, ask a question, send an update, check for an answer, and revisit an earlier conversation.
 
-*   **Decentralized Architecture:** No central router, no single point of failure.
-*   **First-class agent autonomy:** Agents negotiate, cooperate, and evolve independently.
-*   **Interconnect Agent Systems:** Operates above internal frameworks, linking entire agent swarms.
-*   **Living ecosystem:** The network fluidly adapts as agents join, leave, or evolve their skills.
-*   **Secure A2A Communication:** Crypto-grade identity & message signing baked in.
-*   **Horizontal scalability:** Engineered for planet-scale agent populations.
-*   **Plug-and-play extensibility:** Easily integrate custom agents, capabilities, and protocols.
-*   **Integrated Agent Economy:** Seamless A2A payments powered by **Coinbase CDP & AgentKit**.
+Give your harness the Team's collaboration tools.
+
+```python
+tools = agent.team_tools()
+```
+
+Add them to your harness's toolset. If your harness supports **MCP**, you can connect it to the Team's MCP endpoint for the same collaboration tools.
+
+## Connect your harness
+
+Subclass `BaseAgent`, describe what the agent offers, and implement `handle` to receive work. Here, `run` is your existing asynchronous function. It can call a model, run a workflow, or delegate to an internal agent system. This example uses text; agents can also exchange structured JSON data.
+
+If you know [PyTorch's `nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html), the pattern is familiar. You implement `forward` for a model; here, you implement `handle` for an agent.
+
+```python
+from collections.abc import Awaitable, Callable
+
+from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill
+
+Run = Callable[[str], Awaitable[str]]
 
 
-## ✨ Key Features
+class Writer(BaseAgent):
+    profile = AgentProfile(
+        summary="Turns notes into clear drafts.",
+        skills=[Skill(name="writing", description="Draft from notes.")],
+    )
 
-<table>
-  <tr>
-    <td width="33%">
-      <h3>🤖 Dynamic Agent Discovery</h3>
-      <ul>
-        <li>Profile-Based Lookup</li>
-        <li>Decentralized Registry</li>
-        <li>Zero static links</li>
-      </ul>
-    </td>
-    <td width="33%">
-      <h3>⚡ A2A Communication</h3>
-      <ul>
-        <li>Direct Agent-to-Agent Messaging</li>
-        <li>Cryptographic signatures</li>
-        <li>No routing bottlenecks</li>
-      </ul>
-    </td>
-    <td width="33%">
-      <h3>⚙️ True Agent Autonomy</h3>
-      <ul>
-        <li>Independent Operation & Logic</li>
-        <li>Self-Managed Lifecycles</li>
-        <li>Unrestricted Collaboration</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h3>🔒 Trust Layer</h3>
-      <ul>
-        <li>Verifiable identities</li>
-        <li>Tamper-proof messages</li>
-        <li>Standard Security Protocols</li>
-      </ul>
-    </td>
-    <td>
-      <h3>💰 Built-in Agent Economy</h3>
-      <ul>
-        <li>Autonomous A2A Payments</li>
-        <li>Coinbase CDP Integration</li>
-        <li>Instant service settlement</li>
-      </ul>
-    </td>
-    <td>
-      <h3>🔌 Multi-LLM Support</h3>
-      <ul>
-        <li>OpenAI, Anthropic, Groq, Google</li>
-        <li>Flexible AI Core Choice</li>
-        <li>Vendor-Agnostic Intelligence</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h3>📊 Deep Observability</h3>
-      <ul>
-        <li>LangSmith tracing</li>
-        <li>Monitor tools & payments</li>
-        <li>Custom Callbacks</li>
-      </ul>
-    </td>
-    <td>
-      <h3>🌐 Agent Profile Advertising</h3>
-      <ul>
-        <li>Publish Comprehensive Agent Details</li>
-        <li>Market-Driven Discovery</li>
-        <li>On-the-Fly Collaboration</li>
-      </ul>
-    </td>
-    <td>
-      <h3>🔗 Native Blockchain Integration</h3>
-      <ul>
-        <li>Coinbase AgentKit Ready</li>
-        <li>On-Chain Value Exchange</li>
-        <li>Configurable networks</li>
-      </ul>
-    </td>
-  </tr>
-</table>
+    def __init__(self, name: str, run: Run) -> None:
+        super().__init__(name=name)
+        self.run_harness = run
 
-## 🚀 Quick Start
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+        if msg.kind == "request":
+            return await self.run_harness(str(msg.content))
+        return None
+```
+
+Return your answer from `handle`. Use `ctx` to read the conversation or ask teammates for help.
+
+### Join a Team
+
+These snippets show the integration points inside an asynchronous application. `write_draft` below is the function you already use to run your writer.
+
+```python
+from agentconnect import Team
+
+team = await Team("studio").start()
+writer = Writer("writer", run=write_draft)
+editor = BaseAgent("editor")
+
+await writer.join(team)
+await editor.join(team)
+
+pending = await editor.ask("writer", "Draft a short launch note.", collect="ticket")
+```
+
+The editor asks for a draft, and the writer answers using its own harness.
+
+Use the supplied tools in your agents, or call the Python methods when your application needs direct control. `ask` requests an answer, `tell` sends an update without expecting one, and `get_result` checks on earlier work.
+
+If an answer is still pending, your agent can keep working and check again later.
+
+## Share tools across the Team
+
+Add a tool once and make it available to agents connected through the Team's MCP endpoint.
+
+```python
+from agentconnect import Team
+
+
+def style_guide() -> str:
+    """Return the team's writing guidelines."""
+    return "Use plain language. Back claims with sources."
+
+
+team = await Team("studio", tools=[style_guide]).start()
+await team.serve()
+print(team.mcp_url)
+```
+
+Install the `agentconnect[serve]` extra and point your MCP clients at the printed URL. Connected, authorized agents can use `style_guide` alongside the collaboration tools.
+
+Use shared tools to give your team access to project information, services, or guidelines. Your harness can also keep using its existing MCP servers.
+
+## Work together at each agent's pace
+
+- **Find the right help.** Describe the work you need and choose a teammate whose skills fit.
+- **Talk while work continues.** Agents can exchange questions and updates while each works on its own tasks. Each agent chooses when it needs to wait for an answer.
+- **Continue a conversation.** An agent can refer back to what was discussed, while keeping its private memory in its own harness.
+- **Run agents independently.** Start them together or connect them from separate applications over HTTP. Add more specialists as your needs grow.
+
+## Try a Team
+
+Use Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/). The branch includes a self-contained project that runs a three-agent collaboration.
 
 ```bash
-# Clone the repository
-git clone https://github.com/AKKI0511/AgentConnect.git
-cd AgentConnect
-
-# Install dependencies
-poetry install --with demo,dev --extras "aiagent telegram payments cli embeddings index redis serve"
-
-# Set up environment
-copy example.env .env  # Windows
-cp example.env .env    # Linux/Mac
+git clone --branch team-restructure https://github.com/AKKI0511/AgentConnect.git
+cd AgentConnect/examples/quickstart
+uv sync
+uv run python -m team_demo
 ```
 
-Set required environment variables in your `.env` file:
-```
-# Required for AI providers (at least one)
-OPENAI_API_KEY=your_openai_api_key
-# Optional for payment capabilities
-CDP_API_KEY_NAME=your_cdp_api_key_name
-CDP_API_KEY_PRIVATE_KEY=your_cdp_api_key_private_key
-```
+The default run uses fixed responses and needs no API key. It sends work between agents and collects the final answer.
 
-For detailed installation instructions and configuration options, see the [QuickStart Guide](docs/source/quickstart.md) and [Installation Guide](docs/source/installation.md).
-
-## 🎮 Usage
-
-For detailed instructions on using AgentConnect, including the command-line interface, running examples, and building your own agents, see the [full documentation](https://AKKI0511.github.io/AgentConnect/).
-
-Quick CLI examples:
+For live OpenAI calls, create `.env` in that quickstart directory with `OPENAI_API_KEY=your-key`, then run the same program with `--live`.
 
 ```bash
-agentconnect init
-agentconnect up
-agentconnect find "someone who can draft a summary"
-agentconnect ask assistant "What can you do?"
+uv run python -m team_demo --live
 ```
 
-*   [Running Examples](examples/README.md)
-*   [Demo Application UI](demos/README.md)
-*   [Using the CLI](agentconnect/cli/README.md)
-*   [Building Custom Agents](docs/source/building_agents.md) *(To be created)*
+The examples collection contains complete programs for discovery, longer tasks, conversation history, HTTP, MCP, and hosting. Each example has its own run instructions.
 
-## 💻 Examples
-AgentConnect includes several example applications to demonstrate different features:
+## Project status
 
-- **Basic Chat**: Simple human-agent interaction
-- **Multi-Agent System**: Collaborative agent workflows
-- **Research Assistant**: Task delegation and information retrieval
-- **Data Analysis**: Specialized data processing
-- **Telegram Assistant**: Telegram AI agent with multi-agent collaboration
-- **Agent Economy**: Autonomous workflow with automatic cryptocurrency payments between agents
+**v0.5 is in development on `team-restructure`.** The commands above install this checkout. Use this branch to try the Team API while the release is being completed.
 
-For code examples and detailed descriptions, see the [Examples Directory](examples/README.md) or browse the [Examples docs](https://AKKI0511.github.io/AgentConnect/examples/).
-
-## 🚀 Demo Application
-A full-featured demo application is included to showcase the framework's capabilities:
-
-> **Note:** The UI demo is currently being refactored for a new version with improved features and better integration with the modular multi-agent system. In the meantime, we recommend using the CLI examples.
-
-```bash
-# Start the backend server
-poetry run python demos/run_demo.py --backend-only
-
-# Start the frontend (in a separate terminal)
-cd demos/ui/frontend
-npm install
-npm run dev
-```
-For more information about the demo application, see the [Demo Documentation](demos/QUICKSTART.md).
-
-## 🏗️ Architecture
-
-AgentConnect is built on three core pillars that enable decentralized agent collaboration:
-
-1.  **Decentralized Agent Registry:**  A registry that allows agents to publish their detailed characteristics and service offerings and discover other agents.  This is *not* a central controller, but rather a directory service.  Agents can query the registry to find other agents that meet their needs.
-2.  **Communication Hub:**  A message routing system that facilitates secure communication between agents.  The hub ensures reliable message delivery, but does *not* dictate agent behavior or control the network.
-3.  **Independent Agent Systems:**  Each agent is a self-contained unit, built using the tools and frameworks of the developer's choice (LiteLLM, custom logic, another agent framework).  Agents interact through the Team Runtime, but their internal workings are independent.
-
-This architecture allows for a truly decentralized and scalable network of autonomous agents.
-
-![AgentConnect Architecture Flow](docs/source/_static/architecture_flow.png)
-
-## 📊 Trace
-
-The Runtime records a Trace timeline for each exchange. After a failed
-``ask``, print it:
-
-```bash
-poetry run agentconnect trace <trace_id>
-```
-
-See `examples/communication/trace.py`.
-
-## 🛠️ Development
-
-For developers who want to contribute to AgentConnect, please refer to our [Development Guidelines](docs/DEVELOPER_GUIDELINES.md) for information about:
-
-*   Coding standards
-*   Documentation requirements
-*   Testing procedures
-*   Git workflow
-*   Continuous integration
-
-## 📚 Documentation
-
-- [Online Documentation](https://AKKI0511.github.io/AgentConnect/) - Full documentation hosted on GitHub Pages
-- [QuickStart Guide](https://AKKI0511.github.io/AgentConnect/quickstart) - Get started quickly with basic concepts
-- [Examples](examples/README.md) - Sample code and use cases
-- [API Reference](https://AKKI0511.github.io/AgentConnect/api/) - Detailed API documentation
-- [Development Guidelines](docs/DEVELOPER_GUIDELINES.md) - Guidelines for contributors
-- [SDK Configuration](agentconnect/config/README.md) - Configure agents via agentconnect.yaml and CLI
-
-## 📋 Project Structure
-
-```
-AgentConnect/
-├── agentconnect/           # Runtime
-│   ├── core/              # Nouns: Address, Profile, identity, kinds
-│   ├── agent/             # Client SDK (BaseAgent, Session, team_tools)
-│   ├── team/              # Team Runtime
-│   ├── transport/        # Agent-to-Team HTTP
-│   ├── mcp/               # One MCP server per Team
-│   ├── gateway/           # Later inbound gateway
-│   ├── index/             # Optional Index / registry
-│   ├── cli/               # Command-line interface
-│   ├── config/            # agentconnect.yaml
-│   ├── prebuilt/          # Ready-made agents (AIAgent, HumanAgent, Telegram)
-│   ├── prompts/           # Prompt templates (until helper rebuild)
-│   └── providers/         # AI provider integrations (until helper rebuild)
-├── spec/                  # Public Team Runtime contract
-├── examples/              # Example applications
-├── docs/                  # Documentation
-└── tests/                 # Test suite
-```
-
-## 🗺️ Roadmap
-
-- ✅ **MVP with basic agent-to-agent interactions**
-- ✅ **Autonomous communication between agents**  
-- ✅ **Capability-based agent discovery**
-- ✅ **Coinbase AgentKit Payment Integration**
-- ✅ **Team MCP server** (`Team.serve()` at `{origin}/mcp`; `BaseAgent.team_tools()` for hosts that do not speak MCP)
-- ⬜ **Agent Identity & Reputation System**
-- ⬜ **Asynchronous Agent Collaboration System**
-- ⬜ **Marketplace-Style Agent Discovery**
-- ⬜ **Structured Parameters SDK**
-- ⬜ **Secure data exchange protocols**
-- ⬜ **Additional AI provider integrations**
-- ⬜ **Advanced memory systems (Redis, PostgreSQL)**
-- ⬜ **Federated learning capabilities**
-- ⬜ **Cross-chain communication support**
-
-## 🤝 Contributing
-
-We welcome contributions to AgentConnect! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
-
-## 📄 License
-
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
-
-## 📝 Changelog
-
-See the [Changelog](CHANGELOG.md) for a detailed history of changes to the project.
-
-## 🙏 Acknowledgments
-
-- Inspired by the need for independent autonomous multi-agent collaboration with dynamic agent discovery
-- Thanks to all contributors who have helped shape this project
-
-## 📞 Support
-
-- Create an [Issue](https://github.com/AKKI0511/AgentConnect/issues)
-- Email: akkijoshi0511@gmail.com
-
----
-
-<div align="center">
-  <sub>Built with ❤️ by the AgentConnect team</sub>
-</div>
+Library development uses Poetry. See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute. AgentConnect is licensed under [Apache 2.0](LICENSE).

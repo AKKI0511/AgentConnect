@@ -5,7 +5,7 @@ include CHANGELOG.md
 include CONTRIBUTING.md
 include CODE_OF_CONDUCT.md
 include pyproject.toml
-include poetry.lock
+include uv.lock
 include example.env
 include Makefile
 

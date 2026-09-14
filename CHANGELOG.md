@@ -36,7 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced standalone discovery and communication MCP servers with one Team MCP server. `agentconnect mcp start` is gone. MCP access tokens are the member Session token, not a separate JWT.
 - Replaced SDK-wide `AgentConnectSettings` and the old `config`, `serve registry`, and `registry ping` commands with a Team file plus the operator CLI. Embedded `Team("name").start()` still needs no file.
 - Laid out the Team-based package tree: `core/` (nouns), `agent/` (client SDK), `team/` (runtime), `transport/`, `gateway/`, and `index/`. `BaseAgent` lives in `agent/`. Message `kind` is the closed set `request`, `response`, `error`, `event`.
-- Import boundaries are enforced with `import-linter`: `core/` imports no siblings, `agent/` and `team/` do not import each other, `agent/` and `mcp/` do not import each other, and nothing imports `prebuilt/`.
+- Import boundaries are checked by tests under `tests/imports`: `core/` imports no siblings, `agent/` and `team/` do not import each other, `agent/` and `mcp/` do not import each other, and nothing imports `prebuilt/`.
+- Supported CPython is 3.11–3.14 (`requires-python = ">=3.11,<4"`). Contributor checks use Ruff for lint and format.
 - Rebuilt `AIAgent`, `HumanAgent`, and `TelegramAIAgent` on LiteLLM. Model choice is a string. Custom tools use `agentconnect.prebuilt.Tool`. `HumanAgent` needs `agentconnect[cli]`. Telegram needs `agentconnect[telegram]`.
 - Index embeddings default to hashed n-grams. `fastembed` stays behind `agentconnect[embeddings]`. `qdrant-client` stays behind `agentconnect[index]`.
 - Appointment scheduler and fundraising examples are hosted Teams. Cross-team talk is later work.

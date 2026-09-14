@@ -553,7 +553,7 @@ Deployment
 
 .. note::
 
-   Official Docker images and a PyPI release are on the roadmap. Until then, the only fully supported deployment path is running from source using Poetry.
+   Official Docker images and a PyPI release are on the roadmap. Until then, the only fully supported deployment path is running from source using uv.
 
 Clone the repository on your target machine, install dependencies, and copy the server ``.env`` template:
 
@@ -561,7 +561,7 @@ Clone the repository on your target machine, install dependencies, and copy the 
 
     git clone https://github.com/AKKI0511/AgentConnect.git
     cd AgentConnect
-    poetry install
+    uv sync
     cp agentconnect/index/.env.example .env
 
 Edit ``.env``. Set ``AGENTCONNECT_REGISTRY_HOST=0.0.0.0`` so the server accepts connections from outside localhost, and configure the Qdrant variables for your chosen deployment mode (see `Vector Search Deployment Mode`_ above).
@@ -570,7 +570,7 @@ Start the server:
 
 .. code-block:: bash
 
-    poetry run agentconnect serve registry
+    uv run agentconnect serve registry
 
 For persistent deployments, wrap this command in a process manager such as systemd or supervisord so the server restarts automatically on failure.
 

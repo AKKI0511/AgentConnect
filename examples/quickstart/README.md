@@ -18,7 +18,7 @@ switch back to the stub.
 
 ## Setup
 
-Python 3.11 or 3.12. [Install uv](https://docs.astral.sh/uv/getting-started/installation/).
+Python 3.11 through 3.14. [Install uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 From a clone of this repository:
 

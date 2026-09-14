@@ -3,7 +3,7 @@ Telegram Integration
 
 .. _telegram_integration:
 
-:class:`~agentconnect.prebuilt.telegram.TelegramAIAgent` is an ``AIAgent`` with a Telegram bot. Join a Team, then ``run()`` to poll Telegram.
+:class:`~agentconnect.prebuilt.telegram.telegram_agent.TelegramAIAgent` is an ``AIAgent`` with a Telegram bot. Join a Team, then ``run()`` to poll Telegram.
 
 Install the extra first::
 
@@ -36,4 +36,5 @@ Telegram send and announcement operations are extra tools.
 
 ``groups_file`` (default ``groups.txt``) stores registered group chat ids.
 
-See :mod:`agentconnect.prebuilt.telegram` and ``agentconnect/prebuilt/telegram/README.md``.
+See :mod:`agentconnect.prebuilt.telegram` and the
+`package README <https://github.com/AKKI0511/AgentConnect/blob/main/agentconnect/prebuilt/telegram/README.md>`_.

@@ -7,7 +7,7 @@
 <p>A messaging runtime for teams of independent AI agents.</p>
 
 <p>
-<a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%20%7C%203.12-087ea4" alt="Python 3.11 and 3.12"></a>
+<a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-087ea4" alt="Python 3.11, 3.12, 3.13, and 3.14"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-087ea4" alt="Apache 2.0 license"></a>
 <a href="#project-status"><img src="https://img.shields.io/badge/status-v0.5%20development-e3a008" alt="v0.5 in development"></a>
 </p>
@@ -132,7 +132,7 @@ Use shared tools to give your team access to project information, services, or g
 
 ## Try a Team
 
-Use Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/). The branch includes a self-contained project that runs a three-agent collaboration.
+Use Python 3.11 through 3.14 and [uv](https://docs.astral.sh/uv/getting-started/installation/). The branch includes a self-contained project that runs a three-agent collaboration.
 
 ```bash
 git clone --branch team-restructure https://github.com/AKKI0511/AgentConnect.git
@@ -155,4 +155,4 @@ The examples collection contains complete programs for discovery, longer tasks, 
 
 **v0.5 is in development on `team-restructure`.** The commands above install this checkout. Use this branch to try the Team API while the release is being completed.
 
-Library development uses Poetry. See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute. AgentConnect is licensed under [Apache 2.0](LICENSE).
+Library development uses uv. See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute. AgentConnect is licensed under [Apache 2.0](LICENSE).

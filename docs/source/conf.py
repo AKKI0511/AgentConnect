@@ -15,10 +15,25 @@ def setup(app):
 def skip_private_members(app, what, name, obj, skip, options):
     if skip:
         return True
-    if hasattr(obj, "__doc__") and obj.__doc__ and ":private:" in obj.__doc__:
+    doc = getattr(obj, "__doc__", None)
+    if isinstance(doc, str) and ":private:" in doc:
         return True
-    if name == "__init__" and obj.__objclass__ is object:
-        # dont document default init
+    # Default object.__init__ is a wrapper function, not a slot wrapper.
+    if name == "__init__" and getattr(obj, "__objclass__", None) is object:
+        return True
+    # Document classes and functions on their defining module page only.
+    defined = getattr(obj, "__module__", None)
+    current = app.env.ref_context.get("py:module")
+    if current is None:
+        docname = getattr(app.env, "docname", "") or ""
+        if docname.startswith("api/"):
+            current = docname[4:].replace("/", ".")
+    if current and defined and defined != current:
+        return True
+    # Napoleon turns an Attributes: section into py:attribute entries, and
+    # autodoc also emits annotated fields. Skipping autodoc attributes avoids
+    # that double index on the same page. Methods and the class still render.
+    if what in {"attribute", "data"}:
         return True
     return None
 
@@ -58,7 +73,7 @@ napoleon_include_special_with_doc = True
 napoleon_use_admonition_for_examples = False
 napoleon_use_admonition_for_notes = False
 napoleon_use_admonition_for_references = False
-napoleon_use_ivar = False
+napoleon_use_ivar = True
 napoleon_use_param = True
 napoleon_use_rtype = True
 napoleon_preprocess_types = False
@@ -69,15 +84,13 @@ autodoc_default_options = {
     'members': True,
     'undoc-members': True,
     'show-inheritance': True,
-    'special-members': '__init__',
 }
 autodoc_typehints = 'description'
 autodoc_member_order = 'bysource'
 
-# Fix for duplicate object descriptions
-# This tells autodoc to not document the same object twice
 autodoc_inherit_docstrings = True
-autodoc_warningiserror = False
+# Fail the build when autodoc cannot import or render a documented object.
+autodoc_warningiserror = True
 
 # Remove autodoc_default_flags which is deprecated
 # Add this to handle duplicate class documentation
@@ -110,22 +123,61 @@ source_suffix = ['.rst', '.md']
 # Configure MyST to handle anchors in Markdown files
 myst_heading_anchors = 3  # Generate anchors for h1, h2, and h3 headers
 
-# Ignore specific warnings for specific files
-nitpicky = False  # Don't be overly strict about warnings
-
-# Suppress specific warnings
+# Broken internal references fail the build (also passed as sphinx -n -W).
+nitpicky = True
+# Google-style SDK docstrings are often not strict RST. Rewriting those
+# strings is outside this contributor-infrastructure change. Import failures
+# and missing AgentConnect references still fail via autodoc and nitpicky.
+# Team's Embedder annotation is a forward name; resolving it is Runtime work.
 suppress_warnings = [
-    'docutils.nodes.title_reference',  # Suppress title reference warnings
-    'app.add_directive',               # Suppress directive warnings
-    'app.add_node',                    # Suppress node warnings
-    'image.nonlocal_uri',              # Suppress nonlocal URI warnings
-    'docutils.nodes.document',         # Suppress document warnings
-    'docutils',                        # Suppress all docutils warnings (including title underlines)
+    "docutils",
+    "sphinx_autodoc_typehints.forward_reference",
+    # installation.md / quickstart.md jump from H1 to H3. Rewriting those
+    # pages is outside this contributor-infrastructure change.
+    "myst.header",
 ]
-
-# Additional warning handling settings
-warning_is_error = False  # Don't treat warnings as errors
-nitpick_ignore = []  # List of (type, target) tuples to ignore for nitpicky warnings
+# Optional extras are mocked below so the docs extra does not need model,
+# embedding, or payment packages.
+# Non-agentconnect Python targets include typing constructs, Pydantic Field()
+# constraint fragments that autodoc emits as fake types, and third-party
+# objects. Missing agentconnect.* names still fail, except the removed
+# public names the current website guides still mention (guide rewrite is
+# a later task).
+nitpick_ignore_regex = [
+    ("py:.*", r"^(aiogram|litellm|fastembed|qdrant_client|cdp|coinbase_agentkit)(\.|$).*"),
+    ("py:.*", r"^(?!agentconnect(\.|$)).+"),
+]
+nitpick_ignore = [
+    ("py:class", "agentconnect.core.base.TypeAliasType"),
+    ("py:class", "agentconnect.core.base.TSchema"),
+    ("py:func", "agentconnect.config.load_settings"),
+    ("py:data", "agentconnect.config.settings"),
+    ("py:class", "agentconnect.config.models.AgentConnectSettings"),
+    ("py:class", "agentconnect.config.models.RegistryClientSettings"),
+    ("py:class", "agentconnect.config.models.VectorSearchAdvancedSettings"),
+    ("py:class", "agentconnect.team.directory.AgentRegistry"),
+    ("py:meth", "agentconnect.team.directory.AgentRegistry.get_by_capability"),
+    ("py:meth", "agentconnect.team.directory.AgentRegistry.get_by_capability_semantic"),
+    ("py:mod", "agentconnect.team.directory.search"),
+    ("py:class", "agentconnect.team.directory.search.AgentSearchInput"),
+    ("py:class", "agentconnect.team.directory.search.AgentSearchOutput"),
+    ("py:func", "agentconnect.team.directory.search.populate_search_result_item"),
+    ("py:class", "agentconnect.team.directory.search.schemas.AgentSearchOutput"),
+    ("py:class", "agentconnect.team.directory.search.schemas.AgentSearchResultItem"),
+    ("py:class", "agentconnect.team.directory.registration.AgentRegistration"),
+    ("py:class", "agentconnect.team.CommunicationHub"),
+    ("py:class", "agentconnect.team.runtime.CommunicationHub"),
+    ("py:class", "agentconnect.index.RegistryAPIClient"),
+    ("py:meth", "agentconnect.index.RegistryAPIClient.get_by_capability"),
+    ("py:meth", "agentconnect.index.RegistryAPIClient.get_by_capability_semantic"),
+    ("py:class", "agentconnect.core.types.AgentIdentity"),
+    ("py:class", "agentconnect.core.types.Capability"),
+    ("py:class", "agentconnect.core.types.AgentProfile"),
+    ("py:class", "agentconnect.core.types.Skill"),
+    ("py:class", "agentconnect.config.models.VectorSearchSettings"),
+    ("py:class", "agentconnect.core.message.Message"),
+    ("py:class", "agentconnect.core.message.MailboxMessage"),
+]
 
 # Exclude patterns for autodoc
 # This helps with the duplicate object descriptions in the prompts module
@@ -135,9 +187,15 @@ exclude_patterns = [
     '.DS_Store',
 ]
 
-# Ignore specific modules for autodoc
-# This helps with the duplicate object descriptions in the prompts module
-autodoc_mock_imports = []
+# Optional extras. Core, Agent, Team, HTTP, MCP, and CLI must import.
+autodoc_mock_imports = [
+    "aiogram",
+    "litellm",
+    "fastembed",
+    "qdrant_client",
+    "cdp",
+    "coinbase_agentkit",
+]
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
@@ -175,8 +233,8 @@ html_theme_options = {
     # Show previous/next buttons
     "show_prev_next": True,
     # Increase contrast for better readability
-    "pygment_light_style": "tango",
-    "pygment_dark_style": "monokai",
+    "pygments_light_style": "tango",
+    "pygments_dark_style": "monokai",
     # Theme toggle settings
     "footer_start": ["copyright"],
     # Sidebar collapsing behavior

@@ -3,7 +3,7 @@ name = "agentconnect-quickstart"
 version = "0.0.0"
 description = "Run a small AgentConnect team with uv."
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<4"
 dependencies = [
     "agentconnect",
     "openai>=1.40.0,<3",

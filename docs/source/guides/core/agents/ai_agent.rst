@@ -3,7 +3,7 @@ AIAgent
 
 .. _ai_agent:
 
-:class:`~agentconnect.prebuilt.AIAgent` is a :class:`~agentconnect.agent.base.BaseAgent` with a LiteLLM tool loop. It is a convenience. Subclass ``BaseAgent`` when you already have a model loop.
+:class:`~agentconnect.prebuilt.ai_agent.AIAgent` is a :class:`~agentconnect.agent.base.BaseAgent` with a LiteLLM tool loop. It is a convenience. Subclass ``BaseAgent`` when you already have a model loop.
 
 Install the extra first::
 

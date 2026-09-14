@@ -1,138 +1,81 @@
-# AgentConnect Documentation
+# AgentConnect documentation
 
-This directory contains the documentation for the AgentConnect project. The documentation is built using [Sphinx](https://www.sphinx-doc.org/), which automatically generates API documentation from docstrings in the code.
+[Read the docs](https://akki0511.github.io/AgentConnect/)
 
-## Documentation Structure
+This folder contains the AgentConnect website: getting started, user guides, examples, the Python API reference, and release notes. The published site is built from `main`.
 
-- `source/`: Contains the source files for the documentation
-  - `api/`: Auto-generated API documentation
-  - `guides/`: User guides
-  - `examples/`: Example code and usage
-  - `conf.py`: Sphinx configuration
-  - `index.rst`: Main index file
-- `build/`: Contains the built documentation (generated)
-- `generate_docs.py`: Script to automate documentation generation
-- `check_docstrings.py`: Script to check for missing docstrings
-- `generate_docstring_template.py`: Script to generate templates for missing docstrings
-- `doc_coverage.py`: Script to generate documentation coverage reports
-- `Makefile` and `make.bat`: Standard Sphinx build scripts
+## Browse this folder
 
-## Getting Started
+| Content | Source |
+| --- | --- |
+| Getting started | [Installation](source/installation.md) and [quickstart](source/quickstart.md) |
+| User guides | [source/guides/](source/guides/) |
+| Example walkthroughs | [source/examples/](source/examples/) |
+| Python API reference | [source/api/](source/api/), generated from the SDK |
+| Release notes | [Website changelog](https://akki0511.github.io/AgentConnect/changelog.html) |
+| Contributing | [source/contributing.rst](source/contributing.rst) |
 
-### Installation
+The [site index](source/index.rst) defines navigation. Images and styles live in [source/_static/](source/_static/).
 
-Before using the documentation tools, you need to install the required Python packages using Poetry:
+## Development
+
+From the repository root, one command installs the documentation dependencies, generates the API reference, builds the website, and starts a local server:
 
 ```bash
-# Install documentation dependencies
-poetry install --with docs
-# or
-make install-docs
+uv run --group docs --extra serve --extra cli python docs/generate_docs.py --preview
 ```
 
-## Automated Documentation Generation
+Open **http://127.0.0.1:8000/**. Ctrl+C stops the server. Rerun after editing to rebuild; `--port 8001` selects another port. `make docs-preview` is a shortcut.
 
-We've set up several tools to automate the documentation process:
+For a build without a server, omit `--preview` or use `make docs`. The output is `docs/build/html/`. The script also accepts `--api-only` to regenerate just the API sources and `--clean-only` to remove generated output.
 
-### Using Make
+### Website pages
 
-The simplest way to build the documentation is using Make:
+Pages in `source/` can use RST or Markdown. Add a new page to its parent page's toctree so readers can reach it. Keep page explanations and assets inside `docs/`; use links for additional repository context. The changelog is included from its canonical source as described below.
 
-```bash
-# Generate HTML documentation
-make docs
-# or
-make docs-html
+Before sharing a documentation change, the local preview lets you inspect navigation, links, examples, and API sections. CI publishes the same build from `main`; there are no PR preview builds.
 
-# Clean existing docs before generating
-make docs-clean
+### API docstrings
 
-# Check docstring coverage
-make docs-coverage
-```
+[Sphinx Napoleon](https://www.sphinx-doc.org/en/master/usage/extensions/example_google.html) parses Google-style docstrings. The summary appears first, followed by an optional explanation and named sections. Use blank lines between sections and indent their contents by four spaces relative to the heading.
 
-### Python Scripts
-
-For more fine-grained control, you can use the Python scripts directly:
-
-```bash
-# Generate API docs and build HTML documentation
-poetry run python docs/generate_docs.py
-
-# Check for missing docstrings
-poetry run python docs/check_docstrings.py
-
-# Generate templates for missing docstrings
-poetry run python docs/generate_docstring_template.py missing_docstrings.txt --output docstring_templates.txt
-
-# Generate documentation coverage report
-poetry run python docs/doc_coverage.py
-```
-
-### Pre-commit Hooks
-
-We use pre-commit hooks to ensure documentation quality:
-
-1. The `check-docstrings` hook checks that all public functions, classes, and methods have docstrings.
-2. The `check-docs` hook ensures that the documentation builds successfully.
-
-These hooks are automatically installed when you run:
-
-```bash
-poetry run pre-commit install
-# or
-make install-hooks
-```
-
-### GitHub Actions
-
-Documentation is automatically built and deployed to GitHub Pages when changes are pushed to the main branch. You can view the latest documentation at: `https://akki0511.github.io/AgentConnect/`
-
-## Writing Documentation
-
-### Code Documentation
-
-Document your code using Google-style docstrings:
+This standalone example shows the structure; `take_names` is an example function, not an AgentConnect API:
 
 ```python
-def my_function(param1, param2):
-    """Short description of the function.
-    
-    Longer description explaining what the function does, its behavior,
-    and any important details.
-    
+def take_names(names: list[str], *, limit: int = 3) -> list[str]:
+    """Return up to ``limit`` names in their original order.
+
+    The input list is left unchanged.
+
     Args:
-        param1 (type): Description of param1
-        param2 (type): Description of param2
-        
+        names: Names to select from.
+        limit: Maximum number to return. Must be positive.
+
     Returns:
-        return_type: Description of the return value
-        
+        A new list containing the selected names.
+
     Raises:
-        ExceptionType: When and why this exception is raised
-        
+        ValueError: If ``limit`` is less than one.
+
     Examples:
-        >>> my_function(1, 2)
-        3
+        .. code-block:: python
+
+            names = take_names(["writer", "editor"], limit=1)
+            print(names)  # ["writer"]
     """
-    return param1 + param2
+    if limit < 1:
+        raise ValueError("limit must be positive")
+    return names[:limit]
 ```
 
-### Adding New Pages
+The blank line after `.. code-block:: python` and the extra indentation on its body make the example a highlighted Python block in the generated API page. Markdown triple-backtick fences belong in Markdown pages, not these docstrings. A short interactive example can instead use `>>>` prompts. Generator functions use `Yields` in place of `Returns`; classes can describe public state under `Attributes`.
 
-1. Create a new `.rst` or `.md` file in the appropriate directory
-2. Add the file to the appropriate toctree in `index.rst` or another parent document
+Keep the summary and section text readable on their own for IDE hover help. IDEs vary in how much RST markup they render. Types are already provided by annotations, so descriptions can focus on behavior and constraints.
 
-## Building Documentation Manually
+Every RST file under `source/api/`, including `index.rst`, is regenerated by [generate_docs.py](generate_docs.py). Edit SDK docstrings for API content and [apidoc-templates/](apidoc-templates/) for presentation. Manual edits to generated pages are overwritten.
 
-If you prefer to use the standard Sphinx commands:
+### Changelog
 
-```bash
-# On Linux/macOS
-cd docs
-make html
+The root [CHANGELOG.md](https://github.com/AKKI0511/AgentConnect/blob/main/CHANGELOG.md) is the only source for release notes. [source/changelog.rst](source/changelog.rst) includes it through the MyST Markdown parser. Edit the root file once; its headings, lists, and code blocks appear on both GitHub and the website.
 
-# On Windows
-cd docs
-.\make.bat html
-``` 
+The docs publishing workflow watches `CHANGELOG.md` as well as documentation and SDK changes, so a release-note-only change on `main` updates the website.

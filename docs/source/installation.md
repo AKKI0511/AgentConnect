@@ -2,23 +2,23 @@
 
 ### Prerequisites
 
-- Python 3.11 or higher
-- Poetry (Python package manager)
+- Python 3.11 through 3.14
+- uv (Python package manager)
 
 ### Installing AgentConnect
 
-AgentConnect is currently available from source only. Direct installation via pip will be available soon.
+AgentConnect is installed from this repository.
 
 ### Development Installation
 
-Clone the repository and install dependencies using Poetry:
+Clone the repository and install dependencies using uv:
 
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-poetry install --with dev --extras "aiagent telegram payments cli embeddings index redis serve"  # For development (recommended)
-# For production only:
-# poetry install --without dev
+uv sync --extra serve --extra cli
+# Runtime only, no dev tools:
+# uv sync
 ```
 
 ### Environment Setup

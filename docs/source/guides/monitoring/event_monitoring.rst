@@ -9,10 +9,10 @@ leased, completed, replied, ticket closed. ``get_trace`` returns it.
 
 .. code-block:: bash
 
-    poetry run agentconnect trace <trace_id>
+    uv run agentconnect trace <trace_id>
 
 A failed ``ask`` is visible from that timeline without reading logs. Canonical
-example: ``examples/communication/trace.py``.
+example: ``agentconnect trace <trace_id>``.
 
 Model-provider dashboards (LiteLLM callbacks, vendor consoles) are outside the
 Runtime. They can sit next to Team Trace. They do not replace it.

@@ -26,7 +26,7 @@ Overall Vision: Independent Agents
 
 At its heart, AgentConnect is designed to create a network of independent, potentially heterogeneous agents that can discover and communicate with each other securely. Unlike traditional centralized systems, AgentConnect promotes agent autonomy - each agent makes its own decisions about when, how, and with whom to interact.
 
-The framework is built around the :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` abstract class, which provides the foundation for all agents in the system. This base class defines common functionality such as identity management, message handling, and capability declaration, while leaving implementation details to specific agent types like :class:`AIAgent <agentconnect.prebuilt.AIAgent>` or :class:`HumanAgent <agentconnect.prebuilt.HumanAgent>`.
+The framework is built around the :class:`BaseAgent <agentconnect.agent.base.BaseAgent>` abstract class, which provides the foundation for all agents in the system. This base class defines common functionality such as identity management, message handling, and capability declaration, while leaving implementation details to specific agent types like :class:`AIAgent <agentconnect.prebuilt.ai_agent.AIAgent>` or :class:`HumanAgent <agentconnect.prebuilt.human_agent.HumanAgent>`.
 
 .. admonition:: Mental model: Describe → Discover → Talk
    :class: tip

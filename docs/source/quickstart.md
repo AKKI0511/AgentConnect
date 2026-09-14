@@ -6,8 +6,8 @@ an optional helper on a LiteLLM tool loop.
 
 ### Prerequisites
 
-- Python 3.11 or 3.12
-- Poetry
+- Python 3.11 through 3.14
+- uv
 - At least one provider API key when you use a live model
 
 ### Installation
@@ -15,7 +15,7 @@ an optional helper on a LiteLLM tool loop.
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-poetry install --with dev --extras "aiagent telegram payments cli embeddings index redis serve"
+uv sync --all-extras
 copy example.env .env  # Windows
 cp example.env .env    # Linux/Mac
 ```
@@ -89,8 +89,9 @@ if __name__ == "__main__":
 
 Join starts a Session that pulls work. There is no `run()` loop on the Agent.
 
-A recorded model (`complete=`) is how tests avoid a live API. See
-`examples/communication/aiagent.py`.
+A recorded model (`complete=`) is how tests avoid a live API.
+
+The uv quickstart is [`examples/quickstart`](https://github.com/AKKI0511/AgentConnect/tree/main/examples/quickstart).
 
 ## Interactive CLI chat
 
@@ -121,10 +122,10 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Type `exit` to stop. See `examples/example_usage.py`.
+Type `exit` to stop. The Team recipes are in `examples/recipes/`.
 
 ### What's Next?
 
-- Team Runtime examples in `examples/communication/`
+- Team Runtime examples in `examples/`
 - [User Guides](https://AKKI0511.github.io/AgentConnect/guides/)
 - [API Reference](https://AKKI0511.github.io/AgentConnect/api/)

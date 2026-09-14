@@ -9,7 +9,7 @@ This section contains examples demonstrating how to use the AgentConnect framewo
 .. note::
    The example code is available in the ``examples/`` directory of the repository.
    You can run these examples directly after installing AgentConnect with the demo dependencies:
-   ``poetry install --with demo``
+   ``uv sync --group demo``
 
 The examples cover a range of use cases from basic to advanced scenarios:
 

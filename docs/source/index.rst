@@ -168,24 +168,21 @@ Installation
 ==============
 
 .. attention::
-   AgentConnect is currently available from source only. Direct installation via pip will be available soon.
+   AgentConnect is installed from this repository.
 
 Prerequisites
 ------------
 
-- Python 3.11 or higher
-- Poetry (Python package manager)
+- Python 3.11 through 3.14
+- uv (Python package manager)
 
-AgentConnect can be installed by cloning the repository and using Poetry to install dependencies. 
+Clone the repository and install with uv.
 
 .. code-block:: bash
 
-    # Clone the repository
     git clone https://github.com/AKKI0511/AgentConnect.git
     cd AgentConnect
-
-    # Install dependencies
-    poetry install
+    uv sync --extra serve --extra cli
 
 For detailed installation instructions including environment setup and API configuration, see the :doc:`installation` guide.
 

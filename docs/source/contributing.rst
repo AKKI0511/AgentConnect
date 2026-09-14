@@ -1,284 +1,97 @@
 Contributing
 ============
 
-.. Note::
-   We welcome contributions to AgentConnect! This guide will help you get started.
-
-.. contents:: Table of Contents
-   :local:
-   :depth: 2
-
-Code of Conduct
---------------
-
-This project and everyone participating in it is governed by our :doc:`code_of_conduct`. By participating, you are expected to uphold this code.
-
-Getting Started
---------------
-
-Development Environment
-~~~~~~~~~~~~~~~~~~~~~
-
-Required tools:
-
-* Python 3.11 or higher
-* Poetry (Python package manager)
-* Git
-* A code editor (VS Code recommended)
-* Make (optional, for using Makefile commands)
-
-First Time Setup
-~~~~~~~~~~~~~~
-
-1. Fork the repository on GitHub
-2. Clone your fork locally:
-
-   .. code-block:: bash
-
-      git clone https://github.com/AKKI0511/AgentConnect.git
-      cd AgentConnect
-
-3. Set up your development environment:
-
-   .. code-block:: bash
-
-      # Install Poetry if you haven't already
-      curl -sSL https://install.python-poetry.org | python3 -
-
-      # Install dependencies
-      poetry install --with dev,demo
-
-      # Install pre-commit hooks
-      poetry run pre-commit install
-      # or
-      make install-hooks
-
-4. Create a branch for your changes:
-
-   .. code-block:: bash
-
-      git checkout -b feature/your-feature-name
-
-Development Workflow
-------------------
-
-Creating a Feature
-~~~~~~~~~~~~~~~~
-
-1. Update your main branch:
-
-   .. code-block:: bash
-
-      git checkout main
-      git pull upstream main
-
-2. Create a feature branch:
-
-   .. code-block:: bash
-
-      git checkout -b feature/your-feature-name
-
-3. Make your changes:
-
-   * Write tests for new functionality
-   * Update documentation as needed
-   * Follow the code style guidelines
-
-4. Commit your changes:
-
-   .. code-block:: bash
-
-      git add .
-      git commit -m "feat: add your feature description"
-
-CI/CD Workflows
-~~~~~~~~~~~~~
-
-AgentConnect uses GitHub Actions for continuous integration and deployment:
-
-1. **CI Workflow (main.yml)**:
-
-   * Triggered on pushes to main and pull requests
-   * Runs on Ubuntu with Python 3.11 and 3.12
-   * Sets up Redis for testing
-   * Installs dependencies using Poetry
-   * Runs linting with flake8
-   * Checks code formatting with black
-   * Runs tests with pytest
-   * Fails fast if any step fails
-
-2. **Documentation Workflow (docs.yml)**:
-
-   * Triggered on pushes to main and pull requests that modify documentation
-   * Builds documentation using Sphinx
-   * Deploys to GitHub Pages when merged to main
-   * Documentation is available at: https://akki0511.github.io/AgentConnect/
-
-When you submit a pull request, these workflows will automatically run to verify your changes. Make sure all checks pass before requesting a review.
-
-Code Style
-~~~~~~~~
-
-We use several tools to maintain code quality:
-
-1. Recommended: Use the Makefile for common development tasks:
-
-   .. code-block:: bash
-
-      # Format code, run linting, and tests
-      make all
-
-      # Run only linting
-      make lint
-
-      # Format code
-      make format
-
-      # Run tests
-      make test
-
-      # Run tests with coverage
-      make coverage
-
-2. Black for code formatting:
-
-   .. code-block:: bash
-
-      poetry run black .
-
-3. Flake8 for style guide enforcement:
-
-   .. code-block:: bash
-
-      poetry run flake8
-
-4. Type hints are required for all functions:
-
-   .. code-block:: python
-
-      def example_function(param1: str, param2: int) -> bool:
-          return True
-
-Git Hooks
-~~~~~~~~
-
-We use pre-commit to automate code quality checks before each commit. The hooks will:
-
-* Format code with Black
-* Sort imports with isort
-* Check for common issues with flake8
-* Ensure documentation is up-to-date
-
-To install the hooks:
-
-.. code-block:: bash
-
-   # Install pre-commit hooks
-   poetry run pre-commit install
-   # or
-   make install-hooks
-
-To manually run all hooks on all files:
-
-.. code-block:: bash
-
-   poetry run pre-commit run --all-files
-   # or
-   make hooks
-
-.. note::
-   The ``demos/`` directory is excluded from pre-commit checks as it contains standalone demo applications that follow different coding standards.
-
-Testing
-~~~~~~
-
-1. Write tests for your changes:
-
-   .. code-block:: python
-
-      # tests/test_your_feature.py
-      def test_your_feature():
-          result = your_feature()
-          assert result == expected_value
-
-2. Run the test suite:
-
-   .. code-block:: bash
-
-      poetry run pytest
-
-Documentation
-~~~~~~~~~~~
-
-1. Update docstrings for any new code:
-
-   .. code-block:: python
-
-      def your_function(param1: str, param2: int) -> bool:
-          """
-          Brief description of function.
-
-          Args:
-              param1: Description of param1
-              param2: Description of param2
-
-          Returns:
-              bool: Description of return value
-
-          Raises:
-              ValueError: Description of when this error occurs
-          """
-          return True
-
-2. Update README.md if you've added new features
-3. Add examples to the examples/ directory
-4. Update API documentation if needed
-
-Pull Request Process
-------------------
-
-1. Update the README.md with details of major changes
-2. Update the CHANGELOG.md following the Keep a Changelog format
-3. Ensure all tests pass and code style checks succeed
-4. Submit the PR with a clear title and description
-5. Wait for review and address any feedback
-
-Example PR description:
-
-.. code-block:: markdown
-
-   ## Description
-   Brief description of your changes
-
-   ## Type of Change
-   - [ ] Bug fix
-   - [ ] New feature
-   - [ ] Breaking change
-   - [ ] Documentation update
-
-   ## Testing
-   Describe how you tested your changes
-
-   ## Checklist
-   - [ ] Tests added/updated
-   - [ ] Documentation updated
-   - [ ] Code follows style guidelines
-   - [ ] CHANGELOG.md updated
-
-Community
---------
-
-- Follow us on `LinkedIn <https://www.linkedin.com/company/agentconnect-ai/>`_
-- Join our `Discord server <https://discord.gg/agentconnect>`_
-- Follow us on `Twitter <https://twitter.com/agentconnect>`_
-- Subscribe to our `newsletter <https://agentconnect.dev/newsletter>`_
-
-Additional Resources
+Development setup
 -----------------
 
-- `Python Style Guide (PEP 8) <https://peps.python.org/pep-0008/>`_
-- `Type Hints Guide (PEP 484) <https://peps.python.org/pep-0484/>`_
-- `Git Commit Message Guidelines <https://www.conventionalcommits.org/>`_
-- `Semantic Versioning <https://semver.org/>`_
+Install `uv <https://docs.astral.sh/uv/getting-started/installation/>`_
+and use Python 3.11 through 3.14.
 
-Thank you for contributing to AgentConnect!
+.. code-block:: bash
+
+   git clone https://github.com/AKKI0511/AgentConnect.git
+   cd AgentConnect
+   uv sync --extra serve --extra cli --extra index
+
+Use your fork's URL if contributing through a fork. Pull requests
+target ``main``.
+
+Tests and code style
+--------------------
+
+.. code-block:: bash
+
+   uv run --extra serve --extra cli --extra index pytest tests/ -q
+   uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
+   uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
+
+A test file or directory can replace ``tests/``. Routine tests do not
+need provider API keys. Optional Ruff commit hooks are available with
+``uvx pre-commit@latest install``.
+
+Public API
+----------
+
+The public schema is in
+`spec/schema/schema.ts <https://github.com/AKKI0511/AgentConnect/blob/main/spec/schema/schema.ts>`_;
+its Python models are in
+`agentconnect/core/ <https://github.com/AKKI0511/AgentConnect/tree/main/agentconnect/core>`_.
+Changes to public fields need matching definitions. With Node LTS installed:
+
+.. code-block:: bash
+
+   npm --prefix spec/schema ci
+   npm --prefix spec/schema run generate
+   npm --prefix spec/schema run check
+
+Package boundaries and generated-file locations are listed in
+`AGENTS.md <https://github.com/AKKI0511/AgentConnect/blob/main/AGENTS.md>`_.
+
+Documentation
+-------------
+
+For a complete website preview, run from the repository root:
+
+.. code-block:: bash
+
+   uv run --group docs --extra serve --extra cli python docs/generate_docs.py --preview
+
+Open http://127.0.0.1:8000/ and stop the server with Ctrl+C.
+``make docs-preview`` is a shortcut. Without ``--preview``, the command
+builds HTML without serving it.
+
+SDK docstrings use Google-style sections. Under ``Examples:``, an
+indented ``.. code-block:: python`` followed by a blank line and further
+indented code produces a highlighted Python example. All API RST,
+including its index, is generated. Edit SDK docstrings or templates
+rather than the generated files.
+
+The `docs README <https://github.com/AKKI0511/AgentConnect/blob/main/docs/README.md>`_
+contains a complete docstring example and the documentation folder map.
+The :doc:`changelog` includes the root
+`CHANGELOG.md <https://github.com/AKKI0511/AgentConnect/blob/main/CHANGELOG.md>`_,
+so release notes only need one edit. Website publishing is limited to
+``main``; previews run locally.
+
+Pull requests
+-------------
+
+* Describe the problem and the change.
+* Include tests for changed behavior and note what you ran.
+* Update affected documentation and user-facing release notes.
+* Keep unrelated changes in separate pull requests.
+
+An issue is useful for discussing substantial features before
+implementation. Small fixes can go straight to a pull request.
+AI-assisted contributions follow the same review process.
+
+Code of conduct
+---------------
+
+The :doc:`code_of_conduct` applies to contributions and discussions.
+
+License
+-------
+
+Contributions are distributed under the project's
+`Apache 2.0 license <https://github.com/AKKI0511/AgentConnect/blob/main/LICENSE>`_.

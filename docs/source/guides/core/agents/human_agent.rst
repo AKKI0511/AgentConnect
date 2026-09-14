@@ -3,7 +3,7 @@ HumanAgent
 
 .. _human_agent:
 
-:class:`~agentconnect.prebuilt.HumanAgent` is a :class:`~agentconnect.agent.base.BaseAgent` that prints incoming work and reads a reply from stdin.
+:class:`~agentconnect.prebuilt.human_agent.HumanAgent` is a :class:`~agentconnect.agent.base.BaseAgent` that prints incoming work and reads a reply from stdin.
 
 Install the extra first::
 

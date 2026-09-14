@@ -1,84 +1,101 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - develop
   pull_request:
-    branches:
-      - main
-      - develop
+  push:
+    # Remove team-restructure after it merges into main.
+    branches: [main, team-restructure]
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
+  checks:
+    name: Code and schema
     runs-on: ubuntu-latest
-
-    services:
-      redis:
-        image: redis
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    strategy:
-      matrix:
-        python-version: [3.11, 3.12]
-      fail-fast: false
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-
-      - name: Configure Poetry
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-
-      - name: Cache Poetry virtualenv
-        uses: actions/cache@v5
-        id: cache
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
         with:
-          path: ./.venv
-          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-
-
-      - name: Install dependencies
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "lts/*"
+      - name: Lint and formatting
         run: |
-          poetry install --with demo,dev
-
-      - name: Run linting and formatting checks
+          uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
+          uvx ruff@latest format --check agentconnect tests examples docs/generate_docs.py
+      - name: Lockfiles and generated schema
         run: |
-          poetry run make lint
-          poetry run make format
+          uv lock --check
+          uv lock --check --directory examples/quickstart
+          uv lock --check --directory examples/recipes
+          npm --prefix spec/schema ci
+          npm --prefix spec/schema run check
 
-      - name: Create test environment file
-        run: |
-          echo "REDIS_HOST=localhost" > .env
-          echo "REDIS_PORT=6379" >> .env
-          echo "GROQ_API_KEY=dummy-key" >> .env
+  tests:
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        suite: [tests/]
+        include:
+          - os: windows-latest
+            python: "3.12"
+            suite: tests/imports/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --extra serve --extra cli --extra index
+      - run: uv run --no-sync pytest ${{ matrix.suite }} -q
 
-      - name: Run tests
-        if: hashFiles('tests/**/*.py') != ''
+  package:
+    name: Distribution install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+      - run: uv build
+      - name: Install wheel and sdist outside the checkout
         run: |
-          poetry run pytest tests/ -q
+          set -euo pipefail
+          for artifact in "$GITHUB_WORKSPACE"/dist/*.whl "$GITHUB_WORKSPACE"/dist/*.tar.gz; do
+            work="$(mktemp -d "$RUNNER_TEMP/ac-package.XXXXXX")"
+            uv venv "$work/venv"
+            (
+              cd "$work"
+              uv pip install --python venv/bin/python "$artifact"
+              venv/bin/python -c "from agentconnect.agent import BaseAgent; from agentconnect.team import Team"
+              uv pip install --python venv/bin/python "$artifact[serve,cli]"
+              venv/bin/python -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli import app"
+            )
+          done
 
-      - name: Skip tests
-        if: hashFiles('tests/**/*.py') == ''
-        run: |
-          echo "No tests found - skipping test step"
+  ci:
+    name: CI
+    if: always()
+    needs: [checks, tests, package]
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ join(needs.*.result, ',') }}" = "success,success,success"

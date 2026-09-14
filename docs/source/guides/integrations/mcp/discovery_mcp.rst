@@ -87,4 +87,4 @@ Session-bound callables
                 wait_seconds=10,
             )
 
-See ``examples/communication/mcp.py`` and ``examples/communication/tools.py``.
+See ``examples/recipes/team_mcp.py``.

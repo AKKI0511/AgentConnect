@@ -287,8 +287,7 @@ Troubleshooting
 Next Steps
 -------------
 
-- `Autonomous Workflow example <https://github.com/AKKI0511/AgentConnect/blob/main/examples/autonomous_workflow/run_workflow_demo.py>`_
-  — a complete two-agent economy: a paid research provider and a paying coordinator
+- The Team examples in ``examples/``
 - :doc:`../core/agents/ai_agent` — ``enable_payments`` and ``wallet_data_dir`` alongside
   every other ``AIAgent`` parameter
 - :doc:`../core/agent_profile_and_capabilities` — writing capability descriptions other

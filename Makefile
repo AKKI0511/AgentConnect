@@ -1,65 +1,18 @@
-.PHONY: install install-core install-dev install-demo lint format test typecheck clean build publish all install-hooks hooks docs docs-clean docs-html docs-coverage
+.PHONY: check format test docs docs-preview
 
-install-core:
-	poetry install
-
-install-dev:
-	poetry install --with dev --extras "aiagent telegram payments cli embeddings index redis serve"
-
-install-demo:
-	poetry install --with demo --extras "aiagent telegram payments cli embeddings index redis serve"
-
-install-all:
-	poetry install --with dev,demo,research --extras "aiagent telegram payments cli embeddings index redis serve"
-
-install-docs:
-	poetry install --with docs
-
-install: install-core
-
-install-hooks:
-	poetry run pre-commit install
-
-hooks:
-	poetry run pre-commit run --all-files
-
-lint:
-	poetry run flake8 --extend-ignore E501,W293,E128,W291,E402,E20,E701 agentconnect/ demos/api/ demos/utils/
-	poetry run lint-imports
+check:
+	uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
+	uvx ruff@latest format --check agentconnect tests examples docs/generate_docs.py
+	uv lock --check
 
 format:
-	poetry run black agentconnect/ demos/
-
-typecheck:
-	poetry run mypy
+	uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
 
 test:
-	poetry run pytest tests/ -q
+	uv run --extra serve --extra cli --extra index pytest tests/ -q
 
 docs:
-	$(MAKE) -C docs html
+	uv run --group docs --extra serve --extra cli python docs/generate_docs.py
 
-docs-clean:
-	$(MAKE) -C docs clean
-
-docs-html:
-	$(MAKE) -C docs html
-
-docs-coverage:
-	poetry run python docs/doc_coverage.py
-
-clean:
-	rm -rf dist/ build/ *.egg-info/ .pytest_cache/ .coverage htmlcov/
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name "*.egg-info" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type f -name "*.pyd" -delete
-
-build:
-	poetry build
-
-publish:
-	poetry publish
-
-all: install-all lint format test hooks docs
+docs-preview:
+	uv run --group docs --extra serve --extra cli python docs/generate_docs.py --preview

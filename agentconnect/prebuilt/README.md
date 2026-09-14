@@ -22,8 +22,10 @@ attach from the Session. Conversation state for Team work is ``ctx.history``.
 from agentconnect.prebuilt import AIAgent, Tool
 from agentconnect.team import Team
 
+
 async def search_docs(query: str) -> str:
     return f"no hits for {query}"
+
 
 agent = AIAgent(
     name="researcher",

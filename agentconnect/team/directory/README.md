@@ -14,6 +14,7 @@ already available.
 from agentconnect.agent import BaseAgent
 from agentconnect.team import Team
 
+
 class Reviewer(BaseAgent):
     profile = {
         "summary": "Reviews contracts for risk and missing terms.",
@@ -29,6 +30,7 @@ class Reviewer(BaseAgent):
 
     async def handle(self, msg, ctx):
         return "reviewed"
+
 
 team = await Team("content-squad").start()
 await Reviewer(name="reviewer").join(team)
@@ -64,6 +66,7 @@ Set on the Team, not on each Agent.
 ```python
 async def embed(texts: list[str]) -> list[list[float]]:
     return await my_model.encode(texts)
+
 
 team = await Team("content-squad", embeddings=embed).start()
 ```

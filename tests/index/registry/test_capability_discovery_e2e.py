@@ -11,10 +11,6 @@ import tempfile
 from typing import Dict, List, Set
 from datetime import datetime
 from tests.core.utils import print_header, print_step, print_success, print_result
-
-pytestmark = pytest.mark.slow
-
-# Core imports
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import Skill
 from agentconnect.index.types import (
@@ -24,6 +20,8 @@ from agentconnect.index.types import (
 )
 from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
+
+pytestmark = pytest.mark.slow
 
 # Sample test data
 TEST_CAPABILITIES = [
@@ -187,7 +185,6 @@ def temp_dir():
 
 # Group tests within a class
 class TestCapabilityDiscoveryE2E:
-
     @pytest.mark.asyncio
     async def test_capability_discovery_string_matching(
         self,

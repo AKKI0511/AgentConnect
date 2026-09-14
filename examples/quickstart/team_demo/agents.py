@@ -90,8 +90,7 @@ class Writer(BaseAgent):
         super().__init__(name=name)
         self.harness = harness
         self.instructions = (
-            "Write a short draft from the research notes. "
-            "Stay faithful to those notes."
+            "Write a short draft from the research notes. Stay faithful to those notes."
         )
 
     async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:

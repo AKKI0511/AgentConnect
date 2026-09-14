@@ -17,7 +17,7 @@ def _id() -> str:
 
 @pytest.mark.asyncio
 async def test_replacement_cannot_read_or_trace_predecessor_work(team: Team):
-    writer = await join_member(team, "writer")
+    await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
     thread_id = _id()
     sent = await team.send(

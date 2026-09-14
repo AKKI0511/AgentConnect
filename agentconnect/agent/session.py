@@ -949,11 +949,13 @@ class Session:
         except TransportError as exc:
             if _should_reconnect(exc):
                 try:
-                    await asyncio.wait_for(
-                        self._reconnect(),
-                        timeout=self._foreground_recovery_seconds(),
-                    )
-                except asyncio.TimeoutError:
+                    # asyncio.timeout keeps reconnect on this task. wait_for()
+                    # on 3.11 wraps it in a new Task, so current_task() inside
+                    # _reconnect is not the handler and _abandon_sdk_handlers
+                    # cancels the caller.
+                    async with asyncio.timeout(self._foreground_recovery_seconds()):
+                        await self._reconnect()
+                except TimeoutError:
                     raise SessionError(
                         "unavailable",
                         "Session recovery timed out; the Runtime may already have accepted the operation",

@@ -18,9 +18,9 @@ class Colors:
 
 def print_header(text):
     """Print a formatted header."""
-    print(f"\n{Colors.HEADER}{Colors.BOLD}{'='*80}{Colors.ENDC}")
+    print(f"\n{Colors.HEADER}{Colors.BOLD}{'=' * 80}{Colors.ENDC}")
     print(f"{Colors.HEADER}{Colors.BOLD}{text.center(80)}{Colors.ENDC}")
-    print(f"{Colors.HEADER}{Colors.BOLD}{'='*80}{Colors.ENDC}\n")
+    print(f"{Colors.HEADER}{Colors.BOLD}{'=' * 80}{Colors.ENDC}\n")
 
 
 def print_step(text):
@@ -51,15 +51,19 @@ def print_result(title, data):
             if isinstance(item, tuple) and len(item) == 2:
                 reg, score = item
                 print(
-                    f"  {idx+1}. {Colors.BOLD}{reg.name}{Colors.ENDC} ({reg.agent_id}) - Score: {Colors.YELLOW}{score:.4f}{Colors.ENDC}"
+                    f"  {idx + 1}. {Colors.BOLD}{reg.name}{Colors.ENDC} ({reg.agent_id}) - Score: {Colors.YELLOW}{score:.4f}{Colors.ENDC}"
                 )
                 if hasattr(reg, "description") and reg.description:
-                    print(f"     {Colors.CYAN}Description:{Colors.ENDC} {reg.description[:100]}...")  # type: ignore
+                    print(
+                        f"     {Colors.CYAN}Description:{Colors.ENDC} {reg.description[:100]}..."
+                    )  # type: ignore
             else:
                 print(
-                    f"  {idx+1}. {Colors.BOLD}{item.name}{Colors.ENDC} ({item.agent_id})"
+                    f"  {idx + 1}. {Colors.BOLD}{item.name}{Colors.ENDC} ({item.agent_id})"
                 )
                 if hasattr(item, "description") and item.description:
-                    print(f"     {Colors.CYAN}Description:{Colors.ENDC} {item.description[:100]}...")  # type: ignore
+                    print(
+                        f"     {Colors.CYAN}Description:{Colors.ENDC} {item.description[:100]}..."
+                    )  # type: ignore
     else:
         print(f"  {data}")

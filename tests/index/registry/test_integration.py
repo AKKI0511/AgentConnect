@@ -26,7 +26,9 @@ async def registry_instance():
     # Explicitly configure for in-memory mode for CI/testing
     config = {"vector_search_config": {"in_memory": True}}
     registry = AgentRegistry(**config)  # Pass config here
-    await registry.ensure_initialized()  # Wait for the background task to finish basic init
+    await (
+        registry.ensure_initialized()
+    )  # Wait for the background task to finish basic init
     yield registry
     # No explicit teardown needed
 
@@ -243,9 +245,9 @@ class TestCapabilityDiscoveryIntegration:
         updated_agent = await registry_instance.update_registration(
             agent_id_to_update, updates
         )
-        assert (
-            updated_agent is not None
-        ), f"Agent {agent_id_to_update} should exist for update."
+        assert updated_agent is not None, (
+            f"Agent {agent_id_to_update} should exist for update."
+        )
 
         # Allow some time for the background embedding update task to process
         await asyncio.sleep(0.2)
@@ -260,9 +262,9 @@ class TestCapabilityDiscoveryIntegration:
         found_nlp_agent = False
         for agent, score in results:
             if agent.agent_id == agent_id_to_update:
-                assert (
-                    agent.name == "Language Processor Pro"
-                ), "Agent name was not updated correctly."
+                assert agent.name == "Language Processor Pro", (
+                    "Agent name was not updated correctly."
+                )
                 # Check if the new capability is part of its capabilities
                 assert any(
                     cap.name == "translate_text" for cap in agent.capabilities
@@ -275,9 +277,9 @@ class TestCapabilityDiscoveryIntegration:
                 assert agent.tags == updates["tags"], "Tags were not updated correctly."
                 found_nlp_agent = True
                 break
-        assert (
-            found_nlp_agent
-        ), f"Updated agent {agent_id_to_update} not found in search results for new capability."
+        assert found_nlp_agent, (
+            f"Updated agent {agent_id_to_update} not found in search results for new capability."
+        )
 
     async def test_organization_filtering(self, registry_instance: AgentRegistry):
         """Test filtering by organization."""

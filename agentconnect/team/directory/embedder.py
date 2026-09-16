@@ -16,6 +16,11 @@ queries to a hosted embedder. Pass ``embeddings="openai"`` or
 
 A backend that fails is not swapped here. The Directory owns fallback so
 one ``find`` never mixes two embedding spaces.
+
+Neural backends own token limits. They split a complete input to the
+selected model's per-input budget and, for hosted calls, the request
+budget. Directory character packing is only for backends that publish a
+character limit.
 """
 
 from __future__ import annotations
@@ -32,6 +37,18 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Awaitable, Callable, Protocol, Sequence, Union
 
+from agentconnect.team.directory.tokens import (
+    DEFAULT_LOCAL_INPUT_TOKENS,
+    OPENAI_INPUT_TOKENS,
+    OPENAI_REQUEST_TOKENS,
+    estimate_token_windows,
+    hosted_token_count,
+    hosted_token_windows,
+    local_content_tokens,
+    pack_token_batches,
+    token_windows,
+)
+
 logger = logging.getLogger(__name__)
 
 HASHED_DIM = 384
@@ -39,11 +56,6 @@ DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
 DEFAULT_FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_BATCH = 32
 OPENAI_BATCH = 128
-# Conservative character budgets so a valid Profile is split instead of
-# silently truncated or rejected as a provider outage.
-OPENAI_INPUT_CHARS = 24000
-FASTEMBED_INPUT_CHARS = 1024
-FASTEMBED_CONTENT_TOKENS = 500
 HASHED_BATCH = 8
 
 EmbedFn = Callable[
@@ -259,8 +271,10 @@ class CallableEmbedder:
 class OpenAIEmbedder:
     """Hosted embeddings through the OpenAI HTTP API. Uses httpx, not the OpenAI SDK."""
 
-    input_char_limit = OPENAI_INPUT_CHARS
+    input_char_limit: int | None = None
     max_batch = OPENAI_BATCH
+    input_token_limit = OPENAI_INPUT_TOKENS
+    request_token_limit = OPENAI_REQUEST_TOKENS
 
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL) -> None:
         """Use ``model``. ``text-embedding-3-*`` requests 384 dimensions."""
@@ -280,9 +294,10 @@ class OpenAIEmbedder:
         payload = list(texts)
         if not payload:
             return []
-        return await _embed_bounded(
+        return await _embed_token_bounded(
             payload,
-            char_limit=self.input_char_limit,
+            per_input_tokens=self.input_token_limit,
+            request_tokens=self.request_token_limit,
             batch=self.max_batch,
             embed_chunk=self._embed_request,
         )
@@ -311,8 +326,10 @@ class OpenAIEmbedder:
 class LiteLLMEmbedder:
     """Hosted embeddings through LiteLLM when that package is installed."""
 
-    input_char_limit = OPENAI_INPUT_CHARS
+    input_char_limit: int | None = None
     max_batch = OPENAI_BATCH
+    input_token_limit = OPENAI_INPUT_TOKENS
+    request_token_limit = OPENAI_REQUEST_TOKENS
 
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL) -> None:
         """Use LiteLLM model id ``model``."""
@@ -324,9 +341,10 @@ class LiteLLMEmbedder:
         payload = list(texts)
         if not payload:
             return []
-        return await _embed_bounded(
+        return await _embed_token_bounded(
             payload,
-            char_limit=self.input_char_limit,
+            per_input_tokens=self.input_token_limit,
+            request_tokens=self.request_token_limit,
             batch=self.max_batch,
             embed_chunk=self._embed_request,
         )
@@ -351,7 +369,7 @@ class FastEmbedEmbedder:
     hosted provider.
     """
 
-    input_char_limit = FASTEMBED_INPUT_CHARS
+    input_char_limit: int | None = None
     max_batch = DEFAULT_BATCH
 
     def __init__(self, model: str = DEFAULT_FASTEMBED_MODEL) -> None:
@@ -372,12 +390,16 @@ class FastEmbedEmbedder:
         windows: list[str] = []
         owners: list[int] = []
         tokenizer = _fastembed_tokenizer(model)
+        budget = (
+            local_content_tokens(tokenizer)
+            if tokenizer is not None
+            else DEFAULT_LOCAL_INPUT_TOKENS
+        )
         for index, text in enumerate(texts):
-            pieces = (
-                _token_windows(tokenizer, text, FASTEMBED_CONTENT_TOKENS)
-                if tokenizer is not None
-                else char_windows(text, self.input_char_limit)
-            )
+            if tokenizer is not None:
+                pieces = token_windows(tokenizer, text, budget)
+            else:
+                pieces = estimate_token_windows(text, budget)
             for piece in pieces:
                 windows.append(piece)
                 owners.append(index)
@@ -406,7 +428,7 @@ class AutoEmbedder:
     instead of mixing spaces.
     """
 
-    input_char_limit: int | None = FASTEMBED_INPUT_CHARS
+    input_char_limit: int | None = None
     max_batch = DEFAULT_BATCH
 
     def __init__(self) -> None:
@@ -521,20 +543,22 @@ def _is_coroutine_callable(fn: EmbedFn) -> bool:
     return inspect.iscoroutinefunction(call)
 
 
-async def _embed_bounded(
+async def _embed_token_bounded(
     texts: list[str],
     *,
-    char_limit: int,
+    per_input_tokens: int,
+    request_tokens: int,
     batch: int,
     embed_chunk: Callable[[list[str]], Awaitable[list[list[float]]]],
 ) -> list[list[float]]:
-    groups = [char_windows(text, char_limit) for text in texts]
+    groups = [hosted_token_windows(text, per_input_tokens) for text in texts]
     flat = [window for group in groups for window in group]
+    costs = [hosted_token_count(window) for window in flat]
     raw: list[list[float]] = []
-    for index in range(0, len(flat), batch):
-        chunk = flat[index : index + batch]
+    chunks = pack_token_batches(flat, costs, batch=batch, request_tokens=request_tokens)
+    for index, chunk in enumerate(chunks):
         raw.extend(await embed_chunk(chunk))
-        if index + batch < len(flat):
+        if index + 1 < len(chunks):
             await asyncio.sleep(0)
     pooled: list[list[float]] = []
     cursor = 0
@@ -561,34 +585,6 @@ def _fastembed_tokenizer(model: Any) -> Any:
         if nested_tokenizer is not None and hasattr(nested_tokenizer, "encode"):
             return nested_tokenizer
     return None
-
-
-def _token_windows(tokenizer: Any, text: str, max_tokens: int) -> list[str]:
-    stripped = text.strip()
-    if not stripped:
-        return [""]
-    try:
-        encoded = tokenizer.encode(stripped, add_special_tokens=False)
-    except TypeError:
-        encoded = tokenizer.encode(stripped)
-    ids = getattr(encoded, "ids", encoded)
-    if not isinstance(ids, (list, tuple)):
-        try:
-            ids = list(ids)
-        except TypeError:
-            return char_windows(stripped, FASTEMBED_INPUT_CHARS)
-    if len(ids) <= max_tokens:
-        return [stripped]
-    windows: list[str] = []
-    for start in range(0, len(ids), max_tokens):
-        piece_ids = ids[start : start + max_tokens]
-        try:
-            piece = tokenizer.decode(piece_ids)
-        except Exception:
-            piece = ""
-        if piece:
-            windows.append(piece)
-    return windows or char_windows(stripped, FASTEMBED_INPUT_CHARS)
 
 
 def _hash_texts(texts: list[str], dim: int) -> list[list[float]]:

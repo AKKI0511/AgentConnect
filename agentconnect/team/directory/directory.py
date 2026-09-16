@@ -44,7 +44,7 @@ _VECTOR_KEY = "dirvec:{name}"
 _SPACE_KEY = "dirspace"
 _SPACE_PROBE = "agentconnect directory embedding space"
 # Internal search-text layout. Changing this rebuilds stored vectors.
-_REPRESENTATION = "w1"
+_REPRESENTATION = "t1"
 _SCORE_OFFLOAD_MIN = 16
 
 
@@ -314,9 +314,9 @@ def profile_text(profile: Mapping[str, Any]) -> str:
 def profile_windows(profile: Mapping[str, Any], limit: int | None) -> list[str]:
     """Bounded Profile windows for one embedding space.
 
-    When ``limit`` is omitted, the whole Profile is one window. Otherwise
-    later Skills keep their own windows instead of disappearing behind an
-    earlier token budget. The packing is an implementation detail.
+    When ``limit`` is omitted, the whole Profile is one window and the
+    embedder owns token splitting. Otherwise later Skills keep their own
+    character windows. The packing is an implementation detail.
     """
     units = _profile_units(profile)
     if limit is None:

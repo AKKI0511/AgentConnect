@@ -25,7 +25,14 @@ from agentconnect.team.directory.embedder import (
     OpenAIEmbedder,
     as_unit_vector,
     cosine,
+    _fastembed_tokenizer,
     _select_auto_backend,
+)
+from agentconnect.team.directory.tokens import (
+    encode_complete,
+    hosted_token_count,
+    local_content_tokens,
+    token_windows,
 )
 from agentconnect.team.store.memory import MemoryStore
 
@@ -1044,3 +1051,194 @@ async def test_bge_later_skill_survives_long_profile():
     assert isinstance(left, dict) and isinstance(right, dict)
     assert left["vector"] != right["vector"]
     assert found.matches[0].address == "salvage@content-squad"
+
+
+_CJK_FILL = "日常文书处理与常规办公记录整理。"
+
+
+def _token_dense(*, last_name: str, last_blurb: str) -> dict:
+    block = _CJK_FILL * 40
+    return {
+        "summary": "办公室日常文书助手。",
+        "description": block,
+        "skills": [
+            {
+                "name": last_name,
+                "description": last_blurb,
+                "examples": [last_blurb],
+            }
+        ],
+    }
+
+
+def _chinese_long(marker: str) -> dict:
+    block = "中文档案检索与整理工作记录。" * 730
+    return {
+        "summary": "中文档案助手。",
+        "description": block,
+        "skills": [
+            {"name": "archive", "description": marker, "examples": [marker]},
+        ],
+    }
+
+
+def _provider_tokens(text: str) -> int:
+    """Simulated hosted limiter: one token per character."""
+    return len(text.strip())
+
+
+def test_fastembed_token_windows_keep_content_beyond_first_window():
+    pytest.importorskip("fastembed")
+    from fastembed import TextEmbedding
+
+    from agentconnect.team.directory.embedder import DEFAULT_FASTEMBED_MODEL
+
+    prefix = _CJK_FILL * 40
+    suffix = "Handles maritime salvage arbitration disputes."
+    text = f"{prefix}\n{suffix}"
+    assert 600 < len(text) < 900
+    model = TextEmbedding(model_name=DEFAULT_FASTEMBED_MODEL)
+    tokenizer = _fastembed_tokenizer(model)
+    assert tokenizer is not None
+    truncated = tokenizer.encode(text, add_special_tokens=False)
+    cut = truncated.offsets[-1][1]
+    assert cut < len(text)
+    assert "maritime salvage" not in text[:cut]
+    complete = encode_complete(tokenizer, text)
+    assert complete.offsets[-1][1] >= text.rfind("maritime salvage")
+    windows = token_windows(tokenizer, text, local_content_tokens(tokenizer))
+    assert len(windows) > 1
+    assert "maritime salvage" not in windows[0]
+    assert any("maritime salvage" in window for window in windows)
+    assert tokenizer.truncation["max_length"] == 512
+
+
+@pytest.mark.asyncio
+async def test_bge_token_dense_profile_keeps_later_skill():
+    pytest.importorskip("fastembed")
+    from fastembed import TextEmbedding
+
+    from agentconnect.team.directory.embedder import (
+        DEFAULT_FASTEMBED_MODEL,
+        l2_normalize,
+    )
+
+    salvage = _token_dense(
+        last_name="salvage_arbitration",
+        last_blurb="Handles maritime salvage arbitration disputes.",
+    )
+    pedigree = _token_dense(
+        last_name="horse_pedigree",
+        last_blurb="Tracks icelandic horse pedigree records.",
+    )
+    salvage_text = profile_text(salvage)
+    pedigree_text = profile_text(pedigree)
+    assert 600 < len(salvage_text) < 900
+    assert salvage_text[:500] == pedigree_text[:500]
+    assert "maritime salvage" not in salvage_text[:500]
+    model = TextEmbedding(model_name=DEFAULT_FASTEMBED_MODEL)
+    naive = [
+        l2_normalize(list(map(float, vector)))
+        for vector in model.embed([salvage_text, pedigree_text])
+    ]
+    assert naive[0] == naive[1]
+    store = MemoryStore()
+    directory = Directory(store, FastEmbedEmbedder())
+    members = [_member("salvage", salvage), _member("pedigree", pedigree)]
+    for member in members:
+        await directory.upsert(member["name"], member["profile"])
+    found = await directory.search(
+        "maritime salvage arbitration",
+        members,
+        exclude_address="researcher@content-squad",
+        limit=None,
+        detail="summary",
+    )
+    left = await store.get("dirvec:salvage")
+    right = await store.get("dirvec:pedigree")
+    assert isinstance(left, dict) and isinstance(right, dict)
+    assert left["vector"] != right["vector"]
+    assert str(left["space"]).endswith(":t1")
+    assert found.matches[0].address == "salvage@content-squad"
+    assert not directory.using_fallback
+
+
+@pytest.mark.asyncio
+async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
+    salvage = _chinese_long("处理海难救助仲裁争议。")
+    pedigree = _chinese_long("登记冰岛马血统档案。")
+    salvage_text = profile_text(salvage)
+    pedigree_text = profile_text(pedigree)
+    assert salvage_text[:8000] == pedigree_text[:8000]
+    assert _provider_tokens(salvage_text) > 8192
+    assert hosted_token_count(salvage_text) > 8192
+    assert "海难救助" not in salvage_text[:8000]
+    seen: list[list[str]] = []
+    rejected = {"n": 0}
+
+    async def fake_request(self, texts: list[str]) -> list[list[float]]:
+        total = 0
+        rows: list[list[float]] = []
+        for text in texts:
+            cost = _provider_tokens(text)
+            if cost > 8192:
+                rejected["n"] += 1
+                raise RuntimeError("max input tokens")
+            total += cost
+            rows.append(
+                [
+                    1.0 if "海难救助" in text else 0.0,
+                    1.0 if "冰岛马" in text else 0.0,
+                    0.1,
+                ]
+            )
+        if total > 300_000:
+            rejected["n"] += 1
+            raise RuntimeError("max tokens per request")
+        seen.append(list(texts))
+        return rows
+
+    monkeypatch.setattr(OpenAIEmbedder, "_embed_request", fake_request)
+    embedder = OpenAIEmbedder()
+    with pytest.raises(RuntimeError, match="max input tokens"):
+        await fake_request(embedder, [salvage_text])
+    rejected["n"] = 0
+    directory = Directory(MemoryStore(), embedder)
+    members = [_member("salvage", salvage), _member("pedigree", pedigree)]
+    for member in members:
+        await directory.upsert(member["name"], member["profile"])
+    found = await directory.search(
+        "海难救助仲裁",
+        members,
+        exclude_address="researcher@content-squad",
+        limit=None,
+        detail="summary",
+    )
+    assert rejected["n"] == 0
+    assert not directory.using_fallback
+    assert any("海难救助" in text for payload in seen for text in payload)
+    assert found.matches[0].address == "salvage@content-squad"
+
+
+@pytest.mark.asyncio
+async def test_previous_representation_cached_vector_is_rebuilt():
+    store = MemoryStore()
+    directory = Directory(store, HashedEmbedder())
+    await directory.upsert("writer", _writer())
+    record = await store.get("dirvec:writer")
+    assert isinstance(record, dict)
+    assert str(record["space"]).endswith(":t1")
+    record["space"] = "hashed:384:w1"
+    await store.put("dirvec:writer", record)
+    found = await directory.search(
+        "anything",
+        [_member("writer", _writer())],
+        exclude_address="researcher@content-squad",
+        limit=None,
+        detail="summary",
+    )
+    assert found.matches[0].address == "writer@content-squad"
+    fresh = await store.get("dirvec:writer")
+    assert isinstance(fresh, dict)
+    assert fresh["space"] != "hashed:384:w1"
+    assert str(fresh["space"]).endswith(":t1")

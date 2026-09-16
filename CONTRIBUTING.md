@@ -22,6 +22,14 @@ uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
 
 A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
 
+After changing `pyproject.toml` dependencies or extras, refresh every lockfile CI checks, then commit them together:
+
+```bash
+uv lock
+uv lock --directory examples/quickstart
+uv lock --directory examples/recipes
+```
+
 ## Public API
 
 The public schema is in `spec/schema/schema.ts`; its Python models are in `agentconnect/core/`. Changes to public fields need matching definitions. With Node LTS installed:

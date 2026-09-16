@@ -4,6 +4,8 @@ check:
 	uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
 	uvx ruff@latest format --check agentconnect tests examples docs/generate_docs.py
 	uv lock --check
+	uv lock --check --directory examples/quickstart
+	uv lock --check --directory examples/recipes
 
 format:
 	uvx ruff@latest format agentconnect tests examples docs/generate_docs.py

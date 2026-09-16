@@ -57,12 +57,13 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'cli'", specifier = ">=6.0.2,<7.0.0" },
     { name = "qdrant-client", marker = "extra == 'index'", specifier = ">=1.14.2,<2.0.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.2.1,<6.0.0" },
+    { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.14.0,<1" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.16.1,<0.17.0" },
     { name = "typing-extensions", specifier = ">=4.12.2,<5.0.0" },
     { name = "uvicorn", marker = "extra == 'index'", specifier = ">=0.34.0,<0.35.0" },
     { name = "uvicorn", marker = "extra == 'serve'", specifier = ">=0.34.0,<0.35.0" },
 ]
-provides-extras = ["serve", "mcp", "redis", "aiagent", "telegram", "embeddings", "index", "payments", "cli"]
+provides-extras = ["serve", "mcp", "redis", "aiagent", "telegram", "embeddings", "index", "payments", "cli", "openai"]
 
 [package.metadata.requires-dev]
 demo = [

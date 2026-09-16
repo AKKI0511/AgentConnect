@@ -5,7 +5,7 @@ This module contains handlers for Telegram group messages, including
 handlers for bot mentions and group management.
 """
 
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 from aiogram import Dispatcher, F, types
 

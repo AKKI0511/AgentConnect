@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
 from agentconnect.agent.context import Context
 from agentconnect.core.base import JsonValue
 from agentconnect.core.message import MailboxMessage
 from agentconnect.team import Team
-from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
 
 @pytest.mark.asyncio

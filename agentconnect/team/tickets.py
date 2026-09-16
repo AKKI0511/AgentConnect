@@ -11,11 +11,11 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any, Optional
 
+import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.codec import format_timestamp, parse_timestamp, timestamp_score
 from agentconnect.team.constants import TICKET_TERMINAL
-import agentconnect.team.expiry as expiry_mod
-from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.retention import RETAIN_MESSAGES_SET, open_ticket_count_key
+from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.ops import (
     Cas,
     DecrementFloor,

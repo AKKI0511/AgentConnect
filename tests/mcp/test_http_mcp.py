@@ -6,13 +6,13 @@ import json
 from typing import Any
 
 import pytest
-from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp.shared.exceptions import MCPError
 
 from agentconnect.agent import BaseAgent
 from agentconnect.team import Team
+from mcp import Client
 
 
 class Writer(BaseAgent):

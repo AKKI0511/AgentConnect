@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from tests.agent.conftest import EchoAgent
 
 from agentconnect.agent import SessionError
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.team import Team
-from tests.agent.conftest import EchoAgent
 
 
 @pytest.mark.asyncio

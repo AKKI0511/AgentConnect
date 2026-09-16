@@ -4,7 +4,7 @@ Text message handlers for the Telegram agent.
 This module contains handlers for Telegram text messages in private chats.
 """
 
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 from aiogram import Dispatcher, F, types
 

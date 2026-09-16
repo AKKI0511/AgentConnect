@@ -6,14 +6,15 @@ both string-matching and semantic (vector) search approaches.
 """
 
 import logging
-from typing import Callable, Dict, List, Set, Tuple, Optional, Awaitable
+from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
+
 from qdrant_client import AsyncQdrantClient
 
-from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     Embeddings,
     calculate_similarity,
 )
+from agentconnect.index.registry.registration import AgentRegistration
 
 # Configure logger
 logger = logging.getLogger(__name__)

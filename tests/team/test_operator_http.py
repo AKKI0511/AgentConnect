@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 import httpx
-
+import pytest
 from tests.team.conftest import join_member
 
 pytestmark = pytest.mark.asyncio

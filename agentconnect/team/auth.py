@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Mapping, NoReturn, NotRequired, Optional, TypedDict
 
+import agentconnect.team.expiry as expiry_mod
 from agentconnect.core.identity import (
     AgentIdentity,
     issue_membership_attestation,
@@ -29,7 +30,6 @@ from agentconnect.team.codec import (
     utc_now,
 )
 from agentconnect.team.errors import TeamError
-import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.ops import (
     Cas,

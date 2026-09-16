@@ -6,9 +6,9 @@ import asyncio
 import uuid
 
 import pytest
+from tests.team.conftest import deadline, join_member
 
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import deadline, join_member
 
 
 def _id() -> str:

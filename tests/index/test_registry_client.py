@@ -11,13 +11,14 @@ Focus areas:
 - Basic integration patterns work
 """
 
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
-import httpx
 
+import httpx
+import pytest
+
+from agentconnect.core.identity import AgentIdentity
 from agentconnect.index.client import RegistryAPIClient
 from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.core.identity import AgentIdentity
 from agentconnect.index.types import AgentType, InteractionMode
 
 

@@ -14,9 +14,9 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from agentconnect.team.codec import json_size
+from agentconnect.team.retention import LIVE_MESSAGES_SET, RETAIN_MESSAGES_SET
 from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.ops import Cas, Insert, SetAdd, StoreOp
-from agentconnect.team.retention import LIVE_MESSAGES_SET, RETAIN_MESSAGES_SET
 
 THREAD_KEY_PREFIX = "thread:"
 THREADS_SET = "threads"

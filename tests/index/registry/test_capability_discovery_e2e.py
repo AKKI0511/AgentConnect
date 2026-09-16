@@ -5,21 +5,23 @@ This module provides comprehensive tests for the capability discovery system,
 including semantic search, string matching, and Qdrant integration.
 """
 
-import pytest
 import shutil
 import tempfile
-from typing import Dict, List, Set
 from datetime import datetime
-from tests.core.utils import print_header, print_step, print_success, print_result
+from typing import Dict, List, Set
+
+import pytest
+from tests.core.utils import print_header, print_result, print_step, print_success
+
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import Skill
+from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.types import (
     AgentType,
     Capability,
     InteractionMode,
 )
-from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
 
 pytestmark = pytest.mark.slow
 

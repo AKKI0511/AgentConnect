@@ -6,12 +6,13 @@ to search interface objects (AgentSearchResultItem) with appropriate detail leve
 """
 
 from typing import Dict, List
-from agentconnect.index.registry.search.schemas import AgentSearchResultItem
+
 from agentconnect.index.registry.registration import (
     AgentRegistration,
     Capability,
     Skill,
 )
+from agentconnect.index.registry.search.schemas import AgentSearchResultItem
 
 
 def format_capabilities_for_output(cap_list: List[Capability]) -> List[Dict[str, str]]:

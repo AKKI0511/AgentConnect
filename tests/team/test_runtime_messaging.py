@@ -7,10 +7,10 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+from tests.team.conftest import deadline, join_member
 
 from agentconnect.core.base import dump_public
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import deadline, join_member
 
 
 def _id() -> str:

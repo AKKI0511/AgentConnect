@@ -6,9 +6,9 @@ import uuid
 
 import httpx
 import pytest
+from tests.team.conftest import deadline, join_member
 
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import deadline, join_member
 
 PREFIX = "/agentconnect/v1"
 

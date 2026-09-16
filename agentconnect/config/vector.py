@@ -7,10 +7,9 @@ reads them from ``AGENTCONNECT_REGISTRY_*`` environment variables.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
-from typing import Literal
 
 
 class InMemoryConfig(BaseModel):

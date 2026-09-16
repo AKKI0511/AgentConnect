@@ -4,15 +4,15 @@ Command message handlers for the Telegram agent.
 This module contains handlers for Telegram command messages, like /start and /help.
 """
 
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 from aiogram import Dispatcher, F, types
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import Command, CommandStart
 
 from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
 from agentconnect.prebuilt.telegram.keyboards import (
-    PRIVATE_CHAT_KEYBOARD,
     GROUP_CHAT_KEYBOARD,
+    PRIVATE_CHAT_KEYBOARD,
 )
 
 

@@ -6,10 +6,10 @@ import asyncio
 import socket
 
 import pytest
+from tests.agent.conftest import DeferredAgent, EchoAgent
 
 from agentconnect.agent import BaseAgent, SessionError
 from agentconnect.team import Team
-from tests.agent.conftest import DeferredAgent, EchoAgent
 
 
 def _free_loopback_port() -> int:

@@ -6,7 +6,10 @@ import asyncio
 import uuid
 
 import pytest
+from tests.team.conftest import deadline, join_member
 
+import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.tickets as tickets_mod
 from agentconnect.team import Team, TeamError
 from agentconnect.team.codec import json_size
 from agentconnect.team.retention import (
@@ -16,9 +19,6 @@ from agentconnect.team.retention import (
     reclaim_ticket_records,
 )
 from agentconnect.team.store.memory import MemoryStore
-import agentconnect.team.mailbox as mailbox_mod
-import agentconnect.team.tickets as tickets_mod
-from tests.team.conftest import deadline, join_member
 
 
 def _id() -> str:

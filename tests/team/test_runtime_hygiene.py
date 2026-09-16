@@ -7,13 +7,13 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from tests.team.conftest import join_member
 
+import agentconnect.team.expiry as expiry_mod
 from agentconnect.team import Team
 from agentconnect.team.codec import format_timestamp, timestamp_score, utc_now
 from agentconnect.team.locks import KeyedLock
-import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.store import MemoryStore
-from tests.team.conftest import join_member
 
 
 @pytest.mark.asyncio

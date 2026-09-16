@@ -6,13 +6,14 @@ with the AgentRegistry for real-world discovery scenarios.
 """
 
 import asyncio
+
 import pytest
 import pytest_asyncio
 
-from agentconnect.index.registry import AgentRegistry
-from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import Skill
+from agentconnect.index.registry import AgentRegistry
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.types import (
     AgentType,
     Capability,

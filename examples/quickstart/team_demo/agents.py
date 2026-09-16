@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill
 from agentconnect.core.ticket import Ticket
-
 from team_demo.harness import Harness
 from team_demo.tickets import until_terminal
 

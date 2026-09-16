@@ -5,7 +5,7 @@ This module defines the base handler interface that all Telegram message handler
 """
 
 import abc
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 from aiogram import Dispatcher
 

@@ -7,7 +7,6 @@ from typing import Any
 
 import jsonschema
 import pytest
-from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_PARAMS
@@ -25,6 +24,7 @@ from agentconnect.core.primitives import ERROR_CODES
 from agentconnect.mcp.server import create_team_mcp
 from agentconnect.mcp.tool_schema import advertise_tool_schema
 from agentconnect.team import Team
+from mcp import Client
 
 _QUERY = "someone who can draft a summary"
 _UUID = "00000000-0000-4000-8000-000000000099"

@@ -6,8 +6,9 @@ for vector search operations.
 """
 
 import logging
-from typing import Tuple, Optional, List, Union
-from qdrant_client import QdrantClient, AsyncQdrantClient
+from typing import List, Optional, Tuple, Union
+
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.local.async_qdrant_local import AsyncQdrantLocal
 
 # Absolute imports from agentconnect package
@@ -36,7 +37,7 @@ async def initialize_qdrant_clients(
         Tuple of (sync_client, async_client) or (None, None) if initialization failed
     """
     try:
-        from qdrant_client import QdrantClient, AsyncQdrantClient
+        from qdrant_client import AsyncQdrantClient, QdrantClient
 
         if config is None:
             config = VectorSearchSettings()

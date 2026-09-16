@@ -7,11 +7,11 @@ providing a clean interface for the agent to interact with the bot.
 
 import asyncio
 import logging
-from typing import Dict, Optional, Set, Callable, Any
+from typing import Any, Callable, Dict, Optional, Set
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from agentconnect.prebuilt.telegram._utils.file_utils import (

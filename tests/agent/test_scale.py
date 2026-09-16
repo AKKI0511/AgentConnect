@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from tests.agent.conftest import EchoAgent
 
 from agentconnect.team import Team
-from tests.agent.conftest import EchoAgent
 
 
 @pytest.mark.asyncio

@@ -6,17 +6,17 @@ import asyncio
 import uuid
 
 import pytest
+from tests.team.conftest import deadline, join_member
 
 from agentconnect.team import Team, TeamError
-from agentconnect.team.locks import KeyedLock
 from agentconnect.team.codec import utc_now
+from agentconnect.team.locks import KeyedLock
 from agentconnect.team.store import (
     Cas,
+    IndexAddIfCardBelow,
     Insert,
     MemoryStore,
-    IndexAddIfCardBelow,
 )
-from tests.team.conftest import deadline, join_member
 
 
 def _id() -> str:

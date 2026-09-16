@@ -9,23 +9,24 @@ and capability matching.
 import asyncio
 import logging
 import os
-from typing import Dict, List, Optional, Set, Tuple, Any, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+from agentconnect.config.vector import VectorSearchSettings
 
 # Absolute imports from agentconnect package
 from agentconnect.core.types import (
     VerificationStatus,
 )
+from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
+from agentconnect.index.registry.identity_verification import (
+    verify_agent_identity,
+)
+from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.types import (
     AgentType,
     Capability,
     InteractionMode,
 )
-from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
-from agentconnect.index.registry.identity_verification import (
-    verify_agent_identity,
-)
-from agentconnect.config.vector import VectorSearchSettings
 
 # Set up logging (module namespace)
 logger = logging.getLogger(__name__)

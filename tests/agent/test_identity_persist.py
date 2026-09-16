@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from tests.agent.conftest import EchoAgent
 
 from agentconnect.agent import BaseAgent
 from agentconnect.agent.identity import (
@@ -13,7 +14,6 @@ from agentconnect.agent.identity import (
     save_identity,
 )
 from agentconnect.core.identity import AgentIdentity
-from tests.agent.conftest import EchoAgent
 
 
 def test_identity_path_reuses_the_saved_did(tmp_path):

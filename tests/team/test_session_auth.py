@@ -6,13 +6,13 @@ import asyncio
 
 import httpx
 import pytest
+from tests.team.conftest import join_member, profile
 
 from agentconnect.team import Team, TeamError
 from agentconnect.team.session_auth import (
     allow_loopback_operator,
     session_token_for_request,
 )
-from tests.team.conftest import join_member, profile
 
 PREFIX = "/agentconnect/v1"
 

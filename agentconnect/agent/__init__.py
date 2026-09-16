@@ -3,9 +3,9 @@
 from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context, DeferredReply
 from agentconnect.agent.errors import SessionError
-from agentconnect.core.primitives import CollectMode
 from agentconnect.agent.session import Session
 from agentconnect.agent.tools import TeamTool, TeamTools
+from agentconnect.core.primitives import CollectMode
 
 __all__ = [
     "BaseAgent",

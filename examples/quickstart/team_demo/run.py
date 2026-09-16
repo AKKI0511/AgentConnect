@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Any
 
 from agentconnect import Team, Ticket
-
 from team_demo.agents import Editor, Researcher, Writer
 from team_demo.harness import Harness
 from team_demo.tickets import show_ticket, until_terminal

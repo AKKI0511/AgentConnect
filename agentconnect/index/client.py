@@ -7,9 +7,9 @@ It mimics the interface of agentconnect.index.registry.AgentRegistry, but uses H
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Type
-from functools import wraps
 import time
+from functools import wraps
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import httpx
 from pydantic import ValidationError

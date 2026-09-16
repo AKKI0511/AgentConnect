@@ -5,7 +5,7 @@ This module contains handlers for Telegram media messages, including
 photos, documents, voice messages, and other media types.
 """
 
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 from aiogram import Dispatcher, F, types
 

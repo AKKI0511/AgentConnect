@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.team import Team, TeamError
 from agentconnect.team.errors import IDENTITY_MISSING
-from tests.team.conftest import deadline, join_member, make_did, profile
 
 
 def _id() -> str:

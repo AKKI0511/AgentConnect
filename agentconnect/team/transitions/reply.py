@@ -8,8 +8,8 @@ from typing import Any, Optional
 import agentconnect.team.expiry as expiry_mod
 import agentconnect.team.mailbox as mailbox_mod
 import agentconnect.team.retention as retention_mod
-import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.threads as threads_mod
+import agentconnect.team.tickets as tickets_mod
 import agentconnect.team.trace as trace_mod
 from agentconnect.team.codec import timestamp_score
 from agentconnect.team.errors import IDENTITY_MISSING

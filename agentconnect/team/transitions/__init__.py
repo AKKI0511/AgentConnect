@@ -6,17 +6,17 @@ from agentconnect.team.transitions.complete import (
     CompleteConflict,
     commit_complete,
 )
-from agentconnect.team.transitions.reply import (
-    ReplyAccepted,
-    ReplyCommit,
-    ReplyConflict,
-    commit_reply,
-)
 from agentconnect.team.transitions.join import (
     JoinAccepted,
     JoinConflict,
     JoinPlan,
     commit_join,
+)
+from agentconnect.team.transitions.reply import (
+    ReplyAccepted,
+    ReplyCommit,
+    ReplyConflict,
+    commit_reply,
 )
 from agentconnect.team.transitions.send import (
     SendAccepted,

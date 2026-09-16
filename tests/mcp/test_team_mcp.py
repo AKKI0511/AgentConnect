@@ -6,15 +6,15 @@ import json
 from typing import Any
 
 import pytest
-from mcp import Client
+from mcp.shared.exceptions import MCPError
+from tests.team.conftest import make_did, profile
 
 from agentconnect.agent import BaseAgent
 from agentconnect.mcp.actions import resolve_session
 from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.mcp.server import create_team_mcp
 from agentconnect.team import Team, TeamError
-from mcp.shared.exceptions import MCPError
-from tests.team.conftest import make_did, profile
+from mcp import Client
 
 
 class Writer(BaseAgent):

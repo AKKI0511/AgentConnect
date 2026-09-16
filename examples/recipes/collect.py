@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import asyncio
 
+from _wait import show_ticket, until_terminal
+
 from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill, Team
 from agentconnect.agent.context import DeferredReply
-
-from _wait import show_ticket, until_terminal
 
 
 class Researcher(BaseAgent):

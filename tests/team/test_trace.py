@@ -6,7 +6,6 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from tests.team.conftest import deadline, join_member, profile
 
 pytestmark = pytest.mark.asyncio

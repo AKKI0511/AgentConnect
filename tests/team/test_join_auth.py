@@ -6,10 +6,10 @@ import asyncio
 from datetime import timedelta
 
 import pytest
+from tests.team.conftest import join_member, make_did, profile
 
 from agentconnect.core.identity import AgentIdentity, issue_identity_proof, utc_now
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import join_member, make_did, profile
 
 
 async def _auth_team(**kwargs) -> Team:

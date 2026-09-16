@@ -4,7 +4,7 @@ Telegram message handlers package.
 This package contains all the handlers for Telegram messages.
 """
 
-from typing import Dict, Callable, List
+from typing import Callable, Dict, List
 
 from aiogram import Dispatcher
 

@@ -5,8 +5,7 @@ This module contains the keyboard layouts used in the Telegram agent for
 both private and group chats.
 """
 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 # Main keyboard for private chats with all options
 PRIVATE_CHAT_KEYBOARD = ReplyKeyboardMarkup(

@@ -12,16 +12,17 @@ from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from agentconnect.config.servers import RegistryAPISettings
+from agentconnect.core.profile import Skill
+
 # AgentConnect core imports
-from agentconnect.index.registry import AgentRegistry, AgentRegistration
+from agentconnect.index.registry import AgentRegistration, AgentRegistry
 from agentconnect.index.registry.search import (
     AgentSearchInput,
     AgentSearchOutput,
     populate_search_result_item,
 )
-from agentconnect.core.profile import Skill
 from agentconnect.index.types import AgentType, Capability, InteractionMode
-from agentconnect.config.servers import RegistryAPISettings
 
 logger = logging.getLogger("uvicorn.error.agentconnect.registry")
 

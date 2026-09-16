@@ -7,34 +7,35 @@ capability discovery system, including embedding utils, indexing, and Qdrant cli
 
 import pytest
 from tests.core.utils import (
+    Colors,
+    print_error,
     print_header,
     print_step,
     print_success,
     print_warning,
-    print_error,
-    Colors,
 )
+
+from agentconnect.config.models import VectorSearchSettings
 
 # Import implementation modules directly for testing
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     calculate_similarity,
-    cosine_similarity,
     check_semantic_search_requirements,
+    cosine_similarity,
     create_huggingface_embeddings,
 )
+from agentconnect.index.registry.capability_discovery_impl.indexing import (
+    extract_capability_index,
+    update_capability_embeddings,
+)
 from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
-    initialize_qdrant_clients,
     init_qdrant_collection,
+    initialize_qdrant_clients,
 )
 from agentconnect.index.registry.capability_discovery_impl.search import (
-    find_by_capability_name,
     fallback_string_search,
+    find_by_capability_name,
 )
-from agentconnect.index.registry.capability_discovery_impl.indexing import (
-    update_capability_embeddings,
-    extract_capability_index,
-)
-from agentconnect.config.models import VectorSearchSettings
 
 
 # Tests for embedding_utils.py
@@ -344,7 +345,8 @@ class TestSearch:
 
         # Assertions
         # assert len(results) > 0, "Should find results for 'weather forecast'"
-        # assert any("weather" in r.agent_id.lower() for r, _ in results), "Should find weather-related agents"
+        _ = [r for r, _ in results if "weather" in r.agent_id.lower()]
+        # assert len(weather_results) > 0, "Should find weather-related agents"
 
         print_success("Completed fallback string search. Please verify results above.")
 
@@ -510,9 +512,7 @@ class TestIndexing:
             pytest.skip("Collection creation failed")
             return
 
-        # Verify collection exists
         await async_client.collection_exists(collection_name)
-        # assert collection exists after initialization
         print_step(
             f"Collection {collection_name} existence verified. Please check logs."
         )

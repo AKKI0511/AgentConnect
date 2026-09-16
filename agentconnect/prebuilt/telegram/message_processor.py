@@ -6,7 +6,7 @@ of Telegram messages through the AgentConnect framework.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
 
 from aiogram import types
 

@@ -6,10 +6,10 @@ import asyncio
 import uuid
 
 import pytest
+from tests.agent.conftest import EchoAgent
 
 from agentconnect.agent import BaseAgent, SessionError
 from agentconnect.team import Team
-from tests.agent.conftest import EchoAgent
 
 
 @pytest.mark.asyncio

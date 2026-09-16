@@ -27,7 +27,7 @@ class Skill(SchemaModel):
     @field_validator("tags")
     @classmethod
     def unique_skill_tags(cls, value: list[str] | None) -> list[str] | None:
-        """Reject a repeated tag on one Skill."""
+        """Reject a repeated tag on one Skill. Skill tags are full-Profile only."""
         if value is not None and len(value) != len(set(value)):
             raise ValueError("tags must not repeat a value")
         return value
@@ -36,8 +36,11 @@ class Skill(SchemaModel):
 class AgentProfile(SchemaModel):
     """Discovery information for an Agent.
 
-    A Profile describes what one participant can do. Identity, name,
-    Address, presence, and Session data do not belong here.
+    ``summary`` is the cheap Directory card line. ``description`` is the
+    longer explanation on the full Profile. Profile ``tags`` appear on
+    the light card; Skill ``tags`` appear only on the full Profile.
+
+    Identity, name, Address, presence, and Session data do not belong here.
     """
 
     summary: str = Field(min_length=1, max_length=200, pattern=r"\S")

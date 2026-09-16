@@ -15,9 +15,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from agentconnect import BaseAgent, Context, MailboxMessage, Team
-
 from _wait import show_ticket, until_terminal
+
+from agentconnect import BaseAgent, Context, MailboxMessage, Team
 
 
 class Echo(BaseAgent):

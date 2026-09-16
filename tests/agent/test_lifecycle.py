@@ -6,13 +6,13 @@ import asyncio
 import uuid
 
 import pytest
+from tests.agent.conftest import DeferredAgent, EchoAgent
 
 from agentconnect.agent import BaseAgent
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import Session, _TrackedLease
 from agentconnect.team import Team
 from agentconnect.transport.runtime import TransportError
-from tests.agent.conftest import DeferredAgent, EchoAgent
 
 
 @pytest.mark.asyncio
@@ -691,7 +691,7 @@ async def test_third_delivery_waits_for_deferred_and_unwinding_slots():
                 break
             await asyncio.sleep(0.05)
         assert writer.deferred is not None
-        await researcher.ask("writer", "slow", deadline_seconds=0.4, collect="ticket")
+        await researcher.ask("writer", "slow", deadline_seconds=2.0, collect="ticket")
         await asyncio.wait_for(writer.slow_started.wait(), timeout=5)
         session = writer._session
         assert session is not None

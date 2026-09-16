@@ -6,8 +6,8 @@ import asyncio
 import bisect
 from typing import Any, Optional, Sequence
 
-from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.apply import Overlay, apply_ops
+from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.ops import ApplyResult, StoreOp
 
 

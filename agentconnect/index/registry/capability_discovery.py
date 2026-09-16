@@ -7,22 +7,24 @@ including semantic search using embeddings and simpler string matching methods.
 
 from __future__ import annotations
 
+import asyncio
+
 # Standard library imports
 import logging
 import time
-import asyncio
-from typing import Dict, List, Set, Tuple, Any, Optional, Union, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union, cast
+
+from agentconnect.config.vector import VectorSearchSettings
 
 # Avoid importing implementation modules at top-level to prevent optional deps from loading
-
 # Absolute imports from agentconnect package
 from agentconnect.index.registry.registration import AgentRegistration
-from agentconnect.config.vector import VectorSearchSettings
 
 # Type-only imports for IDEs and static analysis (no runtime import)
 if TYPE_CHECKING:
-    from qdrant_client import QdrantClient as _QdrantClient
     from qdrant_client import AsyncQdrantClient as _AsyncQdrantClient
+    from qdrant_client import QdrantClient as _QdrantClient
+
     from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
         Embeddings as _Embeddings,
     )
@@ -123,8 +125,8 @@ class CapabilityDiscoveryService:
 
             # Initialize Qdrant clients
             from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
-                initialize_qdrant_clients,
                 init_qdrant_collection,
+                initialize_qdrant_clients,
             )
 
             self._qdrant_client, self._async_qdrant_client = cast(

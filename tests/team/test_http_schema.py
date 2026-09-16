@@ -7,7 +7,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 from tests.core.test_schema_mutations import _generated_cases
 from tests.team.conftest import join_member
 

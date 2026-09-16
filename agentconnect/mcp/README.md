@@ -30,4 +30,4 @@ Cursor MCP config:
 
 Loopback calls with no `Authorization` header run as the reserved `operator` Membership on a trusted loopback path. A Bearer token is that member's `session_token`. Tool arguments never include `sender` or `session_token`. The roster resource and any extra Team tools use the same Session boundary. A reverse proxy in front of a loopback listener is not that path; send a Session token. Empty `X-Forwarded-*` headers and empty or malformed `Authorization` headers are unauthorized.
 
-See `examples/communication/mcp.py` and `examples/communication/tools.py`.
+See `examples/recipes/team_mcp.py`. Python hosts that do not speak MCP use `BaseAgent.team_tools()`.

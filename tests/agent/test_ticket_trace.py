@@ -6,10 +6,10 @@ import asyncio
 import uuid
 
 import pytest
+from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
 from agentconnect.agent import BaseAgent
 from agentconnect.team import Team
-from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
 _RECIPIENTS = {
     "open": DeferredAgent,

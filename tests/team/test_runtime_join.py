@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from tests.team.conftest import join_member, make_did, profile
 
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import join_member, profile, make_did
 
 
 @pytest.mark.asyncio

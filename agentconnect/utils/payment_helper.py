@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any, Union, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 from agentconnect.utils import wallet_manager
 

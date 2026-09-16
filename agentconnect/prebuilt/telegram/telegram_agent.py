@@ -31,14 +31,14 @@ from dotenv import load_dotenv
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.prebuilt.ai_agent import AIAgent, CompletionOptions
 from agentconnect.prebuilt.loop import CompletionFn
+from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
+from agentconnect.prebuilt.telegram._utils.file_utils import ensure_download_directory
 from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
 from agentconnect.prebuilt.telegram.keyboards import (
     GROUP_CHAT_KEYBOARD,
     PRIVATE_CHAT_KEYBOARD,
 )
 from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
-from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
-from agentconnect.prebuilt.telegram._utils.file_utils import ensure_download_directory
 from agentconnect.prebuilt.tools import Tool, merge_tools
 
 logger = logging.getLogger(__name__)

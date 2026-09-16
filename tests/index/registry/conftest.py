@@ -4,22 +4,19 @@ Pytest fixtures for capability discovery tests.
 This module provides shared fixtures for the capability discovery tests.
 """
 
-import pytest
-import pytest_asyncio
-import tempfile
 import shutil
+import tempfile
 from datetime import datetime
 from typing import List
+
+import pytest
+import pytest_asyncio
+
+from agentconnect.config.models import VectorSearchSettings
 
 # Import from agentconnect
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import Skill
-from agentconnect.index.types import (
-    AgentType,
-    Capability,
-    InteractionMode,
-)
-from agentconnect.index.registry.registration import AgentRegistration
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     check_semantic_search_requirements,
@@ -28,7 +25,12 @@ from agentconnect.index.registry.capability_discovery_impl.embedding_utils impor
 from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
     initialize_qdrant_clients,
 )
-from agentconnect.config.models import VectorSearchSettings
+from agentconnect.index.registry.registration import AgentRegistration
+from agentconnect.index.types import (
+    AgentType,
+    Capability,
+    InteractionMode,
+)
 
 
 # Sample test data

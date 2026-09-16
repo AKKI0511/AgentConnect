@@ -8,7 +8,7 @@ import time
 import pytest
 
 from agentconnect.agent.errors import SessionError
-from agentconnect.agent.session import Session, _TrackedLease, _should_reconnect
+from agentconnect.agent.session import Session, _should_reconnect, _TrackedLease
 from agentconnect.transport.runtime import TransportError
 
 

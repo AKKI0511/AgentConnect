@@ -26,8 +26,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from agentconnect.team.codec import new_uuid, parse_timestamp, timestamp_score
 import agentconnect.team.expiry as expiry_mod
+from agentconnect.team.codec import new_uuid, parse_timestamp, timestamp_score
 from agentconnect.team.retention import LIVE_MESSAGES_SET
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.ops import (

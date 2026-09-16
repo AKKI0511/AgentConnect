@@ -7,9 +7,9 @@ import uuid
 
 import httpx
 import pytest
+from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.team import Team, TeamError
-from tests.team.conftest import deadline, join_member, make_did, profile
 
 
 def _id() -> str:

@@ -5,17 +5,18 @@ This module provides functions for indexing agent capabilities into Qdrant,
 handling updates, deletions, and processing agent registrations.
 """
 
-import logging
-from typing import Dict, Set, Tuple, List
-from qdrant_client import AsyncQdrantClient
-import uuid
-import hashlib
 import asyncio
+import hashlib
+import logging
+import uuid
+from typing import Dict, List, Set, Tuple
 
-from agentconnect.index.registry.registration import AgentRegistration
+from qdrant_client import AsyncQdrantClient
+
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     Embeddings,
 )
+from agentconnect.index.registry.registration import AgentRegistration
 
 # Configure logger (module namespace)
 logger = logging.getLogger(__name__)
@@ -375,22 +376,23 @@ def extract_capability_index(
 
 async def main():
     #  Test usage
-    from agentconnect.index.registry.registration import AgentRegistration
     from agentconnect.core.identity import AgentIdentity
     from agentconnect.core.profile import Skill
+    from agentconnect.index.registry.registration import AgentRegistration
     from agentconnect.index.types import (
         AgentType,
         Capability,
         InteractionMode,
     )
 
-    # Removed direct AsyncQdrantClient import here, will use our helper
-    from .qdrant_client import (
-        initialize_qdrant_clients,
-        init_qdrant_collection,
-    )
     from .embedding_utils import (
         create_huggingface_embeddings,
+    )
+
+    # Removed direct AsyncQdrantClient import here, will use our helper
+    from .qdrant_client import (
+        init_qdrant_collection,
+        initialize_qdrant_clients,
     )
 
     registration = AgentRegistration(

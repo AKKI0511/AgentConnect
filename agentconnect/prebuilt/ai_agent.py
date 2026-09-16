@@ -54,8 +54,8 @@ from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.message import MailboxMessage
 from agentconnect.core.profile import AgentProfile
 from agentconnect.prebuilt.loop import (
-    CompletionFn,
     DEFAULT_MAX_ROUNDS,
+    CompletionFn,
     messages_from_thread,
     run_tool_loop,
 )

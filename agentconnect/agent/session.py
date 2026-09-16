@@ -317,6 +317,7 @@ class Session:
         """Search this Team's Directory.
 
         found = await session.find("someone who can draft a summary")
+        found.matches[0].address
         """
         return FindResult.model_validate(
             await self._call(

@@ -75,6 +75,15 @@ from typing import Any, Callable, Mapping, NoReturn, Optional, Sequence, Union
 
 from pydantic import ValidationError
 
+import agentconnect.team.auth as auth_mod
+import agentconnect.team.expiry as expiry_mod
+import agentconnect.team.mailbox as mailbox_mod
+import agentconnect.team.projection as projection_mod
+import agentconnect.team.retention as retention_mod
+import agentconnect.team.sessions as sessions_mod
+import agentconnect.team.threads as threads_mod
+import agentconnect.team.tickets as tickets_mod
+import agentconnect.team.trace as trace_mod
 from agentconnect.core.address import (
     ADDRESS_OUTSIDE_TEAM,
     INVALID_ADDRESS,
@@ -82,9 +91,9 @@ from agentconnect.core.address import (
     parse_team_name,
     resolve_address,
 )
-
 from agentconnect.core.base import dump_public, validation_message
 from agentconnect.core.directory import DirectoryEntry
+from agentconnect.core.error import ErrorObject
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.operations import (
     CompleteResult,
@@ -106,19 +115,9 @@ from agentconnect.core.operations import (
     parse_send_result,
 )
 from agentconnect.core.primitives import DeliveryHistoryForm
-from agentconnect.core.error import ErrorObject
 from agentconnect.core.profile import AgentProfile
+from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.ticket import parse_ticket
-from agentconnect.team.directory import Directory, MAX_FIND_LIMIT
-from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
-import agentconnect.team.auth as auth_mod
-import agentconnect.team.mailbox as mailbox_mod
-import agentconnect.team.projection as projection_mod
-import agentconnect.team.retention as retention_mod
-import agentconnect.team.sessions as sessions_mod
-import agentconnect.team.tickets as tickets_mod
-import agentconnect.team.threads as threads_mod
-import agentconnect.team.trace as trace_mod
 from agentconnect.team.codec import (
     canonical_json,
     format_timestamp,
@@ -130,7 +129,6 @@ from agentconnect.team.codec import (
     semantic_hash,
     utc_now,
 )
-from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.team.constants import (
     COLLECT_MODES,
     DEFAULT_DELIVERY_HISTORY_LIMIT,
@@ -157,8 +155,9 @@ from agentconnect.team.constants import (
     SWEEP_BATCH,
     SWEEP_INTERVAL_SECONDS,
 )
+from agentconnect.team.directory import MAX_FIND_LIMIT, Directory
+from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
 from agentconnect.team.errors import IDENTITY_MISSING, TeamError
-import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.locks import KeyedLock
 from agentconnect.team.store import MemoryStore, Store
 from agentconnect.team.transitions.complete import (
@@ -290,12 +289,15 @@ class Team:
             max_retained_bytes: Cap on UTF-8 JSON bytes of retained
                 Message bodies.
             embeddings: How Profiles are turned into vectors for ``find``.
-                ``"auto"`` uses a hosted embedding API when a key is
-                already configured, a local ONNX model when
+                ``"auto"`` uses a local ONNX model when
                 ``agentconnect[embeddings]`` is installed, and hashed
-                n-grams otherwise. ``"none"`` forces hashed n-grams.
-                Pass a callable ``(list[str]) -> list[list[float]]`` to
-                supply your own embeddings.
+                n-grams otherwise. An API key in the environment does
+                not select a hosted embedder. ``"openai"`` and
+                ``"litellm"`` are explicit hosted backends. ``"none"``
+                forces hashed n-grams. Pass a callable
+                ``(list[str]) -> list[list[float]]`` to supply your own
+                embeddings. A failed backend is not mixed with leftover
+                vectors; ``find`` rebuilds one space.
             tools: Extra MCP tools this Team serves beside find, ask, tell,
                 get_result, and get_history. Each item is a callable whose
                 ``__name__`` is the tool name. Those five names are reserved.
@@ -638,8 +640,9 @@ class Team:
     async def _serve_http(self, host: str, port: int) -> str:
         await self.ensure_operator_session()
         try:
-            from agentconnect.team.http import create_runtime_app
             import uvicorn
+
+            from agentconnect.team.http import create_runtime_app
         except ImportError:
             _fail(
                 "unavailable",
@@ -1249,9 +1252,16 @@ class Team:
             self._forget_session(accepted.old_session)
         self._index_session(accepted.session)
         if self._directory is not None and not _is_principal(accepted.member):
-            await self._directory.upsert(
-                accepted.member["name"], accepted.member["profile"]
-            )
+            try:
+                await self._directory.upsert(
+                    accepted.member["name"], accepted.member["profile"]
+                )
+            except Exception:
+                logger.warning(
+                    "Directory upsert failed for %s",
+                    accepted.member["name"],
+                    exc_info=True,
+                )
         return self._join_result(accepted.session, accepted.member)
 
     async def disconnect(self, session_token: str) -> None:
@@ -2637,22 +2647,29 @@ class Team:
             _fail("invalid_request", "detail must be summary or full")
         store = self._ensure_started()
         names = await store.set_members("members")
-        members: list[dict[str, Any]] = []
-        for name in names:
-            member = await self._get_member(name)
-            if member is not None and not _is_principal(member):
-                members.append(member)
+        records = await store.get_many([f"member:{name}" for name in names])
+        members = [
+            record
+            for record in records
+            if isinstance(record, dict) and not _is_principal(record)
+        ]
         exclude = session["address"]
         directory = self._directory
         if directory is None:
             _fail("unavailable", "Team has not been started")
-        return await directory.search(
-            query,
-            members,
-            exclude_address=exclude,
-            limit=cap,
-            detail=detail,
-        )
+        try:
+            return await directory.search(
+                query,
+                members,
+                exclude_address=exclude,
+                limit=cap,
+                detail=detail,
+            )
+        except TeamError:
+            raise
+        except Exception:
+            logger.exception("Directory search failed")
+            _fail("unavailable", "Directory ranking is unavailable")
 
     async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
         """Return one Directory entry by local or same-Team Address."""

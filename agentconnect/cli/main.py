@@ -373,10 +373,8 @@ def find(
         typer.echo("no matches")
         return
     for match in matches:
-        summary = (match.get("profile") or {}).get("summary") or ""
-        score = match.get("score")
-        score_text = f"  {score:.3f}" if isinstance(score, (int, float)) else ""
-        typer.echo(f"{match['address']}{score_text}  {summary}")
+        summary = match.get("summary") or ""
+        typer.echo(f"{match['address']}  {summary}")
 
 
 @app.command("ask")

@@ -426,8 +426,13 @@ The Runtime MUST:
 - when `limit` is omitted, return every remaining member, at most 100
 - when `limit` is present, return at most that many matches; `limit` MUST be between `1` and `100`
 - return each match at the requested `detail`
+- rank every match in one `FindResult` in one embedding space
+- rebuild rather than mix when the embedding space changes or a stored vector is malformed
+- keep backend and fallback diagnostics out of the result
 
-`detail` is `summary` or `full` and defaults to `summary`; `full` adds `agent_did` and the complete Profile to each match. Search MUST work without optional infrastructure. Ranking implementation is outside the specification, and changing it MUST NOT change the request or result shape.
+`detail` is `summary` or `full` and defaults to `summary`; `full` adds `agent_did` and the complete Profile to each match. Search MUST work without optional infrastructure. The ranking method is an implementation choice, and changing it MUST NOT change the request shape or the match card.
+
+Directory ranking MUST NOT choose a `send` recipient, change Mailbox order, or change lease order.
 
 A future addition may widen `find` to reach beyond the local Team. That is an added scope, not a reshape: the result stays a list of ranked matches whose Addresses are already qualified.
 

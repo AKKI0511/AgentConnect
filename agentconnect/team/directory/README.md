@@ -5,8 +5,8 @@ from a natural-language query. Vectors are stored next to Memberships. A
 vector database is not used.
 
 Search works on a fresh Team. No configuration, no extra package, and no API
-key are required. Hosted or local neural embeddings are used when they are
-already available.
+key are required. Hosted embeddings are used only when the Team selects them
+explicitly.
 
 ## What a caller writes
 
@@ -14,14 +14,17 @@ already available.
 from agentconnect.agent import BaseAgent
 from agentconnect.team import Team
 
+
 class Reviewer(BaseAgent):
     profile = {
         "summary": "Reviews contracts for risk and missing terms.",
+        "description": "Use for MSAs and similar commercial contracts.",
         "skills": [
             {
                 "name": "contract_review",
                 "description": "Read a contract and list risks and missing clauses.",
                 "examples": ["Check this MSA for indemnity gaps."],
+                "tags": ["msa"],
             }
         ],
         "tags": ["legal", "contracts"],
@@ -30,15 +33,19 @@ class Reviewer(BaseAgent):
     async def handle(self, msg, ctx):
         return "reviewed"
 
+
 team = await Team("content-squad").start()
 await Reviewer(name="reviewer").join(team)
 await Researcher(name="researcher").join(team)
 
 found = await researcher.find("someone who can verify a contract")
 found.matches[0].address  # reviewer@content-squad
+found.matches[0].summary
+found.matches[0].tags  # Profile tags ["legal", "contracts"]
 
 entry = await researcher.get_entry("reviewer")
-entry.profile.summary
+entry.profile.description
+entry.profile.skills[0].tags  # Skill tags ["msa"], not on the light card
 ```
 
 Omit ``limit`` to receive every other member, ordered, up to 100. Pass
@@ -46,7 +53,8 @@ Omit ``limit`` to receive every other member, ordered, up to 100. Pass
 and the complete Profile to each match.
 
 The Runtime never injects a Profile into handler input. Call ``find`` or
-``get_entry`` when the Agent should read one.
+``get_entry`` when the Agent should read one. Ranking does not choose who
+``ask`` or ``tell`` send to.
 
 ## Embedding backends
 
@@ -54,25 +62,32 @@ Set on the Team, not on each Agent.
 
 | ``embeddings=`` | When to use it |
 |---|---|
-| ``"auto"`` (default) | Hosted API if ``OPENAI_API_KEY`` or ``AZURE_OPENAI_API_KEY`` is set, else ``fastembed`` if installed, else hashed n-grams |
+| ``"auto"`` (default) | Local ONNX if ``agentconnect[embeddings]`` is installed, else hashed n-grams. Ambient API keys are ignored |
 | ``"none"`` | Hashed n-grams only. No network, no extra package |
-| ``"fastembed"`` | Local ONNX model (``pip install agentconnect[embeddings]``) |
-| ``"openai"`` | OpenAI ``text-embedding-3-small`` at 384 dimensions |
-| ``"litellm"`` or ``"litellm:<model>"`` | LiteLLM, when that package is installed |
-| a callable | ``(list[str]) -> list[list[float]]``, sync or async |
+| ``"fastembed"`` | Local ONNX model (``pip install agentconnect[embeddings]``). May download model files to this host; that is not Profile or query egress |
+| ``"openai"`` | Explicit hosted OpenAI ``text-embedding-3-small`` at 384 dimensions |
+| ``"litellm"`` or ``"litellm:<model>"`` | Explicit hosted LiteLLM embeddings |
+| a callable | ``(list[str]) -> list[list[float]]``: sync, async, or a sync function that returns an awaitable |
 
 ```python
 async def embed(texts: list[str]) -> list[list[float]]:
     return await my_model.encode(texts)
 
+
 team = await Team("content-squad", embeddings=embed).start()
 ```
 
 Profiles are embedded when an Agent joins and again when the Profile changes.
-``find`` embeds the query and ranks with a dot product.
+``find`` embeds the query and ranks with a dot product in one embedding space.
+A backend change or an embedding failure rebuilds that index. Store errors
+do not change the configured space. Hashed n-grams keep search available;
+backend failures are logged for the operator and are not added to caller
+results.
 
 ``pip install agentconnect`` does not pull torch. The ``[embeddings]`` extra
 installs [fastembed](https://qdrant.github.io/fastembed/), which uses ONNX.
+A local model download stays on this machine. ``openai`` and ``litellm``
+are the selections that transmit Profile and query text.
 
 ## Index vs Directory
 

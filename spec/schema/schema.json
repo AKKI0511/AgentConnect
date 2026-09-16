@@ -300,7 +300,7 @@
           "items": {
             "$ref": "#/definitions/Tag"
           },
-          "description": "Optional lowercase labels scoped to this Skill.",
+          "description": "Optional lowercase labels scoped to this Skill. They appear only on the full Profile, not on the light DirectoryMatch card.",
           "maxItems": 20,
           "uniqueItems": true
         }
@@ -322,14 +322,14 @@
       "properties": {
         "summary": {
           "type": "string",
-          "description": "Short description used in discovery results.",
+          "description": "Short description used on the light DirectoryMatch card.",
           "minLength": 1,
           "maxLength": 200,
           "pattern": "\\S"
         },
         "description": {
           "type": "string",
-          "description": "Longer optional explanation of suitable work and boundaries.",
+          "description": "Longer optional explanation of suitable work and boundaries. Present on the full Profile (`get_profile` or `detail=full`), not on the light card.",
           "minLength": 1,
           "maxLength": 2000,
           "pattern": "\\S"
@@ -348,7 +348,7 @@
           "items": {
             "$ref": "#/definitions/Tag"
           },
-          "description": "Lowercase discovery labels. Duplicate tags are invalid.",
+          "description": "Lowercase discovery labels for the Agent as a whole. They appear on the light DirectoryMatch card. Duplicate tags are invalid.",
           "maxItems": 20,
           "uniqueItems": true
         }
@@ -1332,7 +1332,7 @@
           "items": {
             "$ref": "#/definitions/Tag"
           },
-          "description": "Optional discovery labels."
+          "description": "Profile tags. Skill tags are not copied onto this card."
         },
         "agent_did": {
           "$ref": "#/definitions/AgentDid",

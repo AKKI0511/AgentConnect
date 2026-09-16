@@ -5,16 +5,18 @@ the Team Store. There is no vector database and no setting to turn search on.
 
     team = await Team("content-squad").start()
     found = await agent.find("someone who can review a contract")
-    found["matches"][0]["address"]
+    found.matches[0].address
     entry = await agent.get_entry("reviewer")
 
 Pass ``embeddings=`` to :class:`~agentconnect.team.runtime.Team` only when you
-want a specific backend. ``"auto"`` is the default.
+want a specific backend. ``"auto"`` is the default: local ONNX when the
+embeddings extra is installed, otherwise hashed n-grams. Hosted backends
+need an explicit ``openai`` or ``litellm`` selection.
 """
 
 from agentconnect.team.directory.directory import (
-    Directory,
     MAX_FIND_LIMIT,
+    Directory,
     profile_text,
 )
 from agentconnect.team.directory.embedder import (

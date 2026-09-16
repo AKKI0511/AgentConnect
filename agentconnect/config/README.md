@@ -26,8 +26,10 @@ ship.
 
 - ``team``: lowercase DNS label
 - ``store``: ``memory`` or a ``redis://`` / ``rediss://`` URL
-- ``embeddings``: ``auto``, ``none``, ``fastembed``, ``fastembed:<model>``,
-  ``litellm``, or ``litellm:<model>``
+- ``embeddings``: ``auto``, ``none``, ``hashed``, ``fastembed``,
+  ``fastembed:<model>``, ``openai``, ``openai:<model>``, ``litellm``, or
+  ``litellm:<model>``. ``auto`` uses local ONNX when installed, otherwise
+  hashed n-grams. Ambient API keys do not select hosted embeddings.
 - ``host`` / ``port``: loopback address ``agentconnect up`` binds
 - ``require_join_auth``: when true, every join needs a token and proof
 - ``agents``: hosted classes this process constructs and joins

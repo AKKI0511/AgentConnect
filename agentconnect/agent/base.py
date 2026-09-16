@@ -296,8 +296,11 @@ class BaseAgent:
     ) -> FindResult:
         """Search this Team's Directory, excluding this Agent.
 
-        found = await agent.find("someone who can draft a summary")
-        found.matches[0].address
+        Light cards include Address, summary, Skill names, and Profile tags.
+        ``detail="full"`` adds the DID and complete Profile.
+
+            found = await agent.find("someone who can draft a summary")
+            found.matches[0].address
         """
         return await self._require_session().find(query, limit=limit, detail=detail)
 

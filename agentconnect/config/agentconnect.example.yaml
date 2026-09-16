@@ -3,7 +3,8 @@
 # Secrets stay in the environment.
 #
 # store: memory  or  redis://localhost:6379/0
-# embeddings: auto | none | fastembed | litellm:<model>
+# embeddings: auto | none | fastembed | openai | litellm:<model>
+# auto never sends Profiles or queries to a hosted embedder.
 #
 # Agents listed here are constructed by `agentconnect up`.
 # Agents in other processes join by URL with a token from

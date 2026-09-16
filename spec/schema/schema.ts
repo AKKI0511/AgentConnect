@@ -198,7 +198,8 @@ export interface Skill {
    */
   examples?: SkillExample[];
   /**
-   * Optional lowercase labels scoped to this Skill.
+   * Optional lowercase labels scoped to this Skill. They appear only on the
+   * full Profile, not on the light DirectoryMatch card.
    * @maxItems 20
    * @uniqueItems true
    */
@@ -214,14 +215,15 @@ export interface Skill {
  */
 export interface AgentProfile {
   /**
-   * Short description used in discovery results.
+   * Short description used on the light DirectoryMatch card.
    * @minLength 1
    * @maxLength 200
    * @pattern \S
    */
   summary: string;
   /**
-   * Longer optional explanation of suitable work and boundaries.
+   * Longer optional explanation of suitable work and boundaries. Present on
+   * the full Profile (`get_profile` or `detail=full`), not on the light card.
    * @minLength 1
    * @maxLength 2000
    * @pattern \S
@@ -234,7 +236,8 @@ export interface AgentProfile {
    */
   skills: Skill[];
   /**
-   * Lowercase discovery labels. Duplicate tags are invalid.
+   * Lowercase discovery labels for the Agent as a whole. They appear on the
+   * light DirectoryMatch card. Duplicate tags are invalid.
    * @maxItems 20
    * @uniqueItems true
    */
@@ -533,7 +536,7 @@ export interface DirectoryMatch {
   summary: string;
   /** Declared Skill names, for a cheap capability scan. */
   skill_names: string[];
-  /** Optional discovery labels. */
+  /** Profile tags. Skill tags are not copied onto this card. */
   tags?: Tag[];
   /** Stable identity. Present only when detail is `full`. */
   agent_did?: AgentDid;

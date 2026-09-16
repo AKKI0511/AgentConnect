@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from agentconnect.config.vector import VectorSearchSettings
 
 _IMPORT_REF = re.compile(r"^([A-Za-z_][\w.]*)\:([A-Za-z_]\w*)$")
-_EMBEDDING_KEYS = {"auto", "none", "fastembed", "litellm"}
+_EMBEDDING_KEYS = {"auto", "none", "hashed", "fastembed", "openai", "litellm"}
 
 
 class PaymentsSettings(BaseModel):
@@ -113,7 +113,7 @@ class TeamConfig(BaseModel):
     )
     embeddings: str = Field(
         default="auto",
-        description="auto | none | fastembed | fastembed:<model> | litellm | litellm:<model>.",
+        description="auto | none | hashed | fastembed | openai | litellm, with optional :model on the last three.",
     )
     host: str = Field(
         default="127.0.0.1",
@@ -168,12 +168,12 @@ class TeamConfig(BaseModel):
         key, sep, rest = text.partition(":")
         if key not in _EMBEDDING_KEYS:
             raise ValueError(
-                "embeddings must be auto, none, fastembed, or litellm, "
-                "optionally with :model"
+                "embeddings must be auto, none, hashed, fastembed, openai, or "
+                "litellm, optionally with :model"
             )
-        if key in {"auto", "none"} and sep:
+        if key in {"auto", "none", "hashed"} and sep:
             raise ValueError(f"embeddings {key} does not take a model suffix")
-        if key in {"fastembed", "litellm"} and sep and not rest.strip():
+        if key in {"fastembed", "openai", "litellm"} and sep and not rest.strip():
             raise ValueError("embeddings model suffix must be non-empty")
         return text
 

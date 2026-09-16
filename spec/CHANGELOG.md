@@ -89,5 +89,8 @@ Defines:
 - MCP tool arguments are checked in their original form before SDK coercion or default insertion
 - advertised MCP tool schemas are the public argument types, so omit-only fields, bounds, enumerations, identifier patterns, and undeclared properties agree with `tools/call`
 - shared schema rejection vectors live in [`schema/rejection.json`](schema/rejection.json); tests also derive structural mutations from the valid controls
+- one `FindResult` is ranked in one embedding space; a failed backend rebuilds rather than mixing leftover vectors; the result does not name the backend or a fallback
+- Directory ranking does not choose a `send` recipient or change Mailbox or lease order
+- Profile `summary` and Profile `tags` are the light Directory card; `description` and Skill `tags` belong to the full Profile
 
 This is a draft. No implementation may claim conformance yet.

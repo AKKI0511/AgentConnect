@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Optional
 
 from pydantic import Field
 
 from agentconnect.core.base import JsonInt, SchemaModel
-from agentconnect.core.primitives import Address, AgentDid, QualifiedAddress, Tag
+from agentconnect.core.primitives import (
+    Address,
+    AgentDid,
+    FindDetail,
+    QualifiedAddress,
+    Tag,
+)
 from agentconnect.core.profile import AgentProfile
 
 __all__ = [
@@ -24,6 +30,12 @@ class DirectoryEntry(SchemaModel):
 
     Runtime ``get_profile`` returns Address, DID, and Profile together.
     The Client method is :meth:`~agentconnect.agent.base.BaseAgent.get_entry`.
+
+    .. code-block:: python
+
+        entry = await agent.get_entry("writer")
+        entry.profile.summary
+        entry.profile.description
     """
 
     address: QualifiedAddress
@@ -32,7 +44,11 @@ class DirectoryEntry(SchemaModel):
 
 
 class DirectoryMatch(SchemaModel):
-    """One ranked discovery result. Light by default; ``detail='full'`` fills the rest."""
+    """One ranked discovery result.
+
+    Light by default: Address, ``summary``, Skill names, and Profile tags.
+    ``detail='full'`` adds ``agent_did`` and the complete Profile.
+    """
 
     address: QualifiedAddress
     summary: str
@@ -47,11 +63,21 @@ class FindRequest(SchemaModel):
 
     query: str = Field(min_length=1, max_length=1000, pattern=r"\S")
     limit: Optional[JsonInt] = Field(default=None, ge=1, le=100)
-    detail: Literal["summary", "full"] = "summary"
+    detail: FindDetail = "summary"
 
 
 class FindResult(SchemaModel):
-    """Ordered local Directory search result."""
+    """Ordered local Directory search result.
+
+    Matches are best-first. The result does not name the embedding
+    backend or a fallback.
+
+    .. code-block:: python
+
+        found = await agent.find("someone who can draft a summary")
+        found.matches[0].address
+        found.matches[0].summary
+    """
 
     matches: list[DirectoryMatch]
 

@@ -99,9 +99,9 @@ Arguments:
 
 The server MUST validate these arguments as sent. A string `limit`, JSON `null`, or an undeclared field is an MCP-level invalid-params failure. The advertised tool schema MUST reject the same values.
 
-Result: `FindResult`. Each match is a light card by default so a model can scan a whole Team cheaply. `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail if it needs more than the card shows.
+Result: `FindResult`. Matches are ordered best-first. The result does not name the embedding backend or a fallback. Each match is a light card by default so a model can scan a whole Team cheaply. `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail or `get_profile` if it needs more than the card shows.
 
-The tool searches only the caller's Team and excludes the caller.
+The tool searches only the caller's Team and excludes the caller. Ranking does not choose a later `ask` or `tell` recipient.
 
 ## `ask`
 

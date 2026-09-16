@@ -52,6 +52,7 @@ def test_store_and_embeddings_validation() -> None:
     TeamConfig.model_validate(
         {"team": "demo", "embeddings": "litellm:text-embedding-3-small"}
     )
+    TeamConfig.model_validate({"team": "demo", "embeddings": "openai"})
     with pytest.raises(Exception):
         TeamConfig.model_validate({"team": "demo", "store": "postgres://x"})
     with pytest.raises(Exception):

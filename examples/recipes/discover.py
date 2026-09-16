@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import asyncio
 
-from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill, Team
-
 from _wait import show_ticket, until_terminal
+
+from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill, Team
 
 
 class Reviewer(BaseAgent):
@@ -88,7 +88,6 @@ async def main() -> None:
     await researcher.join(team)
     try:
         found = await researcher.find("someone who can verify a contract")
-        print(f"ranking: {found.ranking}")
         print("find:")
         for match in found.matches:
             print(f"  {match.address}: {match.summary} tags={match.tags}")

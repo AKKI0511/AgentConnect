@@ -95,12 +95,14 @@ A Profile is discovery information only. It describes what one participant can d
 
 An `AgentProfile` has:
 
-- a required `summary`
+- a required `summary` (the cheap line on every Directory card)
 - one or more `skills`
-- an optional longer `description`
-- optional lowercase `tags`
+- an optional longer `description` (full Profile only)
+- optional lowercase `tags` for the Agent as a whole
 
-A Skill is a natural-language claim, not a typed endpoint. It has a unique `name` within the Profile, a required `description`, optional text `examples`, and optional `tags`. A Skill carries no input or output schema: an Agent is addressed as one conversational participant, a caller describes work in free-form `content`, and no request is dispatched against a declared Skill signature. Skills exist to make discovery specific and to show a reader what the Agent is for.
+A Skill is a natural-language claim, not a typed endpoint. It has a unique `name` within the Profile, a required `description`, optional text `examples`, and optional `tags` scoped to that Skill. A Skill carries no input or output schema: an Agent is addressed as one conversational participant, a caller describes work in free-form `content`, and no request is dispatched against a declared Skill signature. Skills exist to make discovery specific and to show a reader what the Agent is for.
+
+Profile `tags` and Skill `tags` have different readers. Profile tags appear on the light Directory card. Skill tags appear only on the full Profile. `find` does not filter by tag.
 
 The Runtime rejects a Profile when:
 
@@ -151,11 +153,15 @@ Principal Memberships, including `operator`, are not in the Directory. The Direc
 
 The result is an ordered list of matches, best first, with no scores. Scores are implementation-specific and would imply a precision the specification does not define.
 
-Discovery is written for a model deciding who to hire, so it is cheap by default. Each match is a light card: the Address to send to, the Profile `summary`, the Agent's Skill names for a quick capability scan, and any tags. A model skims the ranked cards, then reads the one it wants in full with `get_profile`. When a caller wants everything inline, `detail=full` adds the Agent DID and the complete Profile to every match.
+Discovery is written for a model deciding who to hire, so it is cheap by default. Each match is a light card: the Address to send to, the Profile `summary`, the Agent's Skill names for a quick capability scan, and any Profile tags. A model skims the ranked cards, then reads the one it wants in full with `get_profile`. When a caller wants everything inline, `detail=full` adds the Agent DID and the complete Profile to every match. The longer Profile `description` and Skill `tags` are in that full Profile, not on the light card.
 
 The Runtime searches every Agent Membership except the caller. Principals are not candidates. Matches are ordered by relevance, with equal-relevance entries ordered by canonical Address.
 
 `limit` is optional. When omitted, `find` returns every remaining member, at most 100. When present it MUST be between `1` and `100` and caps the list. A Team of 15 and a Team of 150 use the same request.
+
+Each `FindResult` is ranked in one embedding space. The Runtime MUST NOT mix vectors from different embedding backends or spaces in that ranking, including when a backend fails or is replaced. When the selected space cannot be used, the Runtime ranks with its availability substitute and MUST rebuild rather than mix leftover vectors. Fallback order is still best-first. The result does not name the backend or the substitute; those diagnostics stay with the operator.
+
+Directory ranking MUST NOT choose a `send` recipient, change Mailbox order, or change lease order. A caller sends to an Address it names.
 
 Search MUST work on a fresh Team without optional infrastructure. The search method is an implementation choice, but changing it MUST NOT change the request or result shape. A future policy layer may hide some members from some callers; that filters the result list and does not change its shape, and a later cross-Team scope adds reach rather than a new result type.
 

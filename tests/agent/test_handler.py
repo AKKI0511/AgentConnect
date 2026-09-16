@@ -6,7 +6,6 @@ import asyncio
 
 import pytest
 
-from agentconnect.agent import BaseAgent
 from agentconnect.agent.context import Context
 from agentconnect.core.base import JsonValue
 from agentconnect.core.message import MailboxMessage

@@ -15,7 +15,7 @@ from typing import Any, Literal, Union, get_args, get_origin
 import jsonschema
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from agentconnect.core.base import SchemaModel, dump_public
+from agentconnect.core.base import dump_public
 from agentconnect.core.message import RequestMessage
 from agentconnect.core.projection import PUBLIC_SCHEMA_TYPES, SCHEMA_WRAPPER_NAME
 
@@ -72,9 +72,9 @@ def test_schema_definition_names_match_python_projection():
     defs = set(_definitions(_load_schema()))
     defs.discard(SCHEMA_WRAPPER_NAME)
     python = set(PUBLIC_SCHEMA_TYPES)
-    assert (
-        defs == python
-    ), f"schema-only={sorted(defs - python)} python-only={sorted(python - defs)}"
+    assert defs == python, (
+        f"schema-only={sorted(defs - python)} python-only={sorted(python - defs)}"
+    )
 
 
 def test_object_properties_match_pydantic_fields():

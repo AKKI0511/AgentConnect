@@ -243,7 +243,9 @@ def test_valid_corpus_controls_parse(vector: dict[str, Any]) -> None:
     _generated_cases(),
     ids=lambda item: item[0],
 )
-def test_generated_mutations_are_rejected(case: tuple[str, str, dict[str, Any]]) -> None:
+def test_generated_mutations_are_rejected(
+    case: tuple[str, str, dict[str, Any]],
+) -> None:
     case_id, name, instance = case
     schema = _load_schema()
     assert not _jsonschema_ok(name, instance, schema), case_id

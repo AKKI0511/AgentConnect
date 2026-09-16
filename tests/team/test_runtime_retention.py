@@ -148,7 +148,7 @@ async def test_history_isolates_expired_id_from_new_private_thread():
         writer = await join_member(runtime, "writer")
         researcher = await join_member(runtime, "researcher")
         editor = await join_member(runtime, "editor")
-        reviewer = await join_member(runtime, "reviewer")
+        await join_member(runtime, "reviewer")
         thread_t = _id()
         message_id = _id()
         await runtime.send(

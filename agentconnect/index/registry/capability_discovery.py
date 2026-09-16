@@ -289,14 +289,15 @@ class CapabilityDiscoveryService:
                 precompute_all_capability_embeddings as _precompute_all_capability_embeddings,
             )
 
-            capability_to_agent_map, total_points = (
-                await _precompute_all_capability_embeddings(
-                    self._async_qdrant_client,
-                    self.COLLECTION_NAME,
-                    self._embeddings_model,
-                    agent_registrations,
-                    self._get_batch_size(),
-                )
+            (
+                capability_to_agent_map,
+                total_points,
+            ) = await _precompute_all_capability_embeddings(
+                self._async_qdrant_client,
+                self.COLLECTION_NAME,
+                self._embeddings_model,
+                agent_registrations,
+                self._get_batch_size(),
             )
 
             # Update capability map

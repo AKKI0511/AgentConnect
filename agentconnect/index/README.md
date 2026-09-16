@@ -81,7 +81,10 @@ app = create_registry_api_app(custom)
 # Optionally run with Uvicorn programmatically
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=custom.host, port=custom.port, log_level=custom.log_level.lower())
+
+    uvicorn.run(
+        app, host=custom.host, port=custom.port, log_level=custom.log_level.lower()
+    )
 ```
 
 Preferred CLI:

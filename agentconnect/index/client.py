@@ -273,9 +273,9 @@ class RegistryAPIClient:
                             or expected_status == 204
                         ):  # 204 No Content
                             # For DELETE or successful updates that don't return body, but we expect a model that might be a simple bool/dict
-                            if response_model == bool:
+                            if response_model is bool:
                                 return True
-                            if response_model == dict:
+                            if response_model is dict:
                                 return {}  # common for success messages
                             return None  # Or handle as per specific endpoint needs
 

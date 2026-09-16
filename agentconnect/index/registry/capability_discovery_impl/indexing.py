@@ -473,10 +473,11 @@ async def main():
     print("===========[Capability to Agent Map from _generate_points]===========")
 
     # Test precompute_all_capability_embeddings
-    capability_to_agent_map_precomp, total_points_indexed = (
-        await precompute_all_capability_embeddings(
-            async_client, collection_name, embeddings_model, agent_registrations
-        )
+    (
+        capability_to_agent_map_precomp,
+        total_points_indexed,
+    ) = await precompute_all_capability_embeddings(
+        async_client, collection_name, embeddings_model, agent_registrations
     )
     print("===========[Capability to Agent Map after precompute]===========")
     print(

@@ -78,8 +78,8 @@ Converts `List[Skill]` to `List[Dict[str, str]]` with "name" and "description" k
 
 ```python
 from agentconnect.index.registry.search import (
-    AgentSearchInput, 
-    populate_search_result_item
+    AgentSearchInput,
+    populate_search_result_item,
 )
 
 # Create search input
@@ -88,14 +88,14 @@ search_input = AgentSearchInput(
     top_k=10,
     strictness=0.3,
     output_detail="capabilities",
-    include_tags=["data", "analysis"]
+    include_tags=["data", "analysis"],
 )
 
 # Transform registry result to search result
 search_result = populate_search_result_item(
     registration=agent_registration,
     similarity_score=0.85,
-    output_detail_level="capabilities"
+    output_detail_level="capabilities",
 )
 ```
 
@@ -106,8 +106,7 @@ from agentconnect.index.registry.search import AgentSearchOutput
 
 # Create output with results
 output = AgentSearchOutput(
-    message="Found 3 agents matching your criteria",
-    results=[result1, result2, result3]
+    message="Found 3 agents matching your criteria", results=[result1, result2, result3]
 )
 
 # Get clean JSON representation

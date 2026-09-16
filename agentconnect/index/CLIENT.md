@@ -48,7 +48,7 @@ client = RegistryAPIClient(
     connect_timeout=10.0,
     read_timeout=30.0,
     max_connections=10,
-    max_keepalive_connections=5
+    max_keepalive_connections=5,
 )
 ```
 
@@ -87,6 +87,7 @@ from agentconnect.index import RegistryAPIClient
 from agentconnect.index.registry import AgentRegistration
 from agentconnect.core import AgentType, InteractionMode, AgentIdentity, Capability
 
+
 async def register_agent_example():
     async with RegistryAPIClient() as client:
         # Create agent registration
@@ -98,18 +99,23 @@ async def register_agent_example():
             name="Data Processor",
             summary="Processes CSV and JSON data files",
             capabilities=[
-                Capability(name="csv_processing", description="Parse and transform CSV files"),
-                Capability(name="json_processing", description="Parse and transform JSON data")
+                Capability(
+                    name="csv_processing", description="Parse and transform CSV files"
+                ),
+                Capability(
+                    name="json_processing", description="Parse and transform JSON data"
+                ),
             ],
-            tags=["data", "processing", "csv", "json"]
+            tags=["data", "processing", "csv", "json"],
         )
-        
+
         # Register agent
         success = await client.register(agent)
         if success:
             print(f"Successfully registered {agent.agent_id}")
         else:
             print("Registration failed")
+
 
 # Run the example
 asyncio.run(register_agent_example())
@@ -120,20 +126,20 @@ asyncio.run(register_agent_example())
 ```python
 async def discover_agents_example():
     async with RegistryAPIClient() as client:
-        
         # Find agents using semantic search
         results = await client.get_by_capability_semantic(
             capability_description="process data files and generate reports",
             limit=5,
             similarity_threshold=0.3,
-            filters={"tags": ["data", "reporting"]}
+            filters={"tags": ["data", "reporting"]},
         )
-        
+
         # Process results
         for agent_reg, score in results:
             print(f"Found: {agent_reg.name} (Score: {score:.3f})")
             print(f"  Capabilities: {[cap.name for cap in agent_reg.capabilities]}")
             print(f"  Tags: {agent_reg.tags}")
+
 
 asyncio.run(discover_agents_example())
 ```
@@ -143,18 +149,20 @@ asyncio.run(discover_agents_example())
 ```python
 async def bulk_operations_example():
     async with RegistryAPIClient() as client:
-        
         # Get all agents from a specific organization
         org_agents = await client.get_by_organization("acme_corp")
         print(f"Found {len(org_agents)} agents from Acme Corp")
-        
+
         # Get all verified agents
         verified = await client.get_verified_agents()
         print(f"Found {len(verified)} verified agents")
-        
+
         # Get agents by interaction mode
-        api_agents = await client.get_by_interaction_mode(InteractionMode.AGENT_TO_AGENT)
+        api_agents = await client.get_by_interaction_mode(
+            InteractionMode.AGENT_TO_AGENT
+        )
         print(f"Found {len(api_agents)} A2A agents")
+
 
 asyncio.run(bulk_operations_example())
 ```
@@ -167,19 +175,19 @@ The client includes comprehensive error handling:
 async def error_handling_example():
     try:
         async with RegistryAPIClient() as client:
-            
             # This will automatically retry on network errors
             result = await client.get_registration("some_agent_id")
-            
+
             if result is None:
                 print("Agent not found (404)")
             else:
                 print(f"Found agent: {result.name}")
-                
+
     except httpx.RequestError as e:
         print(f"Network error after all retries: {e}")
     except Exception as e:
         print(f"Unexpected error: {e}")
+
 
 asyncio.run(error_handling_example())
 ```
@@ -211,16 +219,16 @@ The client uses `settings` from `agentconnect.config` and can be configured via 
 
 ```python
 # Client configuration (available via settings.clients.registry)
-settings.clients.registry.base_url                    # Default: "http://localhost:8000"
-settings.clients.registry.default_timeout             # Default: 30.0
-settings.clients.registry.connect_timeout             # Default: 10.0
-settings.clients.registry.read_timeout                # Default: 30.0
-settings.clients.registry.pool_timeout                # Default: 5.0
-settings.clients.registry.max_retries                 # Default: 3
-settings.clients.registry.retry_backoff_factor        # Default: 0.5
-settings.clients.registry.retryable_status_codes      # Default: [502, 503, 504]
-settings.clients.registry.max_connections             # Default: 10
-settings.clients.registry.max_keepalive_connections   # Default: 5
+settings.clients.registry.base_url  # Default: "http://localhost:8000"
+settings.clients.registry.default_timeout  # Default: 30.0
+settings.clients.registry.connect_timeout  # Default: 10.0
+settings.clients.registry.read_timeout  # Default: 30.0
+settings.clients.registry.pool_timeout  # Default: 5.0
+settings.clients.registry.max_retries  # Default: 3
+settings.clients.registry.retry_backoff_factor  # Default: 0.5
+settings.clients.registry.retryable_status_codes  # Default: [502, 503, 504]
+settings.clients.registry.max_connections  # Default: 10
+settings.clients.registry.max_keepalive_connections  # Default: 5
 ```
 
 Example `agentconnect.yaml` configuration:
@@ -288,6 +296,7 @@ Enable debug logging for detailed HTTP request/response information:
 
 ```python
 import logging
+
 logging.basicConfig(level=logging.DEBUG)
 
 # Will show detailed HTTP logs

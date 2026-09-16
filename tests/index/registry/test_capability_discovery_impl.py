@@ -66,7 +66,7 @@ class TestEmbeddingUtils:
         # Print a header for the matrix
         print(f"{Colors.CYAN}{Colors.BOLD}Similarity Results:{Colors.ENDC}")
         print(f"  {'Text 1':<20} | {'Text 2':<20} | {'Similarity':<10}")
-        print(f"  {'-'*20} | {'-'*20} | {'-'*10}")
+        print(f"  {'-' * 20} | {'-' * 20} | {'-' * 10}")
 
         # Test all cases
         for text1, text2, expected in test_cases:
@@ -78,9 +78,9 @@ class TestEmbeddingUtils:
             )
 
             # Check if the result matches expected with a more lenient threshold (0.2)
-            assert (
-                abs(similarity - expected) < 0.2
-            ), f"Expected similarity {expected} but got {similarity} for '{text1}' and '{text2}'"
+            assert abs(similarity - expected) < 0.2, (
+                f"Expected similarity {expected} but got {similarity} for '{text1}' and '{text2}'"
+            )
 
         print_success("Completed similarity calculations. Please verify results above.")
 
@@ -101,7 +101,7 @@ class TestEmbeddingUtils:
         # Print a header for the matrix
         print(f"{Colors.CYAN}{Colors.BOLD}Cosine Similarity Results:{Colors.ENDC}")
         print(f"  {'Vec1':<15} | {'Vec2':<15} | {'Similarity':<10}")
-        print(f"  {'-'*15} | {'-'*15} | {'-'*10}")
+        print(f"  {'-' * 15} | {'-' * 15} | {'-' * 10}")
 
         # Test all cases
         for vec1, vec2, expected in test_cases:
@@ -113,9 +113,9 @@ class TestEmbeddingUtils:
             )
 
             # Check if the result matches expected (with some tolerance)
-            assert (
-                abs(similarity - expected) < 0.01
-            ), f"Expected similarity {expected} but got {similarity}"
+            assert abs(similarity - expected) < 0.01, (
+                f"Expected similarity {expected} but got {similarity}"
+            )
 
         print_success(
             "Completed cosine similarity calculations. Please verify results above."
@@ -173,7 +173,7 @@ class TestEmbeddingUtils:
             print(f"  Min value: {Colors.YELLOW}{min(embedding):.4f}{Colors.ENDC}")
             print(f"  Max value: {Colors.YELLOW}{max(embedding):.4f}{Colors.ENDC}")
             print(
-                f"  Mean value: {Colors.YELLOW}{sum(embedding)/len(embedding):.4f}{Colors.ENDC}"
+                f"  Mean value: {Colors.YELLOW}{sum(embedding) / len(embedding):.4f}{Colors.ENDC}"
             )
 
             # Check embedding properties
@@ -301,13 +301,13 @@ class TestQdrantClient:
         print(f"  Distance: {Colors.YELLOW}{vector_config.distance}{Colors.ENDC}")
 
         # Check collection properties
-        assert (
-            collection_info
-        ), f"Collection info should be available for {collection_name}"
+        assert collection_info, (
+            f"Collection info should be available for {collection_name}"
+        )
         assert vector_config.size > 0, "Vector size should be positive"
-        assert (
-            vector_config.distance.lower() == "cosine"
-        ), "Distance metric should be Cosine"
+        assert vector_config.distance.lower() == "cosine", (
+            "Distance metric should be Cosine"
+        )
 
         # Clean up
         print_step("Cleaning up test collection")
@@ -339,13 +339,12 @@ class TestSearch:
         print(f"{Colors.CYAN}{Colors.BOLD}Search Results:{Colors.ENDC}")
         for idx, (registration, score) in enumerate(results):
             print(
-                f"  {idx+1}. {Colors.BOLD}{registration.name}{Colors.ENDC} ({registration.agent_id}) - Score: {Colors.YELLOW}{score:.4f}{Colors.ENDC}"
+                f"  {idx + 1}. {Colors.BOLD}{registration.name}{Colors.ENDC} ({registration.agent_id}) - Score: {Colors.YELLOW}{score:.4f}{Colors.ENDC}"
             )
 
         # Assertions
         # assert len(results) > 0, "Should find results for 'weather forecast'"
-        weather_results = [r for r, _ in results if "weather" in r.agent_id.lower()]
-        # assert len(weather_results) > 0, "Should find weather-related agents"
+        # assert any("weather" in r.agent_id.lower() for r, _ in results), "Should find weather-related agents"
 
         print_success("Completed fallback string search. Please verify results above.")
 
@@ -380,7 +379,7 @@ class TestSearch:
         print(f"{Colors.CYAN}{Colors.BOLD}Exact Match Results:{Colors.ENDC}")
         for idx, registration in enumerate(results):
             print(
-                f"  {idx+1}. {Colors.BOLD}{registration.name}{Colors.ENDC} ({registration.agent_id})"
+                f"  {idx + 1}. {Colors.BOLD}{registration.name}{Colors.ENDC} ({registration.agent_id})"
             )
 
         # Assertions for exact match
@@ -405,7 +404,7 @@ class TestSearch:
         print(f"{Colors.CYAN}{Colors.BOLD}Fallback Results:{Colors.ENDC}")
         for idx, registration in enumerate(results):
             print(
-                f"  {idx+1}. {Colors.BOLD}{registration.name}{Colors.ENDC} ({registration.agent_id})"
+                f"  {idx + 1}. {Colors.BOLD}{registration.name}{Colors.ENDC} ({registration.agent_id})"
             )
 
         # Assertions for semantic fallback
@@ -445,7 +444,7 @@ class TestIndexing:
         for capability, agents in capability_index.items():
             print(f"  {capability}: {Colors.YELLOW}{len(agents)}{Colors.ENDC} agents")
             for idx, agent_id in enumerate(agents):
-                print(f"    {idx+1}. {agent_id}")
+                print(f"    {idx + 1}. {agent_id}")
 
         # Assertions
         assert "weather_forecast" in capability_index
@@ -512,8 +511,8 @@ class TestIndexing:
             return
 
         # Verify collection exists
-        collection_exists = await async_client.collection_exists(collection_name)
-        # assert collection_exists, "Collection should exist after initialization"
+        await async_client.collection_exists(collection_name)
+        # assert collection exists after initialization
         print_step(
             f"Collection {collection_name} existence verified. Please check logs."
         )
@@ -536,9 +535,9 @@ class TestIndexing:
         # List some entries
         items = list(updated_map.items())
         if items:
-            print(f"  Sample entries:")
+            print("  Sample entries:")
             for idx, (doc_id, reg) in enumerate(items[:3]):
-                print(f"    {idx+1}. {doc_id} -> {reg.name} ({reg.agent_id})")
+                print(f"    {idx + 1}. {doc_id} -> {reg.name} ({reg.agent_id})")
 
         # Assertions
         # assert len(updated_map) > 0, "Updated map should have entries"

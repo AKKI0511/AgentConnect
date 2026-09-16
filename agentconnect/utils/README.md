@@ -71,10 +71,7 @@ Key functions:
 from agentconnect.utils import InteractionControl, TokenConfig, InteractionState
 
 # Create token config
-token_config = TokenConfig(
-    max_tokens_per_minute=5500,
-    max_tokens_per_hour=100000
-)
+token_config = TokenConfig(max_tokens_per_minute=5500, max_tokens_per_hour=100000)
 
 # Create interaction control
 interaction_control = InteractionControl(token_config=token_config)
@@ -88,16 +85,12 @@ interaction_control.set_cooldown_callback(
 callbacks = interaction_control.get_callback_manager()
 
 # Use in LangGraph workflow
-config = {
-    "configurable": {"thread_id": "conversation_id"},
-    "callbacks": callbacks
-}
+config = {"configurable": {"thread_id": "conversation_id"}, "callbacks": callbacks}
 result = await workflow.ainvoke(initial_state, config)
 
 # Process interaction after response
 state = await interaction_control.process_interaction(
-    token_count=1500,
-    conversation_id="conversation_123"
+    token_count=1500, conversation_id="conversation_123"
 )
 
 # Check the state
@@ -127,17 +120,19 @@ setup_logging(
     level=LogLevel.INFO,
     module_levels={
         "agentconnect.prebuilt.ai_agent": LogLevel.DEBUG,
-        "langchain": LogLevel.WARNING
-    }
+        "langchain": LogLevel.WARNING,
+    },
 )
 
 # Get recommended log levels for development
 from agentconnect.utils import get_module_levels_for_development
+
 module_levels = get_module_levels_for_development()
 setup_logging(level=LogLevel.INFO, module_levels=module_levels)
 
 # LangGraph-specific setup
 from agentconnect.utils import setup_langgraph_logging
+
 setup_langgraph_logging(level=LogLevel.INFO)
 
 # Disable all logging for examples
@@ -166,7 +161,7 @@ else:
 wallet_manager.save_wallet_data(
     agent_id="agent123",
     wallet_data=agent.wallet_provider.export_wallet(),
-    data_dir="custom/wallet/dir"  # Optional
+    data_dir="custom/wallet/dir",  # Optional
 )
 
 # Load wallet data
@@ -176,8 +171,7 @@ if wallet_json:
 
 # Back up wallet data
 backup_path = payment_helper.backup_wallet_data(
-    agent_id="agent123",
-    backup_dir="wallet_backups"
+    agent_id="agent123", backup_dir="wallet_backups"
 )
 print(f"Wallet backed up to: {backup_path}")
 ```

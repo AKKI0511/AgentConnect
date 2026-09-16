@@ -77,7 +77,7 @@ Each indexed point includes a rich payload with metadata for filtering:
     "default_output_modes": ["text"],
     "payment_address": "0x1234...",
     "doc_id": "agent123_profile",
-    "doc_type": "agent_profile"
+    "doc_type": "agent_profile",
 }
 ```
 
@@ -111,7 +111,7 @@ discovery_service = CapabilityDiscoveryService()
 matching_agents = await discovery_service.find_by_capability_semantic(
     capability_description="translate English to French",
     limit=5,
-    filters={"tags": ["translation"], "default_input_modes": ["text"]}
+    filters={"tags": ["translation"], "default_input_modes": ["text"]},
 )
 ```
 

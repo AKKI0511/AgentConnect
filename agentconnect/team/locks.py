@@ -49,10 +49,9 @@ class KeyedLock:
                 lock.release()
             async with self._guard:
                 current = self._items.get(key)
-                if current is None:
-                    return
-                held, count = current
-                if count <= 1:
-                    self._items.pop(key, None)
-                else:
-                    self._items[key] = (held, count - 1)
+                if current is not None:
+                    held, count = current
+                    if count <= 1:
+                        self._items.pop(key, None)
+                    else:
+                        self._items[key] = (held, count - 1)

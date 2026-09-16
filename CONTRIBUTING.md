@@ -7,15 +7,15 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and use Py
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-uv sync --extra serve --extra cli --extra index
+uv sync --extra serve --extra cli --extra index --extra openai
 ```
 
-Use your fork's URL if contributing through a fork. Pull requests target `main`. The test suite covers HTTP, CLI, and Index behavior, so the setup includes those extras.
+Use your fork's URL if contributing through a fork. Pull requests target `main`. The test suite covers HTTP, CLI, Index, and hosted Directory tokenizer behavior, so the setup includes those extras.
 
 ## Tests and code style
 
 ```bash
-uv run --extra serve --extra cli --extra index pytest tests/ -q
+uv run --extra serve --extra cli --extra index --extra openai pytest tests/ -q
 uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
 uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
 ```

@@ -67,6 +67,7 @@ def test_import_team_directory_without_torch_or_qdrant(monkeypatch):
         "fastembed",
         "qdrant_client",
         "litellm",
+        "tiktoken",
     ]:
         sys.modules.pop(name, None)
 

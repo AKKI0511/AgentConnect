@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from tests.team.conftest import join_member, make_did, profile
 
 from agentconnect.core.directory import FindResult
+from agentconnect.core.profile import AgentProfile
 from agentconnect.team import Team, TeamError
 from agentconnect.team.directory import HashedEmbedder, profile_text, resolve_embedder
 from agentconnect.team.directory.directory import Directory, profile_windows
@@ -29,8 +30,10 @@ from agentconnect.team.directory.embedder import (
     _select_auto_backend,
 )
 from agentconnect.team.directory.tokens import (
+    EmbeddingSetupError,
     encode_complete,
-    hosted_token_count,
+    encode_hosted,
+    encoding_for_hosted_model,
     local_content_tokens,
     token_windows,
 )
@@ -1071,20 +1074,47 @@ def _token_dense(*, last_name: str, last_blurb: str) -> dict:
     }
 
 
-def _chinese_long(marker: str) -> dict:
-    block = "中文档案检索与整理工作记录。" * 730
-    return {
-        "summary": "中文档案助手。",
-        "description": block,
-        "skills": [
-            {"name": "archive", "description": marker, "examples": [marker]},
-        ],
-    }
+_HOSTED_FILL = "档案检索与整理工作记录处理。"
 
 
-def _provider_tokens(text: str) -> int:
-    """Simulated hosted limiter: one token per character."""
-    return len(text.strip())
+def _schema_hosted_profile(*, marker: str, extra_skills: int) -> dict:
+    skills = []
+    for index in range(extra_skills):
+        block = (_HOSTED_FILL * 80)[:1000]
+        skills.append(
+            {
+                "name": f"fill{index:02d}",
+                "description": block,
+                "examples": [(_HOSTED_FILL * 40)[:500]],
+            }
+        )
+    skills.append(
+        {
+            "name": "specialist",
+            "description": marker,
+            "examples": [marker[:500]],
+        }
+    )
+    return AgentProfile.model_validate(
+        {
+            "summary": "档案助手。",
+            "description": (_HOSTED_FILL * 200)[:2000],
+            "skills": skills,
+        }
+    ).model_dump(exclude_none=True)
+
+
+def _over_limit_profile(marker: str, encoding, max_tokens: int) -> dict:
+    extra = 1
+    profile = _schema_hosted_profile(marker=marker, extra_skills=extra)
+    while extra < 49:
+        text = profile_text(profile)
+        if len(encode_hosted(encoding, text)) > max_tokens:
+            AgentProfile.model_validate(profile)
+            return profile
+        extra += 2
+        profile = _schema_hosted_profile(marker=marker, extra_skills=extra)
+    raise AssertionError("schema-valid Profile did not exceed the token budget")
 
 
 def test_fastembed_token_windows_keep_content_beyond_first_window():
@@ -1158,33 +1188,48 @@ async def test_bge_token_dense_profile_keeps_later_skill():
     right = await store.get("dirvec:pedigree")
     assert isinstance(left, dict) and isinstance(right, dict)
     assert left["vector"] != right["vector"]
-    assert str(left["space"]).endswith(":t1")
+    assert str(left["space"]).endswith(":t2")
     assert found.matches[0].address == "salvage@content-squad"
     assert not directory.using_fallback
 
 
 @pytest.mark.asyncio
 async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
-    salvage = _chinese_long("处理海难救助仲裁争议。")
-    pedigree = _chinese_long("登记冰岛马血统档案。")
+    pytest.importorskip("tiktoken")
+    encoding = encoding_for_hosted_model("text-embedding-3-small")
+    salvage = _over_limit_profile(
+        "处理海难救助仲裁争议。含 <|endoftext|> 标记。",
+        encoding,
+        8191,
+    )
+    pedigree = _over_limit_profile(
+        "登记冰岛马血统档案。含 <|endoftext|> 标记。",
+        encoding,
+        8191,
+    )
     salvage_text = profile_text(salvage)
     pedigree_text = profile_text(pedigree)
-    assert salvage_text[:8000] == pedigree_text[:8000]
-    assert _provider_tokens(salvage_text) > 8192
-    assert hosted_token_count(salvage_text) > 8192
-    assert "海难救助" not in salvage_text[:8000]
-    seen: list[list[str]] = []
+    salvage_ids = encode_hosted(encoding, salvage_text)
+    pedigree_ids = encode_hosted(encoding, pedigree_text)
+    assert salvage_text[:800] == pedigree_text[:800]
+    assert len(salvage_ids) > 8191
+    assert len(pedigree_ids) > 8191
+    assert "海难救助" not in salvage_text[:800]
+    seen: list[list[list[int]]] = []
     rejected = {"n": 0}
 
-    async def fake_request(self, texts: list[str]) -> list[list[float]]:
+    async def fake_request(self, windows: list[list[int]]) -> list[list[float]]:
         total = 0
         rows: list[list[float]] = []
-        for text in texts:
-            cost = _provider_tokens(text)
-            if cost > 8192:
+        limit = self.input_token_limit
+        for window in windows:
+            cost = len(window)
+            if cost > limit:
                 rejected["n"] += 1
                 raise RuntimeError("max input tokens")
             total += cost
+            text, _offsets = self._encoding.decode_with_offsets(window)
+            assert "\ufffd" not in text
             rows.append(
                 [
                     1.0 if "海难救助" in text else 0.0,
@@ -1192,21 +1237,35 @@ async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
                     0.1,
                 ]
             )
-        if total > 300_000:
+        if total > self.request_token_limit:
             rejected["n"] += 1
             raise RuntimeError("max tokens per request")
-        seen.append(list(texts))
+        seen.append([list(window) for window in windows])
         return rows
 
     monkeypatch.setattr(OpenAIEmbedder, "_embed_request", fake_request)
     embedder = OpenAIEmbedder()
     with pytest.raises(RuntimeError, match="max input tokens"):
-        await fake_request(embedder, [salvage_text])
+        await fake_request(embedder, [salvage_ids])
     rejected["n"] = 0
     directory = Directory(MemoryStore(), embedder)
+    await directory.upsert("warmup", _writer())
+    seen.clear()
+    await directory.upsert("salvage", salvage)
+    outgoing = [token for batch in seen for window in batch for token in window]
+    assert outgoing == salvage_ids
+    joined = "".join(
+        encoding.decode_with_offsets(window)[0] for batch in seen for window in batch
+    )
+    assert joined == salvage_text
+    assert any(
+        "<|endoftext|>" in encoding.decode_with_offsets(window)[0]
+        for batch in seen
+        for window in batch
+    )
+    seen.clear()
+    await directory.upsert("pedigree", pedigree)
     members = [_member("salvage", salvage), _member("pedigree", pedigree)]
-    for member in members:
-        await directory.upsert(member["name"], member["profile"])
     found = await directory.search(
         "海难救助仲裁",
         members,
@@ -1216,8 +1275,128 @@ async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
     )
     assert rejected["n"] == 0
     assert not directory.using_fallback
-    assert any("海难救助" in text for payload in seen for text in payload)
     assert found.matches[0].address == "salvage@content-squad"
+
+
+@pytest.mark.asyncio
+async def test_hosted_azure_litellm_respects_model_limit(monkeypatch):
+    pytest.importorskip("tiktoken")
+    monkeypatch.setattr(
+        "agentconnect.team.directory.tokens.litellm_embedding_info",
+        lambda model: {
+            "mode": "embedding",
+            "litellm_provider": "azure",
+            "max_input_tokens": 8191,
+            "max_tokens": 8191,
+        },
+    )
+    encoding = encoding_for_hosted_model("azure/text-embedding-3-small")
+    salvage = _over_limit_profile(
+        "Handles maritime salvage arbitration. Keep <|endoftext|>.",
+        encoding,
+        8191,
+    )
+    pedigree = _over_limit_profile(
+        "Tracks icelandic horse pedigree records. Keep <|endoftext|>.",
+        encoding,
+        8191,
+    )
+    salvage_text = profile_text(salvage)
+    seen: list[list[list[int]]] = []
+    rejected = {"n": 0}
+
+    async def fake_request(self, windows: list[list[int]]) -> list[list[float]]:
+        total = 0
+        rows: list[list[float]] = []
+        for window in windows:
+            if len(window) > self.input_token_limit:
+                rejected["n"] += 1
+                raise RuntimeError("max input tokens")
+            total += len(window)
+            text, _offsets = self._encoding.decode_with_offsets(window)
+            assert "\ufffd" not in text
+            rows.append(
+                [
+                    1.0 if "salvage" in text else 0.0,
+                    1.0 if "pedigree" in text else 0.0,
+                    0.1,
+                ]
+            )
+        if total > self.request_token_limit:
+            rejected["n"] += 1
+            raise RuntimeError("max tokens per request")
+        seen.append([list(window) for window in windows])
+        return rows
+
+    monkeypatch.setattr(LiteLLMEmbedder, "_embed_request", fake_request)
+    embedder = LiteLLMEmbedder("azure/text-embedding-3-small")
+    assert embedder.input_token_limit == 8191
+    directory = Directory(MemoryStore(), embedder)
+    await directory.upsert("warmup", _writer())
+    seen.clear()
+    await directory.upsert("salvage", salvage)
+    assert [
+        token for batch in seen for window in batch for token in window
+    ] == encode_hosted(encoding, salvage_text)
+    await directory.upsert("pedigree", pedigree)
+    members = [_member("salvage", salvage), _member("pedigree", pedigree)]
+    found = await directory.search(
+        "maritime salvage arbitration",
+        members,
+        exclude_address="researcher@content-squad",
+        limit=None,
+        detail="summary",
+    )
+    assert rejected["n"] == 0
+    assert not directory.using_fallback
+    assert found.matches[0].address == "salvage@content-squad"
+
+
+@pytest.mark.asyncio
+async def test_hosted_setup_error_does_not_switch_to_hashed():
+    class _SetupBoom:
+        name = "openai:boom"
+
+        async def embed(self, texts):
+            raise EmbeddingSetupError(
+                "OpenAI Directory embeddings require tiktoken. "
+                "Install it with pip install 'agentconnect[openai]'."
+            )
+
+    directory = Directory(MemoryStore(), _SetupBoom())
+    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
+        await directory.upsert("writer", _writer())
+    assert not directory.using_fallback
+
+    runtime = Team("content-squad", embeddings=_SetupBoom())
+    await runtime.start()
+    try:
+        with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
+            await join_member(runtime, "writer", profile=_writer())
+        assert runtime._directory is not None
+        assert not runtime._directory.using_fallback
+    finally:
+        await runtime.stop()
+
+    hashed = Team("content-squad")
+    await hashed.start()
+    try:
+        caller = await join_member(hashed, "researcher")
+
+        async def boom(*_args, **_kwargs):
+            raise EmbeddingSetupError(
+                "OpenAI Directory embeddings require tiktoken. "
+                "Install it with pip install 'agentconnect[openai]'."
+            )
+
+        assert hashed._directory is not None
+        hashed._directory.search = boom  # type: ignore[method-assign]
+        with pytest.raises(TeamError, match=r"agentconnect\[openai\]") as exc:
+            await hashed.find(caller["session_token"], "writer")
+        assert exc.value.code == "unavailable"
+        assert not hashed._directory.using_fallback
+    finally:
+        await hashed.stop()
 
 
 @pytest.mark.asyncio
@@ -1227,7 +1406,7 @@ async def test_previous_representation_cached_vector_is_rebuilt():
     await directory.upsert("writer", _writer())
     record = await store.get("dirvec:writer")
     assert isinstance(record, dict)
-    assert str(record["space"]).endswith(":t1")
+    assert str(record["space"]).endswith(":t2")
     record["space"] = "hashed:384:w1"
     await store.put("dirvec:writer", record)
     found = await directory.search(
@@ -1241,4 +1420,4 @@ async def test_previous_representation_cached_vector_is_rebuilt():
     fresh = await store.get("dirvec:writer")
     assert isinstance(fresh, dict)
     assert fresh["space"] != "hashed:384:w1"
-    assert str(fresh["space"]).endswith(":t1")
+    assert str(fresh["space"]).endswith(":t2")

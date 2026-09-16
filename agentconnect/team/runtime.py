@@ -157,6 +157,7 @@ from agentconnect.team.constants import (
 )
 from agentconnect.team.directory import MAX_FIND_LIMIT, Directory
 from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
+from agentconnect.team.directory.tokens import EmbeddingSetupError
 from agentconnect.team.errors import IDENTITY_MISSING, TeamError
 from agentconnect.team.locks import KeyedLock
 from agentconnect.team.store import MemoryStore, Store
@@ -293,7 +294,9 @@ class Team:
                 ``agentconnect[embeddings]`` is installed, and hashed
                 n-grams otherwise. An API key in the environment does
                 not select a hosted embedder. ``"openai"`` and
-                ``"litellm"`` are explicit hosted backends. ``"none"``
+                ``"litellm"`` are explicit hosted backends and need their
+                extras (tiktoken; LiteLLM only for OpenAI or Azure
+                embedding models). ``"none"``
                 forces hashed n-grams. Pass a callable
                 ``(list[str]) -> list[list[float]]`` to supply your own
                 embeddings. A failed backend is not mixed with leftover
@@ -1256,6 +1259,8 @@ class Team:
                 await self._directory.upsert(
                     accepted.member["name"], accepted.member["profile"]
                 )
+            except EmbeddingSetupError:
+                raise
             except Exception:
                 logger.warning(
                     "Directory upsert failed for %s",
@@ -2667,6 +2672,8 @@ class Team:
             )
         except TeamError:
             raise
+        except EmbeddingSetupError as exc:
+            _fail("unavailable", str(exc))
         except Exception:
             logger.exception("Directory search failed")
             _fail("unavailable", "Directory ranking is unavailable")

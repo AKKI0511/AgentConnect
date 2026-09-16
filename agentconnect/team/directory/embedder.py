@@ -19,8 +19,9 @@ one ``find`` never mixes two embedding spaces.
 
 Neural backends own token limits. They split a complete input to the
 selected model's per-input budget and, for hosted calls, the request
-budget. Directory character packing is only for backends that publish a
-character limit.
+budget. Hosted OpenAI and Azure paths send token ids from tiktoken.
+Directory character packing is only for backends that publish a
+character limit. Missing hosted extras raise before indexing.
 """
 
 from __future__ import annotations
@@ -38,14 +39,13 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Awaitable, Callable, Protocol, Sequence, Union
 
 from agentconnect.team.directory.tokens import (
-    DEFAULT_LOCAL_INPUT_TOKENS,
     OPENAI_INPUT_TOKENS,
     OPENAI_REQUEST_TOKENS,
-    estimate_token_windows,
-    hosted_token_count,
-    hosted_token_windows,
+    encoding_for_hosted_model,
+    hosted_litellm_limits,
     local_content_tokens,
     pack_token_batches,
+    split_token_windows,
     token_windows,
 )
 
@@ -269,7 +269,11 @@ class CallableEmbedder:
 
 
 class OpenAIEmbedder:
-    """Hosted embeddings through the OpenAI HTTP API. Uses httpx, not the OpenAI SDK."""
+    """Hosted embeddings through the OpenAI HTTP API. Uses httpx, not the OpenAI SDK.
+
+    Requires ``agentconnect[openai]`` so tiktoken can split to the model's
+    token limit. Missing tiktoken is a setup error, not hashed fallback.
+    """
 
     input_char_limit: int | None = None
     max_batch = OPENAI_BATCH
@@ -279,6 +283,7 @@ class OpenAIEmbedder:
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL) -> None:
         """Use ``model``. ``text-embedding-3-*`` requests 384 dimensions."""
         self._model = model
+        self._encoding = encoding_for_hosted_model(model)
         self.name = f"openai:{model}"
         self._client: Any = None
 
@@ -296,17 +301,18 @@ class OpenAIEmbedder:
             return []
         return await _embed_token_bounded(
             payload,
+            encoding=self._encoding,
             per_input_tokens=self.input_token_limit,
             request_tokens=self.request_token_limit,
             batch=self.max_batch,
             embed_chunk=self._embed_request,
         )
 
-    async def _embed_request(self, texts: list[str]) -> list[list[float]]:
+    async def _embed_request(self, windows: list[list[int]]) -> list[list[float]]:
         key = os.environ.get("OPENAI_API_KEY") or os.environ.get("AZURE_OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY is not set")
-        body: dict[str, Any] = {"model": self._model, "input": texts}
+        body: dict[str, Any] = {"model": self._model, "input": windows}
         expected_dim: int | None = None
         if self._model.startswith("text-embedding-3"):
             body["dimensions"] = HASHED_DIM
@@ -320,11 +326,16 @@ class OpenAIEmbedder:
         data = response.json()["data"]
         ordered = sorted(data, key=lambda item: item["index"])
         rows = [list(item["embedding"]) for item in ordered]
-        return normalize_rows(rows, texts, expected_dim=expected_dim)
+        return normalize_rows(rows, windows, expected_dim=expected_dim)
 
 
 class LiteLLMEmbedder:
-    """Hosted embeddings through LiteLLM when that package is installed."""
+    """Hosted embeddings through LiteLLM for OpenAI and Azure models.
+
+    Requires ``agentconnect[aiagent,openai]``. Other LiteLLM embedding
+    providers are refused: their advertised tokenizer is a generic
+    tiktoken fallback, not the hosted model's tokenizer.
+    """
 
     input_char_limit: int | None = None
     max_batch = OPENAI_BATCH
@@ -332,33 +343,38 @@ class LiteLLMEmbedder:
     request_token_limit = OPENAI_REQUEST_TOKENS
 
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL) -> None:
-        """Use LiteLLM model id ``model``."""
+        """Use LiteLLM model id ``model`` after checking its metadata."""
+        input_tokens, request_tokens = hosted_litellm_limits(model)
         self._model = model
+        self._encoding = encoding_for_hosted_model(model)
+        self.input_token_limit = input_tokens
+        self.request_token_limit = request_tokens
         self.name = f"litellm:{model}"
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """Call ``litellm.aembedding``."""
+        """Call ``litellm.aembedding`` with tiktoken token-id windows."""
         payload = list(texts)
         if not payload:
             return []
         return await _embed_token_bounded(
             payload,
+            encoding=self._encoding,
             per_input_tokens=self.input_token_limit,
             request_tokens=self.request_token_limit,
             batch=self.max_batch,
             embed_chunk=self._embed_request,
         )
 
-    async def _embed_request(self, texts: list[str]) -> list[list[float]]:
+    async def _embed_request(self, windows: list[list[int]]) -> list[list[float]]:
         import litellm
 
-        response = await litellm.aembedding(model=self._model, input=texts)
+        response = await litellm.aembedding(model=self._model, input=windows)
         data = getattr(response, "data", None) or response["data"]
         rows: list[list[float]] = []
         for item in data:
             embedding = item["embedding"] if isinstance(item, dict) else item.embedding
             rows.append(list(embedding))
-        return normalize_rows(rows, texts)
+        return normalize_rows(rows, windows)
 
 
 class FastEmbedEmbedder:
@@ -390,16 +406,13 @@ class FastEmbedEmbedder:
         windows: list[str] = []
         owners: list[int] = []
         tokenizer = _fastembed_tokenizer(model)
-        budget = (
-            local_content_tokens(tokenizer)
-            if tokenizer is not None
-            else DEFAULT_LOCAL_INPUT_TOKENS
-        )
+        if tokenizer is None:
+            raise RuntimeError(
+                f"FastEmbed model {self._model_name} did not expose a tokenizer"
+            )
+        budget = local_content_tokens(tokenizer)
         for index, text in enumerate(texts):
-            if tokenizer is not None:
-                pieces = token_windows(tokenizer, text, budget)
-            else:
-                pieces = estimate_token_windows(text, budget)
+            pieces = token_windows(tokenizer, text, budget)
             for piece in pieces:
                 windows.append(piece)
                 owners.append(index)
@@ -474,8 +487,8 @@ def resolve_embedder(spec: EmbeddingsArg) -> Embedder:
     - ``auto`` (default): local ONNX when installed, otherwise hashed
     - ``none`` / ``hashed``
     - ``fastembed`` or ``fastembed:<model>``
-    - ``openai`` or ``openai:<model>`` (explicit hosted)
-    - ``litellm`` or ``litellm:<model>`` (explicit hosted)
+    - ``openai`` or ``openai:<model>`` (explicit hosted; needs tiktoken)
+    - ``litellm`` or ``litellm:<model>`` (explicit hosted OpenAI/Azure)
     """
     if isinstance(spec, str):
         return _from_string(spec)
@@ -546,16 +559,16 @@ def _is_coroutine_callable(fn: EmbedFn) -> bool:
 async def _embed_token_bounded(
     texts: list[str],
     *,
+    encoding: Any,
     per_input_tokens: int,
     request_tokens: int,
     batch: int,
-    embed_chunk: Callable[[list[str]], Awaitable[list[list[float]]]],
+    embed_chunk: Callable[[list[list[int]]], Awaitable[list[list[float]]]],
 ) -> list[list[float]]:
-    groups = [hosted_token_windows(text, per_input_tokens) for text in texts]
+    groups = [split_token_windows(encoding, text, per_input_tokens) for text in texts]
     flat = [window for group in groups for window in group]
-    costs = [hosted_token_count(window) for window in flat]
     raw: list[list[float]] = []
-    chunks = pack_token_batches(flat, costs, batch=batch, request_tokens=request_tokens)
+    chunks = pack_token_batches(flat, batch=batch, request_tokens=request_tokens)
     for index, chunk in enumerate(chunks):
         raw.extend(await embed_chunk(chunk))
         if index + 1 < len(chunks):

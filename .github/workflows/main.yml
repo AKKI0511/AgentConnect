@@ -62,7 +62,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync --locked --extra serve --extra cli --extra index
+      - run: uv sync --locked --extra serve --extra cli --extra index --extra openai
       - run: uv run --no-sync pytest ${{ matrix.suite }} -q
 
   package:

@@ -35,6 +35,7 @@ from agentconnect.team.directory.embedder import (
     mean_pool,
     normalize_rows,
 )
+from agentconnect.team.directory.tokens import EmbeddingSetupError
 from agentconnect.team.store.base import Store
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ _VECTOR_KEY = "dirvec:{name}"
 _SPACE_KEY = "dirspace"
 _SPACE_PROBE = "agentconnect directory embedding space"
 # Internal search-text layout. Changing this rebuilds stored vectors.
-_REPRESENTATION = "t1"
+_REPRESENTATION = "t2"
 _SCORE_OFFLOAD_MIN = 16
 
 
@@ -297,6 +298,8 @@ class Directory:
             try:
                 rows = await self._active.embed(chunk)
                 out.extend(normalize_rows(rows, chunk, expected_dim=expected_dim))
+            except EmbeddingSetupError:
+                raise
             except _EmbeddingFailed:
                 raise
             except Exception as exc:

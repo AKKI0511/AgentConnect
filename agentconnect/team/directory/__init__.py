@@ -11,7 +11,7 @@ the Team Store. There is no vector database and no setting to turn search on.
 Pass ``embeddings=`` to :class:`~agentconnect.team.runtime.Team` only when you
 want a specific backend. ``"auto"`` is the default: local ONNX when the
 embeddings extra is installed, otherwise hashed n-grams. Hosted backends
-need an explicit ``openai`` or ``litellm`` selection.
+need an explicit ``openai`` or ``litellm`` selection and their extras.
 """
 
 from agentconnect.team.directory.directory import (

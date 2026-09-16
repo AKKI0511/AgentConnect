@@ -65,8 +65,8 @@ Set on the Team, not on each Agent.
 | ``"auto"`` (default) | Local ONNX if ``agentconnect[embeddings]`` is installed, else hashed n-grams. Ambient API keys are ignored |
 | ``"none"`` | Hashed n-grams only. No network, no extra package |
 | ``"fastembed"`` | Local ONNX model (``pip install agentconnect[embeddings]``). May download model files to this host; that is not Profile or query egress |
-| ``"openai"`` | Explicit hosted OpenAI ``text-embedding-3-small`` at 384 dimensions |
-| ``"litellm"`` or ``"litellm:<model>"`` | Explicit hosted LiteLLM embeddings |
+| ``"openai"`` | Explicit hosted OpenAI ``text-embedding-3-small`` at 384 dimensions. Requires ``pip install agentconnect[openai]`` (tiktoken). Missing tiktoken is a setup error, not hashed fallback |
+| ``"litellm"`` or ``"litellm:<model>"`` | Explicit hosted LiteLLM embeddings for OpenAI and Azure models only. Requires ``pip install agentconnect[aiagent,openai]``. Other providers are refused because LiteLLM's tokenizer is a generic tiktoken fallback, not the hosted model's tokenizer |
 | a callable | ``(list[str]) -> list[list[float]]``: sync, async, or a sync function that returns an awaitable |
 
 ```python
@@ -87,7 +87,10 @@ results.
 ``pip install agentconnect`` does not pull torch. The ``[embeddings]`` extra
 installs [fastembed](https://qdrant.github.io/fastembed/), which uses ONNX.
 A local model download stays on this machine. ``openai`` and ``litellm``
-are the selections that transmit Profile and query text.
+are the selections that transmit Profile and query text. Hosted OpenAI
+needs the ``openai`` extra so tiktoken can split to the model's limit.
+LiteLLM hosted embeddings also need the ``aiagent`` extra and only
+support OpenAI and Azure embedding models.
 
 ## Index vs Directory
 

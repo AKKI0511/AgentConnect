@@ -17,6 +17,10 @@ Clone the repository and install dependencies using uv:
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
 uv sync --extra serve --extra cli
+# Hosted Directory embeddings also need:
+# uv sync --extra openai
+# LiteLLM hosted embeddings (OpenAI/Azure models only) also need:
+# uv sync --extra aiagent --extra openai
 # Runtime only, no dev tools:
 # uv sync
 ```

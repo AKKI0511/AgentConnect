@@ -9,7 +9,7 @@ format:
 	uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
 
 test:
-	uv run --extra serve --extra cli --extra index pytest tests/ -q
+	uv run --extra serve --extra cli --extra index --extra openai pytest tests/ -q
 
 docs:
 	uv run --group docs --extra serve --extra cli python docs/generate_docs.py

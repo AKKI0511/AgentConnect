@@ -14,93 +14,142 @@ from typing import Any, Sequence
 OPENAI_INPUT_TOKENS = 8191
 OPENAI_REQUEST_TOKENS = 300_000
 DEFAULT_LOCAL_INPUT_TOKENS = 512
-
-_TIKTOKEN: Any = None
-_TIKTOKEN_MISSING = False
-
-
-def hosted_token_count(text: str) -> int:
-    """Return a cl100k_base count, or a dense estimate that does not under-count."""
-    stripped = text.strip()
-    if not stripped:
-        return 0
-    encoder = _cl100k()
-    if encoder is not None:
-        return len(encoder.encode(stripped))
-    return _estimate_token_count(stripped)
+_TIKTOKEN_PROVIDERS = frozenset({"openai", "azure"})
+_OPENAI_INSTALL = "pip install 'agentconnect[openai]'"
+_LITELLM_INSTALL = "pip install 'agentconnect[aiagent,openai]'"
 
 
-def hosted_token_windows(text: str, max_tokens: int = OPENAI_INPUT_TOKENS) -> list[str]:
-    """Split ``text`` into windows of at most ``max_tokens`` hosted tokens."""
+class EmbeddingSetupError(RuntimeError):
+    """Hosted embedding extras or model metadata are missing or unsafe."""
+
+
+def require_tiktoken() -> Any:
+    """Import tiktoken or raise an install error."""
+    try:
+        import tiktoken
+    except ImportError as exc:
+        raise EmbeddingSetupError(
+            "OpenAI Directory embeddings require tiktoken. "
+            f"Install it with {_OPENAI_INSTALL}."
+        ) from exc
+    return tiktoken
+
+
+def encoding_for_hosted_model(model: str) -> Any:
+    """Return the tiktoken encoding for an OpenAI-compatible embedding model."""
+    tiktoken = require_tiktoken()
+    names = [model]
+    if "/" in model:
+        names.append(model.rsplit("/", 1)[-1])
+    for name in names:
+        try:
+            return tiktoken.encoding_for_model(name)
+        except KeyError:
+            continue
+    return tiktoken.get_encoding("cl100k_base")
+
+
+def encode_hosted(encoding: Any, text: str) -> list[int]:
+    """Encode ``text``, keeping literal special-token strings as ordinary text."""
+    return encoding.encode(text, disallowed_special=())
+
+
+def split_token_windows(encoding: Any, text: str, max_tokens: int) -> list[list[int]]:
+    """Split ``text`` into token-id windows of at most ``max_tokens``."""
     if max_tokens < 1:
         raise ValueError("token limit must be positive")
     stripped = text.strip()
     if not stripped:
-        return [""]
-    encoder = _cl100k()
-    if encoder is not None:
-        tokens = encoder.encode(stripped)
-        if len(tokens) <= max_tokens:
-            return [stripped]
-        windows: list[str] = []
-        for start in range(0, len(tokens), max_tokens):
-            piece = encoder.decode(tokens[start : start + max_tokens])
-            if piece:
-                windows.append(piece)
-        return windows or [stripped]
-    return estimate_token_windows(stripped, max_tokens)
+        return [[]]
+    token_ids = encode_hosted(encoding, stripped)
+    return [
+        token_ids[index : index + max_tokens]
+        for index in range(0, len(token_ids), max_tokens)
+    ]
 
 
 def pack_token_batches(
-    texts: Sequence[str],
-    counts: Sequence[int],
+    windows: Sequence[Sequence[int]],
     *,
     batch: int,
     request_tokens: int,
-) -> list[list[str]]:
-    """Group windows so no request exceeds ``batch`` items or ``request_tokens``."""
-    if len(texts) != len(counts):
-        raise ValueError("token counts must match texts")
+) -> list[list[list[int]]]:
+    """Group token windows so no request exceeds ``batch`` or ``request_tokens``."""
     if batch < 1 or request_tokens < 1:
         raise ValueError("batch and request token limits must be positive")
-    chunks: list[list[str]] = []
-    current: list[str] = []
+    chunks: list[list[list[int]]] = []
+    current: list[list[int]] = []
     used = 0
-    for text, count in zip(texts, counts, strict=True):
-        cost = max(0, int(count))
+    for window in windows:
+        ids = list(window)
+        cost = len(ids)
         if current and (len(current) >= batch or used + cost > request_tokens):
             chunks.append(current)
             current = []
             used = 0
-        current.append(text)
+        current.append(ids)
         used += cost
     if current:
         chunks.append(current)
     return chunks
 
 
-def estimate_token_windows(text: str, max_tokens: int) -> list[str]:
-    """Split ``text`` using a dense per-character estimate that does not under-count."""
-    if max_tokens < 1:
-        raise ValueError("token limit must be positive")
-    stripped = text.strip()
-    if not stripped:
-        return [""]
-    windows: list[str] = []
-    buf: list[str] = []
-    used = 0
-    for char in stripped:
-        cost = _char_token_cost(char)
-        if buf and used + cost > max_tokens:
-            windows.append("".join(buf))
-            buf = [char]
-            used = cost
-            continue
-        buf.append(char)
-        used += cost
-    if buf:
-        windows.append("".join(buf))
-    return windows or [stripped]
+def litellm_embedding_info(model: str) -> dict[str, Any]:
+    """Return LiteLLM metadata for ``model``, or raise a setup error."""
+    try:
+        from litellm.utils import get_model_info
+    except ImportError as exc:
+        raise EmbeddingSetupError(
+            "LiteLLM Directory embeddings require litellm and tiktoken. "
+            f"Install them with {_LITELLM_INSTALL}."
+        ) from exc
+    try:
+        info = get_model_info(model)
+    except Exception as exc:
+        raise EmbeddingSetupError(
+            f"LiteLLM has no embedding metadata for {model!r}. "
+            "Use an OpenAI or Azure embedding model, or embeddings='openai'."
+        ) from exc
+    return dict(info)
+
+
+def hosted_litellm_limits(model: str) -> tuple[int, int]:
+    """Return per-input and per-request token limits for a supported model.
+
+    LiteLLM's generic tokenizer is cl100k for most embedding providers,
+    including Cohere. Only OpenAI and Azure embedding models have a
+    tiktoken encoding that matches the hosted model.
+    """
+    require_tiktoken()
+    info = litellm_embedding_info(model)
+    mode = info.get("mode")
+    provider = str(info.get("litellm_provider") or "")
+    if mode != "embedding":
+        raise EmbeddingSetupError(
+            f"LiteLLM model {model!r} is mode {mode!r}, not embedding."
+        )
+    if provider not in _TIKTOKEN_PROVIDERS:
+        raise EmbeddingSetupError(
+            "LiteLLM Directory embeddings are supported only for OpenAI and "
+            "Azure models whose tokenizer is tiktoken. "
+            f"{model!r} uses provider {provider!r}, which LiteLLM tokenizes "
+            "with a generic fallback that is not model-exact. Use "
+            "embeddings='openai' or litellm:<openai-or-azure-embedding-model>. "
+            f"Install with {_LITELLM_INSTALL}."
+        )
+    raw = info.get("max_input_tokens")
+    if raw is None:
+        raw = info.get("max_tokens")
+    try:
+        input_tokens = int(raw)
+    except (TypeError, ValueError):
+        input_tokens = 0
+    if input_tokens < 1:
+        raise EmbeddingSetupError(
+            f"LiteLLM metadata for {model!r} does not include a positive "
+            "max_input_tokens value."
+        )
+    return input_tokens, OPENAI_REQUEST_TOKENS
 
 
 def encode_complete(tokenizer: Any, text: str) -> Any:
@@ -152,8 +201,8 @@ def token_windows(tokenizer: Any, text: str, max_tokens: int) -> list[str]:
     if not isinstance(ids, (list, tuple)):
         try:
             ids = list(ids)
-        except TypeError:
-            return estimate_token_windows(stripped, max_tokens)
+        except TypeError as exc:
+            raise RuntimeError("tokenizer did not return token ids") from exc
     if len(ids) <= max_tokens:
         return [stripped]
     offsets = getattr(encoded, "offsets", None)
@@ -161,9 +210,8 @@ def token_windows(tokenizer: Any, text: str, max_tokens: int) -> list[str]:
     for start in range(0, len(ids), max_tokens):
         end = min(start + max_tokens, len(ids))
         piece = _window_text(tokenizer, stripped, ids, offsets, start, end)
-        if piece:
-            windows.append(piece)
-    return windows or estimate_token_windows(stripped, max_tokens)
+        windows.append(piece)
+    return windows
 
 
 def _window_text(
@@ -187,13 +235,10 @@ def _window_text(
             return stripped[char_start:char_end]
     decode = getattr(tokenizer, "decode", None)
     if callable(decode):
-        try:
-            piece = decode(list(ids[start:end]))
-        except Exception:
-            piece = ""
+        piece = decode(list(ids[start:end]))
         if piece:
             return str(piece)
-    return ""
+    raise RuntimeError("tokenizer window decode produced no text")
 
 
 def _restore_truncation(tokenizer: Any, saved: Any) -> None:
@@ -214,31 +259,3 @@ def _restore_truncation(tokenizer: Any, saved: Any) -> None:
             enable(**dict(saved))
         except Exception:
             return
-
-
-def _cl100k() -> Any:
-    global _TIKTOKEN, _TIKTOKEN_MISSING
-    if _TIKTOKEN_MISSING:
-        return None
-    if _TIKTOKEN is not None:
-        return _TIKTOKEN
-    try:
-        import tiktoken
-    except ImportError:
-        _TIKTOKEN_MISSING = True
-        return None
-    _TIKTOKEN = tiktoken.get_encoding("cl100k_base")
-    return _TIKTOKEN
-
-
-def _estimate_token_count(text: str) -> int:
-    return sum(_char_token_cost(char) for char in text)
-
-
-def _char_token_cost(char: str) -> int:
-    code = ord(char)
-    if code < 128:
-        return 1
-    if code < 0x10000:
-        return 2
-    return 3

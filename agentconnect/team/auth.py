@@ -131,7 +131,7 @@ async def create_join_challenge(
             }
         if applied.reason == "busy":
             raise TeamError("busy", "too many outstanding join challenges")
-        if applied.reason == "exists":
+        if applied.reason in {"exists", "cas"}:
             continue
         raise TeamError("internal", "join challenge failed")
 

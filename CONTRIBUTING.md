@@ -7,7 +7,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and use Py
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-uv sync --extra serve --extra cli --extra index --extra openai
+uv sync --extra serve --extra cli --extra index --extra openai --extra redis
 ```
 
 Use your fork's URL if contributing through a fork. Pull requests target `main`. The test suite covers HTTP, CLI, Index, and hosted Directory tokenizer behavior, so the setup includes those extras.
@@ -15,12 +15,20 @@ Use your fork's URL if contributing through a fork. Pull requests target `main`.
 ## Tests and code style
 
 ```bash
-uv run --extra serve --extra cli --extra index --extra openai pytest tests/ -q
+uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
 uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
 uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
 ```
 
 A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
+
+Runtime discovery performance is a separate workflow. Pull-request CI keeps correctness and real Redis. Release and hot-path Directory/Runtime changes also run:
+
+```bash
+uv run --extra serve --extra embeddings --extra redis python tests/m8/bench.py --require-neural --stress
+```
+
+That command writes `tests/m8/results/latest.json`. GitHub Actions workflow `Performance` runs it on demand with FastEmbed required. Do not skip neural coverage there.
 
 After changing `pyproject.toml` dependencies or extras, refresh every lockfile CI checks, then commit them together:
 

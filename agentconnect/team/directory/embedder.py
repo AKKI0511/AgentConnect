@@ -78,11 +78,19 @@ class _OwnedPool:
     def __init__(self, *, label: str) -> None:
         pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=label)
         self._pool = pool
+        self.pending = 0
+        self.peak_pending = 0
         weakref.finalize(self, pool.shutdown, wait=False, cancel_futures=True)
 
     async def run(self, fn: Callable[..., Any], *args: Any) -> Any:
+        self.pending += 1
+        if self.pending > self.peak_pending:
+            self.peak_pending = self.pending
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._pool, fn, *args)
+        try:
+            return await loop.run_in_executor(self._pool, fn, *args)
+        finally:
+            self.pending -= 1
 
 
 class Embedder(Protocol):

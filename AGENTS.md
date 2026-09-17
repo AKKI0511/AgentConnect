@@ -37,15 +37,18 @@ Website pages are self-contained. The root `CHANGELOG.md` is the canonical relea
 
 ## Useful commands
 
-uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers five optional shortcuts: check, format, test, docs, and docs-preview.
+uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers six optional shortcuts: check, format, test, perf, docs, and docs-preview.
 
 ```bash
-uv sync --extra serve --extra cli --extra index
-uv run --extra serve --extra cli --extra index pytest tests/agent/test_session.py -q
-uv run --extra serve --extra cli --extra index pytest tests/ -q
+uv sync --extra serve --extra cli --extra index --extra openai --extra redis
+uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/agent/test_session.py -q
+uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
+uv run --extra serve --extra embeddings --extra redis python tests/m8/bench.py --require-neural --stress
 uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
 uvx ruff@latest format --check agentconnect tests examples docs/generate_docs.py
 ```
+
+Redis tests use ``REDIS_URL`` (local M8 default ``redis://127.0.0.1:6380/15``). They skip when Redis is unreachable unless ``CI`` or ``AGENTCONNECT_REQUIRE_REDIS=1`` is set, in which case missing Redis fails. The default suite is correctness plus real Redis. Runtime discovery benchmarks are ``python tests/m8/bench.py`` or ``make perf`` (``-m perf``, FastEmbed required when ``AGENTCONNECT_REQUIRE_NEURAL=1``).
 
 Schema generation and freshness:
 
@@ -65,7 +68,7 @@ The preview is at `http://127.0.0.1:8000/`. Without `--preview`, the command onl
 
 ## Review context
 
-CI covers formatting, lockfile and schema consistency, supported Python versions, Windows imports, and distribution installation. The current support matrix is in `.github/workflows/main.yml` and package metadata is in `pyproject.toml`. Docs publish from `main`; previewing a change is local.
+CI covers formatting, lockfile and schema consistency, supported Python versions, Windows imports, distribution installation, and Redis-backed Runtime tests on Linux. The current support matrix is in `.github/workflows/main.yml` and package metadata is in `pyproject.toml`. Docs publish from `main`; previewing a change is local.
 
 Focused tests help explain a behavior change. Existing assertions, import boundaries, and supported installs remain relevant regardless of how a patch was written. A useful completion report distinguishes checks run from behavior inferred or left unverified.
 

@@ -107,18 +107,30 @@ class MemoryStore(Store):
         """Return a copy of the value at ``key``, or None."""
         async with self._lock:
             record = self._docs.get(key)
-            if record is None:
-                return None
-            return _clone(record[0])
+            snapshot = None if record is None else record[0]
+        if snapshot is None:
+            return None
+        return _clone(snapshot)
 
     async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
-        """Return copied values for ``keys`` in one lock acquisition."""
+        """Return copied values for ``keys``.
+
+        The lock covers only the snapshot. Cloning happens afterwards and
+        yields so a large Directory read cannot freeze the event loop or
+        hold send/lease behind vector copies.
+        """
         async with self._lock:
-            out: list[Any | None] = []
-            for key in keys:
-                record = self._docs.get(key)
-                out.append(None if record is None else _clone(record[0]))
-            return out
+            snapshots = [
+                None if (record := self._docs.get(key)) is None else record[0]
+                for key in keys
+            ]
+        out: list[Any | None] = []
+        large = len(snapshots) >= 16
+        for index, value in enumerate(snapshots):
+            out.append(None if value is None else _clone(value))
+            if large and index % 8 == 7:
+                await asyncio.sleep(0)
+        return out
 
     async def get_record(self, key: str) -> StoreRecord | None:
         """Return a copied value and its version, or None."""
@@ -126,7 +138,8 @@ class MemoryStore(Store):
             record = self._docs.get(key)
             if record is None:
                 return None
-            return StoreRecord(value=_clone(record[0]), version=record[1])
+            value, version = record
+        return StoreRecord(value=_clone(value), version=version)
 
     async def apply(self, ops: Sequence[StoreOp]) -> ApplyResult:
         """Apply ``ops`` under the store lock, or leave every key unchanged."""
@@ -354,9 +367,22 @@ class MemoryStore(Store):
             self._indexes.clear()
 
 
+def _is_numeric_vector(value: list) -> bool:
+    """True when every item is an int or float, never a bool or nested value."""
+    for item in value:
+        kind = type(item)
+        if kind is bool or kind not in (int, float):
+            return False
+    return True
+
+
 def _clone(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _clone(item) for key, item in value.items()}
     if isinstance(value, list):
+        if not value:
+            return []
+        if _is_numeric_vector(value):
+            return list(value)
         return [_clone(item) for item in value]
     return value

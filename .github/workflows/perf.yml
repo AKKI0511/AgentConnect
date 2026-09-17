@@ -20,7 +20,6 @@ jobs:
       AGENTCONNECT_REQUIRE_REDIS: "1"
       AGENTCONNECT_REQUIRE_NEURAL: "1"
       NO_PROXY: "127.0.0.1,localhost"
-      no_proxy: "127.0.0.1,localhost"
     services:
       redis:
         image: redis:8.2

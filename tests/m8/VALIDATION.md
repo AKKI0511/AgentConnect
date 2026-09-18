@@ -1,56 +1,70 @@
 # M8 Runtime validation
 
-Tracked on `feat/m8-runtime-release-gate`. M8 stays open until Linux CPython 3.11–3.14 `CI` and the `Performance` workflow pass on the same revision. Budgets in [`budgets.py`](budgets.py) are unchanged.
+Certifying revision: [`a0a89f4`](https://github.com/AKKI0511/AgentConnect/commit/a0a89f42c296c9db752056262d7be334bee34236) on `feat/m8-runtime-release-gate` ([PR 16](https://github.com/AKKI0511/AgentConnect/pull/16)). Budgets in [`budgets.py`](budgets.py) were not changed. Entry point: `python tests/m8/bench.py`. Cold-index, Profile-update, and fallback-rebuild cases run in a child process so they do not share a heap with 1,000-member finds.
 
-Budgets are unchanged in [`budgets.py`](budgets.py). Entry point: `python tests/m8/bench.py`. Cold-index, Profile-update, and fallback-rebuild cases run in a child process so they do not share a heap with 1,000-member finds.
+Linux GitHub `CI` and `Performance` on this commit are the release evidence. Windows numbers below are local only.
 
-## Provenance (local CPython 3.12.8)
+## GitHub (certifying)
 
+### CI
+
+https://github.com/AKKI0511/AgentConnect/actions/runs/35290517112
+
+Linux CPython **3.11, 3.12, 3.13, 3.14** with required Redis 8.2, plus Code and schema, Windows imports, and distribution install: **pass**.
+
+Earlier commits on this branch are not that result: `c772acb` failed YAML parse (`NO_PROXY`/`no_proxy`); `95555eb` failed HTTP warmup counts and Redis restart discovery; `c9b3173` passed CI and failed Performance.
+
+### Performance
+
+https://github.com/AKKI0511/AgentConnect/actions/runs/35290537847  
+Artifact `m8-runtime-bench` (`failed_names: []`, elapsed 52.7 s).
+
+Provenance from the JSON:
+
+- revision `a0a89f42c296c9db752056262d7be334bee34236`
+- CPython 3.12.3, Linux 6.17.0-1022-azure x86_64 glibc 2.39
 - HashedEmbedder, dim 384
 - FastEmbed 0.8.0, `BAAI/bge-small-en-v1.5`, onnxruntime 1.30.0, numpy 2.5.3
 - redis-py 5.3.1, httpx 0.28.1, pydantic 2.13.5
-- Redis 8.10.1 at `127.0.0.1:6380/15`
-- Host: Windows 11 10.0.26200, i7-13700H
+- Redis service `redis:8.2` (8.2.9 in the job log)
 
-Those versions are also written into the bench JSON `provenance` object.
+Public Runtime phases (20 long Profiles, extra lag vs 10 ms probe):
 
-## Local checks (this tree, not GitHub)
+| case | extra lag | budget |
+| --- | ---: | ---: |
+| hashed memory cold | 1.7 ms | 50 ms |
+| hashed memory Profile update | 2.0 ms | 50 ms |
+| fallback rebuild memory | 6.3 ms | 80 ms |
+| hashed redis cold | 2.3 ms | 50 ms |
+| hashed redis Profile update | 0.8 ms | 50 ms |
+| fallback rebuild redis | 6.0 ms | 80 ms |
+
+Hashed warm `Team.find` p95 (budget 25/50/250 ms at 10/100/1,000):
+
+| case | p95 | budget |
+| --- | ---: | ---: |
+| hashed redis embedded 1,000 | 153 ms | 250 ms |
+| hashed redis HTTP 1,000 | 159 ms | 250 ms |
+| hashed memory embedded 1,000 | 93 ms | 250 ms |
+| hashed redis embedded 100 | 15 ms | 50 ms |
+| overlap hashed redis 400 send | 35 ms | 100 ms |
+
+Neural 10/100 passed lag gates on memory and Redis, embedded and HTTP. Neural 1,000 is measured only (memory embedded p95 108 ms). Hashed 10,000 stress extra lag 151 ms against 500 ms.
+
+`c9b3173` used `BlockingConnectionPool` and missed hashed Redis 1,000 at 274/277 ms p95. `a0a89f4` restored `Redis.from_url` with `max_connections=64`. That is not a budget change.
+
+## Local (Windows, not GitHub)
+
+CPython 3.12.8, Redis 8.10.1 at `127.0.0.1:6380/15`, same FastEmbed 0.8.0 model, i7-13700H.
 
 | check | result |
 | --- | --- |
 | Ruff lint + format | pass |
 | `uv lock --check` | pass |
 | `pytest tests/ -q` with required Redis | **692 passed**, 3 skipped, 6 deselected, 139.41 s |
-| `tests/m8/test_discovery_gate.py` Runtime cold / update / rebuild | pass (public `Team.join` / `Team.find`) |
-| Isolated Directory rebuild unit test | preserved |
-| Full `bench.py --require-neural --stress` | see below |
-| GitHub `CI` (Linux 3.11–3.14) | **pass** on `c9b3173` (Python 3.11–3.14, Redis, Windows imports, schema). Earlier SHAs failed YAML parse, then HTTP warmup count, then hardcoded `agentconnect-m8-redis`. |
-| GitHub `Performance` | `95555eb` (pre-blocking-pool) hashed Redis 1000 p95 **186/173 ms**. `c9b3173` failed hashed Redis 1000 p95 **274/277 ms** vs 250 ms after `BlockingConnectionPool`. Not a budget change. |
+| Runtime cold / update / rebuild pytest | pass (`Team.join` / `Team.find`) |
 
-Schema was not edited; npm schema freshness was not rerun.
-
-## Public Runtime phases (20 long Profiles, embedded)
-
-Lag is extra delay beyond the 10 ms probe. Rebuild uses the existing 80 ms extra-lag budget. Cold and Profile-update use the 50 ms budget at 20 members. Warm long ranking is labeled warm and is not a rebuild.
-
-| case | extra lag | budget | notes |
-| --- | ---: | ---: | --- |
-| hashed memory cold index + first find | 14.5 ms | 50 ms | wall 96 ms |
-| hashed memory warm | 2.2 ms | 50 ms | p95 3.8 ms |
-| hashed memory Profile update | 1.2 ms | 50 ms | top `writer@` after reconnect |
-| fallback rebuild memory | 13.5 ms | 80 ms | 23 embed calls, then hashed |
-| hashed redis cold index + first find | 6.4 ms | 50 ms | wall 347 ms includes joins |
-| hashed redis warm | 0 ms | 50 ms | p95 13.9 ms |
-| hashed redis Profile update | 12.7 ms | 50 ms | top `writer@` |
-| fallback rebuild redis | 15.2 ms | 80 ms | hashed fallback confirmed |
-
-Pytest covers the same three public paths on MemoryStore in the default suite.
-
-## Latest local full bench
-
-Windows CPython 3.12.8, required Redis and FastEmbed, `--stress`. Phase cases above passed. Hashed Redis 1,000 p95 was 244 ms embedded and 248 ms HTTP against 250 ms. Redis overlap send p95 was **103.5 ms** against 100 ms. Hashed Redis embedded 100 p95 was **54.9 ms** against 50 ms (p50 26 ms; extra lag 5 ms). Those two misses are local 20-sample tails on this host; extra lag stayed inside the loop budgets. Neural 10/100 passed lag gates. Neural 1,000 remains measured/unsupported (p95 273 ms). Hashed 10,000 stress extra lag 81 ms against 500 ms.
-
-Earlier advisor-review JSON remains historical; do not mix its HTTP burst numbers with this run.
+A full local `--require-neural --stress` bench on this host missed two 20-sample tails (hashed Redis 100 p95 54.9 ms vs 50 ms; overlap send 103.5 ms vs 100 ms). Extra lag passed. Those misses do not override the Linux Performance artifact.
 
 ## Reproduce
 
@@ -66,11 +80,4 @@ uv lock --check
 uv run --extra serve --extra embeddings --extra redis python tests/m8/bench.py --require-neural --stress
 ```
 
-PR CI is Linux correctness plus Redis. Performance is `.github/workflows/perf.yml` / `make perf`.
-
-## Remaining before M8 Done
-
-- Linux `CI` passed on `c9b3173`. Re-run `Performance` after dropping `BlockingConnectionPool` (hashed Redis 1000 p95 274/277 ms vs 250 ms; `95555eb` was 186/173 ms).
-- Record that Performance outcome separately from the Windows numbers above.
-- Keep neural 1,000 and hashed 10,000 labeled unsupported / stress.
-- Do not start M9.
+GitHub: PR CI is Linux correctness plus Redis. Performance is `.github/workflows/perf.yml` / `make perf` (`workflow_dispatch`).

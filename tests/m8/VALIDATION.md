@@ -28,7 +28,7 @@ Neural 10/100 passed lag gates. Neural 1,000 is measured only (memory embedded p
 
 Those `a0a89f4` Profile-update extra-lag figures (2.0 ms memory / 0.8 ms Redis) timed only `Team.find` after the join. They are not the Profile-update gate anymore.
 
-Linux CI on HEAD after this correction is recorded when that run finishes. Earlier: Python 3.11–3.14 passed on [`4b64e45`](https://github.com/AKKI0511/AgentConnect/commit/4b64e45) https://github.com/AKKI0511/AgentConnect/actions/runs/35291348448
+Linux CI on this correction: Python 3.11–3.14, Code and schema, Windows imports, Distribution install, and the `CI` aggregator all passed on [`d24aa25`](https://github.com/AKKI0511/AgentConnect/commit/d24aa25bc5e7a73f0ee8e75b116b8bf8b7d5647b) https://github.com/AKKI0511/AgentConnect/actions/runs/35297204179. Earlier Python 3.11–3.14 on [`4b64e45`](https://github.com/AKKI0511/AgentConnect/commit/4b64e45): https://github.com/AKKI0511/AgentConnect/actions/runs/35291348448
 
 ## Local Profile-update correction (this change)
 

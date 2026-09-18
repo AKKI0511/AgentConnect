@@ -10,7 +10,7 @@ from tests.m8.stores import connect_redis
 from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.team import Team
-from agentconnect.team.store import Cas, Insert, RedisStore
+from agentconnect.team.store import Cas, Insert, Put, RedisStore
 
 
 def _id() -> str:
@@ -242,6 +242,19 @@ async def test_redis_concurrent_put_assigns_distinct_versions(redis_store: Redis
     record = await redis_store.get_record("k")
     assert record is not None
     assert record.version == 11
+
+
+@pytest.mark.asyncio
+async def test_redis_apply_waits_when_the_pool_is_busy(redis_store: RedisStore):
+    import asyncio
+
+    count = 32
+    results = await asyncio.gather(
+        *[redis_store.apply([Put(f"k{i}", {"n": i})]) for i in range(count)]
+    )
+    assert all(result.ok for result in results)
+    many = await redis_store.get_many([f"k{i}" for i in range(count)])
+    assert [item["n"] for item in many] == list(range(count))
 
 
 @pytest.mark.asyncio

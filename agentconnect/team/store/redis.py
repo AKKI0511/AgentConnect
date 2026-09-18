@@ -161,17 +161,22 @@ class RedisStore(Store):
             return self._redis
         try:
             from redis.asyncio import Redis
+            from redis.asyncio.connection import BlockingConnectionPool
         except ImportError as exc:
             raise ImportError(
                 "Redis store requires the redis extra. "
                 "Install with: pip install 'agentconnect[redis]'"
             ) from exc
 
-        self._redis = Redis.from_url(
+        # Cap in-flight clients so Directory reads cannot stampede
+        # single-threaded Redis. Extra waiters block instead of raising.
+        pool = BlockingConnectionPool.from_url(
             self._url,
             decode_responses=True,
             max_connections=16,
+            timeout=20,
         )
+        self._redis = Redis.from_pool(pool)
         self._cas = self._redis.register_script(_CAS_LUA)
         self._put = self._redis.register_script(_PUT_LUA)
         self._index_add_if_below = self._redis.register_script(_INDEX_ADD_IF_BELOW_LUA)

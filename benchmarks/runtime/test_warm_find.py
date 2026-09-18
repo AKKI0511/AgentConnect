@@ -101,9 +101,12 @@ def test_hashed_warm_find(
         assert probed["matches"]
         assert_loop_responsive(intervals, members=members)
 
-        burst = async_bridge.run(
-            asyncio.gather(*[one_find() for _ in range(CONCURRENT_FINDERS)])
-        )
+        async def burst_find():
+            return await asyncio.gather(
+                *[one_find() for _ in range(CONCURRENT_FINDERS)]
+            )
+
+        burst = async_bridge.run(burst_find())
         assert all(item["matches"] for item in burst)
         assert_measured_backend(team, embeddings.name)
 

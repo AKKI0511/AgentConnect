@@ -39,5 +39,7 @@ async def test_http_benchmark_burst_uses_http(monkeypatch):
         store_kind="memory", backend="hashed", members=10, transport="http"
     )
     assert "error" not in result
-    # One HTTP warmup, measured samples, one lag probe, then the HTTP burst.
-    assert calls == 1 + 2 + 1 + bench.CONCURRENT_FINDERS
+    # HTTP warmups after serve, measured samples, one lag probe, then the burst.
+    assert (
+        calls == bench.HTTP_WARMUPS + bench.WARM_SAMPLES + 1 + bench.CONCURRENT_FINDERS
+    )

@@ -67,6 +67,7 @@ from agentconnect.team.store.memory import MemoryStore
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = Path(__file__).resolve().parent / "results" / "latest.json"
+HTTP_WARMUPS = 3
 
 
 def _quiet_http_logs() -> None:
@@ -297,7 +298,7 @@ async def _run_warm_case(
                 async def find():
                     return await _http_find(client, origin, token, query)
 
-                for _ in range(3):
+                for _ in range(HTTP_WARMUPS):
                     found = await find()
                     assert found["matches"]
             else:

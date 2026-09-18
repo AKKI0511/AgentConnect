@@ -291,14 +291,24 @@ async def restart_redis() -> None:
     """Restart the Redis server used by M8 and wait until PING succeeds.
 
     Uses ``DEBUG RESTART`` after enabling the debug command when needed.
-    Falls back to ``docker restart agentconnect-m8-redis``.
+    Falls back to restarting a Docker Redis that publishes the URL port,
+    including GitHub Actions service containers.
     """
+    url = redis_url()
+    if await _try_debug_restart(url):
+        await _wait_for_redis(url)
+        return
+    _docker_restart_redis()
+    await _wait_for_redis(url)
+
+
+async def _try_debug_restart(url: str) -> bool:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
+    from redis.exceptions import ResponseError
+    from redis.exceptions import TimeoutError as RedisTimeoutError
 
-    url = redis_url()
     client = Redis.from_url(url, decode_responses=True)
-    restarted = False
     try:
         try:
             await client.config_set("enable-debug-command", "yes")
@@ -310,30 +320,80 @@ async def restart_redis() -> None:
                 pass
         try:
             await client.execute_command("DEBUG", "RESTART")
-            restarted = True
-        except (RedisConnectionError, ConnectionError, OSError, TimeoutError):
-            restarted = True
-    except Exception:
-        restarted = False
+            return True
+        except (
+            RedisConnectionError,
+            RedisTimeoutError,
+            ConnectionError,
+            OSError,
+            TimeoutError,
+        ):
+            return True
+        except ResponseError:
+            return False
     finally:
         try:
             await client.aclose()
         except Exception:
             pass
-    if not restarted:
-        await _docker_restart_m8_redis()
-    await _wait_for_redis(url)
+
+
+def _redis_port() -> int:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(redis_url())
+    return int(parsed.port or 6379)
+
+
+def _docker_redis_container() -> str | None:
+    docker = shutil.which("docker")
+    if docker is None:
+        return None
+    candidates: list[str] = []
+    named = os.environ.get("AGENTCONNECT_REDIS_CONTAINER", "").strip()
+    if named:
+        candidates.append(named)
+    candidates.append("agentconnect-m8-redis")
+    listed = subprocess.run(
+        [
+            docker,
+            "ps",
+            "-a",
+            "--filter",
+            f"publish={_redis_port()}",
+            "--format",
+            "{{.ID}}",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if listed.returncode == 0:
+        candidates.extend(
+            line.strip() for line in listed.stdout.splitlines() if line.strip()
+        )
+    for candidate in dict.fromkeys(candidates):
+        probe = subprocess.run(
+            [docker, "inspect", candidate],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0:
+            return candidate
+    return None
 
 
 def _docker_enable_debug() -> None:
     docker = shutil.which("docker")
-    if docker is None:
+    container = _docker_redis_container()
+    if docker is None or container is None:
         return
     subprocess.run(
         [
             docker,
             "exec",
-            "agentconnect-m8-redis",
+            container,
             "redis-cli",
             "CONFIG",
             "SET",
@@ -346,12 +406,18 @@ def _docker_enable_debug() -> None:
     )
 
 
-async def _docker_restart_m8_redis() -> None:
+def _docker_restart_redis() -> None:
     docker = shutil.which("docker")
+    container = _docker_redis_container()
     if docker is None:
         pytest.fail("Redis DEBUG RESTART failed and docker is not available")
+    if container is None:
+        pytest.fail(
+            "Redis DEBUG RESTART failed and no Docker Redis publishes "
+            f"port {_redis_port()}"
+        )
     completed = subprocess.run(
-        [docker, "restart", "agentconnect-m8-redis"],
+        [docker, "restart", container],
         check=False,
         capture_output=True,
         text=True,
@@ -363,25 +429,29 @@ async def _docker_restart_m8_redis() -> None:
         )
 
 
-async def _wait_for_redis(url: str, *, timeout_s: float = 20.0) -> None:
+async def _redis_accepts_ping(url: str, *, timeout_s: float) -> bool:
     from redis.asyncio import Redis
 
     deadline = time.monotonic() + timeout_s
-    last_exc: BaseException | None = None
     while time.monotonic() < deadline:
         probe = Redis.from_url(url, decode_responses=True)
         try:
             await probe.ping()
             await probe.aclose()
-            return
-        except Exception as exc:
-            last_exc = exc
+            return True
+        except Exception:
             try:
                 await probe.aclose()
             except Exception:
                 pass
             await asyncio.sleep(0.1)
-    pytest.fail(f"Redis did not accept PING after restart: {last_exc}")
+    return False
+
+
+async def _wait_for_redis(url: str, *, timeout_s: float = 20.0) -> None:
+    if await _redis_accepts_ping(url, timeout_s=timeout_s):
+        return
+    pytest.fail("Redis did not accept PING after restart")
 
 
 async def drop_http_send(origin: str, token: str, body: dict[str, Any]) -> None:

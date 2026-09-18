@@ -245,7 +245,7 @@ async def test_redis_concurrent_put_assigns_distinct_versions(redis_store: Redis
 
 
 @pytest.mark.asyncio
-async def test_redis_apply_waits_when_the_pool_is_busy(redis_store: RedisStore):
+async def test_redis_apply_succeeds_when_many_overlap(redis_store: RedisStore):
     import asyncio
 
     count = 32

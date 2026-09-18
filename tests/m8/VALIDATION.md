@@ -1,6 +1,6 @@
 # M8 Runtime validation
 
-Tracked on `feat/m8-runtime-release-gate` (`c772acb` plus follow-up workflow parse fix). M8 stays open until Linux CPython 3.11–3.14 `CI` and the `Performance` workflow pass. GitHub Actions env keys are case-insensitive, so workflows set only `NO_PROXY`; pytest still sets both `NO_PROXY` and `no_proxy`.
+Tracked on `feat/m8-runtime-release-gate`. M8 stays open until Linux CPython 3.11–3.14 `CI` and the `Performance` workflow pass on the same revision. Budgets in [`budgets.py`](budgets.py) are unchanged.
 
 Budgets are unchanged in [`budgets.py`](budgets.py). Entry point: `python tests/m8/bench.py`. Cold-index, Profile-update, and fallback-rebuild cases run in a child process so they do not share a heap with 1,000-member finds.
 
@@ -24,8 +24,8 @@ Those versions are also written into the bench JSON `provenance` object.
 | `tests/m8/test_discovery_gate.py` Runtime cold / update / rebuild | pass (public `Team.join` / `Team.find`) |
 | Isolated Directory rebuild unit test | preserved |
 | Full `bench.py --require-neural --stress` | see below |
-| GitHub `CI` (Linux 3.11–3.14) | `c772acb` failed to parse (`no_proxy` duplicate). Re-run pending after this fix. |
-| GitHub `Performance` | same YAML parse failure; not a benchmark result |
+| GitHub `CI` (Linux 3.11–3.14) | **pass** on `c9b3173` (Python 3.11–3.14, Redis, Windows imports, schema). Earlier SHAs failed YAML parse, then HTTP warmup count, then hardcoded `agentconnect-m8-redis`. |
+| GitHub `Performance` | `95555eb` (pre-blocking-pool) hashed Redis 1000 p95 **186/173 ms**. `c9b3173` failed hashed Redis 1000 p95 **274/277 ms** vs 250 ms after `BlockingConnectionPool`. Not a budget change. |
 
 Schema was not edited; npm schema freshness was not rerun.
 
@@ -70,7 +70,7 @@ PR CI is Linux correctness plus Redis. Performance is `.github/workflows/perf.ym
 
 ## Remaining before M8 Done
 
-- Verify GitHub `CI` on CPython 3.11–3.14 with Redis, then a `Performance` dispatch with FastEmbed required, on the revision after the `NO_PROXY` parse fix.
-- Record those GitHub outcomes separately from the Windows numbers above.
+- Linux `CI` passed on `c9b3173`. Re-run `Performance` after dropping `BlockingConnectionPool` (hashed Redis 1000 p95 274/277 ms vs 250 ms; `95555eb` was 186/173 ms).
+- Record that Performance outcome separately from the Windows numbers above.
 - Keep neural 1,000 and hashed 10,000 labeled unsupported / stress.
 - Do not start M9.

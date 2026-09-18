@@ -47,6 +47,6 @@ def queue_stats(team: Any) -> dict[str, int]:
         "search_in_flight_peak": int(getattr(directory, "search_in_flight_peak", 0)),
         "dir_cpu_peak_pending": int(getattr(cpu, "peak_pending", 0) or 0),
         "embed_peak_pending": int(getattr(work, "peak_pending", 0) or 0),
-        "dir_worker_threads": 1,
-        "embed_worker_threads": 1,
+        "dir_worker_threads": len(cpu._pool._threads) if cpu else 0,
+        "embed_worker_threads": len(work._pool._threads) if work else 0,
     }

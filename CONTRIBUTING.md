@@ -17,25 +17,34 @@ Use your fork's URL if contributing through a fork. Pull requests target `main`.
 ```bash
 uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
 uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
-uvx ruff@latest format agentconnect tests examples benchmarks docs/generate_docs.py
+uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
 ```
 
-A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
+A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Remove `--check` from the format command to apply formatting. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
 
-Runtime discovery performance is a separate workflow. Pull-request CI keeps correctness and real Redis. Release and hot-path Directory/Runtime changes also run `make perf`, which invokes sequential pytest groups under `benchmarks/runtime/` with pytest-benchmark JSON and JUnit output:
+Redis cases skip locally when Redis is unavailable, but are required in Linux CI.
+For the complete suite, start a dedicated test server (recovery tests restart it):
 
 ```bash
-uv sync --group benchmark --extra serve --extra embeddings --extra redis
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_phases.py --benchmark-json=benchmarks/runtime/results/phases.json --junitxml=benchmarks/runtime/results/phases.xml
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_warm_find.py --benchmark-json=benchmarks/runtime/results/warm.json --junitxml=benchmarks/runtime/results/warm.xml
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_overlap.py --benchmark-json=benchmarks/runtime/results/overlap.json --junitxml=benchmarks/runtime/results/overlap.xml
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_neural.py --benchmark-json=benchmarks/runtime/results/neural.json --junitxml=benchmarks/runtime/results/neural.xml
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_stress.py --benchmark-json=benchmarks/runtime/results/stress.json --junitxml=benchmarks/runtime/results/stress.xml
+docker run -d --name agentconnect-test-redis -p 127.0.0.1:6380:6379 redis:8.2 redis-server --enable-debug-command yes --appendonly yes
 ```
 
-GitHub Actions workflow `Performance` runs those groups on demand with FastEmbed required. Generated JSON and JUnit files under `benchmarks/runtime/results/` are ignored. The curated historical baseline is `benchmarks/runtime/baseline.json`. Do not skip neural coverage there.
+On later runs use `docker start agentconnect-test-redis`. Tests default to
+`redis://127.0.0.1:6380/15`; set `REDIS_URL` to use another dedicated test server.
+Set `AGENTCONNECT_REQUIRE_REDIS=1` if a missing server should fail locally too.
 
-After changing `pyproject.toml` dependencies or extras, refresh every lockfile CI checks, then commit them together:
+## Performance
+
+Routine tests do not run the full benchmark matrix. GitHub's **Performance**
+workflow runs for relevant Runtime and benchmark changes and supports manual runs.
+It checks discovery, overlapping messaging, and event-loop responsiveness with
+pytest-benchmark, saving JSON measurements and JUnit results even on failure.
+See [Runtime benchmarks](benchmarks/runtime/README.md) for focused local commands
+and `make perf`. No benchmark dependency is added to a normal library install.
+
+## Dependency changes
+
+After changing `pyproject.toml` dependencies, extras, or groups, refresh every lockfile CI checks, then commit them together:
 
 ```bash
 uv lock

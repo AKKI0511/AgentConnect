@@ -39,27 +39,21 @@ Website pages are self-contained. The root `CHANGELOG.md` is the canonical relea
 
 uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers six optional shortcuts: check, format, test, perf, docs, and docs-preview.
 
-When you add or change dependencies, extras, or dependency groups in any `pyproject.toml`, refresh every lockfile CI checks and commit those `uv.lock` files in the same revision. Do not push a dependency change without the matching locks. CI runs `uv lock --check` on the library and on `examples/quickstart` and `examples/recipes`.
-
 ```bash
-uv lock
-uv lock --directory examples/quickstart
-uv lock --directory examples/recipes
-uv lock --check
-uv lock --check --directory examples/quickstart
-uv lock --check --directory examples/recipes
-uv sync --extra serve --extra cli --extra index --extra openai --extra redis
-```
-
-```bash
-uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/agent/test_session.py -q
-uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_phases.py
+uv sync --locked --extra serve --extra cli --extra index --extra openai --extra redis
+uv run --no-sync pytest tests/ -q
 uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
 uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
 ```
 
-Redis tests use ``REDIS_URL`` (local default ``redis://127.0.0.1:6380/15``). They skip when Redis is unreachable unless ``CI`` or ``AGENTCONNECT_REQUIRE_REDIS=1`` is set, in which case missing Redis fails. The default suite is correctness plus real Redis. Runtime discovery benchmarks live under ``benchmarks/runtime/`` and run as sequential pytest groups (``make perf``, FastEmbed required when ``AGENTCONNECT_REQUIRE_NEURAL=1``). Do not collect them from ordinary CI.
+Replace `tests/` with a file or directory for focused checks. Redis setup and
+lockfile refresh commands are in [CONTRIBUTING.md](CONTRIBUTING.md). Dependency,
+extra, or group changes must include all affected CI-checked locks: the root,
+`examples/quickstart`, and `examples/recipes`.
+
+Performance lives under `benchmarks/runtime/` and runs separately from ordinary
+CI. [Runtime benchmarks](benchmarks/runtime/README.md) explains the commands,
+fixed budgets, and artifacts. Preserve real-backend coverage and failed evidence.
 
 Schema generation and freshness:
 
@@ -81,6 +75,12 @@ The preview is at `http://127.0.0.1:8000/`. Without `--preview`, the command onl
 
 CI covers formatting, lockfile and schema consistency, supported Python versions, Windows imports, distribution installation, and Redis-backed Runtime tests on Linux. The current support matrix is in `.github/workflows/main.yml` and package metadata is in `pyproject.toml`. Docs publish from `main`; previewing a change is local.
 
-Focused tests help explain a behavior change. Existing assertions, import boundaries, and supported installs remain relevant regardless of how a patch was written. A useful completion report distinguishes checks run from behavior inferred or left unverified.
+Before committing Python or toolchain changes, run the full suite and both Ruff
+checks on the final changes. Verify compatibility-sensitive changes on the minimum
+supported Python version. Refresh affected locks and generated files. Validate
+what will actually be committed, including in a shared checkout; do not weaken
+assertions or bypass hooks to make a check pass. Report the Python versions and
+checks actually run, distinguishing local results from GitHub CI. Repeat checks
+only when subsequent changes or failures justify it.
 
 A shared checkout may contain unrelated changes. Keeping those separate makes the resulting diff reviewable. [CONTRIBUTING.md](CONTRIBUTING.md) has more setup and contribution information.

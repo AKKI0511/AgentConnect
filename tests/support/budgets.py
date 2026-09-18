@@ -1,11 +1,6 @@
 """Predetermined Runtime pass/fail budgets.
 
-These numbers were fixed from the M7 hashed-probe evidence in the
-internal roadmap (warm medians 11ms/46ms/116ms at 100/400/1,000 short
-Profiles; 109ms 10ms-timer interval at 1,000 members; 148ms interval on
-the 400-member warm-ranking test against an 80ms assertion; ~53ms
-interval while rebuilding 20 heavy Profiles). They are not fitted to a
-later run.
+Budgets are frozen for the workloads described in benchmarks/runtime/README.md.
 
 Lag budgets apply to extra delay on a 10ms ``asyncio.sleep`` probe:
 ``extra = interval - 0.01``. The 148ms failure was a 138ms extra stall.
@@ -15,7 +10,7 @@ supported store/transport matrix, not to isolated Directory searches.
 The supported single-Runtime range is 10–1,000 hashed Memberships, 10–100
 local neural Memberships, memory and Redis, embedded and HTTP. Neural
 work at 1,000 is measured and may be recorded as unsupported. 10,000 is
-a stress probe with no latency pass/fail. Replica work stays in v0.8.
+a stress probe with no latency pass/fail. This covers one Runtime process.
 """
 
 from __future__ import annotations
@@ -36,13 +31,6 @@ FIND_P95_S = {
     400: 0.100,
     1000: 0.250,
 }
-FIND_P50_S = {
-    10: 0.020,
-    100: 0.040,
-    400: 0.080,
-    1000: 0.200,
-}
-
 WARM_SAMPLES = 20
 CONCURRENT_FINDERS = 8
 HTTP_WARMUPS = 3
@@ -101,7 +89,7 @@ def find_p95_budget_s(members: int) -> float | None:
 
 
 def percentile(values: list[float], pct: float) -> float:
-    """Nearest-rank percentile for a non-empty sample."""
+    """Linearly interpolated percentile for a non-empty sample."""
     if not values:
         raise ValueError("percentile of empty sample")
     ordered = sorted(values)

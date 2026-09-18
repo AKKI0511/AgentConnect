@@ -290,7 +290,7 @@ async def connect_redis(prefix: str | None = None) -> RedisStore:
 async def restart_redis() -> None:
     """Restart the Redis server used by tests and wait until PING succeeds.
 
-    Uses ``DEBUG RESTART`` after enabling the debug command when needed.
+    Uses ``DEBUG RESTART`` (enable it when starting the test server).
     Falls back to restarting a Docker Redis that publishes the URL port,
     including GitHub Actions service containers.
     """
@@ -310,14 +310,6 @@ async def _try_debug_restart(url: str) -> bool:
 
     client = Redis.from_url(url, decode_responses=True)
     try:
-        try:
-            await client.config_set("enable-debug-command", "yes")
-        except Exception:
-            _docker_enable_debug()
-            try:
-                await client.config_set("enable-debug-command", "yes")
-            except Exception:
-                pass
         try:
             await client.execute_command("DEBUG", "RESTART")
             return True
@@ -346,64 +338,28 @@ def _redis_port() -> int:
 
 
 def _docker_redis_container() -> str | None:
+    from urllib.parse import urlparse
+
     docker = shutil.which("docker")
-    if docker is None:
+    if docker is None or urlparse(redis_url()).hostname not in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
         return None
-    candidates: list[str] = []
+    args = [docker, "ps", "-a", "--filter", f"publish={_redis_port()}"]
     named = os.environ.get("AGENTCONNECT_REDIS_CONTAINER", "").strip()
     if named:
-        candidates.append(named)
-    candidates.append("agentconnect-m8-redis")
+        args.extend(["--filter", f"name=^/{named}$"])
     listed = subprocess.run(
-        [
-            docker,
-            "ps",
-            "-a",
-            "--filter",
-            f"publish={_redis_port()}",
-            "--format",
-            "{{.ID}}",
-        ],
+        [*args, "--format", "{{.ID}}"],
         check=False,
         capture_output=True,
         text=True,
     )
-    if listed.returncode == 0:
-        candidates.extend(
-            line.strip() for line in listed.stdout.splitlines() if line.strip()
-        )
-    for candidate in dict.fromkeys(candidates):
-        probe = subprocess.run(
-            [docker, "inspect", candidate],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if probe.returncode == 0:
-            return candidate
-    return None
-
-
-def _docker_enable_debug() -> None:
-    docker = shutil.which("docker")
-    container = _docker_redis_container()
-    if docker is None or container is None:
-        return
-    subprocess.run(
-        [
-            docker,
-            "exec",
-            container,
-            "redis-cli",
-            "CONFIG",
-            "SET",
-            "enable-debug-command",
-            "yes",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    candidates = listed.stdout.split() if listed.returncode == 0 else []
+    # Never choose an unrelated named container or guess between matches.
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _docker_restart_redis() -> None:

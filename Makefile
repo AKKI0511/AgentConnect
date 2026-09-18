@@ -17,7 +17,6 @@ RESULTS := benchmarks/runtime/results
 PERF := uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off --benchmark-columns=min,median,max,mean,stddev,rounds
 
 perf:
-	mkdir -p $(RESULTS)
 	$(PERF) benchmarks/runtime/test_phases.py --benchmark-json=$(RESULTS)/phases.json --junitxml=$(RESULTS)/phases.xml
 	$(PERF) benchmarks/runtime/test_warm_find.py --benchmark-json=$(RESULTS)/warm.json --junitxml=$(RESULTS)/warm.xml
 	$(PERF) benchmarks/runtime/test_overlap.py --benchmark-json=$(RESULTS)/overlap.json --junitxml=$(RESULTS)/overlap.xml

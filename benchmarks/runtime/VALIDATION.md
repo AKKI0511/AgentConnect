@@ -47,25 +47,36 @@ CPython 3.12.8, Redis 8.10.1 at `127.0.0.1:6380/15`. The specialist `Team.join` 
 
 Linux CI on the measurement correction passed Python 3.11–3.14 on [`d24aa25`](https://github.com/AKKI0511/AgentConnect/commit/d24aa25bc5e7a73f0ee8e75b116b8bf8b7d5647b): https://github.com/AKKI0511/AgentConnect/actions/runs/35297204179.
 
-## Local default suite
+## Harness review
 
-`uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q` with required Redis on CPython 3.12.8: **691 passed**, 1 failed, 3 skipped, 5 deselected, 167.76 s. The failure was `test_warm_ranking_400_stays_within_loop_budget` (106 ms extra lag vs 80 ms). The same test passed in isolation (0.28 s). That Windows full-suite tail is the previously documented 400-member timer flake; Linux CI is the certifying run. Ruff lint/format on the touched Python files passed. Isolated `benchmarks/runtime/test_phases.py` on this host: 6 passed in 2.55 s, Profile update ranked `writer@content-squad`.
+The first migrated run on `599ae74` failed in overlap teardown because
+`asyncio.Runner.run` rejected a Task on Python 3.12. It also measured Redis
+1,000-member p95 at 259.6/259.7 ms against 250 ms. Its four-vCPU AMD EPYC 7763
+runner had Redis medians of 246.6/249.7 ms; this was not just one extreme sample.
+[Failed run and artifacts](https://github.com/AKKI0511/AgentConnect/actions/runs/35306837186).
 
-pytest-benchmark 5.3.0, `asyncio.Runner` bridge, one completed operation per timing sample (`pedantic(..., iterations=1)`). Loop lag is a separate `LoopProbe` around the same public operations. Cold indexing and Profile update keep join work inside the timed/probed window. Phases, warm hashed, overlap, neural, and stress run as separate pytest processes.
+The adapter now awaits coroutines, Tasks, and gather Futures on the same loop.
+A regression test covers pending work between calls, completed Tasks, and errors;
+it passed on CPython 3.11.12 and in the 3.12.8 default suite. The Redis helper
+no longer retries immutable configuration or picks a hard-coded unrelated container.
 
-A fresh GitHub Performance run on this harness is recorded when that workflow finishes.
+Advisor local verification, Windows CPython 3.12.8, Redis 8.10.1:
+
+- Default suite with required Redis: **693 passed**, 3 skipped, 5 deselected.
+- Warm hashed matrix: **12 passed**; Redis 1,000-member maxima 228/245 ms.
+- Overlap: **6 passed**; Redis send maximum 86 ms against a 100 ms p95 budget.
+- Cold/update/fallback: **6 passed**; real FastEmbed: **9 passed** (lag gates);
+  10,000-member stress: **1 passed**. Neural latency is measured, not gated.
+- Ruff lint and format, all three lock checks, and generated schema freshness passed.
+
+Local passes do not supersede the Linux miss. Budgets and Runtime code were not
+changed during this harness review. A new Linux Performance run must pass before
+this migration is accepted. See [README.md](README.md) for measurement boundaries
+and the commands maintained for future contributors.
 
 ## Reproduce
 
-```powershell
-docker start agentconnect-m8-redis
-$env:REDIS_URL="redis://127.0.0.1:6380/15"
-$env:AGENTCONNECT_REQUIRE_REDIS="1"
-$env:AGENTCONNECT_REQUIRE_NEURAL="1"
-$env:NO_PROXY="127.0.0.1,localhost"
-uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
-uv sync --group benchmark --extra serve --extra embeddings --extra redis
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_phases.py --benchmark-json=benchmarks/runtime/results/phases.json --junitxml=benchmarks/runtime/results/phases.xml
-```
-
-GitHub Redis DEBUG/AOF uses the documented service `command` override (`redis-server --enable-debug-command yes --appendonly yes`). Redis 8 treats `enable-debug-command` as immutable, so `CONFIG SET` after start fails. RedisStore uses `max_connections=64`.
+Use the commands in [README.md](README.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
+The review host uses the existing dedicated container `agentconnect-m8-redis` on
+port 6380. GitHub uses `redis:8.2` on port 6379, with DEBUG enabled and AOF at server
+startup. RedisStore has a 64-connection pool; this is not a replica scaling claim.

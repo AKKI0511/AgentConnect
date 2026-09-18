@@ -2,9 +2,26 @@ name: Performance
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "agentconnect/**"
+      - "benchmarks/**/*.py"
+      - "tests/support/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/perf.yml"
+  push:
+    branches: [main, team-restructure]
+    paths:
+      - "agentconnect/**"
+      - "benchmarks/**/*.py"
+      - "tests/support/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/perf.yml"
 
 concurrency:
-  group: perf-${{ github.ref }}
+  group: perf-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -14,7 +31,7 @@ jobs:
   runtime-bench:
     name: Runtime discovery benchmark
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     env:
       REDIS_URL: redis://127.0.0.1:6379/15
       AGENTCONNECT_REQUIRE_REDIS: "1"
@@ -85,9 +102,7 @@ jobs:
         if: always()
         with:
           name: runtime-bench
-          path: |
-            benchmarks/runtime/results/
-            .benchmarks/
+          path: benchmarks/runtime/results/
       - name: Require every group
         run: |
           set -euo pipefail

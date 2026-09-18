@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
-from typing import Any, TypeVar
+from collections.abc import Awaitable
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -15,8 +15,13 @@ class AsyncBridge:
     def __init__(self) -> None:
         self._runner = asyncio.Runner()
 
-    def run(self, coro: Coroutine[Any, Any, T]) -> T:
-        return self._runner.run(coro)
+    def run(self, awaitable: Awaitable[T]) -> T:
+        # Runner.run only accepts coroutines on Python 3.11–3.13. Tasks and
+        # gather Futures also occur when a benchmark overlaps operations.
+        async def wait() -> T:
+            return await awaitable
+
+        return self._runner.run(wait())
 
     def close(self) -> None:
         self._runner.close()

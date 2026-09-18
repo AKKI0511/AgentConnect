@@ -99,18 +99,6 @@ class LoopProbe:
         return list(self.intervals)
 
 
-async def timer_delays(
-    samples: int = 8, sleep_for: float = LOOP_PROBE_SLEEP_S
-) -> list[float]:
-    """Measure idle event-loop intervals. Prefer :func:`probe_during` under load."""
-    delays: list[float] = []
-    for _ in range(samples):
-        started = time.perf_counter()
-        await asyncio.sleep(sleep_for)
-        delays.append(time.perf_counter() - started)
-    return delays
-
-
 def assert_loop_responsive(
     intervals: list[float], *, members: int, rebuild: bool = False
 ) -> None:

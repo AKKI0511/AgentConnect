@@ -30,6 +30,7 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+        command: redis-server --enable-debug-command yes --appendonly yes
     steps:
       - uses: actions/checkout@v7
         with:
@@ -38,9 +39,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --locked --extra serve --extra cli --extra embeddings --extra redis
-      - name: Enable Redis DEBUG and AOF
-        run: |
-          uv run --no-sync python -c "import os, redis; c=redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True); c.config_set('enable-debug-command','yes'); c.config_set('appendonly','yes')"
       - name: Runtime benchmark
         run: uv run --no-sync python tests/m8/bench.py --require-neural --stress --out tests/m8/results/latest.json
       - uses: actions/upload-artifact@v4

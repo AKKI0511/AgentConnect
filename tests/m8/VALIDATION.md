@@ -60,4 +60,4 @@ uv run --extra serve --extra cli --extra index --extra openai --extra redis pyte
 uv run --extra serve --extra embeddings --extra redis python tests/m8/bench.py --internal-phases
 ```
 
-GitHub Redis DEBUG/AOF is `CONFIG SET` after the stock `redis:8.2` image starts. RedisStore uses `max_connections=64`.
+GitHub Redis DEBUG/AOF uses the documented service `command` override (`redis-server --enable-debug-command yes --appendonly yes`). Redis 8 treats `enable-debug-command` as immutable, so `CONFIG SET` after start fails. RedisStore uses `max_connections=64`.

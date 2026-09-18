@@ -1,4 +1,8 @@
-"""Hashed discovery budgets on the supported single-Runtime sizes."""
+"""Hashed discovery behavior on the supported single-Runtime sizes.
+
+Warm-find p95 budgets are enforced by ``tests/m8/bench.py``, not the
+default pytest suite.
+"""
 
 from __future__ import annotations
 
@@ -76,6 +80,7 @@ async def _measure_team_find(team, token: str, samples: int = 10) -> list[float]
     return times
 
 
+@pytest.mark.perf
 @pytest.mark.parametrize("size", [10, 100])
 async def test_hashed_warm_team_find_meets_latency_budget(size: int):
     store = MemoryStore()

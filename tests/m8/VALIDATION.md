@@ -10,7 +10,9 @@ Linux GitHub `CI` and `Performance` on this commit are the release evidence. Win
 
 https://github.com/AKKI0511/AgentConnect/actions/runs/35290517112
 
-Linux CPython **3.11, 3.12, 3.13, 3.14** with required Redis 8.2, plus Code and schema, Windows imports, and distribution install: **pass**.
+Linux CPython **3.11, 3.12, 3.13, 3.14** with required Redis 8.2, plus Code and schema, Windows imports, and distribution install: **pass** on `a0a89f4`.
+
+`fc0d6ad` (validation report only) failed Python 3.11 on `test_hashed_warm_team_find_meets_latency_budget[100]` (p95 75.6 ms vs 50 ms, 10 samples in the default suite). That check belongs to Performance, not default CI. 3.12–3.14 passed on the same commit.
 
 Earlier commits on this branch are not that result: `c772acb` failed YAML parse (`NO_PROXY`/`no_proxy`); `95555eb` failed HTTP warmup counts and Redis restart discovery; `c9b3173` passed CI and failed Performance.
 

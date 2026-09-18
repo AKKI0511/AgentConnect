@@ -44,7 +44,7 @@ mcp = [
     "mcp[cli] (>=2.1.1,<3.0.0)",
 ]
 redis = [
-    "redis (>=5.2.1,<6.0.0)",
+    "redis[hiredis] (>=5.2.1,<6.0.0)",
 ]
 aiagent = [
     "litellm (>=1.40.0,<3.0.0) ; python_version < '3.15'",

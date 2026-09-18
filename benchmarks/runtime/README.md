@@ -37,7 +37,8 @@ phase timings include that probe's final tick; their gate is loop lag, not laten
 
 Budgets live in [tests/support/budgets.py](../../tests/support/budgets.py). These
 are workload-specific regression gates, not latency guarantees for every machine
-or a claim that 1,000 agents can all execute simultaneously. Do not increase a
+or a claim that 1,000 agents can all execute simultaneously. The optional Redis
+extra includes Redis's compiled hiredis response parser. Do not increase a
 budget or retry until green to hide a failure. Check the failed samples and host
 conditions; explain any rerun or changed workload.
 

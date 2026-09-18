@@ -69,10 +69,19 @@ Advisor local verification, Windows CPython 3.12.8, Redis 8.10.1:
   10,000-member stress: **1 passed**. Neural latency is measured, not gated.
 - Ruff lint and format, all three lock checks, and generated schema freshness passed.
 
-Local passes do not supersede the Linux miss. Budgets and Runtime code were not
-changed during this harness review. A new Linux Performance run must pass before
-this migration is accepted. See [README.md](README.md) for measurement boundaries
-and the commands maintained for future contributors.
+[The next Linux run](https://github.com/AKKI0511/AgentConnect/actions/runs/35311910082)
+confirmed the adapter correction: phases, overlap, neural, and stress passed.
+Redis 1,000-member warm p95 still missed at 267.1/270.9 ms. Normal CI passed
+Python 3.11–3.14 on that revision. Neither failure was discarded or reclassified.
+
+The Redis extra now includes the official `redis[hiredis]` compiled response
+parser, recorded in benchmark provenance. A local trial at 1,000 members had
+Redis embedded/HTTP medians of 178/176 ms, versus 186/197 ms in the earlier local
+matrix. Different runs have noise; the unchanged full Linux gates must still pass.
+No Runtime algorithm or budget was changed for this adjustment. With hiredis
+3.4.1, the local CPython 3.12.8 suite again passed **693 tests**, with 3 skipped
+and 5 deselected. Redis store and adapter checks passed **14 tests** on CPython
+3.11.12. Ruff and all three lock checks passed.
 
 ## Reproduce
 

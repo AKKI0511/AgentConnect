@@ -96,6 +96,7 @@ def pytest_benchmark_update_json(
         },
         "runtime_packages": {
             "redis": _package_version("redis"),
+            "hiredis": _package_version("hiredis"),
             "httpx": _package_version("httpx"),
             "pydantic": _package_version("pydantic"),
             "psutil": _package_version("psutil"),

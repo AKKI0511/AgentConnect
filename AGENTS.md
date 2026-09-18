@@ -39,11 +39,22 @@ Website pages are self-contained. The root `CHANGELOG.md` is the canonical relea
 
 uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers six optional shortcuts: check, format, test, perf, docs, and docs-preview.
 
+When you add or change dependencies, extras, or dependency groups in any `pyproject.toml`, refresh every lockfile CI checks and commit those `uv.lock` files in the same revision. Do not push a dependency change without the matching locks. CI runs `uv lock --check` on the library and on `examples/quickstart` and `examples/recipes`.
+
 ```bash
+uv lock
+uv lock --directory examples/quickstart
+uv lock --directory examples/recipes
+uv lock --check
+uv lock --check --directory examples/quickstart
+uv lock --check --directory examples/recipes
 uv sync --extra serve --extra cli --extra index --extra openai --extra redis
+```
+
+```bash
 uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/agent/test_session.py -q
 uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
-uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_phases.py/test_phases.py
+uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_phases.py
 uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
 uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
 ```

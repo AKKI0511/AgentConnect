@@ -491,7 +491,7 @@ async def _run_overlap(store_kind: str) -> dict[str, Any]:
 
 
 async def _run_long_profile_phases(store_kind: str) -> list[dict[str, Any]]:
-    """Cold index, warm ranking, and one Profile update on public Team.find."""
+    """Cold index, warm ranking, and a Team.join Profile update plus find."""
     store = await _open_store("memory" if store_kind == "memory" else "redis")
     team = await start_team(store, embeddings=HashedEmbedder())
     members = LONG_PROFILE_MEMBERS
@@ -564,17 +564,19 @@ async def _run_long_profile_phases(store_kind: str) -> list[dict[str, Any]]:
                 top=found["matches"][0]["address"],
             )
         )
-        await join_member(
-            team,
-            "writer",
-            agent_did=writer_did,
-            profile=specialist_profile(),
-        )
+
+        async def _update_and_rank():
+            await join_member(
+                team,
+                "writer",
+                agent_did=writer_did,
+                profile=specialist_profile(),
+            )
+            return await team.find(held["token"], "missing terms and contract risk")
+
         started = time.perf_counter()
         found, intervals = await probe_during(
-            team.find(held["token"], "missing terms and contract risk"),
-            members=members,
-            enforce=False,
+            _update_and_rank(), members=members, enforce=False
         )
         elapsed = time.perf_counter() - started
         top = found["matches"][0]["address"]

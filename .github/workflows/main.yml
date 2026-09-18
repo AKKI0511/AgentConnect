@@ -59,7 +59,6 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
-        command: redis-server --enable-debug-command yes --appendonly yes
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +71,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked --extra serve --extra cli --extra index --extra openai --extra redis
+      - name: Enable Redis DEBUG and AOF
+        run: |
+          uv run --no-sync python -c "import os, redis; c=redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True); c.config_set('enable-debug-command','yes'); c.config_set('appendonly','yes')"
       - run: uv run --no-sync pytest tests/ -q
 
   windows-imports:

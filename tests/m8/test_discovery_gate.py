@@ -367,32 +367,59 @@ async def test_runtime_cold_long_profiles_stay_responsive():
         await store.close()
 
 
-async def test_runtime_profile_update_ranks_new_skill():
+async def _roster_for_profile_update():
     store = MemoryStore()
     team = await start_team(store, embeddings=HashedEmbedder())
     writer_did = make_did("writer")
-    try:
+    await join_member(team, "writer", agent_did=writer_did, profile=short_profile(0))
+    for index in range(7):
+        name = f"agent{index:02d}"
         await join_member(
-            team, "writer", agent_did=writer_did, profile=short_profile(0)
+            team,
+            name,
+            agent_did=make_did(name),
+            profile=heavy_profile(f"task{index:02d}"),
         )
-        for index in range(7):
-            name = f"agent{index:02d}"
-            await join_member(
-                team,
-                name,
-                agent_did=make_did(name),
-                profile=heavy_profile(f"task{index:02d}"),
-            )
-        caller = await join_member(team, "researcher")
-        token = caller["session_token"]
+    caller = await join_member(team, "researcher")
+    return store, team, writer_did, caller["session_token"]
+
+
+async def test_runtime_profile_update_ranks_new_skill():
+    store, team, writer_did, token = await _roster_for_profile_update()
+
+    async def update_and_rank():
         await join_member(
             team, "writer", agent_did=writer_did, profile=specialist_profile()
         )
-        found, _intervals = await probe_during(
-            team.find(token, "missing terms and contract risk"),
-            members=8,
-        )
+        return await team.find(token, "missing terms and contract risk")
+
+    try:
+        found, _intervals = await probe_during(update_and_rank(), members=8)
         assert found["matches"][0]["address"] == "writer@content-squad"
+    finally:
+        await team.stop()
+        await store.close()
+
+
+async def test_injected_profile_update_stall_fails_the_gate():
+    store, team, writer_did, token = await _roster_for_profile_update()
+    real_join = team.join
+
+    async def stalled_join(*args: Any, **kwargs: Any):
+        time.sleep(0.2)
+        return await real_join(*args, **kwargs)
+
+    team.join = stalled_join
+
+    async def update_and_rank():
+        await join_member(
+            team, "writer", agent_did=writer_did, profile=specialist_profile()
+        )
+        return await team.find(token, "missing terms and contract risk")
+
+    try:
+        with pytest.raises(AssertionError, match="extra lag"):
+            await probe_during(update_and_rank(), members=8)
     finally:
         await team.stop()
         await store.close()

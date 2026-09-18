@@ -167,8 +167,9 @@ class RedisStore(Store):
                 "Install with: pip install 'agentconnect[redis]'"
             ) from exc
 
-        # Enough concurrent apply/find clients for Runtime bursts. Directory
-        # reads still batch MGET so they cannot open one connection per key.
+        # redis-py raises Too many connections at 16 when overlapping apply()
+        # pins WATCH pipelines. 64 covers those bursts; Directory still batches
+        # MGET so ranking cannot open one client per key.
         self._redis = Redis.from_url(
             self._url,
             decode_responses=True,

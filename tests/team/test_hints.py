@@ -6,9 +6,9 @@ import asyncio
 
 import pytest
 from tests.agent.conftest import EchoAgent
-from tests.m8.budgets import WAIT_AMPLIFICATION_HINTS_S, WAIT_WITHOUT_HINTS_S
-from tests.m8.stores import open_m8_store
-from tests.m8.support import start_team
+from tests.support.budgets import WAIT_AMPLIFICATION_HINTS_S, WAIT_WITHOUT_HINTS_S
+from tests.support.stores import open_store
+from tests.support.runtime import start_team
 
 from agentconnect.team.store.memory import MemoryStore
 
@@ -28,7 +28,7 @@ def _silence_hints(team) -> None:
 @pytest.mark.parametrize("store_kind", _STORE_KINDS)
 @pytest.mark.parametrize("via_http", [False, True], ids=["embedded", "http"])
 async def test_completes_without_process_local_hints(store_kind: str, via_http: bool):
-    store = await open_m8_store(store_kind)
+    store = await open_store(store_kind)
     team = await start_team(store, lease_ttl_seconds=8, wait_hold_seconds=0.3)
     _silence_hints(team)
     writer = EchoAgent(name="writer")

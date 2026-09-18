@@ -38,11 +38,61 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.12"
-      - run: uv sync --locked --extra serve --extra cli --extra embeddings --extra redis
-      - name: Runtime benchmark
-        run: uv run --no-sync python tests/m8/bench.py --require-neural --stress --out tests/m8/results/latest.json
+      - run: uv sync --locked --group benchmark --extra serve --extra cli --extra embeddings --extra redis
+      - name: Create result directory
+        run: mkdir -p benchmarks/runtime/results
+      - name: Cold, Profile update, fallback
+        id: phases
+        continue-on-error: true
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_phases.py
+          --benchmark-json=benchmarks/runtime/results/phases.json
+          --junitxml=benchmarks/runtime/results/phases.xml
+      - name: Hashed warm find
+        id: warm
+        continue-on-error: true
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_warm_find.py
+          --benchmark-json=benchmarks/runtime/results/warm.json
+          --junitxml=benchmarks/runtime/results/warm.xml
+      - name: Overlap send, renew, expiry
+        id: overlap
+        continue-on-error: true
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_overlap.py
+          --benchmark-json=benchmarks/runtime/results/overlap.json
+          --junitxml=benchmarks/runtime/results/overlap.xml
+      - name: Neural FastEmbed
+        id: neural
+        continue-on-error: true
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_neural.py
+          --benchmark-json=benchmarks/runtime/results/neural.json
+          --junitxml=benchmarks/runtime/results/neural.xml
+      - name: Hashed stress
+        id: stress
+        continue-on-error: true
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_stress.py
+          --benchmark-json=benchmarks/runtime/results/stress.json
+          --junitxml=benchmarks/runtime/results/stress.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: m8-runtime-bench
-          path: tests/m8/results/latest.json
+          name: runtime-bench
+          path: |
+            benchmarks/runtime/results/
+            .benchmarks/
+      - name: Require every group
+        run: |
+          set -euo pipefail
+          test "${{ steps.phases.outcome }}" = "success"
+          test "${{ steps.warm.outcome }}" = "success"
+          test "${{ steps.overlap.outcome }}" = "success"
+          test "${{ steps.neural.outcome }}" = "success"
+          test "${{ steps.stress.outcome }}" = "success"

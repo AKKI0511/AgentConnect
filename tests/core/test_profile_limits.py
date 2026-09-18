@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agentconnect.core.profile import AgentProfile
-from tests.m8.support import heavy_profile, short_profile, specialist_profile
+from tests.support.runtime import heavy_profile, short_profile, specialist_profile
 
 
 def test_short_specialist_and_heavy_profiles_validate():

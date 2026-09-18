@@ -1,4 +1,4 @@
-"""Yielding memory store, Redis require-path, and call counters for M8."""
+"""Yielding memory store, Redis require-path, and call counters."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ DEFAULT_REDIS_URL = "redis://127.0.0.1:6380/15"
 
 
 def redis_url() -> str:
-    """Return the Redis URL for M8. Local default is the dedicated 6380 instance."""
+    """Return the Redis URL. Local default is the dedicated 6380 instance."""
     return os.environ.get("REDIS_URL", DEFAULT_REDIS_URL)
 
 
@@ -153,7 +153,7 @@ class YieldingStore(Store):
 
 
 class CountingStore(Store):
-    """Count Store calls and approximate write bytes for M8 reports."""
+    """Count Store calls and approximate write bytes for reports."""
 
     def __init__(self, inner: Store) -> None:
         self._inner = inner
@@ -270,9 +270,9 @@ class CountingStore(Store):
 
 
 async def connect_redis(prefix: str | None = None) -> RedisStore:
-    """Open Redis or skip/fail according to the M8 require-path."""
+    """Open Redis or skip/fail according to the require-path."""
     url = redis_url()
-    store = RedisStore(url, prefix=prefix or f"ac:m8:{uuid.uuid4()}")
+    store = RedisStore(url, prefix=prefix or f"ac:test:{uuid.uuid4()}")
     try:
         await store.open()
         await store.ping()
@@ -288,7 +288,7 @@ async def connect_redis(prefix: str | None = None) -> RedisStore:
 
 
 async def restart_redis() -> None:
-    """Restart the Redis server used by M8 and wait until PING succeeds.
+    """Restart the Redis server used by tests and wait until PING succeeds.
 
     Uses ``DEBUG RESTART`` after enabling the debug command when needed.
     Falls back to restarting a Docker Redis that publishes the URL port,
@@ -481,12 +481,16 @@ async def drop_http_send(origin: str, token: str, body: dict[str, Any]) -> None:
         pass
 
 
-async def open_m8_store(kind: str) -> Store:
-    """Return a yielding memory store or a required/skippable Redis store."""
+async def open_store(kind: str) -> Store:
+    """Return a yielding memory store, MemoryStore, or required/skippable Redis."""
     if kind == "yielding-memory":
         store = YieldingStore()
         await store.open()
         return store
+    if kind == "memory":
+        store = MemoryStore()
+        await store.open()
+        return store
     if kind == "redis":
         return await connect_redis()
-    raise ValueError(f"unknown M8 store kind: {kind}")
+    raise ValueError(f"unknown store kind: {kind}")

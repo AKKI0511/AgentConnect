@@ -11,7 +11,7 @@ from typing import Sequence
 
 import pytest
 from pydantic import ValidationError
-from tests.m8.support import probe_during
+from tests.support.runtime import probe_during
 from tests.team.conftest import join_member, make_did, profile
 
 from agentconnect.core.directory import FindResult

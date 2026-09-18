@@ -6,8 +6,8 @@ import asyncio
 import time
 
 import pytest
-from tests.m8.budgets import extra_lag
-from tests.m8.support import LoopProbe, probe_during
+from tests.support.budgets import extra_lag
+from tests.support.runtime import LoopProbe, probe_during
 
 pytestmark = pytest.mark.asyncio
 

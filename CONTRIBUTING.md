@@ -16,19 +16,24 @@ Use your fork's URL if contributing through a fork. Pull requests target `main`.
 
 ```bash
 uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
-uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
-uvx ruff@latest format agentconnect tests examples docs/generate_docs.py
+uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
+uvx ruff@latest format agentconnect tests examples benchmarks docs/generate_docs.py
 ```
 
 A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
 
-Runtime discovery performance is a separate workflow. Pull-request CI keeps correctness and real Redis. Release and hot-path Directory/Runtime changes also run:
+Runtime discovery performance is a separate workflow. Pull-request CI keeps correctness and real Redis. Release and hot-path Directory/Runtime changes also run `make perf`, which invokes sequential pytest groups under `benchmarks/runtime/` with pytest-benchmark JSON and JUnit output:
 
 ```bash
-uv run --extra serve --extra embeddings --extra redis python tests/m8/bench.py --require-neural --stress
+uv sync --group benchmark --extra serve --extra embeddings --extra redis
+uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_phases.py --benchmark-json=benchmarks/runtime/results/phases.json --junitxml=benchmarks/runtime/results/phases.xml
+uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_warm_find.py --benchmark-json=benchmarks/runtime/results/warm.json --junitxml=benchmarks/runtime/results/warm.xml
+uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_overlap.py --benchmark-json=benchmarks/runtime/results/overlap.json --junitxml=benchmarks/runtime/results/overlap.xml
+uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_neural.py --benchmark-json=benchmarks/runtime/results/neural.json --junitxml=benchmarks/runtime/results/neural.xml
+uv run --group benchmark --extra serve --extra embeddings --extra redis pytest -q --benchmark-warmup=off benchmarks/runtime/test_stress.py --benchmark-json=benchmarks/runtime/results/stress.json --junitxml=benchmarks/runtime/results/stress.xml
 ```
 
-That command writes `tests/m8/results/latest.json`. GitHub Actions workflow `Performance` runs it on demand with FastEmbed required. Do not skip neural coverage there.
+GitHub Actions workflow `Performance` runs those groups on demand with FastEmbed required. Generated JSON and JUnit files under `benchmarks/runtime/results/` are ignored. The curated historical baseline is `benchmarks/runtime/baseline.json`. Do not skip neural coverage there.
 
 After changing `pyproject.toml` dependencies or extras, refresh every lockfile CI checks, then commit them together:
 

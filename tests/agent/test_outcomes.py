@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
-from tests.m8.stores import open_m8_store
-from tests.m8.support import start_team
+from tests.support.stores import open_store
+from tests.support.runtime import start_team
 
 from agentconnect.agent import BaseAgent, Context
 from agentconnect.core.base import JsonValue
@@ -53,7 +53,7 @@ async def _join_pair(
 )
 @pytest.mark.parametrize("via_http", [False, True], ids=["embedded", "http"])
 async def test_completed_echo(store_kind: str, via_http: bool):
-    store = await open_m8_store(store_kind)
+    store = await open_store(store_kind)
     team = await start_team(store, lease_ttl_seconds=8)
     writer = EchoAgent(name="writer")
     researcher = EchoAgent(name="researcher")
@@ -76,7 +76,7 @@ async def test_completed_echo(store_kind: str, via_http: bool):
 @pytest.mark.parametrize("store_kind", _STORE_KINDS)
 @pytest.mark.parametrize("via_http", [False, True], ids=["embedded", "http"])
 async def test_completed_null_content(store_kind: str, via_http: bool):
-    store = await open_m8_store(store_kind)
+    store = await open_store(store_kind)
     team = await start_team(store, lease_ttl_seconds=8)
     writer = NullContentAgent(name="writer")
     researcher = EchoAgent(name="researcher")
@@ -96,7 +96,7 @@ async def test_completed_null_content(store_kind: str, via_http: bool):
 @pytest.mark.parametrize("store_kind", _STORE_KINDS)
 @pytest.mark.parametrize("via_http", [False, True], ids=["embedded", "http"])
 async def test_declined(store_kind: str, via_http: bool):
-    store = await open_m8_store(store_kind)
+    store = await open_store(store_kind)
     team = await start_team(store, lease_ttl_seconds=8)
     writer = DeclineAgent(name="writer")
     researcher = EchoAgent(name="researcher")
@@ -115,7 +115,7 @@ async def test_declined(store_kind: str, via_http: bool):
 @pytest.mark.parametrize("store_kind", _STORE_KINDS)
 @pytest.mark.parametrize("via_http", [False, True], ids=["embedded", "http"])
 async def test_failed(store_kind: str, via_http: bool):
-    store = await open_m8_store(store_kind)
+    store = await open_store(store_kind)
     team = await start_team(store, lease_ttl_seconds=8)
     writer = BoomAgent(name="writer")
     researcher = EchoAgent(name="researcher")
@@ -135,7 +135,7 @@ async def test_failed(store_kind: str, via_http: bool):
 @pytest.mark.parametrize("store_kind", _STORE_KINDS)
 @pytest.mark.parametrize("via_http", [False, True], ids=["embedded", "http"])
 async def test_expired_deadline(store_kind: str, via_http: bool):
-    store = await open_m8_store(store_kind)
+    store = await open_store(store_kind)
     team = await start_team(
         store, lease_ttl_seconds=8, sweep_interval_seconds=0.05, wait_hold_seconds=0.2
     )

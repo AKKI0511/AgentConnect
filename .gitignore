@@ -194,6 +194,9 @@ data/
 # Local CLI state from `agentconnect up`
 .agentconnect/
 
+# pytest-benchmark
+.benchmarks/
+
 # Project specific
 .cursor/
 .agents/

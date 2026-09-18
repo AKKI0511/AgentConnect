@@ -1,4 +1,4 @@
-"""Predetermined M8 pass/fail budgets.
+"""Predetermined Runtime pass/fail budgets.
 
 These numbers were fixed from the M7 hashed-probe evidence in the
 internal roadmap (warm medians 11ms/46ms/116ms at 100/400/1,000 short
@@ -45,6 +45,7 @@ FIND_P50_S = {
 
 WARM_SAMPLES = 20
 CONCURRENT_FINDERS = 8
+HTTP_WARMUPS = 3
 
 # A 50ms handler with in-process hints should not wait the full hold.
 WAIT_AMPLIFICATION_HINTS_S = 0.200

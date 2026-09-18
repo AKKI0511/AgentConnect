@@ -1,7 +1,14 @@
 """Shared pytest hooks."""
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
+
+import pytest
+import pytest_asyncio
+
+STORE_KINDS = ("yielding-memory", "redis")
 
 
 def pytest_configure(config) -> None:
@@ -17,8 +24,6 @@ def pytest_configure(config) -> None:
 
 def pytest_collection_modifyitems(items) -> None:
     """Mark Redis-backed tests at collection time so ``-m redis`` works."""
-    import pytest
-
     marker = pytest.mark.redis
     for item in items:
         names = set(getattr(item, "fixturenames", ()))
@@ -30,3 +35,23 @@ def pytest_collection_modifyitems(items) -> None:
         params = callspec.params
         if params.get("store_kind") == "redis" or params.get("kind") == "redis":
             item.add_marker(marker)
+
+
+@pytest_asyncio.fixture(
+    params=STORE_KINDS, ids=list(STORE_KINDS), loop_scope="function"
+)
+async def runtime_store(request: pytest.FixtureRequest):
+    from tests.support.stores import open_store
+
+    kind = str(request.param)
+    if kind == "redis":
+        request.node.add_marker(pytest.mark.redis)
+    store = await open_store(kind)
+    try:
+        yield store
+    finally:
+        try:
+            await store.clear()
+        except Exception:
+            pass
+        await store.close()

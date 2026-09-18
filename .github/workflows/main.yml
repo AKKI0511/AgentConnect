@@ -31,8 +31,8 @@ jobs:
           node-version: "lts/*"
       - name: Lint and formatting
         run: |
-          uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
-          uvx ruff@latest format --check agentconnect tests examples docs/generate_docs.py
+          uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
+          uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
       - name: Lockfiles and generated schema
         run: |
           uv lock --check

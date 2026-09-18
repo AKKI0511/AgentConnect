@@ -1,0 +1,44 @@
+{
+  "source": "https://github.com/AKKI0511/AgentConnect/actions/runs/35290537847",
+  "revision": "a0a89f42c296c9db752056262d7be334bee34236",
+  "harness": "tests/m8/bench.py (retired)",
+  "note": "Certifying M8 GitHub Performance artifact on the pre-pytest-benchmark harness. Unchanged hashed/neural/overlap numbers. Profile-update extra lag on this run timed only Team.find after join and is not the Profile-update gate.",
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux 6.17.0-1022-azure x86_64 glibc 2.39",
+    "hashed": {"name": "hashed", "dim": 384},
+    "neural": {
+      "backend": "fastembed:BAAI/bge-small-en-v1.5",
+      "packages": {
+        "fastembed": "0.8.0",
+        "onnxruntime": "1.30.0",
+        "numpy": "2.5.3"
+      }
+    },
+    "runtime_packages": {
+      "redis": "5.3.1",
+      "httpx": "0.28.1",
+      "pydantic": "2.13.5"
+    },
+    "redis_image": "redis:8.2.9"
+  },
+  "cases": {
+    "hashed redis embedded 1000 p95_s": 0.153,
+    "hashed redis HTTP 1000 p95_s": 0.159,
+    "hashed memory embedded 1000 p95_s": 0.093,
+    "hashed redis embedded 100 p95_s": 0.015,
+    "overlap hashed redis 400 send p95_s": 0.035,
+    "hashed memory cold extra_lag_s": 0.0017,
+    "hashed redis cold extra_lag_s": 0.0023,
+    "fallback rebuild memory extra_lag_s": 0.0063,
+    "fallback rebuild redis extra_lag_s": 0.0060,
+    "neural 1000 memory embedded p95_s": 0.108,
+    "hashed 10000 stress extra_lag_s": 0.151
+  },
+  "budgets": {
+    "hashed_p95_s": {"10": 0.025, "100": 0.050, "400": 0.100, "1000": 0.250},
+    "send_during_find_p95_s": 0.100,
+    "rebuild_lag_s": 0.080,
+    "stress_lag_s": 0.500
+  }
+}

@@ -1,6 +1,6 @@
 """Hashed discovery behavior on the supported single-Runtime sizes.
 
-Warm-find p95 budgets are enforced by ``tests/m8/bench.py``, not the
+Warm-find p95 budgets are enforced by ``benchmarks/runtime/``, not the
 default pytest suite.
 """
 
@@ -12,18 +12,16 @@ import uuid
 from typing import Any, Sequence
 
 import pytest
-from tests.m8.budgets import (
+from tests.support.budgets import (
     SEND_DURING_FIND_P95_S,
     WARM_RANK_MEMBERS,
-    find_p95_budget_s,
     percentile,
 )
-from tests.m8.stores import CountingStore, YieldingStore, open_m8_store
-from tests.m8.support import (
+from tests.support.stores import CountingStore, YieldingStore, open_store
+from tests.support.runtime import (
     FailingEmbedder,
     assert_loop_responsive,
     heavy_profile,
-    join_roster,
     probe_during,
     short_profile,
     specialist_profile,
@@ -70,37 +68,6 @@ async def _warm_directory(
     return directory, members
 
 
-async def _measure_team_find(team, token: str, samples: int = 10) -> list[float]:
-    times: list[float] = []
-    for _ in range(samples):
-        started = time.perf_counter()
-        found = await team.find(token, "similar paperwork")
-        times.append(time.perf_counter() - started)
-        assert found["matches"]
-    return times
-
-
-@pytest.mark.perf
-@pytest.mark.parametrize("size", [10, 100])
-async def test_hashed_warm_team_find_meets_latency_budget(size: int):
-    store = MemoryStore()
-    team = await start_team(store)
-    try:
-        await join_roster(team, size, specialist=True)
-        caller = await join_member(team, "researcher", agent_did=make_did("researcher"))
-        await team.find(caller["session_token"], "similar paperwork")
-        times = await _measure_team_find(team, caller["session_token"], samples=10)
-        budget = find_p95_budget_s(size)
-        assert budget is not None
-        p95 = percentile(times, 95)
-        assert p95 < budget, (
-            f"hashed Team.find p95 {p95 * 1000:.1f}ms exceeds "
-            f"{budget * 1000:.0f}ms at {size}"
-        )
-    finally:
-        await team.stop()
-
-
 async def test_warm_ranking_400_stays_within_loop_budget():
     directory, members = await _warm_directory(WARM_RANK_MEMBERS)
     found, delays = await probe_during(
@@ -119,7 +86,7 @@ async def test_warm_ranking_400_stays_within_loop_budget():
 
 async def test_team_find_hashed_on_yielding_memory_and_redis():
     for kind in ("yielding-memory", "redis"):
-        store = await open_m8_store(kind)
+        store = await open_store(kind)
         team = await start_team(store)
         try:
             await join_member(

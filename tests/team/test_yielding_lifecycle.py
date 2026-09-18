@@ -1,4 +1,4 @@
-"""M8 lifecycle against a yielding memory store and real Redis."""
+"""Runtime lifecycle against a yielding memory store and real Redis."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ import uuid
 from pathlib import Path
 
 import pytest
-from tests.m8.budgets import RETENTION_CYCLES, RETENTION_SLACK_BYTES
-from tests.m8.stores import connect_redis, drop_http_send, restart_redis, redis_url
-from tests.m8.support import message_id, start_team
+from tests.support.budgets import RETENTION_CYCLES, RETENTION_SLACK_BYTES
+from tests.support.stores import connect_redis, drop_http_send, restart_redis, redis_url
+from tests.support.runtime import message_id, start_team
 from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.core.identity import AgentIdentity, issue_identity_proof
@@ -34,8 +34,8 @@ async def _join_with_proof(team: Team, identity: AgentIdentity, name: str, token
     )
 
 
-async def test_concurrent_send_accepts_one_mailbox_item(m8_store):
-    team = await start_team(m8_store, lease_ttl_seconds=8)
+async def test_concurrent_send_accepts_one_mailbox_item(runtime_store):
+    team = await start_team(runtime_store, lease_ttl_seconds=8)
     try:
         writer = await join_member(team, "writer", max_in_flight=4)
         researcher = await join_member(team, "researcher")
@@ -56,8 +56,8 @@ async def test_concurrent_send_accepts_one_mailbox_item(m8_store):
         await team.stop()
 
 
-async def test_single_use_token_admits_one_join(m8_store):
-    team = await start_team(m8_store, require_join_auth=True)
+async def test_single_use_token_admits_one_join(runtime_store):
+    team = await start_team(runtime_store, require_join_auth=True)
     writer = AgentIdentity.create_key_based()
     editor = AgentIdentity.create_key_based()
     try:
@@ -80,8 +80,8 @@ async def test_single_use_token_admits_one_join(m8_store):
         await team.stop()
 
 
-async def test_name_reuse_cannot_read_predecessor(m8_store):
-    team = await start_team(m8_store)
+async def test_name_reuse_cannot_read_predecessor(runtime_store):
+    team = await start_team(runtime_store)
     try:
         await join_member(team, "writer")
         researcher = await join_member(team, "researcher")
@@ -105,8 +105,8 @@ async def test_name_reuse_cannot_read_predecessor(m8_store):
         await team.stop()
 
 
-async def test_lost_send_response_replays_the_same_id(m8_store):
-    team = await start_team(m8_store)
+async def test_lost_send_response_replays_the_same_id(runtime_store):
+    team = await start_team(runtime_store)
     try:
         writer = await join_member(team, "writer")
         researcher = await join_member(team, "researcher")
@@ -128,8 +128,8 @@ async def test_lost_send_response_replays_the_same_id(m8_store):
         await team.stop()
 
 
-async def test_reconnect_recovers_open_ticket(m8_store):
-    team = await start_team(m8_store)
+async def test_reconnect_recovers_open_ticket(runtime_store):
+    team = await start_team(runtime_store)
     try:
         await join_member(team, "writer")
         did = make_did("researcher")
@@ -258,9 +258,11 @@ async def test_live_runtime_reconnects_after_redis_restart():
 
 @pytest.mark.redis
 async def test_abrupt_process_exit_recovers_ticket_and_mailbox(tmp_path: Path):
-    prefix = f"ac:m8:crash:{uuid.uuid4()}"
+    import tests.support.crash_worker as crash_worker
+
+    prefix = f"ac:test:crash:{uuid.uuid4()}"
     out_path = tmp_path / "crash.json"
-    worker = Path(__file__).resolve().parent / "crash_worker.py"
+    worker = Path(crash_worker.__file__)
     completed = subprocess.run(
         [
             sys.executable,
@@ -345,8 +347,8 @@ async def test_lost_http_send_replays_the_same_id():
         await store.close()
 
 
-async def test_lease_renew_extends_expiry(m8_store):
-    team = await start_team(m8_store, lease_ttl_seconds=8)
+async def test_lease_renew_extends_expiry(runtime_store):
+    team = await start_team(runtime_store, lease_ttl_seconds=8)
     try:
         writer = await join_member(team, "writer")
         researcher = await join_member(team, "researcher")
@@ -379,8 +381,8 @@ async def test_lease_renew_extends_expiry(m8_store):
         await team.stop()
 
 
-async def test_cancelled_wait_does_not_duplicate_work(m8_store):
-    team = await start_team(m8_store, wait_hold_seconds=2.0)
+async def test_cancelled_wait_does_not_duplicate_work(runtime_store):
+    team = await start_team(runtime_store, wait_hold_seconds=2.0)
     try:
         writer = await join_member(team, "writer")
         researcher = await join_member(team, "researcher")
@@ -405,8 +407,8 @@ async def test_cancelled_wait_does_not_duplicate_work(m8_store):
         await team.stop()
 
 
-async def test_expiry_closes_open_ticket(m8_store):
-    team = await start_team(m8_store, sweep_interval_seconds=0.05)
+async def test_expiry_closes_open_ticket(runtime_store):
+    team = await start_team(runtime_store, sweep_interval_seconds=0.05)
     try:
         await join_member(team, "writer")
         researcher = await join_member(team, "researcher")
@@ -435,9 +437,9 @@ async def test_expiry_closes_open_ticket(m8_store):
         await team.stop()
 
 
-async def test_retention_reclaims_completed_body(m8_store):
+async def test_retention_reclaims_completed_body(runtime_store):
     team = await start_team(
-        m8_store,
+        runtime_store,
         replay_horizon_seconds=1,
         sweep_interval_seconds=0.05,
         thread_message_limit=2,
@@ -445,7 +447,7 @@ async def test_retention_reclaims_completed_body(m8_store):
     try:
         writer = await join_member(team, "writer")
         researcher = await join_member(team, "researcher")
-        empty = await m8_store.get(RETAINED_BYTES_KEY)
+        empty = await runtime_store.get(RETAINED_BYTES_KEY)
         baseline = 0 if empty is None else int(empty)
         for _ in range(RETENTION_CYCLES):
             sent = await team.send(
@@ -474,15 +476,15 @@ async def test_retention_reclaims_completed_body(m8_store):
             )
             assert done["state"] == "completed"
         await asyncio.sleep(2.8)
-        retained = await m8_store.get(RETAINED_BYTES_KEY)
+        retained = await runtime_store.get(RETAINED_BYTES_KEY)
         current = 0 if retained is None else int(retained)
         assert current <= baseline + RETENTION_SLACK_BYTES
     finally:
         await team.stop()
 
 
-async def test_schema_rejects_extra_send_field(m8_store):
-    team = await start_team(m8_store)
+async def test_schema_rejects_extra_send_field(runtime_store):
+    team = await start_team(runtime_store)
     try:
         await join_member(team, "writer")
         researcher = await join_member(team, "researcher")

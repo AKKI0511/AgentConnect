@@ -1,4 +1,4 @@
-"""Shared helpers for M8 gate tests."""
+"""Shared Runtime test helpers."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import time
 import uuid
 from typing import Any, Awaitable, Sequence
 
-from tests.m8.budgets import LOOP_PROBE_SLEEP_S, extra_lag, loop_lag_budget_s
+from tests.support.budgets import LOOP_PROBE_SLEEP_S, extra_lag, loop_lag_budget_s
 from tests.team.conftest import join_member, make_did, profile
 
 from agentconnect.core.base import dump_public
@@ -78,7 +78,7 @@ class LoopProbe:
     async def start(self) -> None:
         self.intervals.clear()
         self._stop.clear()
-        self._task = asyncio.create_task(self._run(), name="m8-loop-probe")
+        self._task = asyncio.create_task(self._run(), name="loop-probe")
         await asyncio.sleep(0)
 
     async def _run(self) -> None:
@@ -147,7 +147,7 @@ async def probe_during(
 
 
 def platform_report() -> dict[str, str]:
-    """Interpreter and host fields for the M8 performance report."""
+    """Interpreter and host fields for performance provenance."""
     return {
         "python": sys.version.split()[0],
         "implementation": platform.python_implementation(),
@@ -209,6 +209,30 @@ def heavy_profile(label: str) -> dict[str, Any]:
             }
         )
     )
+
+
+async def http_find(client: Any, origin: str, token: str, query: str) -> dict[str, Any]:
+    """POST ``Team.find`` over HTTP. Used by correctness and benchmark tests."""
+    from agentconnect.team.http import HTTP_PREFIX
+
+    response = await client.post(
+        f"{origin}{HTTP_PREFIX}/directory/find",
+        json={"query": query},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def assert_measured_backend(team: Team, requested_name: str) -> None:
+    """Fail when the Directory measured a different backend than requested."""
+    directory = team._directory
+    if directory is None:
+        raise AssertionError("Team has no Directory")
+    if directory.using_fallback or directory.backend_name != requested_name:
+        raise AssertionError(
+            f"requested {requested_name}, but measured {directory.backend_name}"
+        )
 
 
 async def join_roster(team: Team, count: int, *, specialist: bool = False) -> None:

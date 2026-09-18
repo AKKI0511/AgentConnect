@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from tests.m8.stores import connect_redis
+from tests.support.stores import connect_redis
 from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.team import Team

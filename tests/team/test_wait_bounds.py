@@ -7,8 +7,8 @@ import time
 import tracemalloc
 
 import pytest
-from tests.m8.budgets import WAIT_AMPLIFICATION_HINTS_S, percentile
-from tests.m8.support import message_id, start_team
+from tests.support.budgets import WAIT_AMPLIFICATION_HINTS_S, percentile
+from tests.support.runtime import message_id, start_team
 from tests.team.conftest import deadline, join_member
 
 from agentconnect.team.retention import RETAINED_BYTES_KEY
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_send_lease_reply_latency_on_yielding_store():
-    from tests.m8.stores import YieldingStore
+    from tests.support.stores import YieldingStore
 
     store = YieldingStore()
     team = await start_team(store, lease_ttl_seconds=8)
@@ -103,7 +103,7 @@ async def test_find_allocation_returns_after_warm_searches():
     try:
         for index in range(40):
             name = f"agent{index:02d}"
-            from tests.m8.support import short_profile
+            from tests.support.runtime import short_profile
             from tests.team.conftest import make_did
 
             await join_member(

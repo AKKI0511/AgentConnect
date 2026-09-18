@@ -11,6 +11,7 @@ from typing import Sequence
 
 import pytest
 from pydantic import ValidationError
+from tests.support.runtime import probe_during
 from tests.team.conftest import join_member, make_did, profile
 
 from agentconnect.core.directory import FindResult
@@ -287,6 +288,11 @@ async def test_hashed_embedder_is_deterministic():
 
 
 def test_as_unit_vector_rejects_non_finite_and_wrong_dim():
+    assert as_unit_vector([3, 4.0], expected_dim=2) == [0.6, 0.8]
+    assert as_unit_vector((0.0, 0), expected_dim=2) == [0.0, 0.0]
+    for value in (True, "1.0", None):
+        with pytest.raises(ValueError, match="finite numbers"):
+            as_unit_vector([value, 0.0])
     with pytest.raises(ValueError):
         as_unit_vector([float("nan"), 0.0])
     with pytest.raises(ValueError):
@@ -729,21 +735,6 @@ def _about_3600(*, last_name: str, last_blurb: str) -> dict:
     }
 
 
-async def _timer_delays(samples: int = 8, sleep_for: float = 0.01) -> list[float]:
-    delays: list[float] = []
-    for _ in range(samples):
-        started = time.perf_counter()
-        await asyncio.sleep(sleep_for)
-        delays.append(time.perf_counter() - started)
-    return delays
-
-
-def _assert_loop_stayed_responsive(delays: list[float]) -> None:
-    """Fail on a frozen loop. Shared runners can spike past 80ms."""
-    assert min(delays) < 0.04
-    assert max(delays) < 0.3
-
-
 class _TruncatingKeyword:
     name = "openai:trunc"
     input_char_limit = 512
@@ -849,20 +840,19 @@ async def test_hashed_rebuild_keeps_event_loop_responsive():
         _member(f"agent{index:02d}", _heavy_profile(f"task{index:02d}"))
         for index in range(12)
     ]
-    task = asyncio.create_task(
+    found, delays = await probe_during(
         directory.search(
             "clause review notes",
             members,
             exclude_address="researcher@content-squad",
             limit=None,
             detail="summary",
-        )
+        ),
+        members=12,
+        rebuild=True,
     )
-    await asyncio.sleep(0)
-    delays = await _timer_delays()
-    found = await task
     assert len(found.matches) == 12
-    _assert_loop_stayed_responsive(delays)
+    assert delays
 
 
 @pytest.mark.asyncio
@@ -885,20 +875,18 @@ async def test_warm_ranking_keeps_event_loop_responsive():
         limit=None,
         detail="summary",
     )
-    task = asyncio.create_task(
+    found, delays = await probe_during(
         directory.search(
             "similar paperwork",
             members,
             exclude_address="researcher@content-squad",
             limit=None,
             detail="summary",
-        )
+        ),
+        members=400,
     )
-    await asyncio.sleep(0)
-    delays = await _timer_delays()
-    found = await task
     assert len(found.matches) == 100
-    _assert_loop_stayed_responsive(delays)
+    assert delays
 
 
 @pytest.mark.asyncio

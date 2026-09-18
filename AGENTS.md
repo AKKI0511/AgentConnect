@@ -37,15 +37,23 @@ Website pages are self-contained. The root `CHANGELOG.md` is the canonical relea
 
 ## Useful commands
 
-uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers five optional shortcuts: check, format, test, docs, and docs-preview.
+uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers six optional shortcuts: check, format, test, perf, docs, and docs-preview.
 
 ```bash
-uv sync --extra serve --extra cli --extra index
-uv run --extra serve --extra cli --extra index pytest tests/agent/test_session.py -q
-uv run --extra serve --extra cli --extra index pytest tests/ -q
-uvx ruff@latest check agentconnect tests examples docs/generate_docs.py
-uvx ruff@latest format --check agentconnect tests examples docs/generate_docs.py
+uv sync --locked --extra serve --extra cli --extra index --extra openai --extra redis
+uv run --no-sync pytest tests/ -q
+uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
+uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
 ```
+
+Replace `tests/` with a file or directory for focused checks. Redis setup and
+lockfile refresh commands are in [CONTRIBUTING.md](CONTRIBUTING.md). Dependency,
+extra, or group changes must include all affected CI-checked locks: the root,
+`examples/quickstart`, and `examples/recipes`.
+
+Performance lives under `benchmarks/runtime/` and runs separately from ordinary
+CI. [Runtime benchmarks](benchmarks/runtime/README.md) explains the commands,
+fixed budgets, and artifacts. Preserve real-backend coverage and failed evidence.
 
 Schema generation and freshness:
 
@@ -65,8 +73,14 @@ The preview is at `http://127.0.0.1:8000/`. Without `--preview`, the command onl
 
 ## Review context
 
-CI covers formatting, lockfile and schema consistency, supported Python versions, Windows imports, and distribution installation. The current support matrix is in `.github/workflows/main.yml` and package metadata is in `pyproject.toml`. Docs publish from `main`; previewing a change is local.
+CI covers formatting, lockfile and schema consistency, supported Python versions, Windows imports, distribution installation, and Redis-backed Runtime tests on Linux. The current support matrix is in `.github/workflows/main.yml` and package metadata is in `pyproject.toml`. Docs publish from `main`; previewing a change is local.
 
-Focused tests help explain a behavior change. Existing assertions, import boundaries, and supported installs remain relevant regardless of how a patch was written. A useful completion report distinguishes checks run from behavior inferred or left unverified.
+Before committing Python or toolchain changes, run the full suite and both Ruff
+checks on the final changes. Verify compatibility-sensitive changes on the minimum
+supported Python version. Refresh affected locks and generated files. Validate
+what will actually be committed, including in a shared checkout; do not weaken
+assertions or bypass hooks to make a check pass. Report the Python versions and
+checks actually run, distinguishing local results from GitHub CI. Repeat checks
+only when subsequent changes or failures justify it.
 
 A shared checkout may contain unrelated changes. Keeping those separate makes the resulting diff reviewable. [CONTRIBUTING.md](CONTRIBUTING.md) has more setup and contribution information.

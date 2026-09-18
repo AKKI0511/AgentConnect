@@ -6,11 +6,11 @@ repos:
         name: Ruff check
         entry: uvx ruff@latest check --force-exclude --fix
         language: system
-        files: ^(agentconnect|tests|examples)/|^docs/generate_docs\.py$
+        files: ^(agentconnect|tests|examples|benchmarks)/|^docs/generate_docs\.py$
         types_or: [python, pyi]
       - id: ruff-format
         name: Ruff format
         entry: uvx ruff@latest format --force-exclude
         language: system
-        files: ^(agentconnect|tests|examples)/|^docs/generate_docs\.py$
+        files: ^(agentconnect|tests|examples|benchmarks)/|^docs/generate_docs\.py$
         types_or: [python, pyi]

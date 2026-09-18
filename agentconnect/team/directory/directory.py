@@ -76,6 +76,8 @@ class Directory:
         self._lock = asyncio.Lock()
         self._instance_nonce = secrets.token_hex(8)
         self._cpu = _OwnedPool(label="ac-dir-cpu")
+        self.search_in_flight = 0
+        self.search_in_flight_peak = 0
 
     @property
     def backend_name(self) -> str:
@@ -124,17 +126,23 @@ class Directory:
         if not candidates:
             return FindResult(matches=[])
 
-        async with self._lock:
-            try:
-                return await self._rank_locked(
-                    query, candidates, limit=limit, detail=detail
-                )
-            except _EmbeddingFailed:
-                if not self._activate_fallback():
-                    raise
-                return await self._rank_locked(
-                    query, candidates, limit=limit, detail=detail
-                )
+        self.search_in_flight += 1
+        if self.search_in_flight > self.search_in_flight_peak:
+            self.search_in_flight_peak = self.search_in_flight
+        try:
+            async with self._lock:
+                try:
+                    return await self._rank_locked(
+                        query, candidates, limit=limit, detail=detail
+                    )
+                except _EmbeddingFailed:
+                    if not self._activate_fallback():
+                        raise
+                    return await self._rank_locked(
+                        query, candidates, limit=limit, detail=detail
+                    )
+        finally:
+            self.search_in_flight -= 1
 
     def _activate_fallback(self) -> bool:
         if self._fallback or self._active.name == HashedEmbedder.name:
@@ -161,14 +169,9 @@ class Directory:
         query_vector = await self._embed_query(query, expected_dim=space.dim)
         keys = [_VECTOR_KEY.format(name=str(member["name"])) for member in candidates]
         records = await self._store.get_many(keys)
-        fingerprints = [_fingerprint(member["profile"]) for member in candidates]
-        vectors: list[list[float] | None] = []
-        missing: list[int] = []
-        for index, record in enumerate(records):
-            vector = _usable_vector(record, space, fingerprints[index])
-            vectors.append(vector)
-            if vector is None:
-                missing.append(index)
+        vectors, fingerprints, missing = await self._prepare_vectors(
+            records, candidates, space
+        )
         if missing:
             batch = max_batch(self._active)
             for start in range(0, len(missing), batch):
@@ -203,6 +206,23 @@ class Directory:
             for _, address in scored[:cap]
         ]
         return FindResult(matches=matches)
+
+    async def _prepare_vectors(
+        self,
+        records: Sequence[Any],
+        candidates: Sequence[Mapping[str, Any]],
+        space: _Space,
+    ) -> tuple[list[list[float] | None], list[str], list[int]]:
+        profiles = [member["profile"] for member in candidates]
+        if len(profiles) >= _SCORE_OFFLOAD_MIN:
+            return await self._cpu.run(
+                _prepare_candidate_vectors,
+                list(records),
+                profiles,
+                space.id,
+                space.dim,
+            )
+        return _prepare_candidate_vectors(records, profiles, space.id, space.dim)
 
     async def _score(
         self,
@@ -369,6 +389,27 @@ def _profile_units(profile: Mapping[str, Any]) -> list[str]:
         if text:
             units.append(text)
     return units
+
+
+def _prepare_candidate_vectors(
+    records: Sequence[Any],
+    profiles: Sequence[Mapping[str, Any]],
+    space_id: str,
+    dim: int,
+) -> tuple[list[list[float] | None], list[str], list[int]]:
+    """Fingerprint Profiles and validate stored vectors off the event loop."""
+    space = _Space(id=space_id, backend="", dim=dim)
+    vectors: list[list[float] | None] = []
+    fingerprints: list[str] = []
+    missing: list[int] = []
+    for index, (record, profile) in enumerate(zip(records, profiles, strict=True)):
+        fingerprint = _fingerprint(profile)
+        fingerprints.append(fingerprint)
+        vector = _usable_vector(record, space, fingerprint)
+        vectors.append(vector)
+        if vector is None:
+            missing.append(index)
+    return vectors, fingerprints, missing
 
 
 def _fingerprint(profile: Mapping[str, Any]) -> str:

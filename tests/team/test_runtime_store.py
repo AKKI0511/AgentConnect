@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 
 import pytest
 import pytest_asyncio
+from tests.support.stores import connect_redis
 from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.team import Team
-from agentconnect.team.store import Cas, Insert, RedisStore
+from agentconnect.team.store import Cas, Insert, Put, RedisStore
 
 
 def _id() -> str:
@@ -18,14 +18,9 @@ def _id() -> str:
 
 
 @pytest_asyncio.fixture(loop_scope="function")
-async def redis_store():
-    url = os.environ.get("REDIS_URL", "redis://localhost:6379/15")
-    store = RedisStore(url, prefix=f"ac:pytest:{uuid.uuid4()}")
-    try:
-        await store.open()
-        await store.ping()
-    except Exception:
-        pytest.skip("Redis is not reachable")
+async def redis_store(request: pytest.FixtureRequest):
+    request.node.add_marker(pytest.mark.redis)
+    store = await connect_redis(prefix=f"ac:pytest:{uuid.uuid4()}")
     try:
         yield store
     finally:
@@ -247,3 +242,125 @@ async def test_redis_concurrent_put_assigns_distinct_versions(redis_store: Redis
     record = await redis_store.get_record("k")
     assert record is not None
     assert record.version == 11
+
+
+@pytest.mark.asyncio
+async def test_redis_apply_succeeds_when_many_overlap(redis_store: RedisStore):
+    import asyncio
+
+    count = 32
+    results = await asyncio.gather(
+        *[redis_store.apply([Put(f"k{i}", {"n": i})]) for i in range(count)]
+    )
+    assert all(result.ok for result in results)
+    many = await redis_store.get_many([f"k{i}" for i in range(count)])
+    assert [item["n"] for item in many] == list(range(count))
+
+
+@pytest.mark.asyncio
+async def test_redis_get_many_spans_mget_batches(redis_store: RedisStore):
+    keys = [f"vec:{index}" for index in range(200)]
+    for index, key in enumerate(keys):
+        await redis_store.put(
+            key,
+            {"n": index, "mixed": [1, {"status": "accepted"}], "vector": [0.1, 0.2]},
+        )
+    many = await redis_store.get_many(keys)
+    assert len(many) == 200
+    assert many[0] == {
+        "n": 0,
+        "mixed": [1, {"status": "accepted"}],
+        "vector": [0.1, 0.2],
+    }
+    assert many[199]["n"] == 199
+    many[0]["mixed"][1]["status"] = "spoofed"
+    assert (await redis_store.get(keys[0]))["mixed"][1]["status"] == "accepted"
+    missing = await redis_store.get_many(["missing-a", keys[5], "missing-b"])
+    assert missing[0] is None
+    assert missing[1]["n"] == 5
+    assert missing[2] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["increment", "insert", "apply"])
+async def test_redis_lost_write_reply_is_not_replayed(
+    redis_store, monkeypatch, operation
+):
+    from redis.exceptions import ConnectionError
+
+    from agentconnect.team.store.ops import IncrementIfBelow
+
+    client = await redis_store._client()
+    if operation == "increment":
+        original = redis_store._incr_if_below
+
+        async def lost_reply(*args, **kwargs):
+            await original(*args, **kwargs)
+            raise ConnectionError("reply lost after commit")
+
+        monkeypatch.setattr(redis_store, "_incr_if_below", lost_reply)
+        call = redis_store.increment_if_below("count", 10)
+    elif operation == "insert":
+        original = client.set
+
+        async def lost_reply(*args, **kwargs):
+            await original(*args, **kwargs)
+            raise ConnectionError("reply lost after commit")
+
+        monkeypatch.setattr(client, "set", lost_reply)
+        call = redis_store.insert("count", 1)
+    else:
+        original_pipeline = client.pipeline
+
+        def pipeline(*args, **kwargs):
+            pipe = original_pipeline(*args, **kwargs)
+            original_parse = pipe.parse_response
+            replies = 0
+
+            async def lose_exec_reply(connection, command, **options):
+                nonlocal replies
+                value = await original_parse(connection, command, **options)
+                if command == "_":
+                    replies += 1
+                    # MULTI, SET, EXEC: Redis has committed, but redis-py has
+                    # not observed the EXEC reply and still considers us watching.
+                    if replies == 3:
+                        raise ConnectionError("reply lost after commit")
+                return value
+
+            pipe.parse_response = lose_exec_reply
+            return pipe
+
+        monkeypatch.setattr(client, "pipeline", pipeline)
+        call = redis_store.apply([IncrementIfBelow("count", 10)])
+
+    with pytest.raises(ConnectionError, match="reply lost after commit"):
+        await call
+    assert await redis_store.get("count") == 1
+
+
+@pytest.mark.asyncio
+async def test_redis_read_retry_keeps_shared_pool(redis_store, monkeypatch):
+    from redis.exceptions import ConnectionError
+
+    await redis_store.put("value", 1)
+    client = await redis_store._client()
+    original = client.get
+    calls = 0
+
+    async def transient_read(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ConnectionError("transient read failure")
+        return await original(*args, **kwargs)
+
+    async def forbidden_close():
+        pytest.fail("one read failure must not close the shared pool")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(client, "get", transient_read)
+        patch.setattr(redis_store, "close", forbidden_close)
+        assert await redis_store.get("value") == 1
+        assert await redis_store._client() is client
+    assert calls == 2

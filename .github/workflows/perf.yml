@@ -1,0 +1,101 @@
+name: Performance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "agentconnect/**"
+      - "benchmarks/**/*.py"
+      - "tests/support/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/perf.yml"
+  push:
+    branches: [main, team-restructure]
+    paths:
+      - "agentconnect/**"
+      - "benchmarks/**/*.py"
+      - "tests/support/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/perf.yml"
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-bench:
+    name: Runtime discovery benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REDIS_URL: redis://127.0.0.1:6379/15
+      AGENTCONNECT_REQUIRE_REDIS: "1"
+      AGENTCONNECT_REQUIRE_NEURAL: "1"
+      NO_PROXY: "127.0.0.1,localhost"
+    services:
+      redis:
+        image: redis:8.2
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+        command: redis-server --enable-debug-command yes --appendonly yes
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+      - id: dependencies
+        run: uv sync --locked --group benchmark --extra serve --extra cli --extra embeddings --extra redis
+      - name: Create result directory
+        run: mkdir -p benchmarks/runtime/results
+      - name: Cold, Profile update, fallback
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_phases.py
+          --benchmark-json=benchmarks/runtime/results/phases.json
+          --junitxml=benchmarks/runtime/results/phases.xml
+      - name: Hashed warm find
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_warm_find.py
+          --benchmark-json=benchmarks/runtime/results/warm.json
+          --junitxml=benchmarks/runtime/results/warm.xml
+      - name: Overlap send, renew, expiry
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_overlap.py
+          --benchmark-json=benchmarks/runtime/results/overlap.json
+          --junitxml=benchmarks/runtime/results/overlap.xml
+      - name: Neural FastEmbed
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_neural.py
+          --benchmark-json=benchmarks/runtime/results/neural.json
+          --junitxml=benchmarks/runtime/results/neural.xml
+      - name: Hashed stress
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/test_stress.py
+          --benchmark-json=benchmarks/runtime/results/stress.json
+          --junitxml=benchmarks/runtime/results/stress.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-bench
+          path: benchmarks/runtime/results/

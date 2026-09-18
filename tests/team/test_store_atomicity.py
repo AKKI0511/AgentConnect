@@ -103,3 +103,60 @@ async def test_index_range_skips_unrelated_future_members():
     assert due == ["due-a", "due-b"]
     page = await store.index_range("idx", max_score=1_000_000.0 + 5000, limit=2)
     assert page == ["due-a", "due-b"]
+
+
+@pytest.mark.asyncio
+async def test_mixed_list_write_is_isolated_from_caller_mutation():
+    store = MemoryStore()
+    await store.open()
+    payload = [1, {"status": "accepted"}]
+    await store.put("doc", payload)
+    payload[1]["status"] = "spoofed"
+    payload.append({"extra": True})
+    stored = await store.get("doc")
+    assert stored == [1, {"status": "accepted"}]
+    record = await store.get_record("doc")
+    assert record is not None
+    assert record.version == 1
+
+
+@pytest.mark.asyncio
+async def test_mixed_list_read_is_isolated_from_caller_mutation():
+    store = MemoryStore()
+    await store.open()
+    await store.put("doc", [1, {"status": "accepted"}])
+    loaded = await store.get("doc")
+    assert loaded is not None
+    loaded[1]["status"] = "spoofed"
+    loaded.append(2)
+    again = await store.get("doc")
+    assert again == [1, {"status": "accepted"}]
+    many = await store.get_many(["doc"])
+    many[0][1]["status"] = "other"
+    assert await store.get("doc") == [1, {"status": "accepted"}]
+
+
+@pytest.mark.asyncio
+async def test_numeric_vector_copy_does_not_alias_store():
+    store = MemoryStore()
+    await store.open()
+    vector = [0.1, 0.2, 0.3]
+    await store.put("vec", {"vector": vector})
+    vector[0] = 9.9
+    stored = await store.get("vec")
+    assert stored == {"vector": [0.1, 0.2, 0.3]}
+    loaded = await store.get("vec")
+    loaded["vector"][1] = 8.8
+    assert (await store.get("vec"))["vector"] == [0.1, 0.2, 0.3]
+
+
+@pytest.mark.asyncio
+async def test_apply_insert_isolates_nested_objects():
+    store = MemoryStore()
+    await store.open()
+    body = {"items": [1, {"status": "accepted"}]}
+    result = await store.apply([Insert("ticket:1", body)])
+    assert result.ok is True
+    body["items"][1]["status"] = "spoofed"
+    stored = await store.get("ticket:1")
+    assert stored == {"items": [1, {"status": "accepted"}]}

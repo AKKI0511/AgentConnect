@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import json
 from typing import Any, Optional, Sequence
 
@@ -85,13 +87,45 @@ return nxt
 """
 
 
+def _is_disconnect(exc: BaseException | None) -> bool:
+    """Recognize redis-py's connection failures without importing it at startup."""
+    if exc is None or isinstance(exc, ImportError):
+        return False
+    from redis.exceptions import ConnectionError, TimeoutError
+
+    return isinstance(exc, (ConnectionError, TimeoutError))
+
+
+def _retry_read(method):
+    """Retry reads only; a lost write reply leaves its outcome unknown.
+
+    redis-py reconnects the failed connection. Keep the shared pool open so
+    another operation's connection is not interrupted by this read.
+    """
+
+    @functools.wraps(method)
+    async def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
+        for attempt in range(8):
+            try:
+                return await method(self, *args, **kwargs)
+            except Exception as exc:
+                if attempt == 7 or not _is_disconnect(exc):
+                    raise
+                await asyncio.sleep(min(0.05 * (2**attempt), 0.5))
+
+    return wrapped
+
+
 class RedisStore(Store):
     """Durable document store keyed under a per-Team prefix.
 
     Pass the same ``url`` and ``prefix`` to a new Runtime after a restart to
     recover open Tickets and queued Mailbox work. ``insert`` uses ``SET NX``.
     ``compare_and_set``, ``put``, and ``apply`` use Lua or WATCH/MULTI so
-    version updates themselves are atomic.
+    version updates themselves are atomic. A dropped connection reconnects
+    on the next operation; sharing a Redis URL still does not make replicas
+    safe. Writes with a lost reply are not replayed by the Store: callers
+    must recover through their operation-level idempotency rules.
     """
 
     persistence = "durable"
@@ -133,7 +167,14 @@ class RedisStore(Store):
                 "Install with: pip install 'agentconnect[redis]'"
             ) from exc
 
-        self._redis = Redis.from_url(self._url, decode_responses=True)
+        # redis-py raises Too many connections at 16 when overlapping apply()
+        # pins WATCH pipelines. 64 covers those bursts; Directory still batches
+        # MGET so ranking cannot open one client per key.
+        self._redis = Redis.from_url(
+            self._url,
+            decode_responses=True,
+            max_connections=64,
+        )
         self._cas = self._redis.register_script(_CAS_LUA)
         self._put = self._redis.register_script(_PUT_LUA)
         self._index_add_if_below = self._redis.register_script(_INDEX_ADD_IF_BELOW_LUA)
@@ -155,8 +196,9 @@ class RedisStore(Store):
             self._incr_if_below = None
             self._decr_floor = None
 
+    @_retry_read
     async def ping(self) -> None:
-        """Confirm Redis is reachable."""
+        """Confirm Redis is reachable, reconnecting after a dropped link."""
         client = await self._client()
         await client.ping()
 
@@ -167,20 +209,50 @@ class RedisStore(Store):
             return None
         return record.value
 
+    @_retry_read
     async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
-        """Return values for ``keys`` with one MGET."""
+        """Return values for ``keys``.
+
+        Large reads are split into MGET batches so send, renew, and expiry
+        can run while a Directory ranking loads vectors. JSON decoding of
+        large batches runs off the event loop and overlaps the next MGET.
+        """
         if not keys:
             return []
         client = await self._client()
-        raws = await client.mget([self._key(key) for key in keys])
+        physical = [self._key(key) for key in keys]
+        batch = 128
         out: list[Any | None] = []
-        for raw in raws:
-            if raw is None:
-                out.append(None)
-            else:
-                out.append(_unwrap(raw).value)
+        loop = asyncio.get_running_loop()
+        pending: asyncio.Task[Any] | None = None
+        try:
+            for start in range(0, len(physical), batch):
+                if pending is None:
+                    raws = await client.mget(physical[start : start + batch])
+                else:
+                    raws = await pending
+                    pending = None
+                nxt = start + batch
+                if nxt < len(physical):
+                    await asyncio.sleep(0)
+                    pending = asyncio.create_task(
+                        client.mget(physical[nxt : nxt + batch])
+                    )
+                if len(raws) >= 16:
+                    decoded = await loop.run_in_executor(None, _decode_mget, raws)
+                else:
+                    decoded = _decode_mget(raws)
+                out.extend(decoded)
+        finally:
+            if pending is not None and not pending.done():
+                pending.cancel()
+                try:
+                    await pending
+                except asyncio.CancelledError:
+                    pass
         return out
 
+    @_retry_read
     async def get_record(self, key: str) -> StoreRecord | None:
         """Return value and version at ``key``, or None."""
         client = await self._client()
@@ -190,7 +262,11 @@ class RedisStore(Store):
         return _unwrap(raw)
 
     async def apply(self, ops: Sequence[StoreOp]) -> ApplyResult:
-        """Apply ``ops`` with WATCH/MULTI, or leave every key unchanged."""
+        """Apply ``ops`` with WATCH/MULTI, or leave every key unchanged.
+
+        A lost WATCH is retried. Callers see a simulated conflict only when
+        the batch itself cannot commit.
+        """
         batch = tuple(ops)
         if not batch:
             return ApplyResult(ok=True)
@@ -206,45 +282,54 @@ class RedisStore(Store):
                 physical.append(self._index_key(op.key))
         physical = list(dict.fromkeys(physical))
 
-        pipe = client.pipeline(transaction=True)
-        try:
-            if physical:
-                await pipe.watch(*physical)
-            docs: dict[str, StoreRecord | None] = {}
-            for key in doc_keys:
-                raw = await pipe.get(self._key(key))
-                docs[key] = None if raw is None else _unwrap(raw)
-            scores: dict[tuple[str, str], float | None] = {}
-            cards: dict[str, int] = {}
-            for key in index_keys:
-                cards[key] = int(await pipe.zcard(self._index_key(key)) or 0)
-            for op in batch:
-                member = getattr(op, "member", None)
-                if member is None or op.key not in index_keys:
-                    continue
-                pair = (op.key, str(member))
-                if pair in scores:
-                    continue
-                raw_score = await pipe.zscore(self._index_key(op.key), str(member))
-                scores[pair] = None if raw_score is None else float(raw_score)
+        last_cas = ApplyResult(ok=False, reason="cas")
+        for _attempt in range(8):
+            pipe = client.pipeline(transaction=True)
+            try:
+                if physical:
+                    await pipe.watch(*physical)
+                docs: dict[str, StoreRecord | None] = {}
+                for key in doc_keys:
+                    raw = await pipe.get(self._key(key))
+                    docs[key] = None if raw is None else _unwrap(raw)
+                scores: dict[tuple[str, str], float | None] = {}
+                cards: dict[str, int] = {}
+                for key in index_keys:
+                    cards[key] = int(await pipe.zcard(self._index_key(key)) or 0)
+                for op in batch:
+                    member = getattr(op, "member", None)
+                    if member is None or op.key not in index_keys:
+                        continue
+                    pair = (op.key, str(member))
+                    if pair in scores:
+                        continue
+                    raw_score = await pipe.zscore(self._index_key(op.key), str(member))
+                    scores[pair] = None if raw_score is None else float(raw_score)
 
-            overlay = Overlay(
-                get_doc=lambda key: docs.get(key),
-                get_index_score=lambda key, member: scores.get((key, member)),
-                get_index_card=lambda key: cards.get(key, 0),
-            )
-            result = apply_ops(batch, overlay)
-            if not result.ok:
-                await pipe.unwatch()
-                return result
-            pipe.multi()
-            self._emit_overlay(pipe, overlay)
-            await pipe.execute()
-            return ApplyResult(ok=True)
-        except WatchError:
-            return ApplyResult(ok=False, reason="cas")
-        finally:
-            await pipe.reset()
+                overlay = Overlay(
+                    get_doc=lambda key: docs.get(key),
+                    get_index_score=lambda key, member: scores.get((key, member)),
+                    get_index_card=lambda key: cards.get(key, 0),
+                )
+                result = apply_ops(batch, overlay)
+                if not result.ok:
+                    await pipe.unwatch()
+                    return result
+                pipe.multi()
+                self._emit_overlay(pipe, overlay)
+                await pipe.execute()
+                return ApplyResult(ok=True)
+            except WatchError as exc:
+                # redis-py also wraps connection loss during EXEC in WatchError.
+                # Only a real WATCH conflict proves the transaction did not run.
+                cause = exc.__context__
+                if cause is not None and _is_disconnect(cause):
+                    raise cause from exc
+                last_cas = ApplyResult(ok=False, reason="cas")
+                continue
+            finally:
+                await pipe.reset()
+        return last_cas
 
     def _emit_overlay(self, pipe: Any, overlay: Overlay) -> None:
         for key, record in overlay.iter_docs():
@@ -319,12 +404,14 @@ class RedisStore(Store):
         client = await self._client()
         await client.srem(self._set_key(key), member)
 
+    @_retry_read
     async def set_members(self, key: str) -> list[str]:
         """Return the sorted members of the Redis set at ``key``."""
         client = await self._client()
         members = await client.smembers(self._set_key(key))
         return sorted(str(item) for item in members)
 
+    @_retry_read
     async def set_is_member(self, key: str, member: str) -> bool:
         """Return True when ``member`` is in the Redis set at ``key``."""
         client = await self._client()
@@ -340,6 +427,7 @@ class RedisStore(Store):
         client = await self._client()
         await client.zrem(self._index_key(key), member)
 
+    @_retry_read
     async def index_range(
         self,
         key: str,
@@ -362,6 +450,7 @@ class RedisStore(Store):
         )
         return [str(item) for item in members]
 
+    @_retry_read
     async def index_card(self, key: str) -> int:
         """Return the number of members in the Redis sorted set at ``key``."""
         client = await self._client()
@@ -455,3 +544,13 @@ def _unwrap(raw: str) -> StoreRecord:
     if isinstance(payload, dict) and "v" in payload and "d" in payload:
         return StoreRecord(value=payload["d"], version=int(payload["v"]))
     return StoreRecord(value=payload, version=1)
+
+
+def _decode_mget(raws: Sequence[Any]) -> list[Any | None]:
+    out: list[Any | None] = []
+    for raw in raws:
+        if raw is None:
+            out.append(None)
+        else:
+            out.append(_unwrap(raw).value)
+    return out

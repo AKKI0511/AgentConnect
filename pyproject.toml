@@ -44,7 +44,7 @@ mcp = [
     "mcp[cli] (>=2.1.1,<3.0.0)",
 ]
 redis = [
-    "redis (>=5.2.1,<6.0.0)",
+    "redis[hiredis] (>=5.2.1,<6.0.0)",
 ]
 aiagent = [
     "litellm (>=1.40.0,<3.0.0) ; python_version < '3.15'",
@@ -128,10 +128,15 @@ docs = [
     "roman-numerals-py==3.1.0",
 ]
 
+benchmark = [
+    "pytest-benchmark==5.3.0",
+    "psutil>=7.0.0,<8.0.0",
+]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-src = ["agentconnect", "tests", "examples"]
+src = ["agentconnect", "tests", "examples", "benchmarks"]
 extend-exclude = [
     ".venv",
     "demos",
@@ -152,3 +157,21 @@ ignore = ["E501"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+markers = [
+    "slow: Embedding/model-dependent tests. Skipped by default; run with -m slow",
+    "redis: tests that need Redis; skipped locally unless reachable, required in CI",
+    "perf: Runtime discovery benchmarks under benchmarks/runtime/",
+]
+addopts = ["-m", "not slow"]
+filterwarnings = [
+    "ignore:.*websockets\\.legacy is deprecated.*:DeprecationWarning",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]

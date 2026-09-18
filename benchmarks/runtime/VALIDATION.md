@@ -1,6 +1,6 @@
 # Runtime validation
 
-## Accepted revision
+## Verified reference run
 
 Runtime and benchmark code: [`5f45f7a`](https://github.com/AKKI0511/AgentConnect/commit/5f45f7aca8b978e73d39175b178f5e8e0ee5f43f).
 
@@ -53,10 +53,24 @@ CI covers pending and completed Tasks and exception propagation.
 That run also missed Redis 1,000-member p95 at 260 ms. The
 [adapter-corrected run](https://github.com/AKKI0511/AgentConnect/actions/runs/35311910082)
 reproduced the latency miss at 267/271 ms, while all other groups passed. Both
-used an older EPYC 7763 host. The accepted run uses a newer CPU as well as hiredis:
+used an older EPYC 7763 host. The reference run uses a newer CPU as well as hiredis:
 it is not a controlled estimate of the parser's speedup or proof of the budget on
 every host. Budgets were not changed. Investigate failures using raw samples and
 host metadata; do not retry until green or turn these results into universal SLAs.
+
+The documentation-only repeat on `a460932` returned to EPYC 7763 and missed
+Redis 1,000 at 257/273 ms despite hiredis:
+[run](https://github.com/AKKI0511/AgentConnect/actions/runs/35312718095).
+This keeps merge blocked; the faster-host result alone does not resolve it.
+Profiling identified repeated cached-vector validation as a large CPU cost.
+The follow-up preserves validation and normalization, but avoids redundant type
+checks/conversion for plain floats and uses a built-in iterator for dot products.
+A local 10,000-call normalization probe measured 0.397 s versus 0.619 s before;
+full public-path gates are required for acceptance, not this microbenchmark.
+The local warm matrix passed all 12 cases after the change; Redis 1,000 p95
+was embedded 150.4 ms, http 173.8 ms. Four focused vector checks passed on CPython
+3.11.12. The final CPython 3.12.8 suite passed 693 tests (3 skipped,
+5 deselected); Ruff passed. Linux gates are pending for this change.
 
 [baseline.json](baseline.json) preserves the earlier `a0a89f4` results from the
 retired harness as historical evidence. Its Profile-update figures timed find

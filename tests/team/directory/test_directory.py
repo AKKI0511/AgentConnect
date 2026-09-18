@@ -288,6 +288,11 @@ async def test_hashed_embedder_is_deterministic():
 
 
 def test_as_unit_vector_rejects_non_finite_and_wrong_dim():
+    assert as_unit_vector([3, 4.0], expected_dim=2) == [0.6, 0.8]
+    assert as_unit_vector((0.0, 0), expected_dim=2) == [0.0, 0.0]
+    for value in (True, "1.0", None):
+        with pytest.raises(ValueError, match="finite numbers"):
+            as_unit_vector([value, 0.0])
     with pytest.raises(ValueError):
         as_unit_vector([float("nan"), 0.0])
     with pytest.raises(ValueError):

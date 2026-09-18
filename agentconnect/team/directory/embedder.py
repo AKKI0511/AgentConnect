@@ -31,6 +31,7 @@ import hashlib
 import inspect
 import logging
 import math
+from operator import mul
 import os
 import re
 import threading
@@ -112,9 +113,14 @@ def as_unit_vector(
         raise ValueError("embedding vector must be a sequence of numbers")
     values: list[float] = []
     for value in vector:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError("embedding values must be finite numbers")
-        number = float(value)
+        # Cached vectors already contain plain floats. Avoid repeating two
+        # isinstance checks and float conversion for every stored component.
+        if type(value) is float:
+            number = value
+        else:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("embedding values must be finite numbers")
+            number = float(value)
         if not math.isfinite(number):
             raise ValueError("embedding values must be finite")
         values.append(number)
@@ -158,7 +164,7 @@ def cosine(left: Sequence[float], right: Sequence[float]) -> float:
     """Dot product of two equal-length vectors. Callers pass unit vectors."""
     if len(left) != len(right):
         raise ValueError("vectors must have the same dimension")
-    return sum(a * b for a, b in zip(left, right, strict=True))
+    return sum(map(mul, left, right))
 
 
 def mean_pool(vectors: Sequence[Sequence[float]]) -> list[float]:

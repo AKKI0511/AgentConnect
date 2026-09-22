@@ -30,13 +30,7 @@ and model helpers:
     await Writer(name="writer").join(team)
 """
 
-from importlib import metadata
 from typing import TYPE_CHECKING, Any
-
-try:
-    __version__ = metadata.version(__package__)
-except metadata.PackageNotFoundError:  # running from source without install
-    __version__ = "0"
 
 # Only the version is imported by default; names below load on attribute access.
 __all__ = [
@@ -85,9 +79,21 @@ _LAZY_EXPORTS = {
     "Ticket": ("agentconnect.core.ticket", "Ticket"),
 }
 
+_version: str | None = None
+
 
 def __getattr__(name: str) -> Any:
     """Load Team and Agent types without importing the whole package tree."""
+    global _version
+    if name == "__version__":
+        if _version is None:
+            from importlib import metadata
+
+            try:
+                _version = metadata.version(__package__)
+            except metadata.PackageNotFoundError:
+                _version = "0"
+        return _version
     target = _LAZY_EXPORTS.get(name)
     if target is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

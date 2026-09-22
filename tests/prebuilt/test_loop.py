@@ -87,11 +87,15 @@ async def test_loop_unknown_tool_still_finishes():
 
 @pytest.mark.asyncio
 async def test_loop_stops_at_max_rounds():
-    reply = await run_tool_loop(
-        complete=scripted(tool_turn("ping", "{}"), tool_turn("ping", "{}", "c2")),
-        model="recorded",
-        messages=[{"role": "user", "content": "loop"}],
-        tools=[PING],
-        max_rounds=2,
-    )
-    assert "Stopped after 2 tool rounds" in reply
+    from agentconnect.prebuilt.loop import ToolLoopExhausted
+
+    with pytest.raises(ToolLoopExhausted) as exc:
+        await run_tool_loop(
+            complete=scripted(tool_turn("ping", "{}"), tool_turn("ping", "{}", "c2")),
+            model="recorded",
+            messages=[{"role": "user", "content": "loop"}],
+            tools=[PING],
+            max_rounds=2,
+        )
+    assert exc.value.max_rounds == 2
+    assert "Stopped after" not in str(exc.value)

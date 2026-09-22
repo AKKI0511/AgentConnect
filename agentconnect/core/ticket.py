@@ -1,7 +1,8 @@
-"""Ticket union discriminated on ``state``."""
+"""Ticket union discriminated on ``state``, plus model-facing TicketView."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Any, Literal, Mapping, Optional, Union
 
 from pydantic import Field, TypeAdapter, ValidationError
@@ -9,7 +10,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from agentconnect.core.base import JsonInt, JsonValue, SchemaModel, validation_message
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
 from agentconnect.core.message import ResponseMessage
-from agentconnect.core.primitives import QualifiedAddress, Timestamp, Uuid
+from agentconnect.core.primitives import ErrorCode, QualifiedAddress, Timestamp, Uuid
 
 __all__ = [
     "TicketBase",
@@ -20,6 +21,16 @@ __all__ = [
     "DeclinedTicket",
     "Ticket",
     "parse_ticket",
+    "TicketViewError",
+    "TicketViewBase",
+    "OpenTicketView",
+    "CompletedTicketView",
+    "FailedTicketView",
+    "ExpiredTicketView",
+    "DeclinedTicketView",
+    "TicketView",
+    "ticket_view",
+    "parse_ticket_view",
 ]
 
 
@@ -104,3 +115,154 @@ def parse_ticket(data: Any) -> Ticket:
         return TICKET_ADAPTER.validate_python(data)
     except ValidationError as exc:
         raise ValueError(validation_message(exc)) from exc
+
+
+class TicketViewError(SchemaModel):
+    """Lean failure on a model-facing Ticket view."""
+
+    code: ErrorCode
+    message: str = Field(min_length=1, max_length=2000, pattern=r"\S")
+
+
+class TicketViewBase(SchemaModel):
+    """Fields shared by every model-facing Ticket view."""
+
+    ticket_id: Uuid
+    deadline: Timestamp
+    ttl_ms: JsonInt = Field(ge=0)
+    status_message: str
+    thread_id: Optional[Uuid] = None
+
+
+class OpenTicketView(TicketViewBase):
+    """Model-facing view of an open Ticket."""
+
+    state: Literal["open"]
+    poll_interval_ms: Literal[1000]
+
+
+class CompletedTicketView(TicketViewBase):
+    """Model-facing view of a completed Ticket."""
+
+    state: Literal["completed"]
+    content: JsonValue
+
+
+class FailedTicketView(TicketViewBase):
+    """Model-facing view of a failed Ticket."""
+
+    state: Literal["failed"]
+    error: TicketViewError
+
+
+class ExpiredTicketView(TicketViewBase):
+    """Model-facing view of an expired Ticket."""
+
+    state: Literal["expired"]
+    error: TicketViewError
+
+
+class DeclinedTicketView(TicketViewBase):
+    """Model-facing view of a declined Ticket."""
+
+    state: Literal["declined"]
+
+
+TicketView = Annotated[
+    Union[
+        OpenTicketView,
+        CompletedTicketView,
+        FailedTicketView,
+        ExpiredTicketView,
+        DeclinedTicketView,
+    ],
+    Field(discriminator="state"),
+]
+
+TICKET_VIEW_ADAPTER: TypeAdapter[TicketView] = TypeAdapter(TicketView)
+
+
+def parse_ticket_view(data: Any) -> TicketView:
+    """Parse a TicketView mapping discriminated on ``state``."""
+    if isinstance(
+        data,
+        (
+            OpenTicketView,
+            CompletedTicketView,
+            FailedTicketView,
+            ExpiredTicketView,
+            DeclinedTicketView,
+        ),
+    ):
+        return data
+    if not isinstance(data, Mapping):
+        raise ValueError("ticket view must be an object")
+    try:
+        return TICKET_VIEW_ADAPTER.validate_python(data)
+    except ValidationError as exc:
+        raise ValueError(validation_message(exc)) from exc
+
+
+def ticket_view(ticket: Ticket, *, now: datetime | None = None) -> TicketView:
+    """Project a wire Ticket into the model-facing TicketView.
+
+    ``now`` is the instant used for ``ttl_ms``. Tests pass a fixed time so
+    results do not depend on the wall clock. Defaults to the current UTC time.
+    """
+    instant = now if now is not None else datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    else:
+        instant = instant.astimezone(timezone.utc)
+    deadline = _parse_timestamp(ticket.deadline)
+    remaining_ms = int((deadline - instant).total_seconds() * 1000)
+    ttl_ms = remaining_ms if remaining_ms > 0 else 0
+    base: dict[str, Any] = {
+        "ticket_id": ticket.id,
+        "deadline": ticket.deadline,
+        "ttl_ms": ttl_ms,
+        "status_message": _status_message(ticket),
+    }
+    if ticket.thread_id is not None:
+        base["thread_id"] = ticket.thread_id
+    if ticket.state == "open":
+        return OpenTicketView.model_validate(
+            {**base, "state": "open", "poll_interval_ms": 1000}
+        )
+    if ticket.state == "completed":
+        return CompletedTicketView.model_validate(
+            {**base, "state": "completed", "content": ticket.response.content}
+        )
+    if ticket.state == "failed":
+        return FailedTicketView.model_validate(
+            {
+                **base,
+                "state": "failed",
+                "error": {"code": ticket.error.code, "message": ticket.error.message},
+            }
+        )
+    if ticket.state == "expired":
+        return ExpiredTicketView.model_validate(
+            {
+                **base,
+                "state": "expired",
+                "error": {"code": ticket.error.code, "message": ticket.error.message},
+            }
+        )
+    return DeclinedTicketView.model_validate({**base, "state": "declined"})
+
+
+def _status_message(ticket: Ticket) -> str:
+    if ticket.state == "open":
+        return "Waiting for a reply."
+    if ticket.state == "completed":
+        return "Completed."
+    if ticket.state == "declined":
+        return "The recipient declined."
+    return ticket.error.message
+
+
+def _parse_timestamp(value: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ValueError("timestamp must be RFC 3339 UTC ending in Z")
+    return datetime.fromisoformat(value[:-1] + "+00:00").astimezone(timezone.utc)

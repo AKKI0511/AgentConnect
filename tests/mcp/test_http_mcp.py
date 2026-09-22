@@ -73,7 +73,7 @@ async def test_serve_exposes_mcp_url_and_operator_can_ask():
                 )
             )
             assert ticket["state"] == "completed"
-            assert ticket["response"]["content"] == {"echo": "via-mcp"}
+            assert ticket["content"] == {"echo": "via-mcp"}
     finally:
         await writer.leave()
         await team.stop()

@@ -292,7 +292,7 @@ async def test_team_tools_ask_from_handler_inherits_parent():
                 content="tighten",
             )
             if ticket["state"] == "completed":
-                return ticket["response"]["content"]
+                return ticket["content"]
             return ticket
 
     writer = Writer(name="writer")

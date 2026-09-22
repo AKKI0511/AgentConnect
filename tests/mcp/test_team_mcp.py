@@ -155,7 +155,15 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
     try:
         async with Client(mcp) as client:
             names = {tool.name for tool in (await client.list_tools()).tools}
-            assert names >= {"find", "ask", "tell", "get_result", "get_history", "ping"}
+            assert names >= {
+                "find",
+                "ask",
+                "tell",
+                "get_result",
+                "get_history",
+                "get_profile",
+                "ping",
+            }
 
             found = _body(
                 await client.call_tool(
@@ -178,14 +186,14 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
                 )
             )
             assert ticket["state"] == "completed"
-            assert ticket["response"]["content"] == {"echo": "draft this"}
-            ticket_id = ticket["id"]
+            assert ticket["content"] == {"echo": "draft this"}
+            ticket_id = ticket["ticket_id"]
             thread_id = ticket["thread_id"]
 
             again = _body(
                 await client.call_tool("get_result", {"ticket_id": ticket_id})
             )
-            assert again["id"] == ticket_id
+            assert again["ticket_id"] == ticket_id
             assert again["state"] == "completed"
 
             history = _body(
@@ -263,7 +271,7 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
             first = _body(await client_a.call_tool("ask", args))
         async with Client(mcp) as client_b:
             second = _body(await client_b.call_tool("ask", args))
-        assert first["id"] != second["id"]
+        assert first["ticket_id"] != second["ticket_id"]
 
         keyed = dict(args)
         keyed["idempotency_key"] = "draft-1"
@@ -273,9 +281,9 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
             later = dict(keyed)
             later["deadline_seconds"] = 60
             two_later = _body(await client.call_tool("ask", later))
-            assert one["id"] == two["id"]
+            assert one["ticket_id"] == two["ticket_id"]
             assert one["thread_id"] == two["thread_id"]
-            assert two_later["id"] == one["id"]
+            assert two_later["ticket_id"] == one["ticket_id"]
             assert two_later["deadline"] == one["deadline"]
 
             conflict = await client.call_tool(

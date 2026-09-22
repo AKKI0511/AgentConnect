@@ -58,5 +58,5 @@ TICKET_TERMINAL = frozenset({"completed", "failed", "expired", "declined"})
 # Reserved for the loopback operator Membership (CLI and MCP).
 OPERATOR_NAME = "operator"
 RESERVED_MCP_TOOL_NAMES = frozenset(
-    {"find", "ask", "tell", "get_result", "get_history"}
+    {"find", "ask", "tell", "get_result", "get_history", "get_profile"}
 )

@@ -37,10 +37,32 @@ Set `AGENTCONNECT_REQUIRE_REDIS=1` if a missing server should fail locally too.
 
 Routine tests do not run the full benchmark matrix. GitHub's **Performance**
 workflow runs for relevant Runtime and benchmark changes and supports manual runs.
-It checks discovery, overlapping messaging, and event-loop responsiveness with
-pytest-benchmark, saving JSON measurements and JUnit results even on failure.
+It checks discovery latency, overlapping messaging, and event-loop responsiveness
+with pytest-benchmark, saving JSON measurements and JUnit results even on failure.
 See [Runtime benchmarks](benchmarks/runtime/README.md) for focused local commands
 and `make perf`. No benchmark dependency is added to a normal library install.
+
+## Retrieval quality
+
+Runtime performance and retrieval quality are separate checks. Run the
+retrieval benchmark when a change can affect who `find` ranks: Profile text,
+Directory embedding, or the hashed or FastEmbed path. Unrelated edits do not
+need it. It does not use Redis or a chat-model key. Install the embeddings
+extra, then follow [Discovery retrieval](benchmarks/discovery/README.md):
+
+```bash
+uv sync --locked --extra embeddings
+uv run --no-sync python -m benchmarks.discovery.check
+uv run --no-sync python -m benchmarks.discovery.score
+```
+
+Results are written to `benchmarks/discovery/artifacts/discovery-v1/`.
+Coverage@10 and MRR on the held-out shuffled split are the gates. Coverage@1,
+coverage@5, and slices are context. A miss names the need, the backend, and
+the rank of the acceptable recipient. A roster no larger than the cutoff
+cannot show a miss at that cutoff. A neural load failure or Directory fallback stays under `failed/` and is
+not filled in with hashed ranks. `score` exits non-zero when a required
+backend or a ranking gate fails.
 
 ## Dependency changes
 

@@ -13,7 +13,7 @@ from mcp_types import INVALID_PARAMS
 
 from agentconnect.agent import BaseAgent
 from agentconnect.core.base import parse_schema, public_json_schema
-from agentconnect.core.directory import FindRequest
+from agentconnect.core.directory import FindRequest, GetProfileRequest
 from agentconnect.core.operations import (
     AskToolRequest,
     GetHistoryRequest,
@@ -34,6 +34,7 @@ _TOOL_MODELS = {
     "tell": TellToolRequest,
     "get_result": GetResultRequest,
     "get_history": GetHistoryRequest,
+    "get_profile": GetProfileRequest,
 }
 
 
@@ -360,18 +361,18 @@ async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
                 assert kind == expected, (name, arguments, kind)
                 if expected == "ok" and name == "ask" and ticket_body is None:
                     ticket_body = _body(result)
-                    assert ticket_body.get("id")
+                    assert ticket_body.get("ticket_id")
                     assert ticket_body.get("thread_id")
 
             assert ticket_body is not None
             kind, result = await _invoke(
-                client, "get_result", {"ticket_id": ticket_body["id"]}
+                client, "get_result", {"ticket_id": ticket_body["ticket_id"]}
             )
             assert _schema_accepts(
-                schemas["get_result"], {"ticket_id": ticket_body["id"]}
+                schemas["get_result"], {"ticket_id": ticket_body["ticket_id"]}
             )
             assert kind == "ok"
-            assert _body(result)["id"] == ticket_body["id"]
+            assert _body(result)["ticket_id"] == ticket_body["ticket_id"]
 
             history_args = {"thread_id": ticket_body["thread_id"]}
             kind, result = await _invoke(client, "get_history", history_args)

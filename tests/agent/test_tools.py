@@ -62,6 +62,7 @@ async def test_team_tools_before_join_fail_on_call():
         "tell",
         "get_result",
         "get_history",
+        "get_profile",
     ]
     with pytest.raises(SessionError) as exc:
         await agent.tools.find(query="someone who can draft a summary")
@@ -88,7 +89,7 @@ async def test_team_tools_find_then_ask_without_hardcoded_address():
             deadline_seconds=30,
         )
         assert ticket["state"] == "completed"
-        assert ticket["response"]["content"] == {"echo": "draft this"}
+        assert ticket["content"] == {"echo": "draft this"}
     finally:
         await researcher.leave()
         await writer.leave()
@@ -116,7 +117,9 @@ async def test_team_tools_collect_ticket_returns_json_without_content_sugar():
         )
         assert ticket["state"] == "open"
         assert "content" not in ticket
-        assert ticket["id"]
+        assert ticket["ticket_id"]
+        assert ticket["poll_interval_ms"] == 1000
+        assert "id" not in ticket
     finally:
         await researcher.leave()
         await writer.leave()
@@ -154,10 +157,10 @@ async def test_team_tools_idempotency_key_reuses_ticket():
             content="same",
             deadline_seconds=30,
         )
-        assert first["id"] == second["id"]
-        assert later["id"] == first["id"]
+        assert first["ticket_id"] == second["ticket_id"]
+        assert later["ticket_id"] == first["ticket_id"]
         assert later["deadline"] == first["deadline"]
-        assert first["id"] != third["id"]
+        assert first["ticket_id"] != third["ticket_id"]
         with pytest.raises(SessionError) as exc:
             await researcher.tools.ask(
                 recipient="writer",

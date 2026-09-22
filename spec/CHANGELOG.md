@@ -53,7 +53,8 @@ Defines:
 - concurrent Instances sharing one Mailbox, with conversation state in the Thread transcript rather than in a running copy
 - embedded and authenticated network joins, with an Instance-aware Session
 - Runtime operations and their HTTP mapping, including a typed Session event stream
-- MCP tools `find`, `ask`, `tell`, `get_result`, and `get_history`
+- MCP tools `find`, `ask`, `tell`, `get_result`, `get_history`, and `get_profile`
+- MCP and Session-bound `ask` / `get_result` return model-facing `TicketView` (wire `Ticket` remains on Runtime, HTTP, and Client `ask` / `get_result`)
 - MCP roster resource at `agentconnect://team/roster` lists Agent Memberships only
 - a Membership that may act is not the same as an Agent that may be hired: a principal has no Profile, Directory entry, or Mailbox, and a `send` naming it fails `not_found`
 - the reserved `operator` is a principal; the Runtime reserves the name when it starts; `find` and the roster omit it; it stays visible in `status`
@@ -77,7 +78,7 @@ Defines:
 - `get_result` authorizes the requesting Membership across Session replacement, in the Runtime, HTTP, MCP, and the Client
 - every Ticket carries the request Message's `trace_id`, so `get_result` can feed `get_trace` after Session replacement in every Ticket state
 - join challenge nonces and single-use tokens are consumed in the same store transition as a successful join; concurrent use of one token admits at most one Membership; revoke versus join has a defined winner
-- MCP Session binding covers the five tools, additional Team tools, and the roster resource; a missing Authorization header is operator only on an explicitly trusted loopback or in-process hosting path
+- MCP Session binding covers the AgentConnect tools, additional Team tools, and the roster resource; a missing Authorization header is operator only on an explicitly trusted loopback or in-process hosting path
 - a reverse proxy in front of a loopback listener is not that path; any forwarded-client header, including an empty `X-Forwarded-*` value, with no Session token is unauthorized
 - an empty or malformed Authorization header is unauthorized and is never treated as operator
 - missing HTTP request context does not imply in-process operator trust

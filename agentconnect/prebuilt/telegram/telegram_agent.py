@@ -28,7 +28,9 @@ from typing import Any, Optional
 from aiogram import types
 from dotenv import load_dotenv
 
+from agentconnect.agent.tools import ToolLike
 from agentconnect.core.identity import AgentIdentity
+from agentconnect.core.profile import AgentProfile, Skill
 from agentconnect.prebuilt.ai_agent import AIAgent, CompletionOptions
 from agentconnect.prebuilt.loop import CompletionFn
 from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
@@ -39,7 +41,7 @@ from agentconnect.prebuilt.telegram.keyboards import (
     PRIVATE_CHAT_KEYBOARD,
 )
 from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
-from agentconnect.prebuilt.tools import Tool, merge_tools
+from agentconnect.prebuilt.tools import Tool
 
 logger = logging.getLogger(__name__)
 
@@ -62,16 +64,18 @@ class TelegramAIAgent(AIAgent):
         "/help - This message\n"
     )
 
-    profile = {
-        "summary": "Talks with people on Telegram and with teammates on a Team.",
-        "skills": [
-            {
-                "name": "telegram_messaging",
-                "description": "Send and receive Telegram text, media, and group announcements.",
-            }
+    profile = AgentProfile(
+        summary="Talks with people on Telegram and with teammates on a Team.",
+        skills=[
+            Skill(
+                name="telegram_messaging",
+                description=(
+                    "Send and receive Telegram text, media, and group announcements."
+                ),
+            )
         ],
-        "tags": ["telegram"],
-    }
+        tags=["telegram"],
+    )
 
     def __init__(
         self,
@@ -80,7 +84,7 @@ class TelegramAIAgent(AIAgent):
         model: str,
         telegram_token: Optional[str] = None,
         instructions: str = "You are a helpful Telegram assistant.",
-        tools: Optional[Sequence[Tool]] = None,
+        tools: Optional[Sequence[ToolLike]] = None,
         identity: Optional[AgentIdentity] = None,
         profile: Any = None,
         completion: Optional[CompletionOptions] = None,
@@ -118,13 +122,14 @@ class TelegramAIAgent(AIAgent):
         telegram_tools: list[Tool] = []
         if self.bot_manager.telegram_tools:
             telegram_tools = self.bot_manager.telegram_tools.get_tools()
+        combined: list[ToolLike] = [*telegram_tools, *(tools or ())]
         super().__init__(
             name=name,
             model=model,
             profile=profile,
             identity=identity,
             instructions=instructions,
-            tools=merge_tools(telegram_tools, list(tools or [])),
+            tools=combined,
             max_tool_rounds=max_tool_rounds,
             completion=completion,
             api_key=api_key,

@@ -43,7 +43,7 @@ from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Optional, Union, get_type_hints
 
-from pydantic import Field, create_model
+from pydantic import ConfigDict, Field, create_model
 from typing_extensions import Annotated
 
 from agentconnect.agent.errors import SessionError
@@ -579,11 +579,16 @@ def _parameters_from_callable(
             fields[name] = (annotation, ...)
         else:
             fields[name] = (annotation, param.default)
+    config = ConfigDict(extra="forbid")
     if not fields:
-        model = create_model(f"{_model_name(fn)}_Params")
-        return {"type": "object", "properties": {}}, model
+        model = create_model(f"{_model_name(fn)}_Params", __config__=config)
+        return {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        }, model
     try:
-        model = create_model(f"{_model_name(fn)}_Params", **fields)
+        model = create_model(f"{_model_name(fn)}_Params", __config__=config, **fields)
         schema = model.model_json_schema()
     except Exception as exc:
         raise ValueError(
@@ -607,7 +612,11 @@ def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
         key: _strip_titles(value)
         for key, value in dict(schema.get("properties") or {}).items()
     }
-    out: dict[str, Any] = {"type": "object", "properties": properties}
+    out: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
     required = schema.get("required")
     if isinstance(required, list) and required:
         out["required"] = list(required)

@@ -99,6 +99,21 @@ async def test_pydantic_argument_is_passed_as_the_model_instance():
 
 
 @pytest.mark.asyncio
+async def test_undeclared_argument_fails_before_the_handler():
+    calls: list[int] = []
+
+    def pay(amount: int) -> str:
+        calls.append(amount)
+        return str(amount)
+
+    tool = Tool.from_callable(pay)
+    assert tool.parameters["additionalProperties"] is False
+    with pytest.raises(ValidationError):
+        await _call_tool(tool, {"amount": 5, "currency": "usd"})
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_invalid_pydantic_argument_does_not_call_the_handler():
     calls: list[Payload] = []
 

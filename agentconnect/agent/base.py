@@ -345,11 +345,13 @@ class BaseAgent:
         )
 
     def team_tools(self) -> TeamTools:
-        """Return find, ask, tell, get_result, and get_history for this Agent.
+        """Return Session-bound tools for this Agent.
 
+        Tools are find, ask, tell, get_result, get_history, and get_profile.
         Safe to call before ``join``. The callables fail until a Session
         exists. Use these when the host does not speak MCP. Results are
-        JSON via :func:`~agentconnect.core.base.dump_public`.
+        JSON via :func:`~agentconnect.core.base.dump_public`. ``ask`` and
+        ``get_result`` return TicketView JSON.
 
             tools = self.team_tools()
             found = await tools.find(query="someone who can draft a summary")
@@ -358,7 +360,7 @@ class BaseAgent:
                 content=msg.content,
             )
             if ticket["state"] == "completed":
-                return ticket["response"]["content"]
+                return ticket["content"]
         """
         return TeamTools(self._require_session)
 

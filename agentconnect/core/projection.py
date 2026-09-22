@@ -90,11 +90,18 @@ from agentconnect.core.primitives import (
 from agentconnect.core.profile import AgentProfile, Skill
 from agentconnect.core.ticket import (
     CompletedTicket,
+    CompletedTicketView,
     DeclinedTicket,
+    DeclinedTicketView,
     ExpiredTicket,
+    ExpiredTicketView,
     FailedTicket,
+    FailedTicketView,
     OpenTicket,
+    OpenTicketView,
     Ticket,
+    TicketView,
+    TicketViewError,
 )
 
 # Every schema.json definition except the generation wrapper.
@@ -135,6 +142,13 @@ PUBLIC_SCHEMA_TYPES: dict[str, Any] = {
     "ExpiredTicket": ExpiredTicket,
     "DeclinedTicket": DeclinedTicket,
     "Ticket": Ticket,
+    "TicketViewError": TicketViewError,
+    "OpenTicketView": OpenTicketView,
+    "CompletedTicketView": CompletedTicketView,
+    "FailedTicketView": FailedTicketView,
+    "ExpiredTicketView": ExpiredTicketView,
+    "DeclinedTicketView": DeclinedTicketView,
+    "TicketView": TicketView,
     "DirectoryEntry": DirectoryEntry,
     "DirectoryMatch": DirectoryMatch,
     "JoinChallenge": JoinChallenge,

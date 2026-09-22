@@ -117,12 +117,21 @@ from agentconnect.core.profile import AgentProfile, Skill
 from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.ticket import (
     CompletedTicket,
+    CompletedTicketView,
     DeclinedTicket,
+    DeclinedTicketView,
     ExpiredTicket,
+    ExpiredTicketView,
     FailedTicket,
+    FailedTicketView,
     OpenTicket,
+    OpenTicketView,
     Ticket,
+    TicketView,
+    TicketViewError,
     parse_ticket,
+    parse_ticket_view,
+    ticket_view,
 )
 
 __all__ = [
@@ -223,10 +232,19 @@ __all__ = [
     "Skill",
     "SPEC_VERSION",
     "CompletedTicket",
+    "CompletedTicketView",
     "DeclinedTicket",
+    "DeclinedTicketView",
     "ExpiredTicket",
+    "ExpiredTicketView",
     "FailedTicket",
+    "FailedTicketView",
     "OpenTicket",
+    "OpenTicketView",
     "Ticket",
+    "TicketView",
+    "TicketViewError",
     "parse_ticket",
+    "parse_ticket_view",
+    "ticket_view",
 ]

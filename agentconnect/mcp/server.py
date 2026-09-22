@@ -32,7 +32,7 @@ from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_PARAMS, ToolAnnotations
 
 from agentconnect.core.base import dump_public, parse_schema
-from agentconnect.core.directory import FindRequest
+from agentconnect.core.directory import FindRequest, GetProfileRequest
 from agentconnect.core.operations import (
     AskToolRequest,
     GetHistoryRequest,
@@ -45,6 +45,7 @@ from agentconnect.mcp.actions import (
     ask_action,
     find_action,
     get_history_action,
+    get_profile_action,
     get_result_action,
     tell_action,
 )
@@ -59,11 +60,12 @@ from agentconnect.team.session_auth import session_token_for_request
 
 _INSTRUCTIONS = (
     "You are talking to an AgentConnect Team. Use find to discover teammates "
-    "by describing the work. Use ask to send reply-expected work. Use tell "
-    "for events. Use get_result to collect a Ticket. Use get_history to page "
+    "by describing the work. Use get_profile to read one teammate in full. "
+    "Use ask to send work that needs a reply. Use tell when no reply is "
+    "needed. Use get_result to collect a TicketView. Use get_history to page "
     "a conversation. Addresses look like writer or writer@team-name. Keep "
-    "ticket.id and thread_id from results. ask wait may return an open "
-    "Ticket; call get_result for the rest. Do not invent thread ids. Pass "
+    "ticket_id and thread_id from results. ask wait may return an open "
+    "TicketView; call get_result for the rest. Do not invent thread ids. Pass "
     "idempotency_key when you mean to retry the same ask."
 )
 
@@ -74,6 +76,7 @@ _TOOL_MODELS = {
     "tell": TellToolRequest,
     "get_result": GetResultRequest,
     "get_history": GetHistoryRequest,
+    "get_profile": GetProfileRequest,
 }
 _resolved_session: ContextVar[str | None] = ContextVar(
     "agentconnect_mcp_session", default=None
@@ -181,9 +184,10 @@ def create_team_mcp(
 ) -> MCPServer:
     """Return the MCP server for ``runtime``.
 
-    Tools are ``find``, ``ask``, ``tell``, ``get_result``, and ``get_history``.
-    The roster is the resource ``agentconnect://team/roster``. Extra callables
-    are registered by function name and must not reuse a reserved name.
+    Tools are ``find``, ``ask``, ``tell``, ``get_result``, ``get_history``,
+    and ``get_profile``. The roster is the resource
+    ``agentconnect://team/roster``. Extra callables are registered by
+    function name and must not reuse a reserved name.
 
     ``in_process=True`` (the default) is the explicit in-process trust path
     used by ``Client(mcp)``. HTTP serving passes ``in_process=False`` so a
@@ -235,6 +239,20 @@ def create_team_mcp(
         except TeamError as exc:
             raise _tool_error(exc) from exc
 
+    async def get_profile(ctx: Context, address: str) -> dict[str, Any]:
+        """Return one teammate's full Directory entry.
+
+        address: Local or same-Team qualified Address.
+        """
+        del ctx
+        token = _bound_session()
+        try:
+            return await get_profile_action(runtime, token, address)
+        except ValueError as exc:
+            raise MCPError(INVALID_PARAMS, str(exc)) from exc
+        except TeamError as exc:
+            raise _tool_error(exc) from exc
+
     async def ask(
         ctx: Context,
         recipient: str,
@@ -244,12 +262,12 @@ def create_team_mcp(
         thread_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Send reply-expected work and return the current Ticket.
+        """Send work that needs a reply and return the current TicketView.
 
         recipient: Local Address such as "writer".
         content: The work, text or JSON.
         deadline_seconds: Optional work cutoff from 1 to 86400 seconds. Omit to inherit a request parent or the Runtime work lifetime.
-        collect: "wait" (default) returns the current Ticket after the Runtime hold, which may still be open. "ticket" returns immediately.
+        collect: "wait" (default) returns the current TicketView after the Runtime hold, which may still be open. "ticket" returns immediately.
         thread_id: Continue this conversation. Omit to start a new one.
         idempotency_key: Stable key so a retry does not create a second request.
         """
@@ -280,12 +298,12 @@ def create_team_mcp(
         thread_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Send an event. No Ticket is created.
+        """Send work that does not need a reply. No Ticket is created.
 
         recipient: Local Address such as "writer".
-        content: The event, text or JSON.
+        content: The work, text or JSON.
         thread_id: Continue this conversation.
-        idempotency_key: Stable key so a retry does not create a second event.
+        idempotency_key: Stable key so a retry does not create a second send.
         """
         token = _bound_session()
         address = await runtime.caller_address(token)
@@ -306,9 +324,9 @@ def create_team_mcp(
             raise _tool_error(exc) from exc
 
     async def get_result(ctx: Context, ticket_id: str) -> dict[str, Any]:
-        """Return the current Ticket for work this Membership sent.
+        """Return the current TicketView for work this Membership sent.
 
-        ticket_id: Ticket id from ask. Equal to the request Message id.
+        ticket_id: ticket_id from ask. Equal to the request Message id.
         """
         del ctx
         token = _bound_session()
@@ -327,7 +345,7 @@ def create_team_mcp(
     ) -> dict[str, Any]:
         """Return one page of retained Thread history.
 
-        thread_id: Conversation id from a Ticket or Message.
+        thread_id: Conversation id from a TicketView or Message.
         before: Oldest Message id already seen. Omit for the newest page.
         limit: Page size from 1 to 200. Defaults to 50.
         """
@@ -353,7 +371,19 @@ def create_team_mcp(
         title="Find teammates",
         description=(
             "Find teammates by describing the work you need. Returns ranked "
-            "matches. Omit limit to receive every other member, at most 100."
+            "matches. Omit limit to receive every other member, at most 100. "
+            "Use get_profile to read one match in full."
+        ),
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        structured_output=True,
+    )
+    mcp.add_tool(
+        get_profile,
+        name="get_profile",
+        title="Read one profile",
+        description=(
+            "Return one teammate's full Directory entry by Address. Prefer "
+            "this over find(detail=full) when you need one Profile."
         ),
         annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
         structured_output=True,
@@ -363,8 +393,10 @@ def create_team_mcp(
         name="ask",
         title="Ask a teammate",
         description=(
-            "Send reply-expected work. Returns a Ticket. Keep ticket.id and "
-            "pass it to get_result if the Ticket is still open."
+            "Send work that needs a reply. Returns a TicketView. Keep "
+            "ticket_id and pass it to get_result while the Ticket is open. "
+            "Prefer this over tell when you need an answer; tell does not "
+            "create a Ticket."
         ),
         annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
         structured_output=True,
@@ -373,7 +405,11 @@ def create_team_mcp(
         tell,
         name="tell",
         title="Tell a teammate",
-        description="Send an event. No reply is expected and no Ticket is created.",
+        description=(
+            "Send work that does not need a reply. Does not create a Ticket, "
+            "so a caller that needed an answer gets none and no error from "
+            "tell itself. Prefer ask when you need a reply."
+        ),
         annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
         structured_output=True,
     )
@@ -381,7 +417,10 @@ def create_team_mcp(
         get_result,
         name="get_result",
         title="Collect a result",
-        description="Return the current Ticket. Repeatable. Does not consume the result.",
+        description=(
+            "Return the current TicketView. Repeatable. Does not consume the "
+            "result. Pass ticket_id from ask."
+        ),
         annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
         structured_output=True,
     )

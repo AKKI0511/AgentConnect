@@ -27,6 +27,7 @@ from agentconnect.agent.context import Context
 from agentconnect.core.base import JsonValue
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.message import MailboxMessage
+from agentconnect.core.profile import AgentProfile, Skill
 
 _EXIT = frozenset({"exit", "quit", "bye"})
 
@@ -39,16 +40,16 @@ class HumanAgent(BaseAgent):
     await human.start_interaction("assistant")
     """
 
-    profile = {
-        "summary": "A person on this Team who reads and types replies.",
-        "skills": [
-            {
-                "name": "text_interaction",
-                "description": "Read a request and type a reply.",
-            }
+    profile = AgentProfile(
+        summary="A person on this Team who reads and types replies.",
+        skills=[
+            Skill(
+                name="text_interaction",
+                description="Read a request and type a reply.",
+            )
         ],
-        "tags": ["human"],
-    }
+        tags=["human"],
+    )
 
     def __init__(
         self,

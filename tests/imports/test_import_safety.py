@@ -9,6 +9,34 @@ def test_top_level_import_has_version_and_no_crash():
     assert hasattr(mod, "__version__")
 
 
+def test_top_level_import_does_not_call_metadata_version_until_accessed():
+    script = (
+        "import sys\n"
+        "import importlib.metadata as metadata\n"
+        "calls = []\n"
+        "original = metadata.version\n"
+        "def tracking_version(name):\n"
+        "    calls.append(name)\n"
+        "    return original(name)\n"
+        "metadata.version = tracking_version\n"
+        "sys.modules.pop('agentconnect', None)\n"
+        "import agentconnect\n"
+        "assert calls == [], calls\n"
+        "version = agentconnect.__version__\n"
+        "assert isinstance(version, str) and version\n"
+        "assert calls == [agentconnect.__package__], calls\n"
+    )
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_top_level_package_does_not_lazy_export_core():
     script = (
         "import agentconnect\n"

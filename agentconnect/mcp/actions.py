@@ -1,8 +1,9 @@
-"""Runtime operations behind the five AgentConnect MCP tools.
+"""Runtime operations behind the AgentConnect MCP tools.
 
 These functions take an already-resolved Session token. The MCP server
 resolves the caller, then calls here. Session-bound callables in
-``agentconnect.agent.tools`` use the same send and wait rules.
+``agentconnect.agent.tools`` use the same send and wait rules. Model-facing
+``ask`` and ``get_result`` return TicketView JSON.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Protocol
 
 from agentconnect.core.base import dump_public, parse_schema
-from agentconnect.core.directory import FindRequest
+from agentconnect.core.directory import FindRequest, GetProfileRequest
 from agentconnect.core.operations import (
     AskToolRequest,
     GetHistoryRequest,
@@ -20,6 +21,7 @@ from agentconnect.core.operations import (
     TellToolRequest,
 )
 from agentconnect.core.primitives import CollectMode
+from agentconnect.core.ticket import parse_ticket, ticket_view
 from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.team.errors import TeamError
 from agentconnect.team.session_auth import session_token_for_request
@@ -47,6 +49,9 @@ class TeamRuntime(Protocol):
         detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory."""
+
+    async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
+        """Return one Directory entry."""
 
     async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
         """Return a Ticket this Membership owns."""
@@ -141,6 +146,14 @@ async def find_action(
     )
 
 
+async def get_profile_action(
+    runtime: TeamRuntime, session_token: str, address: str
+) -> dict[str, Any]:
+    """Return one Directory entry for ``address``."""
+    parsed = parse_schema(GetProfileRequest, {"address": address})
+    return dump_public(await runtime.get_profile(session_token, parsed.address))
+
+
 async def ask_action(
     runtime: TeamRuntime,
     session_token: str,
@@ -153,10 +166,10 @@ async def ask_action(
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Send a reply-expected request and return the current Ticket.
+    """Send a reply-expected request and return the current TicketView.
 
     ``collect`` matches Runtime ``send``. The wait hold may return an
-    ``open`` Ticket; call ``get_result`` for the terminal state.
+    ``open`` TicketView; call ``get_result`` for the terminal state.
     An omitted ``thread_id`` is minted for the send. A keyed retry
     recovers the original generated Thread. An omitted deadline inherits
     a request parent or the Runtime work lifetime.
@@ -165,7 +178,7 @@ async def ask_action(
             team, token, "researcher@content-squad",
             "writer", "draft this",
         )
-        ticket["id"]
+        ticket["ticket_id"]
     """
     if not isinstance(recipient, str) or not recipient.strip():
         raise ValueError("recipient is required")
@@ -249,7 +262,7 @@ async def ask_action(
     ticket = result.get("ticket")
     if not isinstance(ticket, dict):
         raise TeamError("internal", "ask did not return a Ticket")
-    return ticket
+    return dump_public(ticket_view(parse_ticket(ticket)))
 
 
 async def _send_ask(
@@ -292,10 +305,10 @@ async def tell_action(
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Send an event. Returns ``AcceptedSendResult``.
+    """Send without expecting a reply. Returns ``AcceptedSendResult``.
 
     A keyed retry with the same arguments returns the original accepted
-    event. Changed keyed arguments raise ``id_conflict``.
+    send. Changed keyed arguments raise ``id_conflict``.
     """
     if not isinstance(recipient, str) or not recipient.strip():
         raise ValueError("recipient is required")
@@ -326,9 +339,10 @@ async def tell_action(
 async def get_result_action(
     runtime: TeamRuntime, session_token: str, ticket_id: str
 ) -> dict[str, Any]:
-    """Return the current Ticket owned by this Membership."""
+    """Return the current TicketView owned by this Membership."""
     parsed = parse_schema(GetResultRequest, {"ticket_id": ticket_id})
-    return dump_public(await runtime.get_result(session_token, parsed.ticket_id))
+    ticket = parse_ticket(await runtime.get_result(session_token, parsed.ticket_id))
+    return dump_public(ticket_view(ticket))
 
 
 async def get_history_action(

@@ -74,6 +74,27 @@
         "ticket": {
           "$ref": "#/definitions/Ticket"
         },
+        "ticket_view_error": {
+          "$ref": "#/definitions/TicketViewError"
+        },
+        "open_ticket_view": {
+          "$ref": "#/definitions/OpenTicketView"
+        },
+        "completed_ticket_view": {
+          "$ref": "#/definitions/CompletedTicketView"
+        },
+        "failed_ticket_view": {
+          "$ref": "#/definitions/FailedTicketView"
+        },
+        "expired_ticket_view": {
+          "$ref": "#/definitions/ExpiredTicketView"
+        },
+        "declined_ticket_view": {
+          "$ref": "#/definitions/DeclinedTicketView"
+        },
+        "ticket_view": {
+          "$ref": "#/definitions/TicketView"
+        },
         "directory_entry": {
           "$ref": "#/definitions/DirectoryEntry"
         },
@@ -1284,6 +1305,274 @@
       ],
       "additionalProperties": false,
       "description": "Ticket the recipient deliberately declined. The recipient handled the request and chose not to answer, the way a person may read a message and decide no reply is warranted. It is a terminal, non-failure outcome that is explicit to the requester, distinct from a handler failure and from a deadline that expired with no handling."
+    },
+    "TicketViewError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/ErrorCode",
+          "description": "Well-known failure code."
+        },
+        "message": {
+          "type": "string",
+          "description": "Requester-visible explanation.",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "description": "Lean failure on a model-facing Ticket view. Code and message only; no details, retryable flag, or Message envelope."
+    },
+    "OpenTicketView": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id. The only id on this view."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "ttl_ms": {
+          "type": "number",
+          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Short status text present on every state."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one."
+        },
+        "state": {
+          "type": "string",
+          "const": "open",
+          "description": "Ticket still waiting for its first accepted outcome."
+        },
+        "poll_interval_ms": {
+          "type": "number",
+          "const": 1000,
+          "description": "Hint for how often a model may poll `get_result`. Not a Runtime wait or lease change."
+        }
+      },
+      "required": [
+        "deadline",
+        "poll_interval_ms",
+        "state",
+        "status_message",
+        "ticket_id",
+        "ttl_ms"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing view of an open Ticket."
+    },
+    "CompletedTicketView": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id. The only id on this view."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "ttl_ms": {
+          "type": "number",
+          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Short status text present on every state."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one."
+        },
+        "state": {
+          "type": "string",
+          "const": "completed",
+          "description": "Ticket closed by a successful reply."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue",
+          "description": "Reply content alone."
+        }
+      },
+      "required": [
+        "content",
+        "deadline",
+        "state",
+        "status_message",
+        "ticket_id",
+        "ttl_ms"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing view of a completed Ticket."
+    },
+    "FailedTicketView": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id. The only id on this view."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "ttl_ms": {
+          "type": "number",
+          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Short status text present on every state."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one."
+        },
+        "state": {
+          "type": "string",
+          "const": "failed",
+          "description": "Ticket closed by an Agent failure."
+        },
+        "error": {
+          "$ref": "#/definitions/TicketViewError",
+          "description": "Failure code and message only."
+        }
+      },
+      "required": [
+        "deadline",
+        "error",
+        "state",
+        "status_message",
+        "ticket_id",
+        "ttl_ms"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing view of a failed Ticket."
+    },
+    "ExpiredTicketView": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id. The only id on this view."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "ttl_ms": {
+          "type": "number",
+          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Short status text present on every state."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one."
+        },
+        "state": {
+          "type": "string",
+          "const": "expired",
+          "description": "Ticket closed because its deadline passed first."
+        },
+        "error": {
+          "$ref": "#/definitions/TicketViewError",
+          "description": "Deadline failure code and message only."
+        }
+      },
+      "required": [
+        "deadline",
+        "error",
+        "state",
+        "status_message",
+        "ticket_id",
+        "ttl_ms"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing view of an expired Ticket."
+    },
+    "DeclinedTicketView": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id. The only id on this view."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute time after which an open Ticket expires."
+        },
+        "ttl_ms": {
+          "type": "number",
+          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Short status text present on every state."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one."
+        },
+        "state": {
+          "type": "string",
+          "const": "declined",
+          "description": "Ticket closed because the recipient chose not to respond."
+        }
+      },
+      "required": [
+        "deadline",
+        "state",
+        "status_message",
+        "ticket_id",
+        "ttl_ms"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing view of a declined Ticket."
+    },
+    "TicketView": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/OpenTicketView"
+        },
+        {
+          "$ref": "#/definitions/CompletedTicketView"
+        },
+        {
+          "$ref": "#/definitions/FailedTicketView"
+        },
+        {
+          "$ref": "#/definitions/ExpiredTicketView"
+        },
+        {
+          "$ref": "#/definitions/DeclinedTicketView"
+        }
+      ],
+      "description": "Model-facing Ticket projection. Discriminated on `state` with the same Ticket states as the wire union."
     },
     "DirectoryEntry": {
       "type": "object",

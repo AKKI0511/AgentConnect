@@ -55,6 +55,14 @@ Performance lives under `benchmarks/runtime/` and runs separately from ordinary
 CI. [Runtime benchmarks](benchmarks/runtime/README.md) explains the commands,
 fixed budgets, and artifacts. Preserve real-backend coverage and failed evidence.
 
+Retrieval quality lives under `benchmarks/discovery/` and is also separate
+from ordinary CI. Run it when Profile text or Directory ranking changes, not
+for unrelated edits. [Discovery retrieval](benchmarks/discovery/README.md)
+has the setup, commands, artifact path, and how to read a miss. It does not
+need Redis or a chat-model credential. Keep a failed neural load in the
+artifact. Do not replace it with hashed ranks or retune the coverage@10 and
+MRR gates after seeing a run.
+
 Schema generation and freshness:
 
 ```bash

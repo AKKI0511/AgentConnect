@@ -9,19 +9,20 @@ Install the extra first::
 
     pip install 'agentconnect[aiagent]'
 
-    from agentconnect.prebuilt import AIAgent, Tool
+    from agentconnect.prebuilt import AIAgent
+    from agentconnect.core.profile import AgentProfile, Skill
     from agentconnect.team import Team
 
     class Writer(AIAgent):
-        profile = {
-            "summary": "Writes short drafts from notes.",
-            "skills": [
-                {
-                    "name": "drafting",
-                    "description": "Turn notes into a two-paragraph draft.",
-                }
+        profile = AgentProfile(
+            summary="Writes short drafts from notes.",
+            skills=[
+                Skill(
+                    name="drafting",
+                    description="Turn notes into a two-paragraph draft.",
+                )
             ],
-        }
+        )
 
         def __init__(self, name: str = "writer"):
             super().__init__(
@@ -34,8 +35,9 @@ Install the extra first::
     await Writer().join(team)
 
 Conversation state for Team work comes from ``ctx.history``. Team tools
-(``find``, ``ask``, ``tell``, ``get_result``, ``get_history``) are attached
-from the Session, not as an ``AIAgent`` feature. Extra tools are yours.
+(``find``, ``ask``, ``tell``, ``get_result``, ``get_history``,
+``get_profile``) are attached from the Session. Extra tools are yours:
+pass a plain annotated function or an explicit ``Tool``.
 
 ``model`` is a LiteLLM model id, for example ``gpt-4o-mini`` or
 ``gemini/gemini-2.0-flash``. Provider keys stay in the environment.
@@ -50,6 +52,7 @@ from typing import Any, Optional, TypedDict
 from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
+from agentconnect.agent.tools import Tool, ToolLike, _ensure_tool
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.message import MailboxMessage
 from agentconnect.core.profile import AgentProfile
@@ -59,7 +62,6 @@ from agentconnect.prebuilt.loop import (
     messages_from_thread,
     run_tool_loop,
 )
-from agentconnect.prebuilt.tools import Tool, merge_tools, tools_from_team
 
 
 class CompletionOptions(TypedDict, total=False):
@@ -96,7 +98,7 @@ class AIAgent(BaseAgent):
         instructions: str = (
             "You are a helpful teammate. Use tools when they help you do the work."
         ),
-        tools: Optional[Sequence[Tool]] = None,
+        tools: Optional[Sequence[ToolLike]] = None,
         max_tool_rounds: int = DEFAULT_MAX_ROUNDS,
         completion: Optional[CompletionOptions] = None,
         api_key: Optional[str] = None,
@@ -114,7 +116,8 @@ class AIAgent(BaseAgent):
             profile: Discovery Profile mapping or ``AgentProfile``. A class
                 attribute named ``profile`` is used when this is omitted.
             instructions: System prompt for every model call.
-            tools: Extra tools besides the Session Team tools.
+            tools: Extra tools besides the Session Team tools. Each item is a
+                plain annotated function or an explicit ``Tool``.
             max_tool_rounds: Cap on model→tool→model cycles per turn.
             completion: Extra LiteLLM kwargs such as ``temperature``.
             api_key: Optional key. LiteLLM also reads provider env vars.
@@ -141,7 +144,7 @@ class AIAgent(BaseAgent):
         self.completion: dict[str, Any] = dict(completion or {})
         self.api_key = api_key
         self.include_team_tools = include_team_tools
-        self.tools: list[Tool] = list(tools or [])
+        self.tools: list[Tool] = [_ensure_tool(item) for item in tools or ()]
         self._complete: CompletionFn = complete or _litellm_complete
         self._chats: dict[str, list[dict[str, Any]]] = {}
 
@@ -150,6 +153,7 @@ class AIAgent(BaseAgent):
 
         Thread history comes from ``ctx.history``. Team tools attach when a
         Session exists and ``include_team_tools`` is True.
+        ``ToolLoopExhausted`` is not caught here.
         """
         address = self.address
         user_text = _message_text(message)
@@ -219,13 +223,16 @@ class AIAgent(BaseAgent):
         return reply
 
     def _bound_tools(self, include_team_tools: bool) -> list[Tool]:
-        team: list[Tool] = []
+        by_name: dict[str, Tool] = {}
         if include_team_tools:
             try:
-                team = tools_from_team(self.team_tools())
+                for tool in self.team_tools():
+                    by_name[tool.name] = tool
             except SessionError:
-                team = []
-        return merge_tools(team, self.tools)
+                pass
+        for tool in self.tools:
+            by_name[tool.name] = tool
+        return list(by_name.values())
 
 
 def _message_text(message: Any) -> str:

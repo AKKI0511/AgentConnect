@@ -4,6 +4,10 @@ LiteLLM normalizes provider APIs. It does not run tools. This loop does:
 call the model, run any tool calls, append results, repeat until the model
 stops calling tools or ``max_rounds`` is hit.
 
+When the turn budget is exhausted while the model is still calling tools,
+:class:`ToolLoopExhausted` is raised. That is an unsuccessful outcome, not
+a successful string reply.
+
     from agentconnect.prebuilt.loop import run_tool_loop
     from agentconnect.prebuilt.tools import Tool
 
@@ -11,7 +15,7 @@ stops calling tools or ``max_rounds`` is hit.
         complete=litellm.acompletion,
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": "ping the tool"}],
-        tools=[Tool(name="ping", description="Return pong.", parameters={...}, handler=ping)],
+        tools=[Tool.from_callable(ping)],
     )
 """
 
@@ -22,11 +26,24 @@ import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional, Protocol
 
-from agentconnect.prebuilt.tools import Tool, call_tool
+from agentconnect.agent.tools import ToolLike, _call_tool, _ensure_tool
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ROUNDS = 8
+
+
+class ToolLoopExhausted(Exception):
+    """The model was still calling tools when ``max_rounds`` was reached.
+
+    Raised by :func:`run_tool_loop`. ``AIAgent.handle`` does not catch it, so
+    an in-Team request fails through the handler-failure path. ``chat`` and
+    ``complete`` let the same exception reach the caller.
+    """
+
+    def __init__(self, max_rounds: int) -> None:
+        self.max_rounds = max_rounds
+        super().__init__(f"tool loop exhausted after {max_rounds} rounds")
 
 
 class CompletionFn(Protocol):
@@ -45,14 +62,17 @@ async def run_tool_loop(
     complete: CompletionFn,
     model: str,
     messages: Sequence[Mapping[str, Any]],
-    tools: Sequence[Tool] | None = None,
+    tools: Sequence[ToolLike] | None = None,
     max_rounds: int = DEFAULT_MAX_ROUNDS,
     **complete_kwargs: Any,
 ) -> str:
-    """Call ``complete`` until the model returns text or ``max_rounds`` is hit.
+    """Call ``complete`` until the model returns text or raise on exhaustion.
 
     ``messages`` is an OpenAI-style chat history. The loop mutates a local copy
     only. Tool results stay in that copy; they are not written to a Thread.
+    A tool exception becomes one error JSON payload and the loop continues.
+    Hitting ``max_rounds`` while tool calls remain raises
+    :class:`ToolLoopExhausted`.
 
         reply = await run_tool_loop(
             complete=scripted_complete,
@@ -63,9 +83,9 @@ async def run_tool_loop(
     if max_rounds < 1:
         raise ValueError("max_rounds must be at least 1")
     history: list[dict[str, Any]] = [dict(item) for item in messages]
-    by_name = {tool.name: tool for tool in tools or ()}
+    resolved = [_ensure_tool(item) for item in tools or ()]
+    by_name = {tool.name: tool for tool in resolved}
     schemas = [tool.openai_schema() for tool in by_name.values()]
-    last_text = ""
     for round_index in range(max_rounds):
         kwargs: dict[str, Any] = {
             "model": model,
@@ -77,8 +97,6 @@ async def run_tool_loop(
         response = await complete(**kwargs)
         message = _choice_message(response)
         text = _content_text(message)
-        if text:
-            last_text = text
         calls = _tool_calls(message)
         if not calls:
             return text
@@ -90,7 +108,7 @@ async def run_tool_loop(
                 payload = json.dumps({"error": f"unknown tool {name!r}"})
             else:
                 try:
-                    payload = await call_tool(tool, arguments)
+                    payload = await _call_tool(tool, arguments)
                 except Exception as exc:
                     logger.warning(
                         "tool %s failed round=%s: %s", name, round_index, exc
@@ -104,9 +122,7 @@ async def run_tool_loop(
                 }
             )
     logger.warning("tool loop hit max_rounds=%s model=%s", max_rounds, model)
-    if last_text:
-        return last_text
-    return f"Stopped after {max_rounds} tool rounds."
+    raise ToolLoopExhausted(max_rounds)
 
 
 def messages_from_thread(

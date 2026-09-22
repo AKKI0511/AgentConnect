@@ -512,6 +512,97 @@ export type Ticket =
   | DeclinedTicket;
 
 /**
+ * Lean failure on a model-facing Ticket view. Code and message only; no
+ * details, retryable flag, or Message envelope.
+ */
+export interface TicketViewError {
+  /** Well-known failure code. */
+  code: ErrorCode;
+  /**
+   * Requester-visible explanation.
+   * @minLength 1
+   * @maxLength 2000
+   * @pattern \S
+   */
+  message: string;
+}
+
+/**
+ * Fields shared by every model-facing Ticket view. MCP `ask` / `get_result`
+ * and Session-bound Team tools return this projection, not the wire Ticket.
+ * Runtime, HTTP, and Client `ask` / `get_result` still return the wire Ticket.
+ */
+export interface TicketViewBase {
+  /** Request Message id. The only id on this view. */
+  ticket_id: Uuid;
+  /** Absolute time after which an open Ticket expires. */
+  deadline: Timestamp;
+  /**
+   * Whole milliseconds remaining until `deadline` when this view was built.
+   * Never negative.
+   * @minimum 0
+   * @multipleOf 1
+   */
+  ttl_ms: number;
+  /** Short status text present on every state. */
+  status_message: string;
+  /** Thread the request belongs to, when it has one. */
+  thread_id?: Uuid;
+}
+
+/** Model-facing view of an open Ticket. */
+export interface OpenTicketView extends TicketViewBase {
+  /** Ticket still waiting for its first accepted outcome. */
+  state: "open";
+  /**
+   * Hint for how often a model may poll `get_result`. Not a Runtime wait or
+   * lease change.
+   */
+  poll_interval_ms: 1000;
+}
+
+/** Model-facing view of a completed Ticket. */
+export interface CompletedTicketView extends TicketViewBase {
+  /** Ticket closed by a successful reply. */
+  state: "completed";
+  /** Reply content alone. */
+  content: JsonValue;
+}
+
+/** Model-facing view of a failed Ticket. */
+export interface FailedTicketView extends TicketViewBase {
+  /** Ticket closed by an Agent failure. */
+  state: "failed";
+  /** Failure code and message only. */
+  error: TicketViewError;
+}
+
+/** Model-facing view of an expired Ticket. */
+export interface ExpiredTicketView extends TicketViewBase {
+  /** Ticket closed because its deadline passed first. */
+  state: "expired";
+  /** Deadline failure code and message only. */
+  error: TicketViewError;
+}
+
+/** Model-facing view of a declined Ticket. */
+export interface DeclinedTicketView extends TicketViewBase {
+  /** Ticket closed because the recipient chose not to respond. */
+  state: "declined";
+}
+
+/**
+ * Model-facing Ticket projection. Discriminated on `state` with the same
+ * Ticket states as the wire union.
+ */
+export type TicketView =
+  | OpenTicketView
+  | CompletedTicketView
+  | FailedTicketView
+  | ExpiredTicketView
+  | DeclinedTicketView;
+
+/**
  * Full Directory record for one Membership. Runtime `get_profile` returns
  * this object: Address, DID, and Profile together. It is not a bare Profile.
  */
@@ -1223,6 +1314,13 @@ export interface AgentConnectPublicSchema {
   message?: Message;
   delivery?: Delivery;
   ticket?: Ticket;
+  ticket_view_error?: TicketViewError;
+  open_ticket_view?: OpenTicketView;
+  completed_ticket_view?: CompletedTicketView;
+  failed_ticket_view?: FailedTicketView;
+  expired_ticket_view?: ExpiredTicketView;
+  declined_ticket_view?: DeclinedTicketView;
+  ticket_view?: TicketView;
   directory_entry?: DirectoryEntry;
   directory_match?: DirectoryMatch;
   join_challenge?: JoinChallenge;

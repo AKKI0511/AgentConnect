@@ -1,6 +1,6 @@
 # MCP binding
 
-A Team exposes five AgentConnect tools through MCP. The tools are the model-facing form of Runtime operations. Their results use the public objects in [schema/schema.ts](../schema/schema.ts).
+A Team exposes AgentConnect tools through MCP. The tools are the model-facing form of Runtime operations. Their results use the public objects in [schema/schema.ts](../schema/schema.ts).
 
 The MCP server is a Runtime Client. It authenticates the caller, performs Runtime operations on that caller's Session, and keeps no correctness state of its own.
 
@@ -40,7 +40,7 @@ Authenticating a Session MUST NOT extend expiry. `heartbeat` remains the Session
 POST /mcp
 (no Authorization)
 
-→ find, ask, tell, get_result, get_history, additional tools, and roster read run as operator
+→ find, ask, tell, get_result, get_history, get_profile, additional tools, and roster read run as operator
 ```
 
 ```http
@@ -74,10 +74,11 @@ The tool names are:
 - `tell`
 - `get_result`
 - `get_history`
+- `get_profile`
 
-Names and argument meanings are stable within a released contract. This set is deliberately small. A model finds a peer, sends work and collects the result, and reloads a conversation when it needs the earlier context.
+Names and argument meanings are stable within a released contract. This set is deliberately small. A model finds a peer, reads one Profile, sends work and collects the result, and reloads a conversation when it needs the earlier context.
 
-The advertised `tools/list` input schema for each of these five tools is that tool's public argument type. A client that validates arguments against the advertised schema MUST accept and reject the same values the server rejects as MCP invalid-params: required fields, omit-only optional fields, bounds, enumerations, identifier patterns, and undeclared properties. JSON `null` is valid only where the public type includes null, such as `content`. Setting `additionalProperties` to `false` is not enough on its own.
+The advertised `tools/list` input schema for each of these tools is that tool's public argument type. A client that validates arguments against the advertised schema MUST accept and reject the same values the server rejects as MCP invalid-params: required fields, omit-only optional fields, bounds, enumerations, identifier patterns, and undeclared properties. JSON `null` is valid only where the public type includes null, such as `content`. Setting `additionalProperties` to `false` is not enough on its own.
 
 ## `find`
 
@@ -99,13 +100,29 @@ Arguments:
 
 The server MUST validate these arguments as sent. A string `limit`, JSON `null`, or an undeclared field is an MCP-level invalid-params failure. The advertised tool schema MUST reject the same values.
 
-Result: `FindResult`. Matches are ordered best-first. The result does not name the embedding backend or a fallback. Each match is a light card by default so a model can scan a whole Team cheaply. `detail=full` adds the Agent DID and full Profile. The model reads one candidate in depth with a follow-up `find` at `full` detail or `get_profile` if it needs more than the card shows.
+Result: `FindResult`. Matches are ordered best-first. The result does not name the embedding backend or a fallback. Each match is a light card by default so a model can scan a whole Team cheaply. `detail=full` adds the Agent DID and full Profile to every match. To read one candidate in depth, call `get_profile` with that Address.
 
 The tool searches only the caller's Team and excludes the caller. Ranking does not choose a later `ask` or `tell` recipient.
 
+## `get_profile`
+
+`get_profile` maps to the Runtime `get_profile` operation.
+
+Arguments:
+
+```json
+{
+  "address": "writer"
+}
+```
+
+`address` is required. It is a local or same-Team qualified Address.
+
+Result: one `DirectoryEntry` (Address, Agent DID, and full Profile). Missing members and principals return `not_found`.
+
 ## `ask`
 
-`ask` sends a reply-expected request. The server generates the request Message id. When `deadline_seconds` is present, the server converts it into an absolute UTC deadline. When it is omitted, the Runtime inherits a request parent's stamped deadline or applies `work_lifetime_seconds`. `collect` has the same meaning as on Runtime `send` and on Client `ask`.
+`ask` sends work that needs a reply. The server generates the request Message id. When `deadline_seconds` is present, the server converts it into an absolute UTC deadline. When it is omitted, the Runtime inherits a request parent's stamped deadline or applies `work_lifetime_seconds`. `collect` has the same meaning as on Runtime `send` and on Client `ask`. Prefer `ask` over `tell` when a reply is required; `tell` does not create a Ticket, so a caller that needed an answer gets none and no error from `tell` itself.
 
 Arguments:
 
@@ -131,22 +148,22 @@ Arguments:
 | `thread_id` | optional UUID |
 | `idempotency_key` | optional string, 1 to 200 characters |
 
-The server returns the current `Ticket`, and the Ticket carries its `thread_id` and `trace_id`. `collect` has the same bounded-hold meaning as Runtime `send`.
+The server returns the current `TicketView`. Runtime, HTTP, and Client `ask` still return the wire `Ticket`. `collect` has the same bounded-hold meaning as Runtime `send`.
 
-- `collect=wait` (default) holds until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket, which may still be `open`.
-- `collect=ticket` returns immediately with the current Ticket, which may still be `open`.
-- A pending result is an `open` Ticket, not hidden MCP session state. The model keeps `ticket.id` and passes it to `get_result`.
+- `collect=wait` (default) holds until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current TicketView, which may still be `open`.
+- `collect=ticket` returns immediately with the current TicketView, which may still be `open`.
+- A pending result is an `open` TicketView, not hidden MCP session state. The model keeps `ticket_id` and passes it to `get_result`.
 - The server MUST NOT keep polling `get_result` after the Runtime wait hold ends.
 
 ### Conversation continuity
 
-Omitting `thread_id` starts a fresh conversation. The server mints a Thread and returns it on the Ticket. A keyed retry with the same omitted `thread_id` reuses that generated Thread. Passing a returned `thread_id` back into a later `ask` or `tell` continues the same conversation, and the recipient receives the earlier turns as Delivery history. To start over, omit `thread_id` and omit `idempotency_key`. The model does not invent Thread ids. It reuses the one the server returned.
+Omitting `thread_id` starts a fresh conversation. The server mints a Thread and returns it on the TicketView. A keyed retry with the same omitted `thread_id` reuses that generated Thread. Passing a returned `thread_id` back into a later `ask` or `tell` continues the same conversation, and the recipient receives the earlier turns as Delivery history. To start over, omit `thread_id` and omit `idempotency_key`. The model does not invent Thread ids. It reuses the one the server returned.
 
 ### Idempotency
 
 A model tool call may be retried by the framework. Retry collapsing is opt-in.
 
-When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. An omitted `thread_id` is UUID5 of `ask-thread|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key and the same semantic arguments recovers those generated values and returns the original Ticket, including its original stamped deadline.
+When `idempotency_key` is present, the request Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. An omitted `thread_id` is UUID5 of `ask-thread|<caller_address>|<idempotency_key>`. A later `ask` from the same caller with the same key and the same semantic arguments recovers those generated values and returns the original TicketView, including its original stamped deadline.
 
 Semantic arguments for `ask` are `recipient`, `content`, `collect`, a caller-supplied `thread_id`, and whether `deadline_seconds` was supplied. Changing any of them under the same key fails with `id_conflict`. Repeating the same relative `deadline_seconds` later still replays; the accepted absolute deadline does not move. Repeating an omitted `deadline_seconds` also replays.
 
@@ -162,7 +179,7 @@ Two such `ask` calls produce two Tickets, even when their JSON-RPC request ids a
 {"recipient": "writer", "content": "same", "deadline_seconds": 30, "idempotency_key": "draft-1"}
 ```
 
-Two such `ask` calls from the same caller return one Ticket.
+Two such `ask` calls from the same caller return one TicketView.
 
 ```json
 {"recipient": "writer", "content": "other", "deadline_seconds": 30, "idempotency_key": "draft-1"}
@@ -172,7 +189,7 @@ After the first keyed `ask` above, this call fails with `id_conflict`.
 
 ## `tell`
 
-`tell` sends an event and never creates a Ticket. The server generates the Message id.
+`tell` sends work that does not need a reply and never creates a Ticket. Prefer `ask` when a reply is required. A caller that needed an answer and used `tell` gets none and no error from `tell` itself. The server generates the Message id.
 
 Arguments:
 
@@ -193,7 +210,7 @@ Result: `AcceptedSendResult`.
 
 ## `get_result`
 
-`get_result` maps to the Runtime operation of the same name.
+`get_result` maps to the Runtime operation of the same name, then returns the model-facing `TicketView`.
 
 Arguments:
 
@@ -203,7 +220,7 @@ Arguments:
 }
 ```
 
-Result: the current `Ticket`. The read is repeatable and does not consume the result. Only the Membership that opened the Ticket may read it, including after Session replacement for that Membership.
+Result: the current `TicketView`. The read is repeatable and does not consume the result. Only the Membership that opened the Ticket may read it, including after Session replacement for that Membership.
 
 ## `get_history`
 
@@ -241,7 +258,7 @@ The server MUST preserve the Runtime error code. It MUST NOT turn `busy`, `not_f
 
 ## Additional Team tools
 
-A Team may expose its own tools beside the five AgentConnect tools. Those tools are outside this specification and MUST NOT reuse the five reserved names.
+A Team may expose its own tools beside the AgentConnect tools. Those tools are outside this specification and MUST NOT reuse the reserved names.
 
 Every additional tool call passes the same Session boundary as `find` and the roster resource. The extra tool keeps its own arguments and result. It MUST NOT run when that boundary rejects the caller.
 

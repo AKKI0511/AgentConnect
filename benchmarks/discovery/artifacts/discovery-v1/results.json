@@ -1,0 +1,855 @@
+{
+  "corpus_revision": "discovery-v1",
+  "preprocessing_revision": "profile-units-v1",
+  "bm25_revision": "okapi-k1-1.5-b-0.75-alnum",
+  "shuffle_seed": 20260922,
+  "neural": {
+    "model_id": "BAAI/bge-small-en-v1.5",
+    "load_failure": null
+  },
+  "gates": {
+    "recall_at_10_min": 0.9,
+    "mrr_min": 0.5
+  },
+  "empty_acceptable": {
+    "development": 5,
+    "held_out": 5
+  },
+  "backends": {
+    "hashed": {
+      "roster_sizes": {
+        "roster_commerce": 10,
+        "roster_legal": 8,
+        "roster_platform": 24,
+        "roster_research": 26
+      },
+      "backend_name": "hashed",
+      "using_fallback": false,
+      "development_unshuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9148936170212766,
+        "coverage_at_5": 0.9574468085106383,
+        "coverage_at_10": 0.9787234042553191,
+        "mrr": 0.9373522458628842,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "held_out_unshuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.8723404255319149,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9237588652482269,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "development_shuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9148936170212766,
+        "coverage_at_5": 0.9574468085106383,
+        "coverage_at_10": 0.9787234042553191,
+        "mrr": 0.9373522458628842,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "held_out_shuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.8723404255319149,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9237588652482269,
+        "recall_at_10_pass": true,
+        "mrr_pass": true,
+        "slices": {
+          "broad_or_misleading": {
+            "denominator": 1,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "contract_substance_vs_formatting": {
+            "denominator": 5,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "generalist_vs_specialist": {
+            "denominator": 11,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "jurisdiction_or_dataset": {
+            "denominator": 11,
+            "coverage_at_1": 0.8181818181818182,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.893939393939394,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "late_capability": {
+            "denominator": 2,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "multilingual": {
+            "denominator": 2,
+            "coverage_at_1": 0.5,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.625,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "multiple_acceptable": {
+            "denominator": 3,
+            "coverage_at_1": 0.6666666666666666,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.7777777777777778,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "negated_capability": {
+            "denominator": 1,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "paraphrase": {
+            "denominator": 6,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "refunds_vs_chargeback": {
+            "denominator": 4,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "repeated_boilerplate": {
+            "denominator": 3,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "staging_vs_production": {
+            "denominator": 9,
+            "coverage_at_1": 0.8888888888888888,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.9444444444444444,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "translation_direction": {
+            "denominator": 5,
+            "coverage_at_1": 0.4,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.6166666666666667,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          }
+        }
+      }
+    },
+    "bm25": {
+      "roster_sizes": {
+        "roster_commerce": 10,
+        "roster_legal": 8,
+        "roster_platform": 24,
+        "roster_research": 26
+      },
+      "development_unshuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9574468085106383,
+        "coverage_at_5": 0.9787234042553191,
+        "coverage_at_10": 0.9787234042553191,
+        "mrr": 0.9689716312056738,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "held_out_unshuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9361702127659575,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9609929078014184,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "development_shuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9574468085106383,
+        "coverage_at_5": 0.9787234042553191,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9711246200607904,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "held_out_shuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9361702127659575,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9609929078014184,
+        "recall_at_10_pass": true,
+        "mrr_pass": true,
+        "slices": {
+          "broad_or_misleading": {
+            "denominator": 1,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "contract_substance_vs_formatting": {
+            "denominator": 5,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "generalist_vs_specialist": {
+            "denominator": 11,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "jurisdiction_or_dataset": {
+            "denominator": 11,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "late_capability": {
+            "denominator": 2,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "multilingual": {
+            "denominator": 2,
+            "coverage_at_1": 0.5,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.6666666666666666,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "multiple_acceptable": {
+            "denominator": 3,
+            "coverage_at_1": 0.6666666666666666,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.8333333333333334,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "negated_capability": {
+            "denominator": 1,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "paraphrase": {
+            "denominator": 6,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "refunds_vs_chargeback": {
+            "denominator": 4,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "repeated_boilerplate": {
+            "denominator": 3,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "staging_vs_production": {
+            "denominator": 9,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "translation_direction": {
+            "denominator": 5,
+            "coverage_at_1": 0.4,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.6333333333333333,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          }
+        }
+      }
+    },
+    "neural": {
+      "roster_sizes": {
+        "roster_commerce": 10,
+        "roster_legal": 8,
+        "roster_platform": 24,
+        "roster_research": 26
+      },
+      "backend_name": "fastembed:BAAI/bge-small-en-v1.5",
+      "using_fallback": false,
+      "development_unshuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9787234042553191,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9893617021276596,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "held_out_unshuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9574468085106383,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9787234042553191,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "development_shuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9787234042553191,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9893617021276596,
+        "recall_at_10_pass": true,
+        "mrr_pass": true
+      },
+      "held_out_shuffled": {
+        "denominator": 47,
+        "coverage_at_1": 0.9574468085106383,
+        "coverage_at_5": 1.0,
+        "coverage_at_10": 1.0,
+        "mrr": 0.9787234042553191,
+        "recall_at_10_pass": true,
+        "mrr_pass": true,
+        "slices": {
+          "broad_or_misleading": {
+            "denominator": 1,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "contract_substance_vs_formatting": {
+            "denominator": 5,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "generalist_vs_specialist": {
+            "denominator": 11,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "jurisdiction_or_dataset": {
+            "denominator": 11,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "late_capability": {
+            "denominator": 2,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "multilingual": {
+            "denominator": 2,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "multiple_acceptable": {
+            "denominator": 3,
+            "coverage_at_1": 0.6666666666666666,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.8333333333333334,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "negated_capability": {
+            "denominator": 1,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "paraphrase": {
+            "denominator": 6,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "refunds_vs_chargeback": {
+            "denominator": 4,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "repeated_boilerplate": {
+            "denominator": 3,
+            "coverage_at_1": 1.0,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 1.0,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "staging_vs_production": {
+            "denominator": 9,
+            "coverage_at_1": 0.8888888888888888,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.9444444444444444,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          },
+          "translation_direction": {
+            "denominator": 5,
+            "coverage_at_1": 0.8,
+            "coverage_at_5": 1.0,
+            "coverage_at_10": 1.0,
+            "mrr": 0.9,
+            "recall_at_10_pass": true,
+            "mrr_pass": true
+          }
+        }
+      }
+    }
+  },
+  "failures": [
+    {
+      "need_id": "hold-plat-15",
+      "backend": "hashed",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_platform",
+      "roster_size": 24,
+      "slices": [
+        "staging_vs_production"
+      ],
+      "acceptable": [
+        "oncall_triage"
+      ],
+      "best_rank": 2,
+      "top10": [
+        "observability_dash",
+        "oncall_triage",
+        "k8s_debug",
+        "network_acl",
+        "cdn_cache",
+        "log_search",
+        "feature_flags",
+        "chaos_experiments",
+        "ops_generalist",
+        "backup_restore"
+      ]
+    },
+    {
+      "need_id": "hold-res-02",
+      "backend": "hashed",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "translation_direction"
+      ],
+      "acceptable": [
+        "dataset_patents"
+      ],
+      "best_rank": 2,
+      "top10": [
+        "summarize_pdf",
+        "dataset_patents",
+        "chart_maker",
+        "misleading_global_counsel",
+        "dataset_opensource_licenses",
+        "citation_formatter",
+        "translate_en_fr",
+        "law_us_federal",
+        "law_uk",
+        "translate_generalist"
+      ]
+    },
+    {
+      "need_id": "hold-res-03",
+      "backend": "hashed",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "multilingual",
+        "translation_direction"
+      ],
+      "acceptable": [
+        "summarize_pdf"
+      ],
+      "best_rank": 4,
+      "top10": [
+        "citation_formatter",
+        "law_uk",
+        "misleading_global_counsel",
+        "summarize_pdf",
+        "translate_en_es",
+        "law_us_federal",
+        "translate_generalist",
+        "stats_helper",
+        "market_research_us",
+        "mt_postedit"
+      ]
+    },
+    {
+      "need_id": "hold-res-05",
+      "backend": "hashed",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "jurisdiction_or_dataset"
+      ],
+      "acceptable": [
+        "market_research_us"
+      ],
+      "best_rank": 3,
+      "top10": [
+        "law_uk",
+        "misleading_global_counsel",
+        "market_research_us",
+        "translate_en_es",
+        "negated_translator",
+        "dataset_clinical",
+        "market_research_eu",
+        "translate_en_fr",
+        "summarize_pdf",
+        "stats_helper"
+      ]
+    },
+    {
+      "need_id": "hold-res-09",
+      "backend": "hashed",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "jurisdiction_or_dataset"
+      ],
+      "acceptable": [
+        "dataset_sec_edgar"
+      ],
+      "best_rank": 2,
+      "top10": [
+        "misleading_global_counsel",
+        "dataset_sec_edgar",
+        "market_research_us",
+        "translate_en_es",
+        "dataset_clinical",
+        "web_generalist",
+        "summarize_pdf",
+        "negated_translator",
+        "law_uk",
+        "market_research_eu"
+      ]
+    },
+    {
+      "need_id": "hold-res-14",
+      "backend": "hashed",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "multiple_acceptable",
+        "translation_direction"
+      ],
+      "acceptable": [
+        "dataset_patents",
+        "summarize_pdf"
+      ],
+      "best_rank": 3,
+      "top10": [
+        "translate_generalist",
+        "stats_helper",
+        "summarize_pdf",
+        "misleading_global_counsel",
+        "translate_en_fr",
+        "translate_en_es",
+        "citation_formatter",
+        "negated_translator",
+        "law_uk",
+        "market_research_us"
+      ]
+    },
+    {
+      "need_id": "hold-res-02",
+      "backend": "bm25",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "translation_direction"
+      ],
+      "acceptable": [
+        "dataset_patents"
+      ],
+      "best_rank": 3,
+      "top10": [
+        "chart_maker",
+        "summarize_pdf",
+        "dataset_patents",
+        "dataset_opensource_licenses",
+        "translate_en_fr",
+        "translate_es_en",
+        "citation_formatter",
+        "translate_generalist",
+        "market_research_eu",
+        "translate_en_es"
+      ]
+    },
+    {
+      "need_id": "hold-res-03",
+      "backend": "bm25",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "multilingual",
+        "translation_direction"
+      ],
+      "acceptable": [
+        "summarize_pdf"
+      ],
+      "best_rank": 3,
+      "top10": [
+        "dataset_sec_edgar",
+        "citation_formatter",
+        "summarize_pdf",
+        "chart_maker",
+        "corpus_librarian",
+        "dataset_clinical",
+        "dataset_opensource_licenses",
+        "dataset_patents",
+        "glossary_builder",
+        "late_patent_classifier"
+      ]
+    },
+    {
+      "need_id": "hold-res-14",
+      "backend": "bm25",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "multiple_acceptable",
+        "translation_direction"
+      ],
+      "acceptable": [
+        "dataset_patents",
+        "summarize_pdf"
+      ],
+      "best_rank": 2,
+      "top10": [
+        "stats_helper",
+        "summarize_pdf",
+        "translate_en_fr",
+        "dataset_patents",
+        "citation_formatter",
+        "dataset_opensource_licenses",
+        "translate_en_es",
+        "translate_generalist",
+        "chart_maker",
+        "web_generalist"
+      ]
+    },
+    {
+      "need_id": "hold-plat-06",
+      "backend": "neural",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_platform",
+      "roster_size": 24,
+      "slices": [
+        "staging_vs_production"
+      ],
+      "acceptable": [
+        "log_search"
+      ],
+      "best_rank": 2,
+      "top10": [
+        "k8s_debug",
+        "log_search",
+        "feature_flags",
+        "ops_generalist",
+        "observability_dash",
+        "network_acl",
+        "backup_restore",
+        "cdn_cache",
+        "chaos_experiments",
+        "cost_finops"
+      ]
+    },
+    {
+      "need_id": "hold-res-14",
+      "backend": "neural",
+      "split": "held_out",
+      "shuffled": true,
+      "roster_id": "roster_research",
+      "roster_size": 26,
+      "slices": [
+        "multiple_acceptable",
+        "translation_direction"
+      ],
+      "acceptable": [
+        "dataset_patents",
+        "summarize_pdf"
+      ],
+      "best_rank": 2,
+      "top10": [
+        "translate_generalist",
+        "summarize_pdf",
+        "translate_en_fr",
+        "dataset_patents",
+        "misleading_global_counsel",
+        "stats_helper",
+        "citation_formatter",
+        "dataset_opensource_licenses",
+        "web_generalist",
+        "dataset_sec_edgar"
+      ]
+    }
+  ],
+  "field_diagnostic": [
+    {
+      "backend": "hashed",
+      "representation": "full_profile_text",
+      "denominator": 47,
+      "coverage_at_10": 1.0,
+      "mrr": 0.9237588652482269,
+      "using_fallback": false
+    },
+    {
+      "backend": "hashed",
+      "representation": "summary_and_skill_names",
+      "denominator": 47,
+      "coverage_at_10": 0.9787234042553191,
+      "mrr": 0.7739453808602744,
+      "using_fallback": false
+    },
+    {
+      "backend": "neural",
+      "representation": "full_profile_text",
+      "denominator": 47,
+      "coverage_at_10": 1.0,
+      "mrr": 0.9787234042553191,
+      "using_fallback": false
+    },
+    {
+      "backend": "neural",
+      "representation": "summary_and_skill_names",
+      "denominator": 47,
+      "coverage_at_10": 1.0,
+      "mrr": 0.8865248226950354,
+      "using_fallback": false
+    }
+  ],
+  "generated_at_utc": "2026-09-22T14:52:58Z"
+}

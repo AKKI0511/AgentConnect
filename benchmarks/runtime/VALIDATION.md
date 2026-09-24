@@ -70,6 +70,7 @@ Profile-update join fails the lag probe.
 ## Reproduce
 
 [README.md](README.md) defines workloads, timing boundaries, and commands.
+Request/reply exchange evidence is [request_reply/RESULTS.md](request_reply/RESULTS.md).
 [CONTRIBUTING.md](../../CONTRIBUTING.md) sets up dedicated Redis. GitHub starts it
 with DEBUG and AOF enabled. Generated results stay out of Git; update this record
 for accepted reference runs, not for every ordinary CI run.

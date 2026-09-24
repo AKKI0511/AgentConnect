@@ -54,6 +54,8 @@ extra, or group changes must include all affected CI-checked locks: the root,
 Performance lives under `benchmarks/runtime/` and runs separately from ordinary
 CI. [Runtime benchmarks](benchmarks/runtime/README.md) explains the commands,
 fixed budgets, and artifacts. Preserve real-backend coverage and failed evidence.
+Request/reply throughput is [benchmarks/runtime/request_reply/](benchmarks/runtime/request_reply/README.md);
+it is not a discovery ranking run.
 
 Retrieval quality lives under `benchmarks/discovery/` and is also separate
 from ordinary CI. Run it when Profile text or Directory ranking changes, not

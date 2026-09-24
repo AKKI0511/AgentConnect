@@ -168,7 +168,7 @@ testpaths = ["tests"]
 markers = [
     "slow: Embedding/model-dependent tests. Skipped by default; run with -m slow",
     "redis: tests that need Redis; skipped locally unless reachable, required in CI",
-    "perf: Runtime discovery benchmarks under benchmarks/runtime/",
+    "perf: Runtime benchmarks under benchmarks/runtime/",
 ]
 addopts = ["-m", "not slow"]
 filterwarnings = [

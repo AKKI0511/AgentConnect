@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   runtime-bench:
-    name: Runtime discovery benchmark
+    name: Runtime benchmark
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -94,6 +94,13 @@ jobs:
           benchmarks/runtime/test_stress.py
           --benchmark-json=benchmarks/runtime/results/stress.json
           --junitxml=benchmarks/runtime/results/stress.xml
+      - name: Request/reply exchange
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/request_reply
+          --benchmark-json=benchmarks/runtime/results/exchange.json
+          --junitxml=benchmarks/runtime/results/exchange.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

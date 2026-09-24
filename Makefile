@@ -22,6 +22,7 @@ perf:
 	$(PERF) benchmarks/runtime/test_overlap.py --benchmark-json=$(RESULTS)/overlap.json --junitxml=$(RESULTS)/overlap.xml
 	$(PERF) benchmarks/runtime/test_neural.py --benchmark-json=$(RESULTS)/neural.json --junitxml=$(RESULTS)/neural.xml
 	$(PERF) benchmarks/runtime/test_stress.py --benchmark-json=$(RESULTS)/stress.json --junitxml=$(RESULTS)/stress.xml
+	$(PERF) benchmarks/runtime/request_reply --benchmark-json=$(RESULTS)/exchange.json --junitxml=$(RESULTS)/exchange.xml
 
 docs:
 	uv run --group docs --extra serve --extra cli python docs/generate_docs.py

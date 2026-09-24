@@ -288,23 +288,9 @@ class RedisStore(Store):
             try:
                 if physical:
                     await pipe.watch(*physical)
-                docs: dict[str, StoreRecord | None] = {}
-                for key in doc_keys:
-                    raw = await pipe.get(self._key(key))
-                    docs[key] = None if raw is None else _unwrap(raw)
-                scores: dict[tuple[str, str], float | None] = {}
-                cards: dict[str, int] = {}
-                for key in index_keys:
-                    cards[key] = int(await pipe.zcard(self._index_key(key)) or 0)
-                for op in batch:
-                    member = getattr(op, "member", None)
-                    if member is None or op.key not in index_keys:
-                        continue
-                    pair = (op.key, str(member))
-                    if pair in scores:
-                        continue
-                    raw_score = await pipe.zscore(self._index_key(op.key), str(member))
-                    scores[pair] = None if raw_score is None else float(raw_score)
+                docs, scores, cards = await self._snapshot_watched(
+                    pipe, doc_keys, index_keys, batch
+                )
 
                 overlay = Overlay(
                     get_doc=lambda key: docs.get(key),
@@ -330,6 +316,63 @@ class RedisStore(Store):
             finally:
                 await pipe.reset()
         return last_cas
+
+    async def _snapshot_watched(
+        self,
+        pipe: Any,
+        doc_keys: set[str],
+        index_keys: set[str],
+        batch: tuple[StoreOp, ...],
+    ) -> tuple[
+        dict[str, StoreRecord | None],
+        dict[tuple[str, str], float | None],
+        dict[str, int],
+    ]:
+        """Read WATCHed docs and indexes on the pipeline connection.
+
+        One MGET plus one packed ZCARD/ZSCORE round-trip. Sequential GET
+        after WATCH used one Redis round-trip per key.
+        """
+        docs: dict[str, StoreRecord | None] = {}
+        doc_list = list(doc_keys)
+        if doc_list:
+            raws = await pipe.mget([self._key(key) for key in doc_list])
+            for key, raw in zip(doc_list, raws, strict=True):
+                docs[key] = None if raw is None else _unwrap(raw)
+
+        cards: dict[str, int] = {}
+        scores: dict[tuple[str, str], float | None] = {}
+        commands: list[tuple[Any, ...]] = []
+        card_order = list(index_keys)
+        for key in card_order:
+            commands.append(("ZCARD", self._index_key(key)))
+        score_order: list[tuple[str, str]] = []
+        for op in batch:
+            member = getattr(op, "member", None)
+            if member is None or op.key not in index_keys:
+                continue
+            pair = (op.key, str(member))
+            if pair in scores:
+                continue
+            scores[pair] = None
+            score_order.append(pair)
+            commands.append(("ZSCORE", self._index_key(op.key), str(member)))
+        if not commands:
+            return docs, scores, cards
+
+        conn = pipe.connection
+        if conn is None:
+            conn = await pipe.connection_pool.get_connection()
+            pipe.connection = conn
+        packed = conn.pack_commands(commands)
+        await conn.send_packed_command(packed)
+        for key in card_order:
+            raw = await conn.read_response()
+            cards[key] = int(raw or 0)
+        for pair in score_order:
+            raw = await conn.read_response()
+            scores[pair] = None if raw is None else float(raw)
+        return docs, scores, cards
 
     def _emit_overlay(self, pipe: Any, overlay: Overlay) -> None:
         for key, record in overlay.iter_docs():

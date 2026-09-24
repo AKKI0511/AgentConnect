@@ -37,10 +37,13 @@ Set `AGENTCONNECT_REQUIRE_REDIS=1` if a missing server should fail locally too.
 
 Routine tests do not run the full benchmark matrix. GitHub's **Performance**
 workflow runs for relevant Runtime and benchmark changes and supports manual runs.
-It checks discovery latency, overlapping messaging, and event-loop responsiveness
-with pytest-benchmark, saving JSON measurements and JUnit results even on failure.
+It checks discovery latency, overlapping messaging, event-loop responsiveness,
+and request/reply exchange throughput with pytest-benchmark, saving JSON
+measurements and JUnit results even on failure.
 See [Runtime benchmarks](benchmarks/runtime/README.md) for focused local commands
-and `make perf`. No benchmark dependency is added to a normal library install.
+and `make perf`. Request/reply steps are in
+[request_reply/README.md](benchmarks/runtime/request_reply/README.md).
+No benchmark dependency is added to a normal library install.
 
 ## Retrieval quality
 

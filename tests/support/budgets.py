@@ -11,6 +11,9 @@ The supported single-Runtime range is 10–1,000 hashed Memberships, 10–100
 local neural Memberships, memory and Redis, embedded and HTTP. Neural
 work at 1,000 is measured and may be recorded as unsupported. 10,000 is
 a stress probe with no latency pass/fail. This covers one Runtime process.
+
+Request/reply exchange measures concurrent ``send`` / ``lease`` / ``reply``
+/ ``get_result`` on independent caller/worker pairs, not Directory search.
 """
 
 from __future__ import annotations
@@ -52,6 +55,27 @@ SEND_DURING_FIND_SAMPLES = 20
 # After complete+replay-expiry cycles, retained bytes return near empty.
 RETENTION_CYCLES = 12
 RETENTION_SLACK_BYTES = 4096
+
+# Request/reply exchange: N independent caller/worker pairs, each completing
+# send -> lease -> reply -> get_result with a fixed JSON body and no model.
+# Error and timeout rates are gated. Latency is reported; the stall bound
+# only fails a hung Runtime, not an SLA.
+EXCHANGE_CONCURRENCY = (1, 8, 32)
+EXCHANGE_REPLICA_CONCURRENCY = (8, 32)
+EXCHANGE_TRIPS_PER_PAIR = 20
+EXCHANGE_WARMUP_TRIPS = 1
+EXCHANGE_TRIP_TIMEOUT_S = 15.0
+EXCHANGE_LEASE_RETRIES = 50
+EXCHANGE_ERROR_RATE = 0.0
+EXCHANGE_P95_STALL_S = 5.0
+
+
+def exchange_zero_error_gated(store_kind: str, concurrency: int, replicas: int) -> bool:
+    """True when every trip must complete. Redis and extra replicas at 32 are measured."""
+    if concurrency <= 8:
+        return True
+    return store_kind == "memory" and replicas == 1
+
 
 # Neural (local FastEmbed BGE) stays off the event loop at the hashed lag
 # budgets for the same roster size. Latency itself is reported, not gated

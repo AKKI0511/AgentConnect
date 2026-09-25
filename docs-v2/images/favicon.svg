@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AgentConnect">
-  <rect width="64" height="64" rx="12" fill="#0F766E"/>
-  <path d="M18 40 L32 16 L46 40 Z" fill="none" stroke="#ECFDF5" stroke-width="4" stroke-linejoin="round"/>
-  <circle cx="32" cy="34" r="4" fill="#ECFDF5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="AgentConnect">
+  <rect width="32" height="32" rx="9" fill="#2DD4BF"/>
+  <path d="M9 23 L16 10 L23 23" fill="none" stroke="#041312" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="16" cy="20.5" r="2" fill="#041312"/>
 </svg>

@@ -1,27 +1,38 @@
 ---
 title: "AgentConnect"
-description: "Runtime for Teams of independent AI agents."
+sidebarTitle: "Overview"
+description: "Runtime for Teams of independent AI agents — discovery, messaging, and work tracking."
+mode: "wide"
 ---
 
-# AgentConnect
+<div className="ac-hero">
+  <div className="ac-kicker">Runtime for agent teams</div>
+  <h1 className="ac-title">Independent agents.<br />One coherent team.</h1>
+  <p>
+    AgentConnect is the runtime layer for discovery, messaging, and work tracking —
+    without forcing a single harness, memory, or model stack.
+  </p>
+  <div className="ac-cta-row">
+    <a className="ac-btn ac-btn-primary" href="/quickstart">Start building</a>
+    <a className="ac-btn ac-btn-ghost" href="/api-reference">Open reference</a>
+  </div>
+</div>
 
-AgentConnect is a runtime for Teams of independent AI agents. Each agent can use its own harness, tools, and memory. The Runtime provides discovery, messaging, and work tracking.
-
-<Note>
-  This Mintlify site is the new documentation infrastructure. Handwritten guides and examples are placeholders until content is migrated.
-</Note>
-
-<Columns cols={2}>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Install and connect your first agent to a Team.
-  </Card>
-  <Card title="API reference" icon="code" href="/api-reference">
-    Generated reference for the public Python surface.
-  </Card>
-  <Card title="Concepts" icon="book-open" href="/concepts/overview">
-    Teams, agents, messages, tickets, and discovery.
-  </Card>
-  <Card title="Guides" icon="map" href="/guides/overview">
-    Task-oriented how-to pages (placeholders for now).
-  </Card>
-</Columns>
+<div className="ac-grid">
+  <a className="ac-tile" href="/concepts/overview">
+    <strong>Concepts</strong>
+    <span>Teams, sessions, tickets, and the Directory — the nouns that stay stable.</span>
+  </a>
+  <a className="ac-tile" href="/guides/overview">
+    <strong>Guides</strong>
+    <span>Task-shaped paths for joining a Team, sending work, and shipping agents.</span>
+  </a>
+  <a className="ac-tile" href="/examples/overview">
+    <strong>Cookbooks</strong>
+    <span>Runnable patterns you can copy into a real agent loop.</span>
+  </a>
+  <a className="ac-tile" href="/contribute">
+    <strong>Contribute</strong>
+    <span>Docstring contract, docs-v2 workflow, and how API pages stay fresh.</span>
+  </a>
+</div>

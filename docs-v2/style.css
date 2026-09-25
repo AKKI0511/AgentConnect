@@ -1,0 +1,564 @@
+/* AgentConnect docs-v2 — Aspen dual chrome, dark-first taste, dense API nav */
+
+:root {
+  --ac-ink: #070809;
+  --ac-elevated: #0c0e10;
+  --ac-panel: rgba(10, 12, 14, 0.62);
+  --ac-panel-strong: rgba(10, 12, 14, 0.82);
+  --ac-border: rgba(255, 255, 255, 0.08);
+  --ac-border-strong: rgba(255, 255, 255, 0.14);
+  --ac-signal: #2dd4bf;
+  --ac-signal-dim: rgba(45, 212, 191, 0.14);
+  --ac-text: #e9eeec;
+  --ac-muted: #8a938f;
+  --ac-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.light {
+  --ac-ink: #f6f5f1;
+  --ac-elevated: #ffffff;
+  --ac-panel: rgba(255, 255, 255, 0.7);
+  --ac-panel-strong: rgba(255, 255, 255, 0.88);
+  --ac-border: rgba(15, 23, 20, 0.08);
+  --ac-border-strong: rgba(15, 23, 20, 0.14);
+  --ac-signal-dim: rgba(15, 118, 110, 0.12);
+  --ac-text: #121816;
+  --ac-muted: #5a6460;
+}
+
+/* ---------- Atmosphere ---------- */
+
+#background-color {
+  background:
+    radial-gradient(1100px 520px at 8% -8%, rgba(45, 212, 191, 0.1), transparent 55%),
+    radial-gradient(900px 480px at 92% 0%, rgba(94, 234, 212, 0.05), transparent 50%),
+    linear-gradient(180deg, var(--ac-ink), var(--ac-elevated)) !important;
+}
+
+html.light #background-color {
+  background:
+    radial-gradient(900px 420px at 10% -6%, rgba(45, 212, 191, 0.14), transparent 52%),
+    radial-gradient(700px 360px at 90% 0%, rgba(15, 118, 110, 0.07), transparent 48%),
+    linear-gradient(180deg, #f6f5f1, #ffffff) !important;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 70;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+html.light body::before {
+  opacity: 0.02;
+  mix-blend-mode: multiply;
+}
+
+/* ---------- Fixed dual header (Aspen already stacks logo row + tabs) ---------- */
+
+#navbar {
+  z-index: 50 !important;
+  border: none !important;
+  transition: none !important;
+}
+
+/* Kill Aspen's solid opaque layers; we drive glass ourselves */
+#navbar > .absolute.inset-0,
+#navbar > .z-0.absolute.inset-0,
+#navbar > div.z-0.absolute {
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
+#navbar > .z-10.absolute.w-full.h-full.border-b,
+#navbar > div.absolute.border-b {
+  border-color: transparent !important;
+  background: transparent !important;
+  transition: border-color 280ms var(--ac-ease), background 280ms var(--ac-ease) !important;
+}
+
+#navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    background 280ms var(--ac-ease),
+    border-color 280ms var(--ac-ease),
+    backdrop-filter 280ms var(--ac-ease),
+    box-shadow 280ms var(--ac-ease);
+}
+
+#navbar.ac-scrolled::before,
+#navbar[data-ac-glass="true"]::before {
+  background: var(--ac-panel);
+  border-bottom-color: var(--ac-border);
+  backdrop-filter: saturate(1.45) blur(18px);
+  -webkit-backdrop-filter: saturate(1.45) blur(18px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+html.light #navbar.ac-scrolled::before,
+html.light #navbar[data-ac-glass="true"]::before {
+  box-shadow: 0 10px 30px rgba(15, 23, 20, 0.06);
+}
+
+#navbar > .z-10.mx-auto,
+#navbar > div.relative.z-10,
+#navbar .z-10.mx-auto.relative {
+  position: relative;
+  z-index: 2;
+}
+
+/* Logo */
+img.nav-logo {
+  height: 1.75rem !important;
+  width: auto !important;
+  max-width: 12.5rem !important;
+  transition: transform 200ms var(--ac-ease), opacity 200ms var(--ac-ease);
+}
+
+#navbar a:has(img.nav-logo):hover img.nav-logo {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+/* Compact centered search */
+#search-bar-entry {
+  max-width: 16.5rem !important;
+  height: 2.1rem !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  box-shadow: inset 0 0 0 1px var(--ac-border) !important;
+  transition:
+    max-width 240ms var(--ac-ease),
+    background 200ms var(--ac-ease),
+    box-shadow 200ms var(--ac-ease) !important;
+}
+
+#search-bar-entry:hover,
+#search-bar-entry:focus-visible {
+  max-width: 18.5rem !important;
+  background: rgba(45, 212, 191, 0.07) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(45, 212, 191, 0.35),
+    0 0 0 3px var(--ac-signal-dim) !important;
+}
+
+html.light #search-bar-entry {
+  background: rgba(15, 23, 20, 0.03) !important;
+}
+
+/* Right: theme + GitHub — tighten GitHub chip */
+.topbar-right-container {
+  gap: 0.5rem !important;
+}
+
+.topbar-right-container .navbar-link a {
+  border-radius: 999px !important;
+  padding: 0.45rem 0.75rem !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  box-shadow: inset 0 0 0 1px var(--ac-border) !important;
+  transition: background 180ms var(--ac-ease), box-shadow 180ms var(--ac-ease), transform 180ms var(--ac-ease) !important;
+}
+
+.topbar-right-container .navbar-link a:hover {
+  background: var(--ac-signal-dim) !important;
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.35) !important;
+  transform: translateY(-1px);
+}
+
+/* Prefer icon-first GitHub: hide long repo label on mid widths */
+@media (max-width: 1280px) {
+  .topbar-right-container .navbar-link a span.truncate {
+    display: none !important;
+  }
+  .topbar-right-container .navbar-link a {
+    padding: 0.45rem !important;
+  }
+}
+
+[data-component-name="theme-preference-menu"],
+#theme-preference-menu-trigger {
+  border-radius: 999px !important;
+  box-shadow: inset 0 0 0 1px var(--ac-border) !important;
+  transition: background 180ms var(--ac-ease), box-shadow 180ms var(--ac-ease), transform 180ms var(--ac-ease) !important;
+}
+
+#theme-preference-menu-trigger:hover {
+  background: var(--ac-signal-dim) !important;
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.35) !important;
+}
+
+/* Secondary tab row under logo/search */
+#navbar .nav-tabs,
+.nav-tabs {
+  gap: 0.2rem !important;
+  width: 100%;
+}
+
+.nav-tabs-item,
+a.nav-tabs-item {
+  font-family: Syne, Manrope, sans-serif !important;
+  font-size: 0.8rem !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.01em !important;
+  color: var(--ac-muted) !important;
+  text-shadow: none !important;
+  padding-inline: 0.85rem !important;
+  transition: color 180ms var(--ac-ease) !important;
+}
+
+.nav-tabs-item:hover,
+a.nav-tabs-item:hover {
+  color: var(--ac-text) !important;
+}
+
+.nav-tabs-item[data-active="true"],
+a.nav-tabs-item[data-active="true"],
+a.nav-tabs-item[aria-current="location"] {
+  color: var(--ac-signal) !important;
+}
+
+/* Replace default 1px underline with a soft signal bar */
+.nav-tabs-item > div.absolute,
+a.nav-tabs-item > div.absolute {
+  height: 2px !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  opacity: 0;
+  transition: opacity 180ms var(--ac-ease), background 180ms var(--ac-ease) !important;
+}
+
+.nav-tabs-item[data-active="true"] > div.absolute,
+a.nav-tabs-item[data-active="true"] > div.absolute,
+a.nav-tabs-item[aria-current="location"] > div.absolute {
+  background: linear-gradient(90deg, transparent, var(--ac-signal), transparent) !important;
+  opacity: 1;
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.45);
+}
+
+/* ---------- Dense sidebar (fix empty folder gaps) ---------- */
+
+#sidebar-content {
+  border-right-color: var(--ac-border) !important;
+  background: transparent !important;
+}
+
+#sidebar-content [data-component-part="scroll-area-viewport"],
+#navigation-items [data-component-part="scroll-area-viewport"] {
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.85rem !important;
+  padding-right: 0.7rem !important;
+}
+
+#navigation-items .pt-5,
+#navigation-items .pb-4,
+#navigation-items .pr-5 {
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.85rem !important;
+  padding-right: 0.7rem !important;
+}
+
+/* Each module is its own <ul.sidebar-group> — kill stacked margins */
+#navigation-items ul.sidebar-group,
+#navigation-items .sidebar-group,
+#sidebar-content ul.sidebar-group,
+ul.sidebar-group,
+.sidebar-group,
+sidebar-group {
+  margin-top: 0 !important;
+  margin-bottom: 0.12rem !important;
+  margin-block: 0 0.12rem !important;
+}
+
+#navigation-items ul.sidebar-group.my-2,
+#navigation-items .my-2,
+#sidebar-content .my-2,
+ul.sidebar-group.my-2 {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+#navigation-items > ul.list-none[aria-hidden="true"] {
+  display: none !important;
+  margin: 0 !important;
+  height: 0 !important;
+}
+
+#navigation-items .space-y-px > :not([hidden]) ~ :not([hidden]),
+.sidebar-group.space-y-px > li + li {
+  margin-top: 0 !important;
+}
+
+#navigation-items li,
+#sidebar-content li {
+  margin: 0 !important;
+}
+
+#navigation-items li > a,
+#navigation-items li > button,
+#sidebar-content li > a,
+#sidebar-content li > button,
+#navigation-items a,
+#navigation-items button[data-nav-href] {
+  padding-top: 0.22rem !important;
+  padding-bottom: 0.22rem !important;
+  min-height: 0 !important;
+  border-radius: 0.45rem !important;
+  font-size: 0.84rem !important;
+  line-height: 1.2rem !important;
+  transition: background 150ms var(--ac-ease), color 150ms var(--ac-ease) !important;
+}
+
+#navigation-items li > a:hover,
+#navigation-items li > button:hover,
+#sidebar-content li > a:hover {
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+html.light #navigation-items li > a:hover,
+html.light #navigation-items li > button:hover {
+  background: rgba(15, 23, 20, 0.04) !important;
+}
+
+#navigation-items li[data-active="true"] > a,
+#navigation-items li[data-active="true"] > button,
+#navigation-items a[aria-current="page"],
+#sidebar-content a[aria-current="page"] {
+  background: var(--ac-signal-dim) !important;
+  color: var(--ac-signal) !important;
+}
+
+sidebar-group-header,
+.sidebar-group-header,
+#sidebar-content .sidebar-group-header,
+#navigation-items .sidebar-group-header {
+  margin-top: 0.7rem !important;
+  margin-bottom: 0.15rem !important;
+  padding-block: 0.15rem !important;
+  font-size: 0.66rem !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--ac-muted) !important;
+}
+
+/* Home: hero owns the first screen — hide Mintlify page chrome title */
+html[data-current-path="/"] #header,
+html[data-current-path="/"] #page-title,
+html[data-current-path="/"] .mt-0\.5.space-y-2\.5 {
+  display: none !important;
+}
+
+/* ---------- Content polish ---------- */
+
+#page-title {
+  font-family: Syne, Manrope, sans-serif !important;
+  letter-spacing: -0.035em !important;
+  font-weight: 700 !important;
+}
+
+code-block,
+.code-block {
+  border-radius: 0.9rem !important;
+  border: 1px solid var(--ac-border) !important;
+  transition: border-color 200ms var(--ac-ease), box-shadow 200ms var(--ac-ease);
+}
+
+code-block:hover,
+.code-block:hover {
+  border-color: rgba(45, 212, 191, 0.3) !important;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.08);
+}
+
+card,
+.card {
+  transition: transform 220ms var(--ac-ease), border-color 220ms var(--ac-ease), box-shadow 220ms var(--ac-ease) !important;
+}
+
+card:hover,
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(45, 212, 191, 0.35) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2);
+}
+
+/* ---------- Landing hero ---------- */
+
+.ac-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid var(--ac-border);
+  background:
+    linear-gradient(145deg, rgba(45, 212, 191, 0.09), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 62%),
+    rgba(9, 11, 13, 0.55);
+  padding: clamp(2rem, 5vw, 4.1rem);
+  animation: ac-rise 700ms var(--ac-ease) both;
+}
+
+html.light .ac-hero {
+  background:
+    linear-gradient(145deg, rgba(45, 212, 191, 0.13), transparent 46%),
+    linear-gradient(180deg, #ffffff, #f3f6f4);
+}
+
+.ac-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -18% -42% 38%;
+  height: 72%;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.2), transparent 65%);
+  filter: blur(10px);
+  z-index: -1;
+  animation: ac-pulse 7s ease-in-out infinite;
+}
+
+.ac-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ac-signal);
+}
+
+.ac-kicker::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--ac-signal);
+  box-shadow: 0 0 0 4px var(--ac-signal-dim);
+  animation: ac-blink 2.5s ease-in-out infinite;
+}
+
+.ac-title {
+  font-family: Syne, Manrope, sans-serif;
+  font-size: clamp(2.35rem, 5.8vw, 4.05rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  color: var(--ac-text);
+}
+
+.ac-hero p {
+  max-width: 34rem;
+  margin: 0 0 1.7rem;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--ac-muted);
+}
+
+.ac-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.ac-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.68rem 1.1rem;
+  border-radius: 999px;
+  font-family: Syne, Manrope, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-decoration: none !important;
+  transition: transform 180ms var(--ac-ease), box-shadow 180ms var(--ac-ease), background 180ms var(--ac-ease);
+}
+
+.ac-btn-primary {
+  color: #041312 !important;
+  background: linear-gradient(135deg, #5eead4, #2dd4bf);
+  box-shadow: 0 10px 28px rgba(45, 212, 191, 0.28);
+}
+
+.ac-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px rgba(45, 212, 191, 0.38);
+}
+
+.ac-btn-ghost {
+  color: var(--ac-text) !important;
+  border: 1px solid var(--ac-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ac-btn-ghost:hover {
+  border-color: rgba(45, 212, 191, 0.4);
+  background: var(--ac-signal-dim);
+}
+
+.ac-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.85rem;
+  margin-top: 1.6rem;
+}
+
+.ac-tile {
+  border: 1px solid var(--ac-border);
+  border-radius: 1rem;
+  padding: 1.1rem 1.15rem;
+  background: rgba(255, 255, 255, 0.02);
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: transform 220ms var(--ac-ease), border-color 220ms var(--ac-ease), background 220ms var(--ac-ease);
+  animation: ac-rise 820ms var(--ac-ease) both;
+}
+
+.ac-tile:nth-child(2) { animation-delay: 70ms; }
+.ac-tile:nth-child(3) { animation-delay: 140ms; }
+.ac-tile:nth-child(4) { animation-delay: 210ms; }
+
+.ac-tile:hover {
+  transform: translateY(-3px);
+  border-color: rgba(45, 212, 191, 0.42);
+  background: rgba(45, 212, 191, 0.05);
+}
+
+.ac-tile strong {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-family: Syne, Manrope, sans-serif;
+  font-size: 1.02rem;
+  color: var(--ac-text);
+}
+
+.ac-tile span {
+  color: var(--ac-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+@keyframes ac-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ac-pulse {
+  0%, 100% { opacity: 0.5; transform: translate3d(0, 0, 0) scale(1); }
+  50% { opacity: 0.9; transform: translate3d(-2%, -1%, 0) scale(1.05); }
+}
+
+@keyframes ac-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 4px var(--ac-signal-dim); }
+  50% { opacity: 0.5; box-shadow: 0 0 0 7px transparent; }
+}

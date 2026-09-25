@@ -1,0 +1,34 @@
+---
+title: "Contribute"
+description: "How to improve AgentConnect docs and keep the generated API reference accurate."
+sidebarTitle: "Overview"
+---
+
+# Contribute
+
+AgentConnect docs split into handwritten guides under `docs-v2/` and a generated
+Python API reference. Edit source, not generated MDX.
+
+## Improve handwritten pages
+
+1. Edit MDX under `docs-v2/` (except `api/` and `api-reference.mdx`).
+2. Preview with `make docs-v2`.
+3. Validate with `make docs-v2-check`.
+
+## Improve API pages
+
+API pages are generated from public Python modules via mdxify + Griffe.
+
+1. Write **Google-style** docstrings (see [Docstrings](/guides/docstrings)).
+2. Run `make docs-v2-api`.
+3. Commit the regenerated `docs-v2/api/**` and `api-reference.mdx` with your change.
+
+<Info>
+  Package `__init__.py` content becomes the group landing page. The root package
+  docstring is the API reference home.
+</Info>
+
+## Pull requests
+
+Open PRs against `team-restructure` while this Mintlify tree lives in `docs-v2/`.
+Keep Sphinx `docs/` untouched until cutover.

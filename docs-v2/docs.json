@@ -1,0 +1,117 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "AgentConnect",
+  "description": "Runtime for Teams of independent AI agents — discovery, messaging, and work tracking.",
+  "colors": {
+    "primary": "#2DD4BF",
+    "light": "#5EEAD4",
+    "dark": "#0F766E"
+  },
+  "appearance": {
+    "default": "dark",
+    "strict": false
+  },
+  "background": {
+    "decoration": "gradient",
+    "color": {
+      "light": "#F7F6F3",
+      "dark": "#070809"
+    }
+  },
+  "fonts": {
+    "heading": {
+      "family": "Syne",
+      "weight": 700
+    },
+    "body": {
+      "family": "Manrope",
+      "weight": 400
+    }
+  },
+  "favicon": "/images/favicon.svg",
+  "logo": {
+    "light": "/images/logo-light.svg",
+    "dark": "/images/logo-dark.svg",
+    "href": "/"
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/AKKI0511/AgentConnect"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/AKKI0511/AgentConnect"
+    }
+  },
+  "search": {
+    "prompt": "Search docs…"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "github-dark-dimmed"
+      }
+    }
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"],
+    "display": "header"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "quickstart"]
+          },
+          {
+            "group": "Concepts",
+            "pages": ["concepts/overview"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["guides/overview", "guides/docstrings"]
+          }
+        ]
+      },
+      {
+        "tab": "Cookbooks",
+        "icon": "utensils",
+        "groups": [
+          {
+            "group": "Examples",
+            "pages": ["examples/overview"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "icon": "code",
+        "pages": {
+          "$ref": "./api-pages.json"
+        }
+      },
+      {
+        "tab": "Contribute",
+        "icon": "git-branch",
+        "groups": [
+          {
+            "group": "Community",
+            "pages": ["contribute"]
+          }
+        ]
+      }
+    ]
+  },
+  "redirects": []
+}

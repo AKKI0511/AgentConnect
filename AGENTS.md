@@ -18,7 +18,7 @@ This file describes the codebase and its constraints. There is no required edito
 | `agentconnect.prebuilt` | Optional agent helpers and integrations |
 | `agentconnect.index` | Optional published-directory Index |
 
-Tests mirror these packages under `tests/`. Runnable examples are independent uv projects under `examples/`. Website sources and API generation live in `docs/`.
+Tests mirror these packages under `tests/`. Runnable examples are independent uv projects under `examples/`. The legacy Sphinx site lives in `docs/`. The Mintlify documentation project is `website/` — see `website/AGENTS.md` for generated vs handwritten boundaries and commands (`make website`, `make website-check`).
 
 ## Contracts and boundaries
 
@@ -37,7 +37,7 @@ Website pages are self-contained. The root `CHANGELOG.md` is the canonical relea
 
 ## Useful commands
 
-uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers six optional shortcuts: check, format, test, perf, docs, and docs-preview.
+uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers optional shortcuts: check, format, test, perf, docs, docs-preview, website, website-api, and website-check.
 
 ```bash
 uv sync --locked --extra serve --extra cli --extra index --extra openai --extra redis

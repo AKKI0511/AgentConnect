@@ -1,0 +1,53 @@
+name: Website docs
+
+# Isolated Mintlify / generated-API checks. Does not deploy and does not
+# replace the Sphinx docs workflow.
+
+on:
+  pull_request:
+    paths:
+      - "website/**"
+      - "agentconnect/**"
+      - ".github/workflows/website.yml"
+  push:
+    branches: [main, team-restructure]
+    paths:
+      - "website/**"
+      - "agentconnect/**"
+      - ".github/workflows/website.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: website-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    name: Mintlify and API reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "lts/*"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Sync website tooling
+        run: |
+          uv sync --directory website
+          npm ci --prefix website
+
+      - name: Website checks
+        run: make website-check

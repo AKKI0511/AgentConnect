@@ -1,0 +1,3 @@
+python-api/**/*.mdx linguist-generated=true
+python-api-pages.json linguist-generated=true
+python-api/index.mdx linguist-generated=false

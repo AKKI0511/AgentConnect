@@ -1,0 +1,84 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "AgentConnect",
+  "description": "Runtime for Teams of independent AI agents — discovery, messaging, and work tracking.",
+  "colors": {
+    "primary": "#0F766E",
+    "light": "#14B8A6",
+    "dark": "#115E59"
+  },
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
+  "background": {
+    "decoration": "grid"
+  },
+  "favicon": "/images/favicon.svg",
+  "logo": {
+    "light": "/images/logo-light.svg",
+    "dark": "/images/logo-dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/AKKI0511/AgentConnect"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/AKKI0511/AgentConnect"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/AKKI0511/AgentConnect"
+    }
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "quickstart"]
+          },
+          {
+            "group": "Concepts",
+            "pages": ["concepts/overview"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["guides/overview"]
+          },
+          {
+            "group": "Examples",
+            "pages": ["examples/overview"]
+          }
+        ]
+      },
+      {
+        "tab": "Python API",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["python-api/index"]
+          },
+          {
+            "group": "Modules",
+            "pages": {
+              "$ref": "./python-api-pages.json"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "redirects": []
+}

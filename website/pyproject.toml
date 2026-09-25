@@ -1,0 +1,22 @@
+# Isolated tooling for the Mintlify documentation site.
+# Runtime AgentConnect dependencies live in the repository root pyproject.toml.
+[project]
+name = "agentconnect-website"
+version = "0.0.0"
+description = "Mintlify documentation tooling for AgentConnect (API generation and checks)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Editable path to the library under documentation.
+    "agentconnect",
+    # Griffe 2 meta-package pulls griffelib + griffecli (current Sep 2026 stack).
+    "griffe==2.3.0",
+    # Maintained Griffe → Mintlify MDX exporter (used by FastMCP / Prefect).
+    "mdxify==0.2.45",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agentconnect = { path = "..", editable = true }

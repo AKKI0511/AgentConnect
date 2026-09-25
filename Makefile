@@ -1,4 +1,4 @@
-.PHONY: check format test perf docs docs-preview
+.PHONY: check format test perf docs docs-preview website website-api website-check
 
 check:
 	uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
@@ -29,3 +29,13 @@ docs:
 
 docs-preview:
 	uv run --group docs --extra serve --extra cli python docs/generate_docs.py --preview
+
+# Mintlify site under website/ (isolated from the Sphinx docs/ tree).
+website-api:
+	$(MAKE) -C website api
+
+website: website-api
+	$(MAKE) -C website dev
+
+website-check:
+	$(MAKE) -C website check

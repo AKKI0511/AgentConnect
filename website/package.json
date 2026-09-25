@@ -1,0 +1,16 @@
+{
+  "name": "agentconnect-website",
+  "private": true,
+  "description": "Mintlify CLI pin for AgentConnect documentation. Install with npm ci in website/.",
+  "engines": {
+    "node": ">=20.17.0"
+  },
+  "devDependencies": {
+    "mint": "4.2.935"
+  },
+  "scripts": {
+    "dev": "mint dev --no-open",
+    "validate": "mint validate",
+    "broken-links": "mint broken-links --check-anchors --check-redirects"
+  }
+}

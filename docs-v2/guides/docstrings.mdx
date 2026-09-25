@@ -1,0 +1,167 @@
+---
+title: "Docstring style for API reference"
+description: "How to write Google-style docstrings so docs-v2 generation parses Args, Returns, Raises, Examples, and code correctly."
+sidebarTitle: "Docstrings"
+---
+
+# Docstring style for API reference
+
+The Python API tab is generated with **mdxify + Griffe 2** using the **Google** docstring style, then reshaped for Mintlify (package `__init__` as group roots, short module labels, `<ParamField>` / `<ResponseField>`).
+
+If your public docstrings follow the patterns below, signatures, parameters, returns, exceptions, examples, and code fences render correctly. Incomplete docstrings still generate pages; this contract is what makes the UI sections fill in.
+
+Use Google style everywhere in public modules. Prefer complete type annotations on signatures — they appear in the generated code block even when omitted from the docstring.
+
+## Module docstring
+
+Put a short overview at the top of `__init__.py` (or the module file). That text becomes the package/module page body. Package `__init__.py` pages are the group landing pages in the sidebar (there is no separate `__init__` nav entry). The package root (`agentconnect/__init__.py`) becomes the **API reference** landing page.
+
+```python
+"""Client SDK: BaseAgent, Session, Context, and tools.
+
+Join a Team, handle deliveries, and call Directory helpers.
+"""
+```
+
+Indented usage under a module docstring becomes a fenced Python block:
+
+```python
+"""Install and import:
+
+    pip install agentconnect
+
+    from agentconnect import Team
+"""
+```
+
+## Function / method docstring
+
+```python
+def ask(
+    self,
+    recipient: str,
+    content: Any,
+    *,
+    collect: CollectMode = "wait",
+    deadline_seconds: float | None = None,
+) -> Ticket:
+    """Send a reply-expected request through this Session.
+
+    ``collect="wait"`` holds until the Ticket is terminal or the Runtime
+    wait hold elapses.
+
+    Args:
+        recipient: Directory name or address of the peer Agent.
+        content: JSON-serializable request body.
+        collect: Wait strategy. Use ``"ticket"`` to return immediately.
+        deadline_seconds: Optional deadline. Omit to inherit a parent.
+
+    Returns:
+        The current Ticket. It may still be ``open`` when collect waits end.
+
+    Raises:
+        SessionError: The Session is not connected to a Team.
+        TeamError: The Runtime rejected the send.
+
+    Examples:
+        Wait for a completed reply:
+
+        ```python
+        ticket = await agent.ask("writer", {"task": "draft this"})
+        if ticket.state == "completed":
+            print(ticket.response.content)
+        ```
+
+        Collect later:
+
+        ```python
+        pending = await agent.ask("writer", "long job", collect="ticket")
+        ticket = await agent.get_result(pending.id)
+        ```
+    """
+```
+
+### Multi-line Args
+
+Continuation lines under an Arg are fine. Keep them indented under the Arg (Google style). They become one `<ParamField>` description:
+
+```python
+Args:
+    team_or_url: A started ``Team``, or a Runtime origin such as
+        ``http://127.0.0.1:9000``.
+    join_token: Overrides the constructor / environment token for
+        this join.
+```
+
+### Types on Args (optional)
+
+```python
+Args:
+    limit (int): Maximum matches to return.
+    query (str): Free-text Directory query.
+```
+
+Signature annotations are still the source of truth for the code block at the top of each symbol.
+
+## Class docstring
+
+```python
+class BaseAgent:
+    """Client that joins a Team, pulls Deliveries, and runs a handler.
+
+    Subclass, set ``profile``, and implement ``handle``.
+
+    Attributes:
+        profile: Published Directory card for this Agent.
+        name: Display name used in Directory addresses.
+    """
+```
+
+## What the generator expects
+
+| Section | Google heading | Renders as |
+| --- | --- | --- |
+| Summary | First paragraph | Lead prose under the signature |
+| Parameters | `Args:` | Mintlify `<ParamField>` blocks |
+| Returns | `Returns:` | Mintlify `<ResponseField>` |
+| Exceptions | `Raises:` | `<ResponseField type="exception">` |
+| Examples | `Examples:` | Prose + fenced `python` blocks |
+| Attributes | `Attributes:` | Bullet list on the class page |
+
+### Code blocks
+
+Prefer fenced examples inside `Examples:`:
+
+````markdown
+Examples:
+    Basic usage:
+
+    ```python
+    ticket = await agent.ask("writer", {"task": "draft"})
+    ```
+````
+
+Indented examples without fences (4 spaces) are also detected and wrapped. Prefer fences for dict literals, nested indentation, and multi-paragraph examples.
+
+Bare code lines with **no** indent and **no** fence are left as prose — always indent or fence examples.
+
+### Inline code, links, and Python references
+
+- Double-backticks in Google/RST style (``name``) become Markdown `` `name` ``.
+- Markdown single backticks work as-is.
+- Sphinx roles in Google docstrings are normalized: `:class:`~agentconnect.core.ticket.Ticket`` → `` `Ticket` ``. The same applies to `func`, `meth`, `attr`, `exc`, `data`, `mod`, and `obj`.
+- Cross-page Markdown links: `[Ticket](/api/core-ticket)`.
+- External links: normal Markdown URLs.
+- Dotted names in backticks (`` `agentconnect.team.Team` ``) stay as inline code unless you add an explicit Markdown link.
+
+### Braces in examples
+
+Dict / set literals in prose or ParamField text are escaped for MDX. Prefer putting `{...}` inside fenced `python` blocks so they stay literal.
+
+## Checklist before merging API surface changes
+
+1. Public modules listed in `__all__` (or free of leading `_`) are what you intend to publish.
+2. Every public function/method has a Google docstring with `Args` / `Returns` / `Raises` when applicable.
+3. Examples use fenced `python` blocks (or consistent 4-space indent).
+4. Run `make docs-v2-api` and skim the changed pages under `docs-v2/api/` and `docs-v2/api-reference.mdx`.
+5. Run `make docs-v2-check`.

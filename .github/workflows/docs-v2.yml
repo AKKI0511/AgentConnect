@@ -1,0 +1,53 @@
+name: Docs v2
+
+# Isolated Mintlify / generated-API checks for docs-v2/. Does not deploy and
+# does not replace the Sphinx docs workflow.
+
+on:
+  pull_request:
+    paths:
+      - "docs-v2/**"
+      - "agentconnect/**"
+      - ".github/workflows/docs-v2.yml"
+  push:
+    branches: [main, team-restructure]
+    paths:
+      - "docs-v2/**"
+      - "agentconnect/**"
+      - ".github/workflows/docs-v2.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-v2-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-v2:
+    name: Mintlify and API reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "lts/*"
+          cache: npm
+          cache-dependency-path: docs-v2/package-lock.json
+
+      - name: Sync docs-v2 tooling
+        run: |
+          uv sync --directory docs-v2
+          npm ci --prefix docs-v2
+
+      - name: Docs-v2 checks
+        run: make docs-v2-check

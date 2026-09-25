@@ -1,0 +1,148 @@
+[
+  "api-reference",
+  "api/cli",
+  "api/mcp",
+  {
+    "group": "agent",
+    "root": "api/agent",
+    "pages": [
+      "api/agent-base",
+      "api/agent-context",
+      "api/agent-errors",
+      "api/agent-identity",
+      "api/agent-session",
+      "api/agent-tools"
+    ]
+  },
+  {
+    "group": "config",
+    "root": "api/config",
+    "pages": [
+      "api/config-loaders",
+      "api/config-models",
+      "api/config-servers",
+      "api/config-vector"
+    ]
+  },
+  {
+    "group": "core",
+    "root": "api/core",
+    "pages": [
+      "api/core-address",
+      "api/core-base",
+      "api/core-directory",
+      "api/core-error",
+      "api/core-exceptions",
+      "api/core-identity",
+      "api/core-kinds",
+      "api/core-message",
+      "api/core-operations",
+      "api/core-primitives",
+      "api/core-profile",
+      "api/core-projection",
+      "api/core-spec",
+      "api/core-ticket",
+      "api/core-types"
+    ]
+  },
+  {
+    "group": "index",
+    "root": "api/index",
+    "pages": [
+      "api/index-client",
+      {
+        "group": "registry",
+        "root": "api/index-registry",
+        "pages": [
+          "api/index-registry-capability_discovery",
+          "api/index-registry-identity_verification",
+          "api/index-registry-registration",
+          "api/index-registry-registry_base",
+          {
+            "group": "search",
+            "root": "api/index-registry-search",
+            "pages": [
+              "api/index-registry-search-schemas",
+              "api/index-registry-search-utils"
+            ]
+          }
+        ]
+      },
+      "api/index-service",
+      "api/index-types"
+    ]
+  },
+  {
+    "group": "prebuilt",
+    "root": "api/prebuilt",
+    "pages": [
+      "api/prebuilt-ai_agent",
+      "api/prebuilt-human_agent",
+      "api/prebuilt-loop",
+      "api/prebuilt-telegram",
+      "api/prebuilt-tools"
+    ]
+  },
+  {
+    "group": "team",
+    "root": "api/team",
+    "pages": [
+      "api/team-auth",
+      "api/team-codec",
+      "api/team-constants",
+      {
+        "group": "directory",
+        "root": "api/team-directory",
+        "pages": [
+          "api/team-directory-directory",
+          "api/team-directory-embedder",
+          "api/team-directory-tokens"
+        ]
+      },
+      "api/team-errors",
+      "api/team-expiry",
+      "api/team-http",
+      "api/team-locks",
+      "api/team-mailbox",
+      "api/team-projection",
+      "api/team-retention",
+      "api/team-runtime",
+      "api/team-session_auth",
+      "api/team-sessions",
+      {
+        "group": "store",
+        "root": "api/team-store",
+        "pages": [
+          "api/team-store-apply",
+          "api/team-store-base",
+          "api/team-store-memory",
+          "api/team-store-ops",
+          "api/team-store-redis"
+        ]
+      },
+      "api/team-threads",
+      "api/team-tickets",
+      "api/team-trace",
+      {
+        "group": "transitions",
+        "root": "api/team-transitions",
+        "pages": [
+          "api/team-transitions-complete",
+          "api/team-transitions-join",
+          "api/team-transitions-reply",
+          "api/team-transitions-send"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "transport",
+    "root": "api/transport",
+    "pages": [
+      "api/transport-agent_http",
+      "api/transport-envelope",
+      "api/transport-inprocess",
+      "api/transport-runtime"
+    ]
+  }
+]

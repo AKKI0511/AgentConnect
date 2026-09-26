@@ -1,3 +1,20 @@
+> [!IMPORTANT]
+> ## 🚧 New Architecture Coming Soon — v0.5
+>
+> A **completely new restructure and architecture** is being built and will be released soon from **v0.5**.
+>
+> **Dev / beta preview:** follow the work in progress on the
+> [`team-restructure` branch →](https://github.com/AKKI0511/AgentConnect/tree/team-restructure)
+
+<p align="center">
+  <a href="https://github.com/AKKI0511/AgentConnect/tree/team-restructure">
+    <img
+      alt="Open team-restructure branch (v0.5 beta)"
+      src="https://img.shields.io/badge/👀%20Preview%20v0.5%20beta-team--restructure%20branch-FF6B00?style=for-the-badge&labelColor=1B1F23"
+    />
+  </a>
+</p>
+
 <div align="center">
 
 <picture>

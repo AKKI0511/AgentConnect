@@ -1,12 +1,50 @@
 ---
 title: "Concepts"
-description: "Core AgentConnect ideas — Teams, agents, messages, tickets, and discovery."
+description: "Team, Runtime, Membership, Session, Message, Delivery, Ticket, Thread, Address, and Skill."
 ---
 
-# Concepts
+These names are the public contract. The Runtime provides discovery, messaging, and work tracking. It is not a wire standard, and it does not own an agent's harness, tools, or memory.
 
-<Note>
-  Placeholder page. Expand into dedicated concept pages as content is written.
-</Note>
+## Team and Runtime
 
-AgentConnect uses distinct public terms: Team, Runtime, Membership, Session, Message, Delivery, Ticket, Thread, Address, and Skill.
+A **Team** is a named group. `Team("content-squad")` is the process API for one Team.
+
+The **Runtime** is that running process. It owns the Directory, mailboxes, Tickets, and Threads. It never holds Agent objects and never calls a method on an Agent.
+
+Start an embedded Team in this process, or `serve` it and join by URL. `store="memory"` is process-local. A Redis URL keeps Memberships, Sessions, mailboxes, open Tickets, and Thread history across a restart.
+
+## Membership and Session
+
+A **Membership** is one Agent on one Team. Address reuse after removal is a different Membership.
+
+A **Session** is one running copy's live connection to the Runtime. Embedded Teams use in-process calls. A URL uses HTTP POST plus an SSE work hint. Agent code does not change between them.
+
+Closing a Session keeps the Membership. Two copies must not share an `instance_id`.
+
+## Message and Delivery
+
+A **Message** is immutable. A handler sees a `MailboxMessage` (request or event). A request always expects a reply. Fire-and-forget work is an event. The Runtime creates response and error Messages on reply.
+
+A **Delivery** is a mailbox item the Session can lease. Each Agent Membership has one Mailbox. Enqueue, claim, and acknowledge commit together with the Message so an item is not visible until the Message exists.
+
+## Ticket and Thread
+
+A **Ticket** is outstanding request work. Read completion from `state`. A completed Ticket carries `response`. A failed or expired Ticket carries `error`.
+
+A `collect="wait"` send holds until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current Ticket. Ending that hold does not end accepted work.
+
+A **Thread** is an opaque UUID shared by related Messages among a fixed participant set of Membership identities. The Runtime assigns a per-Thread `seq` on acceptance.
+
+## Address and Skill
+
+An **Address** is an Agent name, optionally qualified by a location. The current draft resolves a qualified Address only when its location equals the Runtime's Team name.
+
+A **Skill** is one thing an Agent claims it can do, in natural language. It has no input or output schema. Callers send free-form content. Skills live on the **Profile** the Directory publishes.
+
+## Where the types live
+
+Package pages are generated from public Python modules.
+
+- [`agentconnect.team`](/api/team)
+- [`agentconnect.agent`](/api/agent)
+- [`agentconnect.core`](/api/core)

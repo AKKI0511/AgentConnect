@@ -11,20 +11,21 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 | `api/*.mdx` | **Generated** module/package pages |
 | `api-pages.json` | **Generated** Mintlify nav (`$ref` from `docs.json`) |
 | `docs.json` | Mintlify config + handwritten navigation |
-| `style.css` / `site.js` | Dark-first chrome, glass header, dense API sidebar |
+| `style.css` / `site.js` | Carbon canvas, Atkinson fonts, skip link, dense API sidebar |
+| `fonts/` | Self-hosted Atkinson Hyperlegible Next and Mono (OFL) |
 | `scripts/generate_api.py` | mdxify + reshape (roots, short labels, docstring polish) |
 | `scripts/check.py` | Stale / deterministic / config / Mintlify checks |
 
 ### Site chrome
 
-- Aspen theme, **dark default**, Syne + Manrope fonts
-- Fixed dual header: logo left · search center · GitHub + theme right; second row tabs (Documentation / Cookbooks / Reference / Contribute)
-- Header goes frosted glass on scroll (`site.js` + `style.css`)
+- Aspen theme, dark only (`appearance.strict`), Atkinson Hyperlegible Next + Mono
+- Carbon canvas, bone type, one vermilion live mark. No light theme, no hover restyles, no gradient wash
+- Dual header stays for tabs (Documentation / Cookbooks / Reference / Contribute). Search is a glass pill. `site.js` adds a skip link, font preloads, and `theme-color`
 
 ### API navigation rules
 
 - Opening the **Reference** tab shows `api-reference.mdx` (`agentconnect` package docstring).
-- A package group such as **agent** uses Mintlify `root` pointing at that package's `__init__.py` page — there is no visible `__init__` child.
+- A package group such as **agent** uses Mintlify `root` pointing at that package's `__init__.py` page. There is no visible `__init__` child.
 - Sidebar labels drop the `agentconnect.` prefix (`agent`, `core`, `team`, …). Leaf pages keep short names (`base`, `runtime`).
 - Sidebar row spacing is intentionally dense (custom CSS).
 

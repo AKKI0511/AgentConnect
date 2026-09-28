@@ -1,13 +1,9 @@
 ---
 title: "Quickstart"
-description: "Install AgentConnect and run a minimal Team."
+description: "Install AgentConnect, start a Team, and join a BaseAgent."
 ---
 
-# Quickstart
-
-<Note>
-  Placeholder page. Replace with a real install-and-run walkthrough.
-</Note>
+Install AgentConnect, start an in-process Team, and join a `BaseAgent`. Python 3.11 through 3.14.
 
 ## Install
 
@@ -15,7 +11,91 @@ description: "Install AgentConnect and run a minimal Team."
 pip install agentconnect
 ```
 
-## Next steps
+`pip install agentconnect` is the embedded core. Add extras later for HTTP serving, Redis, CLI, MCP, and model helpers. See the [API reference](/api-reference) for those extras.
 
-- Read [Concepts](/concepts/overview)
-- Browse the [Python API](/api-reference)
+## Start a Team
+
+Save this as `team_hello.py` and run it.
+
+```python
+import asyncio
+
+from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill, Team
+
+
+class Writer(BaseAgent):
+    profile = AgentProfile(
+        summary="Writes short drafts from notes.",
+        skills=[
+            Skill(
+                name="drafting",
+                description="Turn notes into a two-paragraph draft.",
+            )
+        ],
+    )
+
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+        if msg.kind != "request":
+            return None
+        return f"Draft complete for {msg.content!r}."
+
+
+class Editor(BaseAgent):
+    profile = AgentProfile(
+        summary="Sends writing jobs.",
+        skills=[
+            Skill(
+                name="assign",
+                description="Send a drafting job to a writer.",
+            )
+        ],
+    )
+
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+        return None
+
+
+async def main() -> None:
+    team = await Team("content-squad").start()
+    writer = await Writer(name="writer").join(team)
+    editor = await Editor(name="editor").join(team)
+    try:
+        print(f"joined {writer.address} {editor.address}")
+        ticket = await editor.ask("writer", {"task": "draft this"})
+        print(ticket.state)
+        if ticket.state == "completed":
+            print(ticket.response.content)
+    finally:
+        await editor.leave()
+        await writer.leave()
+        await team.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+```bash
+python team_hello.py
+```
+
+You should see a `joined writer@content-squad editor@content-squad` line, then a Ticket `state`. `collect="wait"` can return while accepted work is still `open`. That hold is not the Ticket deadline.
+
+`join` starts a Session that pulls work. There is no `run()` loop on the Agent.
+
+## Three agents in the repo
+
+The uv project at `examples/quickstart` runs an editor, a writer, and a researcher. Deterministic mode uses a stub harness and never calls a provider.
+
+```bash
+cd examples/quickstart
+uv sync
+uv run python -m team_demo
+```
+
+You should see `ticket state: completed` and a short draft. Live OpenAI mode is `--live` after you copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The example README lists the files to edit.
+
+## Next
+
+- Public nouns live on [Concepts](/concepts/overview).
+- Package pages live in the [Python API](/api-reference).

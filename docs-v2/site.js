@@ -1,43 +1,54 @@
 /**
- * AgentConnect docs chrome helpers.
- * Aspen already provides logo | search | actions + a second tabs row.
- * We only drive glass-on-scroll and keep chrome metrics fresh.
+ * AgentConnect docs helpers. Pages work without this file.
+ * Adds a skip link, font preloads, and a theme-color meta tag.
  */
 (function () {
-  const THRESHOLD = 6;
+  const FONTS = [
+    "/fonts/atkinson-hyperlegible-next-400.woff2",
+    "/fonts/atkinson-hyperlegible-mono-400.woff2",
+  ];
 
-  function navbar() {
-    return document.getElementById("navbar");
+  function ensureSkipLink() {
+    if (document.querySelector(".ac-skip")) return;
+    const skip = document.createElement("a");
+    skip.className = "ac-skip";
+    skip.href = "#content";
+    skip.textContent = "Skip to content";
+    document.body.insertBefore(skip, document.body.firstChild);
   }
 
-  function syncGlass() {
-    const el = navbar();
-    if (!el) return;
-    const scrolled = (window.scrollY || document.documentElement.scrollTop || 0) > THRESHOLD;
-    el.classList.toggle("ac-scrolled", scrolled);
-    if (scrolled) el.setAttribute("data-ac-glass", "true");
-    else el.removeAttribute("data-ac-glass");
+  function preloadFonts() {
+    for (const href of FONTS) {
+      if (document.querySelector(`link[rel="preload"][href="${href}"]`)) continue;
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "font";
+      link.type = "font/woff2";
+      link.crossOrigin = "anonymous";
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  }
+
+  function setThemeColor() {
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", "#131313");
   }
 
   function boot() {
-    syncGlass();
+    ensureSkipLink();
+    preloadFonts();
+    setThemeColor();
   }
-
-  window.addEventListener("scroll", syncGlass, { passive: true });
-  window.addEventListener("pageshow", syncGlass);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot, { once: true });
   } else {
     boot();
   }
-
-  // Client-side route changes remount chrome.
-  const mo = new MutationObserver(() => syncGlass());
-  mo.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "data-theme"],
-  });
 })();

@@ -1,20 +1,18 @@
 ---
 title: "Docstring style for API reference"
-description: "How to write Google-style docstrings so docs-v2 generation parses Args, Returns, Raises, Examples, and code correctly."
+description: "Google-style docstrings so docs-v2 generation parses Args, Returns, Raises, Examples, and code."
 sidebarTitle: "Docstrings"
 ---
 
-# Docstring style for API reference
+The Python API tab is generated with mdxify and Griffe 2 from Google-style docstrings, then reshaped for Mintlify. Package `__init__` pages become group roots. Sidebar labels drop the `agentconnect.` prefix. `Args`, `Returns`, and `Raises` become `<ParamField>` and `<ResponseField>` blocks.
 
-The Python API tab is generated with **mdxify + Griffe 2** using the **Google** docstring style, then reshaped for Mintlify (package `__init__` as group roots, short module labels, `<ParamField>` / `<ResponseField>`).
+Incomplete docstrings still generate pages. The patterns below are what fill those sections.
 
-If your public docstrings follow the patterns below, signatures, parameters, returns, exceptions, examples, and code fences render correctly. Incomplete docstrings still generate pages; this contract is what makes the UI sections fill in.
-
-Use Google style everywhere in public modules. Prefer complete type annotations on signatures — they appear in the generated code block even when omitted from the docstring.
+Use Google style in public modules. Put complete type annotations on signatures. Those annotations appear in the generated code block even when the docstring omits types.
 
 ## Module docstring
 
-Put a short overview at the top of `__init__.py` (or the module file). That text becomes the package/module page body. Package `__init__.py` pages are the group landing pages in the sidebar (there is no separate `__init__` nav entry). The package root (`agentconnect/__init__.py`) becomes the **API reference** landing page.
+Put a short overview at the top of `__init__.py` (or the module file). That text becomes the package/module page body. Package `__init__.py` pages are the group landing pages in the sidebar (there is no separate `__init__` nav entry). The package root (`agentconnect/__init__.py`) becomes the API reference landing page.
 
 ```python
 """Client SDK: BaseAgent, Session, Context, and tools.
@@ -143,7 +141,7 @@ Examples:
 
 Indented examples without fences (4 spaces) are also detected and wrapped. Prefer fences for dict literals, nested indentation, and multi-paragraph examples.
 
-Bare code lines with **no** indent and **no** fence are left as prose — always indent or fence examples.
+Bare code lines with no indent and no fence stay as prose. Indent or fence examples.
 
 ### Inline code, links, and Python references
 

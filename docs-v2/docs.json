@@ -2,31 +2,34 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "aspen",
   "name": "AgentConnect",
-  "description": "Runtime for Teams of independent AI agents — discovery, messaging, and work tracking.",
+  "description": "Runtime for Teams of independent AI agents. Discovery, messaging, and work tracking.",
   "colors": {
-    "primary": "#2DD4BF",
-    "light": "#5EEAD4",
-    "dark": "#0F766E"
+    "primary": "#EAE9E6",
+    "light": "#EAE9E6",
+    "dark": "#EAE9E6"
   },
   "appearance": {
     "default": "dark",
-    "strict": false
+    "strict": true
   },
   "background": {
-    "decoration": "gradient",
     "color": {
-      "light": "#F7F6F3",
-      "dark": "#070809"
+      "light": "#0F0E0D",
+      "dark": "#0F0E0D"
     }
   },
   "fonts": {
     "heading": {
-      "family": "Syne",
-      "weight": 700
+      "family": "Atkinson Hyperlegible Next",
+      "weight": 500,
+      "source": "/fonts/atkinson-hyperlegible-next-500.woff2",
+      "format": "woff2"
     },
     "body": {
-      "family": "Manrope",
-      "weight": 400
+      "family": "Atkinson Hyperlegible Next",
+      "weight": 400,
+      "source": "/fonts/atkinson-hyperlegible-next-400.woff2",
+      "format": "woff2"
     }
   },
   "favicon": "/images/favicon.svg",
@@ -38,7 +41,7 @@
   "navbar": {
     "links": [
       {
-        "type": "github",
+        "label": "GitHub",
         "href": "https://github.com/AKKI0511/AgentConnect"
       }
     ]
@@ -49,26 +52,29 @@
     }
   },
   "search": {
-    "prompt": "Search docs…"
+    "prompt": "Search"
   },
   "styling": {
     "eyebrows": "breadcrumbs",
     "codeblocks": {
-      "theme": {
-        "light": "github-light",
-        "dark": "github-dark-dimmed"
-      }
+      "theme": "github-dark"
     }
   },
   "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude"],
+    "options": ["copy", "view", "grok", "chatgpt", "claude"],
     "display": "header"
+  },
+  "errors": {
+    "404": {
+      "redirect": false,
+      "title": "This page is not here",
+      "description": "It may have moved. [Start from the overview](/)."
+    }
   },
   "navigation": {
     "tabs": [
       {
         "tab": "Documentation",
-        "icon": "book-open",
         "groups": [
           {
             "group": "Get started",
@@ -86,7 +92,6 @@
       },
       {
         "tab": "Cookbooks",
-        "icon": "utensils",
         "groups": [
           {
             "group": "Examples",
@@ -96,14 +101,12 @@
       },
       {
         "tab": "Reference",
-        "icon": "code",
         "pages": {
           "$ref": "./api-pages.json"
         }
       },
       {
         "tab": "Contribute",
-        "icon": "git-branch",
         "groups": [
           {
             "group": "Community",

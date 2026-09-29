@@ -1,17 +1,11 @@
 ---
 title: "Cookbooks"
-description: "Runnable examples and patterns for AgentConnect agents and Teams."
+description: "Runnable AgentConnect examples in this repository."
 ---
 
-# Cookbooks
+Copy these from the repo. They are uv projects, not snippets on this page.
 
-Short, copyable patterns. These pages are placeholders until example content is migrated from the legacy Sphinx site and `examples/` projects.
+- [`examples/quickstart`](https://github.com/AKKI0511/AgentConnect/tree/main/examples/quickstart) runs an editor, a writer, and a researcher on one Team. `uv run python -m team_demo` is deterministic. `--live` calls OpenAI from the same `handle`.
+- [`examples/recipes`](https://github.com/AKKI0511/AgentConnect/tree/main/examples/recipes) holds smaller patterns, including Directory `find`.
 
-<Columns cols={2}>
-  <Card title="Quickstart path" icon="rocket" href="/quickstart">
-    Install, start a Team, and join a BaseAgent.
-  </Card>
-  <Card title="API surface" icon="code" href="/api-reference">
-    Jump into the generated Python reference.
-  </Card>
-</Columns>
+Install and join without cloning on [Quickstart](/quickstart).

@@ -4,11 +4,11 @@ description: "Edit handwritten MDX or regenerate the Python API from public docs
 sidebarTitle: "Overview"
 ---
 
-Handwritten guides live under `docs-v2/`. The Python API tab is generated from public modules. Edit source, not generated MDX.
+Handwritten guides live under `docs-v2`. The Python API tab is generated from public modules. Edit source, not generated MDX.
 
 ## Improve handwritten pages
 
-1. Edit MDX under `docs-v2/` except `api/` and `api-reference.mdx`.
+1. Edit MDX under `docs-v2`, except the generated `api` folder and `api-reference.mdx`.
 2. Preview with `make docs-v2`.
 3. Validate with `make docs-v2-check`.
 
@@ -18,10 +18,10 @@ API pages come from public Python modules through mdxify and Griffe.
 
 1. Write Google-style docstrings. See [Docstring style for API reference](/guides/docstrings).
 2. Run `make docs-v2-api`.
-3. Commit the regenerated `docs-v2/api/**` and `api-reference.mdx` with your change.
+3. Commit the regenerated `docs-v2/api` files and `api-reference.mdx` with your change.
 
 Package `__init__.py` content is the group landing page. The root package docstring is the API reference home.
 
 ## Pull requests
 
-Open PRs against the branch that currently holds this Mintlify tree. Leave the Sphinx tree in `docs/` untouched until cutover.
+Open PRs against the branch that currently holds this Mintlify tree. Leave the Sphinx tree in `docs` untouched until cutover.

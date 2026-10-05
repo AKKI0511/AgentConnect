@@ -4,7 +4,7 @@
  * Dark is first paint: sharp black, bright white (Prime Intellect contrast).
  * Light is a second designed theme.
  * Colour appears only for meaning (error, warning) and keyboard focus.
- * Sidebar page hover is visible and distinct from the selected row.
+ * Sidebar page hover is duller than the selected row. Nested groups look like files.
  */
 
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap");
@@ -19,12 +19,13 @@
   --ac-line: rgba(227, 224, 230, 0.06);
   --ac-line-strong: rgba(227, 224, 230, 0.12);
   --ac-fill: rgba(255, 255, 255, 0.045);
-  --ac-fill-hover: rgba(255, 255, 255, 0.1);
+  --ac-fill-hover: rgba(255, 255, 255, 0.06);
   --ac-fill-strong: rgba(255, 255, 255, 0.18);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
   --ac-radius: 2px;
+  --ac-radius-nav: 0.85rem;
   --ac-radius-pill: 9999px;
   --ac-measure: 40rem;
   --ac-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -41,7 +42,7 @@ html.light {
   --ac-line: rgba(18, 18, 18, 0.06);
   --ac-line-strong: rgba(18, 18, 18, 0.12);
   --ac-fill: rgba(18, 18, 18, 0.035);
-  --ac-fill-hover: rgba(18, 18, 18, 0.07);
+  --ac-fill-hover: rgba(18, 18, 18, 0.04);
   --ac-fill-strong: rgba(18, 18, 18, 0.12);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
@@ -395,21 +396,18 @@ sidebar-nav-group-divider {
   padding-top: 0.32rem !important;
   padding-bottom: 0.32rem !important;
   min-height: 0 !important;
-  border-radius: var(--ac-radius) !important;
+  border-radius: var(--ac-radius-nav) !important;
   font-size: 0.925rem !important;
+  font-weight: 400 !important;
   line-height: 1.35rem !important;
   color: var(--ac-muted) !important;
-}
-
-#navigation-items li > button[aria-expanded] {
-  color: var(--ac-heading) !important;
 }
 
 #navigation-items li:not([data-active="true"]) > a:hover,
 #navigation-items li:not([data-active="true"]) > button:hover,
 #sidebar-content li:not([data-active="true"]) > a:hover {
   background: var(--ac-fill-hover) !important;
-  color: var(--ac-text) !important;
+  color: var(--ac-heading) !important;
 }
 
 #navigation-items li[data-active="true"] > a,
@@ -431,8 +429,8 @@ sidebar-nav-group-divider {
 sidebar-group-header,
 .sidebar-group-header,
 #navigation-items .sidebar-group-header {
-  margin-top: 0.7rem !important;
-  margin-bottom: 0.12rem !important;
+  margin-top: 1.85rem !important;
+  margin-bottom: 0.2rem !important;
   padding-block: 0.15rem !important;
   font-size: 0.78rem !important;
   font-weight: 500 !important;
@@ -457,25 +455,45 @@ toc-item,
 .toc-item a,
 #table-of-contents-content a {
   font-size: 0.9rem !important;
+  font-weight: 400 !important;
   color: var(--ac-muted) !important;
   border: none !important;
   border-left: none !important;
   box-shadow: none !important;
   text-shadow: none !important;
   background: transparent !important;
+  border-radius: 0 !important;
 }
 
-toc-item[data-active],
-toc-item[data-active-deepest],
-.toc-item[data-active],
-.toc-item[data-active] > a,
-.toc-item[data-active-deepest] > a,
-#table-of-contents-content li[data-active] > a {
-  color: var(--ac-text) !important;
-  border: none !important;
-  border-left-color: transparent !important;
+toc-item:hover,
+.toc-item:hover,
+#table-of-contents-content a:hover,
+.toc-item a:hover,
+toc-item a:hover {
   background: transparent !important;
-  text-shadow: none !important;
+  box-shadow: none !important;
+  color: var(--ac-body) !important;
+}
+
+toc-item[data-active-deepest],
+toc-item[data-active-deepest] > a,
+.toc-item[data-active-deepest],
+.toc-item[data-active-deepest] > a,
+#table-of-contents-content li[data-active-deepest] > a {
+  color: var(--ac-heading) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+toc-item[data-active]:not([data-active-deepest]),
+toc-item[data-active]:not([data-active-deepest]) > a,
+.toc-item[data-active]:not([data-active-deepest]),
+.toc-item[data-active]:not([data-active-deepest]) > a,
+#table-of-contents-content li[data-active]:not([data-active-deepest]) > a {
+  color: var(--ac-text) !important;
+  background: transparent !important;
+  border: none !important;
   box-shadow: none !important;
 }
 
@@ -484,25 +502,6 @@ eyebrow,
 breadcrumb-list {
   font-size: 0.75rem;
   color: var(--ac-muted);
-}
-
-/* ---------- Code ---------- */
-
-code-block,
-.code-block,
-code-group,
-code-block pre,
-.code-block pre {
-  border-radius: var(--ac-radius) !important;
-  border: 1px solid var(--ac-line) !important;
-  background: var(--ac-elevated) !important;
-  box-shadow: none !important;
-}
-
-code-block:hover,
-.code-block:hover {
-  border-color: var(--ac-line) !important;
-  box-shadow: none !important;
 }
 
 /* ---------- Callouts: hairline, meaning colour on the bar only ---------- */

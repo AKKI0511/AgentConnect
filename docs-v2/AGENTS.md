@@ -19,8 +19,9 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 
 - Aspen theme, **dark default**, IBM Plex Sans + IBM Plex Mono
 - Sharp near-black (`#0E0E10`) and bright white; faint hairlines
-- Sidebar **group headers** are brighter than leaf pages. Body copy is grey; headings and links stay bright.
-- Nested sidebar groups stay open until the reader collapses them. Dummy nested pages live under **Surfaces**.
+- Sidebar **section labels** (Start, Concepts, …) sit farther apart than files in a section. Nested dropdowns use Mintlify `expanded: false`, look like file rows, and start closed. Dummy nested pages live under **Surfaces**.
+- Body copy is grey; headings and links stay bright.
+- Code blocks use native Mintlify UI with Shiki `vitesse-light` / `vitesse-dark`.
 - Tabs: Docs / Examples / Reference
 - Header: logo, search, GitHub, theme. Skip link injected by `site.js`
 

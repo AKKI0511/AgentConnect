@@ -83,8 +83,8 @@
     "eyebrows": "breadcrumbs",
     "codeblocks": {
       "theme": {
-        "light": "github-light",
-        "dark": "github-dark"
+        "light": "vitesse-light",
+        "dark": "vitesse-dark"
       }
     }
   },
@@ -158,12 +158,12 @@
               "surfaces/overview",
               {
                 "group": "Cards",
-                "expanded": true,
+                "expanded": false,
                 "pages": ["surfaces/cards"]
               },
               {
                 "group": "Media",
-                "expanded": true,
+                "expanded": false,
                 "pages": ["surfaces/media"]
               }
             ]

@@ -1,13 +1,14 @@
 /**
  * AgentConnect docs chrome.
- * Skip link. Keep previously opened sidebar groups open across page changes.
+ * Skip link. Keep groups the reader opened during this visit.
  *
- * Group rows with a root page navigate on click. Restoring those groups
- * must set React state, not click the row.
+ * Nested groups start closed (docs.json `expanded: false`).
+ * Session storage is not used, so a refresh starts closed except
+ * the current path. Group rows with a root page navigate on click;
+ * restoring those groups must set React state, not click the row.
  */
 (function () {
   const SKIP_ID = "ac-skip";
-  const STORE = "ac-nav-open";
 
   function ensureSkip() {
     if (document.getElementById(SKIP_ID)) return;
@@ -23,20 +24,7 @@
     return btn.getAttribute("data-nav-href") || btn.textContent.replace(/\s+/g, " ").trim();
   }
 
-  function loadOpen() {
-    try {
-      const raw = sessionStorage.getItem(STORE);
-      return new Set(raw ? JSON.parse(raw) : []);
-    } catch {
-      return new Set();
-    }
-  }
-
-  function saveOpen(open) {
-    sessionStorage.setItem(STORE, JSON.stringify([...open]));
-  }
-
-  const open = loadOpen();
+  const open = new Set();
   let restoring = false;
   let restoreTimer = 0;
 
@@ -85,17 +73,8 @@
     return false;
   }
 
-  function rememberExpanded() {
-    for (const btn of groupButtons()) {
-      if (btn.getAttribute("aria-expanded") === "true") {
-        open.add(groupKey(btn));
-      }
-    }
-    saveOpen(open);
-  }
-
   function restoreOpen() {
-    if (restoring) return;
+    if (restoring || open.size === 0) return;
     restoring = true;
     try {
       for (const btn of groupButtons()) {
@@ -110,7 +89,7 @@
   }
 
   function scheduleRestore() {
-    if (restoring) return;
+    if (restoring || open.size === 0) return;
     window.clearTimeout(restoreTimer);
     restoreTimer = window.setTimeout(restoreOpen, 40);
   }
@@ -127,7 +106,6 @@
       const expanded = nowOpen !== wasOpen ? nowOpen : !wasOpen;
       if (expanded) open.add(key);
       else open.delete(key);
-      saveOpen(open);
       restoring = false;
     });
   }
@@ -139,7 +117,6 @@
       root.dataset.acNavBound = "1";
       root.addEventListener("click", onNavClick, true);
     }
-    rememberExpanded();
     scheduleRestore();
   }
 

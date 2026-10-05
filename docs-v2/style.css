@@ -25,7 +25,7 @@
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
   --ac-radius: 2px;
-  --ac-radius-nav: 0.85rem;
+  --ac-radius-nav: 0.55rem;
   --ac-radius-pill: 9999px;
   --ac-measure: 40rem;
   --ac-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -429,7 +429,7 @@ sidebar-nav-group-divider {
 sidebar-group-header,
 .sidebar-group-header,
 #navigation-items .sidebar-group-header {
-  margin-top: 1.85rem !important;
+  margin-top: 2.25rem !important;
   margin-bottom: 0.2rem !important;
   padding-block: 0.15rem !important;
   font-size: 0.78rem !important;

@@ -21,7 +21,7 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 - Sharp near-black (`#0E0E10`) and bright white; faint hairlines
 - Sidebar **section labels** (Start, Concepts, …) sit farther apart than files in a section. Nested dropdowns use Mintlify `expanded: false`, look like file rows, and start closed. Dummy nested pages live under **Surfaces**.
 - Body copy is grey; headings and links stay bright.
-- Code blocks use native Mintlify UI with Shiki `vitesse-light` / `vitesse-dark`.
+- Code blocks use native Mintlify UI with Shiki `light-plus` / `dark-plus`. No custom syntax colors.
 - Tabs: Docs / Examples / Reference
 - Header: logo, search, GitHub, theme. Skip link injected by `site.js`
 

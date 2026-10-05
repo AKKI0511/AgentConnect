@@ -20,7 +20,7 @@
   --ac-line-strong: rgba(227, 224, 230, 0.12);
   --ac-fill: rgba(255, 255, 255, 0.045);
   --ac-fill-hover: rgba(255, 255, 255, 0.03);
-  --ac-fill-strong: rgba(255, 255, 255, 0.18);
+  --ac-fill-strong: rgba(255, 255, 255, 0.08);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
@@ -43,7 +43,7 @@ html.light {
   --ac-line-strong: rgba(18, 18, 18, 0.12);
   --ac-fill: rgba(18, 18, 18, 0.035);
   --ac-fill-hover: rgba(18, 18, 18, 0.03);
-  --ac-fill-strong: rgba(18, 18, 18, 0.12);
+  --ac-fill-strong: rgba(18, 18, 18, 0.06);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
   --ac-ok: #3d5a40;
@@ -423,6 +423,16 @@ sidebar-nav-group-divider {
 #sidebar-content a[aria-current="page"] {
   background: var(--ac-fill-strong) !important;
   color: var(--ac-text) !important;
+  box-shadow: none !important;
+}
+
+#navigation-items li[data-active="true"] > a *,
+#navigation-items li[data-active="true"] > button *,
+#navigation-items a[aria-current="page"] *,
+#sidebar-content a[aria-current="page"] * {
+  color: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 #navigation-items li[data-active="true"] > a:hover,

@@ -20,7 +20,7 @@
   --ac-muted: #71717a;
   --ac-line: #27272a;
   --ac-line-strong: #3f3f46;
-  --ac-hairline: rgba(245, 245, 245, 0.1);
+  --ac-hairline: rgba(245, 245, 245, 0.06);
   --ac-fill: rgba(245, 245, 245, 0.045);
   --ac-fill-hover: rgba(245, 245, 245, 0.03);
   --ac-fill-strong: rgba(245, 245, 245, 0.08);
@@ -48,7 +48,7 @@ html.light {
   --ac-muted: #a1a1aa;
   --ac-line: #e4e4e7;
   --ac-line-strong: #d4d4d8;
-  --ac-hairline: rgba(24, 24, 27, 0.1);
+  --ac-hairline: rgba(24, 24, 27, 0.08);
   --ac-fill: rgba(24, 24, 27, 0.035);
   --ac-fill-hover: rgba(24, 24, 27, 0.03);
   --ac-fill-strong: rgba(24, 24, 27, 0.06);
@@ -245,8 +245,7 @@ div:has(> #navbar) {
 #navbar > .z-10.absolute.w-full.h-full.border-b,
 #navbar > div.absolute.border-b {
   background: transparent !important;
-  border-top-width: 1px !important;
-  border-top-style: solid !important;
+  border-top: none !important;
   border-bottom-width: 1px !important;
   border-bottom-style: solid !important;
   border-left: none !important;
@@ -255,6 +254,20 @@ div:has(> #navbar) {
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+@media (min-width: 1024px) {
+  #navbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 3.5rem;
+    z-index: 20;
+    height: 1px;
+    pointer-events: none;
+    background: var(--ac-hairline);
+  }
 }
 
 #navbar a,

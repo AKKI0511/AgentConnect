@@ -141,17 +141,34 @@ header > .mt-2.prose p {
   color: var(--ac-heading);
 }
 
-.mdx-content a,
-link {
+.mdx-content a {
   color: var(--ac-heading) !important;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.18em;
 }
 
-.mdx-content a:hover,
-link:hover {
+.mdx-content a.link,
+a.link {
   color: var(--ac-heading) !important;
+  text-decoration: underline !important;
+  text-decoration-line: underline !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 0.18em !important;
+  text-decoration-color: currentColor !important;
+  border-bottom: none !important;
+  border-bottom-width: 0 !important;
+  border-block-width: 0 !important;
+  box-shadow: none !important;
+}
+
+.mdx-content a:hover {
+  color: var(--ac-heading) !important;
+}
+
+.mdx-content a.link:hover,
+a.link:hover {
+  text-decoration-thickness: 1px !important;
+  border-bottom: none !important;
+  border-bottom-width: 0 !important;
+  border-block-width: 0 !important;
 }
 
 .mdx-content a:focus-visible,

@@ -20,6 +20,7 @@
   --ac-muted: #71717a;
   --ac-line: #27272a;
   --ac-line-strong: #3f3f46;
+  --ac-hairline: rgba(245, 245, 245, 0.1);
   --ac-fill: rgba(245, 245, 245, 0.045);
   --ac-fill-hover: rgba(245, 245, 245, 0.03);
   --ac-fill-strong: rgba(245, 245, 245, 0.08);
@@ -47,6 +48,7 @@ html.light {
   --ac-muted: #a1a1aa;
   --ac-line: #e4e4e7;
   --ac-line-strong: #d4d4d8;
+  --ac-hairline: rgba(24, 24, 27, 0.1);
   --ac-fill: rgba(24, 24, 27, 0.035);
   --ac-fill-hover: rgba(24, 24, 27, 0.03);
   --ac-fill-strong: rgba(24, 24, 27, 0.06);
@@ -243,9 +245,13 @@ div:has(> #navbar) {
 #navbar > .z-10.absolute.w-full.h-full.border-b,
 #navbar > div.absolute.border-b {
   background: transparent !important;
+  border-top-width: 1px !important;
+  border-top-style: solid !important;
   border-bottom-width: 1px !important;
   border-bottom-style: solid !important;
-  border-color: var(--ac-line) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-color: var(--ac-hairline) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -349,20 +355,31 @@ a.nav-tabs-item[aria-current="location"] {
   color: var(--ac-text) !important;
 }
 
-.nav-tabs-item:hover > div.absolute,
-a.nav-tabs-item:hover > div.absolute,
 .nav-tabs-item > div.absolute,
-a.nav-tabs-item > div.absolute,
+a.nav-tabs-item > div.absolute {
+  height: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+.nav-tabs-item:hover > div.absolute,
+a.nav-tabs-item:hover > div.absolute {
+  height: 1px !important;
+  background: var(--ac-hairline) !important;
+  opacity: 1 !important;
+}
+
 .nav-tabs-item[data-active="true"] > div.absolute,
 a.nav-tabs-item[data-active="true"] > div.absolute,
 a.nav-tabs-item[aria-current="location"] > div.absolute,
 .nav-tabs-item[data-active="true"]:hover > div.absolute,
 a.nav-tabs-item[data-active="true"]:hover > div.absolute,
 a.nav-tabs-item[aria-current="location"]:hover > div.absolute {
-  height: 0 !important;
-  background: transparent !important;
+  height: 2px !important;
+  background: var(--ac-heading) !important;
+  opacity: 1 !important;
   box-shadow: none !important;
-  opacity: 0 !important;
 }
 
 /* Search dialog sits above the whole site and dims the page. */

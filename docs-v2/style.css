@@ -145,14 +145,13 @@ header > .mt-2.prose p {
   color: var(--ac-heading) !important;
 }
 
-.mdx-content a.link,
-a.link {
+.mdx-content a.link {
   color: var(--ac-heading) !important;
   text-decoration: underline !important;
   text-decoration-line: underline !important;
   text-decoration-thickness: 1px !important;
   text-underline-offset: 0.18em !important;
-  text-decoration-color: currentColor !important;
+  text-decoration-color: var(--ac-chrome) !important;
   border-bottom: none !important;
   border-bottom-width: 0 !important;
   border-block-width: 0 !important;
@@ -163,8 +162,9 @@ a.link {
   color: var(--ac-heading) !important;
 }
 
-.mdx-content a.link:hover,
-a.link:hover {
+.mdx-content a.link:hover {
+  color: var(--ac-heading) !important;
+  text-decoration-color: var(--ac-heading) !important;
   text-decoration-thickness: 1px !important;
   border-bottom: none !important;
   border-bottom-width: 0 !important;
@@ -243,18 +243,20 @@ div:has(> #navbar) {
 #navbar > .z-10.absolute.w-full.h-full.border-b,
 #navbar > div.absolute.border-b {
   background: transparent !important;
-  border: none !important;
-  border-bottom-width: 0 !important;
-  border-color: transparent !important;
+  border-bottom-width: 1px !important;
+  border-bottom-style: solid !important;
+  border-color: var(--ac-line) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
 #navbar a,
-#navbar .navbar-link a {
+#navbar .navbar-link a,
+#navbar .nav-tabs-item {
   text-decoration: none !important;
-  border: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
 img.nav-logo {

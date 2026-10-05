@@ -282,9 +282,15 @@ a.nav-tabs-item[aria-current="location"] > div.absolute {
 #navigation-items ul.sidebar-group,
 #navigation-items .sidebar-group,
 ul.sidebar-group,
-.sidebar-group {
-  margin-top: 0 !important;
-  margin-bottom: 0.15rem !important;
+.sidebar-group,
+#navigation-items .my-2 {
+  margin: 0 !important;
+}
+
+#navigation-items div:has(> .sidebar-nav-group-divider),
+.sidebar-nav-group-divider,
+sidebar-nav-group-divider {
+  display: none !important;
 }
 
 #navigation-items > ul.list-none[aria-hidden="true"] {

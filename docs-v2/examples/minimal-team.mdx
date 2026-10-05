@@ -1,0 +1,32 @@
+---
+title: "Minimal team"
+description: "Start a Team in-process and join a BaseAgent with a one-line handler."
+keywords: ["example", "team", "baseagent"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+```python
+import asyncio
+
+from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage
+from agentconnect.team import Team
+
+class Echo(BaseAgent):
+    profile = AgentProfile(summary="Repeats a request.")
+
+    async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+        if msg.kind != "request":
+            return None
+        return str(msg.content)
+
+async def main() -> None:
+    team = await Team("echo").start()
+    await Echo(name="echo").join(team)
+
+asyncio.run(main())
+```
+
+See [Join a team](/guides/join-a-team) for remote join tokens.

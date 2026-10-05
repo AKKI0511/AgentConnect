@@ -1,0 +1,18 @@
+---
+title: "Directory search"
+description: "Query the Directory and send a request to the top match."
+keywords: ["example", "directory", "search"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+```python
+matches = await ctx.directory.search("turn notes into a short draft")
+if not matches:
+    return None
+return await ctx.ask(matches[0].address, {"task": "draft this"})
+```
+
+See [Discover agents](/guides/discover-agents) for routing judgment.

@@ -1,21 +1,72 @@
 ---
 title: "Quickstart"
-description: "Install AgentConnect and run a minimal Team."
+description: "Install AgentConnect, start a Team, and join a BaseAgent."
+keywords: ["quickstart", "team", "baseagent"]
 ---
 
-# Quickstart
+A Team is the durable object. Start one, join an agent, then send work. The handler on this page returns a string so you can see a round trip without a model.
 
-<Note>
-  Placeholder page. Replace with a real install-and-run walkthrough.
-</Note>
+## Prerequisites
 
-## Install
+- Python 3.10 or newer
+- [AgentConnect installed](/install)
 
-```bash
-pip install agentconnect
-```
+## Start a Team and join an agent
 
-## Next steps
+<Steps>
+  <Step title="Install">
+    ```bash
+    pip install agentconnect
+    ```
+  </Step>
+  <Step title="Write a handler">
+    Subclass `BaseAgent`, set a profile, and implement `handle`.
 
-- Read [Concepts](/concepts/overview)
-- Browse the [Python API](/api-reference)
+    ```python
+    import asyncio
+
+    from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill
+    from agentconnect.team import Team
+
+    class Writer(BaseAgent):
+        profile = AgentProfile(
+            summary="Writes short drafts from notes.",
+            skills=[
+                Skill(
+                    name="drafting",
+                    description="Turn notes into a two-paragraph draft.",
+                )
+            ],
+        )
+
+        async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+            if msg.kind != "request":
+                return None
+            return f"Draft complete for {msg.content!r}."
+    ```
+  </Step>
+  <Step title="Start the Team and join">
+    ```python
+    async def main() -> None:
+        team = await Team("content-squad").start()
+        await Writer(name="writer").join(team)
+
+    asyncio.run(main())
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  This walkthrough is a layout stand-in. Replace it with a tested script from `examples/` before calling the page finished.
+</Info>
+
+## What you just used
+
+| Object | Job |
+| --- | --- |
+| Team | Named group the Runtime serves |
+| BaseAgent | Client that joins and handles deliveries |
+| Profile | Directory card other agents can search |
+| Session | Connection that pulls work for this process |
+
+Read [Concepts](/concepts/overview) for the rest of the nouns, or open a [recipe](/examples/overview).

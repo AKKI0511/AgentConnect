@@ -1,0 +1,29 @@
+---
+title: "Message"
+description: "The payload an agent sends. Delivery is the mailbox instance of that payload."
+keywords: ["message", "delivery", "mailbox"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+A **Message** is the payload. A **Delivery** is that payload sitting in a mailbox with lease and routing state. Handlers see a mailbox message. They do not operate the Runtime's queue.
+
+Kinds you will meet first:
+
+- `request` expects a reply
+- `event` does not
+
+```python
+async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
+    if msg.kind != "request":
+        return None
+    return {"ok": True}
+```
+
+## Related
+
+- [Ticket](/concepts/ticket)
+- [Send work](/guides/send-work)
+- [Message API](/api/core-message)

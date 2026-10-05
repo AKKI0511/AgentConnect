@@ -2,34 +2,37 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "aspen",
   "name": "AgentConnect",
-  "description": "Runtime for Teams of independent AI agents — discovery, messaging, and work tracking.",
+  "description": "Runtime for Teams of independent agents. Discovery, messaging, and work tracking.",
   "colors": {
-    "primary": "#2DD4BF",
-    "light": "#5EEAD4",
-    "dark": "#0F766E"
+    "primary": "#08090A",
+    "light": "#F5F5F5",
+    "dark": "#08090A"
   },
   "appearance": {
     "default": "dark",
     "strict": false
   },
   "background": {
-    "decoration": "gradient",
     "color": {
-      "light": "#F7F6F3",
-      "dark": "#070809"
+      "light": "#FFFFFF",
+      "dark": "#08090A"
     }
   },
   "fonts": {
+    "family": "Atkinson Hyperlegible Next",
     "heading": {
-      "family": "Syne",
-      "weight": 700
+      "family": "Atkinson Hyperlegible Next",
+      "weight": 600
     },
     "body": {
-      "family": "Manrope",
+      "family": "Atkinson Hyperlegible Next",
       "weight": 400
     }
   },
-  "favicon": "/images/favicon.svg",
+  "favicon": {
+    "light": "/images/favicon-light.svg",
+    "dark": "/images/favicon-dark.svg"
+  },
   "logo": {
     "light": "/images/logo-light.svg",
     "dark": "/images/logo-dark.svg",
@@ -46,72 +49,166 @@
   "footer": {
     "socials": {
       "github": "https://github.com/AKKI0511/AgentConnect"
-    }
+    },
+    "links": [
+      {
+        "header": "Read",
+        "items": [
+          { "label": "Install", "href": "/install" },
+          { "label": "Concepts", "href": "/concepts/overview" },
+          { "label": "Python API", "href": "/api-reference" }
+        ]
+      },
+      {
+        "header": "Work",
+        "items": [
+          { "label": "Guides", "href": "/guides/overview" },
+          { "label": "Examples", "href": "/examples/overview" },
+          { "label": "CLI", "href": "/integrate/cli" }
+        ]
+      },
+      {
+        "header": "Agents",
+        "items": [
+          { "label": "For agents", "href": "/agents/overview" },
+          { "label": "MCP", "href": "/integrate/mcp" },
+          { "label": "Contribute", "href": "/contribute" }
+        ]
+      }
+    ]
   },
   "search": {
-    "prompt": "Search docs…"
+    "prompt": "Search"
   },
   "styling": {
     "eyebrows": "breadcrumbs",
     "codeblocks": {
       "theme": {
-        "light": "github-light",
-        "dark": "github-dark-dimmed"
+        "light": "light-plus",
+        "dark": "dark-plus"
       }
     }
   },
   "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude"],
-    "display": "header"
+    "options": ["copy", "view", "chatgpt", "claude", "grok"],
+    "display": "toc"
+  },
+  "interaction": {
+    "drilldown": false
+  },
+  "markdown": {
+    "instructions": [
+      "AgentConnect public terms are Team, Runtime, Membership, Session, Message, Delivery, Ticket, Thread, Address, and Skill. Keep those names. Do not substitute generic agent-framework language.",
+      "The Runtime provides discovery, messaging, and work tracking. It is not a wire standard. Each agent may keep its own harness, tools, and memory.",
+      "Prefer the Python package `agentconnect` and Google-style docstrings when citing the API. Generated pages live under /api and /api-reference; do not invent those files by hand."
+    ]
+  },
+  "errors": {
+    "404": {
+      "redirect": false,
+      "title": "Page not found",
+      "description": "That URL is not in this documentation. Use search, or start at [Install](/install)."
+    }
   },
   "navigation": {
     "tabs": [
       {
-        "tab": "Documentation",
-        "icon": "book-open",
+        "tab": "Docs",
         "groups": [
           {
-            "group": "Get started",
-            "pages": ["index", "quickstart"]
+            "group": "Start",
+            "pages": ["index", "install", "quickstart"]
           },
           {
             "group": "Concepts",
-            "pages": ["concepts/overview"]
+            "pages": [
+              "concepts/overview",
+              "concepts/team",
+              "concepts/agent",
+              "concepts/session",
+              "concepts/message",
+              "concepts/ticket",
+              "concepts/directory"
+            ]
           },
           {
             "group": "Guides",
-            "pages": ["guides/overview", "guides/docstrings"]
+            "pages": [
+              "guides/overview",
+              "guides/join-a-team",
+              "guides/send-work",
+              "guides/discover-agents"
+            ]
+          },
+          {
+            "group": "Connect",
+            "pages": [
+              "integrate/overview",
+              "integrate/python",
+              "integrate/cli",
+              "integrate/mcp"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": ["agents/overview"]
+          },
+          {
+            "group": "Surfaces",
+            "pages": [
+              "surfaces/overview",
+              {
+                "group": "Cards",
+                "expanded": false,
+                "pages": ["surfaces/cards"]
+              },
+              {
+                "group": "Media",
+                "expanded": false,
+                "pages": ["surfaces/media"]
+              }
+            ]
+          },
+          {
+            "group": "Contribute",
+            "pages": [
+              "contribute",
+              "guides/docstrings",
+              "templates/overview",
+              "templates/concept",
+              "templates/guide",
+              "templates/recipe",
+              "templates/empty"
+            ]
           }
         ]
       },
       {
-        "tab": "Cookbooks",
-        "icon": "utensils",
+        "tab": "Examples",
         "groups": [
           {
-            "group": "Examples",
-            "pages": ["examples/overview"]
+            "group": "Recipes",
+            "pages": [
+              "examples/overview",
+              "examples/minimal-team",
+              "examples/request-reply",
+              "examples/directory-search"
+            ]
           }
         ]
       },
       {
         "tab": "Reference",
-        "icon": "code",
         "pages": {
           "$ref": "./api-pages.json"
         }
-      },
-      {
-        "tab": "Contribute",
-        "icon": "git-branch",
-        "groups": [
-          {
-            "group": "Community",
-            "pages": ["contribute"]
-          }
-        ]
       }
     ]
   },
-  "redirects": []
+  "redirects": [
+    {
+      "source": "/contribute/templates",
+      "destination": "/templates/overview"
+    }
+  ]
 }

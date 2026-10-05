@@ -1,30 +1,23 @@
 /**
- * AgentConnect docs chrome helpers.
- * Aspen already provides logo | search | actions + a second tabs row.
- * We only drive glass-on-scroll and keep chrome metrics fresh.
+ * AgentConnect docs chrome.
+ * Skip link only. Theme, search, and navigation stay native.
  */
 (function () {
-  const THRESHOLD = 6;
+  const SKIP_ID = "ac-skip";
 
-  function navbar() {
-    return document.getElementById("navbar");
-  }
-
-  function syncGlass() {
-    const el = navbar();
-    if (!el) return;
-    const scrolled = (window.scrollY || document.documentElement.scrollTop || 0) > THRESHOLD;
-    el.classList.toggle("ac-scrolled", scrolled);
-    if (scrolled) el.setAttribute("data-ac-glass", "true");
-    else el.removeAttribute("data-ac-glass");
+  function ensureSkip() {
+    if (document.getElementById(SKIP_ID)) return;
+    const a = document.createElement("a");
+    a.id = SKIP_ID;
+    a.className = "ac-skip";
+    a.href = "#content-area";
+    a.textContent = "Skip to content";
+    document.body.prepend(a);
   }
 
   function boot() {
-    syncGlass();
+    ensureSkip();
   }
-
-  window.addEventListener("scroll", syncGlass, { passive: true });
-  window.addEventListener("pageshow", syncGlass);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot, { once: true });
@@ -32,12 +25,6 @@
     boot();
   }
 
-  // Client-side route changes remount chrome.
-  const mo = new MutationObserver(() => syncGlass());
-  mo.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "data-theme"],
-  });
+  const mo = new MutationObserver(() => ensureSkip());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
 })();

@@ -1,0 +1,25 @@
+---
+title: "Ticket"
+description: "A tracked unit of work. A Thread is the conversation it belongs to."
+keywords: ["ticket", "thread", "ask", "collect"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+A **Ticket** is how the Runtime tracks a request until it completes, fails, or expires. A **Thread** is the conversation that ticket belongs to. History lives on the thread, not on the agent process.
+
+```python
+ticket = await agent.ask("writer", {"task": "draft this"})
+if ticket.state == "completed":
+    print(ticket.response.content)
+```
+
+Use `collect="ticket"` when the caller should return immediately and wait later.
+
+## Related
+
+- [Message](/concepts/message)
+- [Send work](/guides/send-work)
+- [Ticket API](/api/core-ticket)

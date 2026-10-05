@@ -1,34 +1,29 @@
 ---
 title: "Contribute"
-description: "How to improve AgentConnect docs and keep the generated API reference accurate."
 sidebarTitle: "Overview"
+description: "How handwritten pages and the generated Python API stay in sync."
+keywords: ["contribute", "docs", "mdxify"]
 ---
 
-# Contribute
+Handwritten pages live next to `docs.json`. API pages under `api/` and `api-reference.mdx` are generated. Edit source, not generated MDX.
 
-AgentConnect docs split into handwritten guides under `docs-v2/` and a generated
-Python API reference. Edit source, not generated MDX.
+## Handwritten pages
 
-## Improve handwritten pages
+1. Copy a template from [Page templates](/templates/overview).
+2. Write the page under `docs-v2/`.
+3. Add it to `docs.json` navigation or it will not appear.
+4. Preview with `make docs-v2` and check with `make docs-v2-check`.
 
-1. Edit MDX under `docs-v2/` (except `api/` and `api-reference.mdx`).
-2. Preview with `make docs-v2`.
-3. Validate with `make docs-v2-check`.
+## API pages
 
-## Improve API pages
-
-API pages are generated from public Python modules via mdxify + Griffe.
-
-1. Write **Google-style** docstrings (see [Docstrings](/guides/docstrings)).
+1. Write **Google-style** docstrings. See [Docstrings](/guides/docstrings).
 2. Run `make docs-v2-api`.
-3. Commit the regenerated `docs-v2/api/**` and `api-reference.mdx` with your change.
+3. Commit the regenerated `docs-v2/api/**` and `api-reference.mdx`.
 
 <Info>
-  Package `__init__.py` content becomes the group landing page. The root package
-  docstring is the API reference home.
+  Package `__init__.py` content becomes the group landing page. The root package docstring is the API reference home.
 </Info>
 
 ## Pull requests
 
-Open PRs against `team-restructure` while this Mintlify tree lives in `docs-v2/`.
-Keep Sphinx `docs/` untouched until cutover.
+Open PRs against the current docs branch while this tree lives in `docs-v2/`. Keep Sphinx `docs/` untouched until cutover.

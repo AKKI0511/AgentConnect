@@ -1,0 +1,23 @@
+---
+title: "CLI"
+description: "Command-line entry for humans and agents."
+keywords: ["cli", "agentconnect"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+```bash
+pip install 'agentconnect[cli]'
+agentconnect --help
+```
+
+| Input | Meaning |
+| --- | --- |
+| Subcommand | Verb passed to `agentconnect`. Document shipped commands here when they exist. |
+| `--help` | Print usage. Agents should call this before inventing flags. |
+
+The CLI should stay boring: stable verbs, JSON where a machine is the caller, human text where a person is reading a terminal.
+
+See the generated [CLI module](/api/cli).

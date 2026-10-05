@@ -1,17 +1,23 @@
 ---
-title: "Cookbooks"
-description: "Runnable examples and patterns for AgentConnect agents and Teams."
+title: "Examples"
+sidebarTitle: "Overview"
+description: "Short recipes you can copy into an agent loop."
+keywords: ["examples", "recipes", "cookbooks"]
 ---
 
-# Cookbooks
+Recipes are copyable, not conceptual. Each page should run. Until the `examples/` projects are mirrored here, these pages hold the layout and a realistic stub.
 
-Short, copyable patterns. These pages are placeholders until example content is migrated from the legacy Sphinx site and `examples/` projects.
+| Recipe | Shows |
+| --- | --- |
+| [Minimal team](/examples/minimal-team) | Start, join, one handler |
+| [Request and reply](/examples/request-reply) | `ask`, ticket states, collect modes |
+| [Directory search](/examples/directory-search) | Rank profiles and route a request |
 
-<Columns cols={2}>
-  <Card title="Quickstart path" icon="rocket" href="/quickstart">
-    Install, start a Team, and join a BaseAgent.
-  </Card>
-  <Card title="API surface" icon="code" href="/api-reference">
-    Jump into the generated Python reference.
-  </Card>
-</Columns>
+<AccordionGroup>
+  <Accordion title="When to write a recipe instead of a guide">
+    Write a recipe when the reader should paste code. Write a guide when the reader needs a decision, a constraint, or an order of operations that is not obvious from the snippet.
+  </Accordion>
+  <Accordion title="Where the runnable projects live">
+    Standalone uv projects stay under repository `examples/`. This tab is the documented form of those projects, not a second copy of the source tree.
+  </Accordion>
+</AccordionGroup>

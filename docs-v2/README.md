@@ -1,6 +1,6 @@
 # AgentConnect Mintlify documentation (docs-v2)
 
-Isolated from the legacy Sphinx tree in `../docs/`. See [AGENTS.md](./AGENTS.md).
+Isolated from the legacy Sphinx tree in `../docs/`. See [AGENTS.md](./AGENTS.md) for generated vs handwritten boundaries, visual rules, and navigation.
 
 ```bash
 # From repository root

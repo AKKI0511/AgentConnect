@@ -1,0 +1,31 @@
+---
+title: "Recipe template"
+sidebarTitle: "Recipe"
+description: "Template for an examples-tab page: a script the reader can paste."
+keywords: ["template", "recipe", "example"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+One paragraph of setup, then the code. Put decisions in a guide and link to it.
+
+```python
+# Runnable stub. Replace with a script from examples/ before publishing.
+```
+
+Optional language split:
+
+<Tabs>
+  <Tab title="Wait">
+    ```python
+    ticket = await agent.ask("writer", {"task": "draft"})
+    ```
+  </Tab>
+  <Tab title="Collect later">
+    ```python
+    pending = await agent.ask("writer", "job", collect="ticket")
+    ```
+  </Tab>
+</Tabs>

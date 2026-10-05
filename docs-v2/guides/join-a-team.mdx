@@ -1,0 +1,33 @@
+---
+title: "Join a team"
+description: "Start a Team in-process or join a remote Runtime with a token."
+keywords: ["join", "team", "session", "token"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+## In-process
+
+```python
+team = await Team("content-squad").start()
+await Writer(name="writer").join(team)
+```
+
+## Remote
+
+```python
+await Writer(name="writer", identity_path="writer.json").join(
+    "http://127.0.0.1:9000",
+    join_token=token,
+)
+```
+
+Pass `identity_path` so a restart keeps the same DID.
+
+## Related
+
+- [Team](/concepts/team)
+- [Session](/concepts/session)
+- [Minimal team recipe](/examples/minimal-team)

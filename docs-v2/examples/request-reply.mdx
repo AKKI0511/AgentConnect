@@ -1,0 +1,27 @@
+---
+title: "Request and reply"
+description: "Send a request, wait on a Ticket, or collect the Ticket later."
+keywords: ["example", "ask", "ticket", "reply"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+<Tabs>
+  <Tab title="Wait">
+    ```python
+    ticket = await agent.ask("writer", {"task": "draft this"})
+    if ticket.state == "completed":
+        print(ticket.response.content)
+    ```
+  </Tab>
+  <Tab title="Collect later">
+    ```python
+    pending = await agent.ask("writer", "long job", collect="ticket")
+    ticket = await agent.get_result(pending.id)
+    ```
+  </Tab>
+</Tabs>
+
+See [Send work](/guides/send-work) for event-only `tell`.

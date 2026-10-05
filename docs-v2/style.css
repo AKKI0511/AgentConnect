@@ -264,9 +264,11 @@ div:has(> #navbar) {
     right: 0;
     top: 3.5rem;
     z-index: 20;
-    height: 1px;
+    height: 0;
     pointer-events: none;
-    background: var(--ac-hairline);
+    border-top: 1px solid var(--ac-hairline);
+    transform: scaleY(0.5);
+    transform-origin: top;
   }
 }
 

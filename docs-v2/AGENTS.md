@@ -17,13 +17,13 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 
 ### Site chrome
 
-- Aspen theme, **dark default**, IBM Plex Sans + IBM Plex Mono
-- Sharp near-black (`#0A0A0A`), crisp off-white (`#F4F4F2`), readable grey body, and hairline neutrals. Mintlify `colors` / `background` own emphasis and canvas; CSS only fills in body/muted/border tokens Mintlify cannot set.
+- Aspen theme, **dark default**, Atkinson Hyperlegible Next (heading 600, body 400) + IBM Plex Mono for code
+- Sharp near-black (`#08090A`), headings `#F5F5F5`, body `#C4C4C8`, secondary `#A1A1AA`, TOC `#8B8B92`, muted `#71717A`, borders `#27272A`. Mintlify `colors` / `background` / `fonts` own canvas, emphasis, and type; CSS only fills in body/muted/border tokens Mintlify cannot set.
 - Sidebar **section labels** (Start, Concepts, …) sit farther apart than files in a section. Nested dropdowns use Mintlify `expanded: false`, look like file rows, and start closed. Dummy nested pages live under **Surfaces**.
-- Body copy is grey; headings and links stay bright.
+- Body copy is `#C4C4C8`; headings and links stay `#F5F5F5`. Descriptions use `#A1A1AA`.
 - Code blocks use native Mintlify UI with Shiki `light-plus` / `dark-plus`. No custom syntax colors.
 - Tabs: Docs / Examples / Reference
-- Header: logo, search, GitHub, theme. Controlled glass on the sticky navbar fill layer only (see-through frost + blur). Skip link injected by `site.js`
+- Header: logo, search, GitHub, theme. Controlled glass on the sticky navbar fill layer only, tinted to the canvas color. Skip link injected by `site.js`
 
 ### Information architecture
 

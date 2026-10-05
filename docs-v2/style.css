@@ -1,7 +1,7 @@
 /* AgentConnect docs visual system
  *
- * Neutrals, one type family, hairlines.
- * Dark is first paint: near-black canvas, crisp off-white type.
+ * Neutrals, Atkinson Hyperlegible Next, hairlines.
+ * Dark is first paint: near-black canvas, crisp off-white headings.
  * Light is a second designed theme.
  * Colour appears only for meaning (error, warning) and keyboard focus.
  * Sidebar page hover is duller than the selected row. Nested groups look like files.
@@ -10,18 +10,20 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap");
 
 :root {
-  --ac-bg: #0a0a0a;
-  --ac-elevated: #111111;
-  --ac-text: #f4f4f2;
-  --ac-heading: #ececea;
-  --ac-body: #c6c6c4;
-  --ac-muted: #9a9a98;
-  --ac-line: rgba(244, 244, 242, 0.1);
-  --ac-line-strong: rgba(244, 244, 242, 0.16);
-  --ac-fill: rgba(244, 244, 242, 0.045);
-  --ac-fill-hover: rgba(244, 244, 242, 0.03);
-  --ac-fill-strong: rgba(244, 244, 242, 0.08);
-  --ac-nav-glass: rgba(255, 255, 255, 0.14);
+  --ac-bg: #08090a;
+  --ac-elevated: #111214;
+  --ac-heading: #f5f5f5;
+  --ac-text: #f5f5f5;
+  --ac-body: #c4c4c8;
+  --ac-secondary: #a1a1aa;
+  --ac-toc: #8b8b92;
+  --ac-muted: #71717a;
+  --ac-line: #27272a;
+  --ac-line-strong: #3f3f46;
+  --ac-fill: rgba(245, 245, 245, 0.045);
+  --ac-fill-hover: rgba(245, 245, 245, 0.03);
+  --ac-fill-strong: rgba(245, 245, 245, 0.08);
+  --ac-nav-glass: rgba(8, 9, 10, 0.28);
   --ac-nav-blur: blur(20px);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
@@ -31,23 +33,24 @@
   --ac-radius-card: 1rem;
   --ac-radius-pill: 9999px;
   --ac-measure: 40rem;
-  --ac-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ac-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
 }
 
 html.light {
   --ac-bg: #ffffff;
-  --ac-elevated: #f5f5f5;
-  --ac-text: #111111;
-  --ac-heading: #111111;
-  --ac-body: #3a3a3a;
-  --ac-muted: #5a5a5a;
-  --ac-line: rgba(17, 17, 17, 0.1);
-  --ac-line-strong: rgba(17, 17, 17, 0.16);
-  --ac-fill: rgba(17, 17, 17, 0.035);
-  --ac-fill-hover: rgba(17, 17, 17, 0.03);
-  --ac-fill-strong: rgba(17, 17, 17, 0.06);
-  --ac-nav-glass: rgba(255, 255, 255, 0.42);
+  --ac-elevated: #f4f4f5;
+  --ac-heading: #18181b;
+  --ac-text: #18181b;
+  --ac-body: #3f3f46;
+  --ac-secondary: #52525b;
+  --ac-toc: #71717a;
+  --ac-muted: #a1a1aa;
+  --ac-line: #e4e4e7;
+  --ac-line-strong: #d4d4d8;
+  --ac-fill: rgba(24, 24, 27, 0.035);
+  --ac-fill-hover: rgba(24, 24, 27, 0.03);
+  --ac-fill-strong: rgba(24, 24, 27, 0.06);
+  --ac-nav-glass: rgba(255, 255, 255, 0.55);
   --ac-nav-blur: blur(20px);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
@@ -62,9 +65,8 @@ html.light {
   top: -4rem;
   z-index: 200;
   padding: 0.4rem 0.7rem;
-  background: var(--ac-text);
+  background: var(--ac-heading);
   color: var(--ac-bg);
-  font-family: var(--ac-sans);
   font-size: 0.85rem;
   text-decoration: none;
 }
@@ -88,28 +90,28 @@ html.light #background-color {
   background: var(--ac-bg) !important;
 }
 
-/* ---------- Type ---------- */
+/* ---------- Type: colors Mintlify cannot set in docs.json ---------- */
 
 html,
 body {
-  font-family: var(--ac-sans);
   font-size: 1.0625rem;
   color: var(--ac-body);
 }
 
 #content,
 .mdx-content {
-  font-family: var(--ac-sans);
   color: var(--ac-body);
 }
 
 #page-title {
-  font-family: var(--ac-sans) !important;
-  font-weight: 500 !important;
-  letter-spacing: -0.03em !important;
   line-height: 1.15 !important;
   max-width: var(--ac-measure);
-  color: var(--ac-text) !important;
+  color: var(--ac-heading) !important;
+}
+
+header > .mt-2.prose,
+header > .mt-2.prose p {
+  color: var(--ac-secondary) !important;
 }
 
 .mdx-content {
@@ -120,10 +122,8 @@ body {
 .mdx-content h2,
 .mdx-content h3,
 .mdx-content h4 {
-  font-family: var(--ac-sans) !important;
-  font-weight: 500 !important;
   letter-spacing: -0.02em;
-  color: var(--ac-text);
+  color: var(--ac-heading);
 }
 
 .mdx-content h2 {
@@ -138,12 +138,12 @@ body {
 
 .mdx-content strong,
 .mdx-content b {
-  color: var(--ac-text);
+  color: var(--ac-heading);
 }
 
 .mdx-content a,
 link {
-  color: var(--ac-text) !important;
+  color: var(--ac-heading) !important;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
@@ -151,7 +151,7 @@ link {
 
 .mdx-content a:hover,
 link:hover {
-  color: var(--ac-text) !important;
+  color: var(--ac-heading) !important;
 }
 
 .mdx-content a:focus-visible,
@@ -285,7 +285,6 @@ img.nav-logo {
 
 .nav-tabs-item,
 a.nav-tabs-item {
-  font-family: var(--ac-sans) !important;
   font-size: 0.9375rem !important;
   font-weight: 400 !important;
   letter-spacing: 0.01em !important;
@@ -296,7 +295,7 @@ a.nav-tabs-item {
 
 .nav-tabs-item:hover,
 a.nav-tabs-item:hover {
-  color: var(--ac-heading) !important;
+  color: var(--ac-secondary) !important;
 }
 
 .nav-tabs-item:hover > div.absolute,
@@ -422,7 +421,7 @@ sidebar-nav-group-divider {
 #navigation-items li:not([data-active="true"]) > button:hover,
 #sidebar-content li:not([data-active="true"]) > a:hover {
   background: var(--ac-fill-hover) !important;
-  color: var(--ac-body) !important;
+  color: var(--ac-secondary) !important;
   box-shadow: none !important;
 }
 
@@ -465,10 +464,10 @@ sidebar-group-header,
   margin-bottom: 0.2rem !important;
   padding-block: 0.15rem !important;
   font-size: 0.78rem !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: var(--ac-text) !important;
+  color: var(--ac-heading) !important;
 }
 
 #navigation-items .text-sm.relative > div:not(.my-2):not(.px-1) > .sidebar-group-header {
@@ -482,13 +481,18 @@ toc {
   border-left: none !important;
 }
 
+#table-of-contents p:first-child,
+toc > p:first-child {
+  color: var(--ac-muted) !important;
+}
+
 toc-item,
 .toc-item,
 .toc-item a,
 #table-of-contents-content a {
   font-size: 0.9rem !important;
   font-weight: 400 !important;
-  color: var(--ac-muted) !important;
+  color: var(--ac-toc) !important;
   border: none !important;
   border-left: none !important;
   box-shadow: none !important;
@@ -504,7 +508,7 @@ toc-item:hover,
 toc-item a:hover {
   background: transparent !important;
   box-shadow: none !important;
-  color: var(--ac-body) !important;
+  color: var(--ac-secondary) !important;
 }
 
 toc-item[data-active-deepest],
@@ -512,7 +516,7 @@ toc-item[data-active-deepest] > a,
 .toc-item[data-active-deepest],
 .toc-item[data-active-deepest] > a,
 #table-of-contents-content li[data-active-deepest] > a {
-  color: var(--ac-heading) !important;
+  color: var(--ac-body) !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -523,7 +527,7 @@ toc-item[data-active]:not([data-active-deepest]) > a,
 .toc-item[data-active]:not([data-active-deepest]),
 .toc-item[data-active]:not([data-active-deepest]) > a,
 #table-of-contents-content li[data-active]:not([data-active-deepest]) > a {
-  color: var(--ac-text) !important;
+  color: var(--ac-heading) !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -545,14 +549,14 @@ callout,
   border-left-width: 2px !important;
   background: var(--ac-fill) !important;
   box-shadow: none !important;
-  color: var(--ac-text) !important;
+  color: var(--ac-body) !important;
 }
 
 callout p,
 .callout p,
 callout a,
 .callout a {
-  color: var(--ac-text) !important;
+  color: var(--ac-body) !important;
 }
 
 callout svg,
@@ -601,6 +605,15 @@ tile:hover,
   background: transparent !important;
 }
 
+card [data-component-part="card-title"] {
+  color: var(--ac-heading) !important;
+}
+
+card [data-component-part="card-content"],
+.card [data-component-part="card-content"] {
+  color: var(--ac-secondary) !important;
+}
+
 card [data-component-part="card-icon"] {
   display: none !important;
 }
@@ -639,7 +652,8 @@ accordion,
 }
 
 .mdx-content th {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--ac-heading);
   background: var(--ac-fill);
 }
 
@@ -703,7 +717,7 @@ html[data-current-path="/api-reference"] .mdx-content {
 .ac-lead {
   font-size: 1.1rem;
   line-height: 1.6;
-  color: var(--ac-muted);
+  color: var(--ac-secondary);
   margin: 0 0 1.5rem;
 }
 

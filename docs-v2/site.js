@@ -1,6 +1,9 @@
 /**
  * AgentConnect docs chrome.
  * Skip link. Keep previously opened sidebar groups open across page changes.
+ *
+ * Group rows with a root page navigate on click. Restoring those groups
+ * must set React state, not click the row.
  */
 (function () {
   const SKIP_ID = "ac-skip";
@@ -43,6 +46,45 @@
     return [...root.querySelectorAll("button[aria-expanded]")];
   }
 
+  function fiberOf(node) {
+    if (!node) return null;
+    const key = Object.keys(node).find(
+      (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"),
+    );
+    return key ? node[key] : null;
+  }
+
+  function hooksOf(fiber) {
+    const hooks = [];
+    let hook = fiber && fiber.memoizedState;
+    while (hook) {
+      hooks.push(hook);
+      hook = hook.next;
+    }
+    return hooks;
+  }
+
+  function forceExpandButton(btn) {
+    if (btn.getAttribute("aria-expanded") === "true") return false;
+    let fiber = fiberOf(btn);
+    while (fiber) {
+      for (const hook of hooksOf(fiber)) {
+        const queue = hook.queue;
+        if (!queue || typeof queue.dispatch !== "function") continue;
+        if (hook.memoizedState === false) {
+          queue.dispatch(true);
+          return true;
+        }
+      }
+      fiber = fiber.return;
+    }
+    if (!btn.getAttribute("data-nav-href")) {
+      btn.click();
+      return true;
+    }
+    return false;
+  }
+
   function rememberExpanded() {
     for (const btn of groupButtons()) {
       if (btn.getAttribute("aria-expanded") === "true") {
@@ -59,7 +101,7 @@
       for (const btn of groupButtons()) {
         const key = groupKey(btn);
         if (open.has(key) && btn.getAttribute("aria-expanded") !== "true") {
-          btn.click();
+          forceExpandButton(btn);
         }
       }
     } finally {

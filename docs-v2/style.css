@@ -1,7 +1,7 @@
 /* AgentConnect docs visual system
  *
- * Neutrals, one type family, faint hairlines.
- * Dark is first paint: sharp black, bright white (Prime Intellect contrast).
+ * Neutrals, one type family, hairlines.
+ * Dark is first paint: near-black canvas, crisp off-white type.
  * Light is a second designed theme.
  * Colour appears only for meaning (error, warning) and keyboard focus.
  * Sidebar page hover is duller than the selected row. Nested groups look like files.
@@ -10,17 +10,17 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap");
 
 :root {
-  --ac-bg: #0e0e10;
-  --ac-elevated: #121212;
-  --ac-text: #ffffff;
-  --ac-heading: #e3e0e6;
-  --ac-body: #d2d0d5;
-  --ac-muted: #a3a0a6;
-  --ac-line: rgba(227, 224, 230, 0.06);
-  --ac-line-strong: rgba(227, 224, 230, 0.12);
-  --ac-fill: rgba(255, 255, 255, 0.045);
-  --ac-fill-hover: rgba(255, 255, 255, 0.03);
-  --ac-fill-strong: rgba(255, 255, 255, 0.08);
+  --ac-bg: #0a0a0a;
+  --ac-elevated: #111111;
+  --ac-text: #f4f4f2;
+  --ac-heading: #ececea;
+  --ac-body: #c6c6c4;
+  --ac-muted: #9a9a98;
+  --ac-line: rgba(244, 244, 242, 0.1);
+  --ac-line-strong: rgba(244, 244, 242, 0.16);
+  --ac-fill: rgba(244, 244, 242, 0.045);
+  --ac-fill-hover: rgba(244, 244, 242, 0.03);
+  --ac-fill-strong: rgba(244, 244, 242, 0.08);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
@@ -34,16 +34,16 @@
 
 html.light {
   --ac-bg: #ffffff;
-  --ac-elevated: #f7f4fa;
-  --ac-text: #121212;
-  --ac-heading: #121212;
-  --ac-body: #545258;
-  --ac-muted: #737077;
-  --ac-line: rgba(18, 18, 18, 0.06);
-  --ac-line-strong: rgba(18, 18, 18, 0.12);
-  --ac-fill: rgba(18, 18, 18, 0.035);
-  --ac-fill-hover: rgba(18, 18, 18, 0.03);
-  --ac-fill-strong: rgba(18, 18, 18, 0.06);
+  --ac-elevated: #f5f5f5;
+  --ac-text: #111111;
+  --ac-heading: #111111;
+  --ac-body: #3a3a3a;
+  --ac-muted: #5a5a5a;
+  --ac-line: rgba(17, 17, 17, 0.1);
+  --ac-line-strong: rgba(17, 17, 17, 0.16);
+  --ac-fill: rgba(17, 17, 17, 0.035);
+  --ac-fill-hover: rgba(17, 17, 17, 0.03);
+  --ac-fill-strong: rgba(17, 17, 17, 0.06);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
   --ac-ok: #3d5a40;
@@ -104,7 +104,7 @@ body {
   letter-spacing: -0.03em !important;
   line-height: 1.15 !important;
   max-width: var(--ac-measure);
-  color: var(--ac-heading) !important;
+  color: var(--ac-text) !important;
 }
 
 .mdx-content {

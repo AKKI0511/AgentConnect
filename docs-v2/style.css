@@ -21,6 +21,7 @@
   --ac-fill: rgba(244, 244, 242, 0.045);
   --ac-fill-hover: rgba(244, 244, 242, 0.03);
   --ac-fill-strong: rgba(244, 244, 242, 0.08);
+  --ac-nav-glass: rgba(10, 10, 10, 0.7);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
@@ -44,6 +45,7 @@ html.light {
   --ac-fill: rgba(17, 17, 17, 0.035);
   --ac-fill-hover: rgba(17, 17, 17, 0.03);
   --ac-fill-strong: rgba(17, 17, 17, 0.06);
+  --ac-nav-glass: rgba(255, 255, 255, 0.78);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
   --ac-ok: #3d5a40;
@@ -180,13 +182,15 @@ samp {
   background: var(--ac-fill);
 }
 
-/* ---------- Header: one faint hairline, below search overlay ---------- */
+/* ---------- Header: glass on the sticky bar only, below search overlay ---------- */
 
 #navbar {
   z-index: 30 !important;
   border: none !important;
-  background: var(--ac-bg) !important;
+  background: var(--ac-nav-glass) !important;
   box-shadow: none !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
 }
 
 #navbar > .absolute {
@@ -204,13 +208,15 @@ samp {
 #navbar > .absolute.inset-0,
 #navbar > .z-0.absolute.inset-0,
 #navbar > div.z-0.absolute {
-  background: var(--ac-bg) !important;
+  background: transparent !important;
   opacity: 1 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 #navbar > .z-10.absolute.w-full.h-full.border-b,
 #navbar > div.absolute.border-b {
-  background: var(--ac-bg) !important;
+  background: transparent !important;
   border-bottom-width: 1px !important;
   border-color: var(--ac-line) !important;
   box-shadow: none !important;
@@ -453,7 +459,7 @@ sidebar-group-header,
   font-weight: 500 !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: var(--ac-heading) !important;
+  color: var(--ac-text) !important;
 }
 
 #navigation-items .text-sm.relative > div:not(.my-2):not(.px-1) > .sidebar-group-header {

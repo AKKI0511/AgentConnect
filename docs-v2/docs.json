@@ -4,9 +4,9 @@
   "name": "AgentConnect",
   "description": "Runtime for Teams of independent agents. Discovery, messaging, and work tracking.",
   "colors": {
-    "primary": "#1A1A1A",
-    "light": "#E8E8E6",
-    "dark": "#1A1A1A"
+    "primary": "#121212",
+    "light": "#FFFFFF",
+    "dark": "#121212"
   },
   "appearance": {
     "default": "dark",
@@ -14,8 +14,8 @@
   },
   "background": {
     "color": {
-      "light": "#F3F3F1",
-      "dark": "#141414"
+      "light": "#FFFFFF",
+      "dark": "#0E0E10"
     }
   },
   "fonts": {

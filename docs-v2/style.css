@@ -1,39 +1,44 @@
 /* AgentConnect docs visual system
  *
- * Neutrals, one type family, hairlines, no hover restyles.
- * Dark is first paint. Light is a second designed theme.
+ * Neutrals, one type family, faint hairlines.
+ * Dark is first paint: sharp black, bright white (Prime Intellect contrast).
+ * Light is a second designed theme.
  * Colour appears only for meaning (error, warning) and keyboard focus.
+ * Sidebar page hover is visible and distinct from the selected row.
  */
 
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap");
 
 :root {
-  --ac-bg: #141414;
-  --ac-elevated: #1c1c1c;
-  --ac-text: #e8e8e6;
-  --ac-muted: #8c8c88;
-  --ac-line: rgba(232, 232, 230, 0.12);
-  --ac-line-strong: rgba(232, 232, 230, 0.22);
-  --ac-fill: rgba(232, 232, 230, 0.06);
-  --ac-fill-strong: rgba(232, 232, 230, 0.1);
+  --ac-bg: #0e0e10;
+  --ac-elevated: #121212;
+  --ac-text: #ffffff;
+  --ac-muted: #a3a0a6;
+  --ac-line: rgba(227, 224, 230, 0.06);
+  --ac-line-strong: rgba(227, 224, 230, 0.12);
+  --ac-fill: rgba(255, 255, 255, 0.045);
+  --ac-fill-hover: rgba(255, 255, 255, 0.07);
+  --ac-fill-strong: rgba(255, 255, 255, 0.12);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
   --ac-radius: 2px;
+  --ac-radius-pill: 9999px;
   --ac-measure: 40rem;
   --ac-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ac-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
 }
 
 html.light {
-  --ac-bg: #f3f3f1;
-  --ac-elevated: #fafaf8;
-  --ac-text: #1a1a1a;
-  --ac-muted: #5c5c58;
-  --ac-line: rgba(26, 26, 26, 0.12);
-  --ac-line-strong: rgba(26, 26, 26, 0.22);
-  --ac-fill: rgba(26, 26, 26, 0.04);
-  --ac-fill-strong: rgba(26, 26, 26, 0.07);
+  --ac-bg: #ffffff;
+  --ac-elevated: #f7f4fa;
+  --ac-text: #121212;
+  --ac-muted: #545258;
+  --ac-line: rgba(18, 18, 18, 0.06);
+  --ac-line-strong: rgba(18, 18, 18, 0.12);
+  --ac-fill: rgba(18, 18, 18, 0.035);
+  --ac-fill-hover: rgba(18, 18, 18, 0.06);
+  --ac-fill-strong: rgba(18, 18, 18, 0.09);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
   --ac-ok: #3d5a40;
@@ -158,25 +163,38 @@ samp {
   background: var(--ac-fill);
 }
 
-/* ---------- Header: hairline, not glass ---------- */
+/* ---------- Header: one faint hairline, below search overlay ---------- */
 
 #navbar {
-  z-index: 50 !important;
+  z-index: 30 !important;
   border: none !important;
   background: var(--ac-bg) !important;
   box-shadow: none !important;
 }
 
+#navbar > .absolute {
+  pointer-events: none !important;
+}
+
+#navbar a,
+#navbar button,
+#navbar input,
+#navbar [role="combobox"],
+#navbar .relative {
+  pointer-events: auto !important;
+}
+
 #navbar > .absolute.inset-0,
 #navbar > .z-0.absolute.inset-0,
 #navbar > div.z-0.absolute {
-  background: transparent !important;
-  opacity: 0 !important;
+  background: var(--ac-bg) !important;
+  opacity: 1 !important;
 }
 
 #navbar > .z-10.absolute.w-full.h-full.border-b,
 #navbar > div.absolute.border-b {
   background: var(--ac-bg) !important;
+  border-bottom-width: 1px !important;
   border-color: var(--ac-line) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
@@ -193,15 +211,15 @@ img.nav-logo {
 #search-bar-entry-mobile {
   max-width: 16rem !important;
   height: 2rem !important;
-  border-radius: var(--ac-radius) !important;
+  border-radius: var(--ac-radius-pill) !important;
   background: var(--ac-fill) !important;
   box-shadow: inset 0 0 0 1px var(--ac-line) !important;
 }
 
 #search-bar-entry:hover,
 #search-bar-entry-mobile:hover {
-  background: var(--ac-fill) !important;
-  box-shadow: inset 0 0 0 1px var(--ac-line) !important;
+  background: var(--ac-fill-hover) !important;
+  box-shadow: inset 0 0 0 1px var(--ac-line-strong) !important;
 }
 
 .topbar-right-container .navbar-link a,
@@ -230,7 +248,7 @@ img.nav-logo {
 #navbar .nav-tabs {
   gap: 0 !important;
   width: 100%;
-  border-top: 1px solid var(--ac-line);
+  border-top: none !important;
 }
 
 .nav-tabs-item,
@@ -267,8 +285,36 @@ a.nav-tabs-item > div.absolute {
 a.nav-tabs-item[data-active="true"] > div.absolute,
 a.nav-tabs-item[aria-current="location"] > div.absolute {
   background: var(--ac-text) !important;
-  opacity: 1;
+  opacity: 0.85;
   box-shadow: none !important;
+}
+
+/* Search dialog sits above the whole site and dims the page. */
+[data-component-part="search-backdrop"] {
+  z-index: 200 !important;
+  background: rgb(0 0 0 / 0.68) !important;
+  pointer-events: auto !important;
+}
+
+html.light [data-component-part="search-backdrop"] {
+  background: rgb(18 18 18 / 0.42) !important;
+}
+
+[data-component-part="search-backdrop"] + * {
+  z-index: 201 !important;
+}
+
+[data-component-part="search-modal"] {
+  border-radius: 1.25rem !important;
+  background: var(--ac-elevated) !important;
+  box-shadow: 0 0 0 1px var(--ac-line-strong) !important;
+}
+
+[data-component-part="search-input-container"],
+[data-component-part="search-cli-state"] {
+  border-radius: var(--ac-radius-pill) !important;
+  border-color: var(--ac-line-strong) !important;
+  background: var(--ac-bg) !important;
 }
 
 /* ---------- Sidebar ---------- */
@@ -282,9 +328,13 @@ a.nav-tabs-item[aria-current="location"] > div.absolute {
 #navigation-items ul.sidebar-group,
 #navigation-items .sidebar-group,
 ul.sidebar-group,
-.sidebar-group,
-#navigation-items .my-2 {
+.sidebar-group {
   margin: 0 !important;
+}
+
+#navigation-items .my-2 {
+  margin-top: 0.15rem !important;
+  margin-bottom: 0 !important;
 }
 
 #navigation-items div:has(> .sidebar-nav-group-divider),
@@ -317,11 +367,11 @@ sidebar-nav-group-divider {
   color: var(--ac-muted) !important;
 }
 
-#navigation-items li > a:hover,
-#navigation-items li > button:hover,
-#sidebar-content li > a:hover {
-  background: transparent !important;
-  color: var(--ac-muted) !important;
+#navigation-items li:not([data-active="true"]) > a:hover,
+#navigation-items li:not([data-active="true"]) > button:hover,
+#sidebar-content li:not([data-active="true"]) > a:hover {
+  background: var(--ac-fill-hover) !important;
+  color: var(--ac-text) !important;
 }
 
 #navigation-items li[data-active="true"] > a,
@@ -332,17 +382,29 @@ sidebar-nav-group-divider {
   color: var(--ac-text) !important;
 }
 
+#navigation-items li[data-active="true"] > a:hover,
+#navigation-items li[data-active="true"] > button:hover,
+#navigation-items a[aria-current="page"]:hover,
+#sidebar-content a[aria-current="page"]:hover {
+  background: var(--ac-fill-strong) !important;
+  color: var(--ac-text) !important;
+}
+
 sidebar-group-header,
 .sidebar-group-header,
 #navigation-items .sidebar-group-header {
-  margin-top: 1rem !important;
-  margin-bottom: 0.2rem !important;
+  margin-top: 0.7rem !important;
+  margin-bottom: 0.12rem !important;
   padding-block: 0.15rem !important;
   font-size: 0.68rem !important;
   font-weight: 500 !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
   color: var(--ac-muted) !important;
+}
+
+#navigation-items .text-sm.relative > div:not(.my-2):not(.px-1) > .sidebar-group-header {
+  margin-top: 0 !important;
 }
 
 /* ---------- TOC ---------- */

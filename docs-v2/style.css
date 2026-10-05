@@ -17,8 +17,8 @@
   --ac-line: rgba(227, 224, 230, 0.06);
   --ac-line-strong: rgba(227, 224, 230, 0.12);
   --ac-fill: rgba(255, 255, 255, 0.045);
-  --ac-fill-hover: rgba(255, 255, 255, 0.07);
-  --ac-fill-strong: rgba(255, 255, 255, 0.12);
+  --ac-fill-hover: rgba(255, 255, 255, 0.1);
+  --ac-fill-strong: rgba(255, 255, 255, 0.18);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
@@ -37,8 +37,8 @@ html.light {
   --ac-line: rgba(18, 18, 18, 0.06);
   --ac-line-strong: rgba(18, 18, 18, 0.12);
   --ac-fill: rgba(18, 18, 18, 0.035);
-  --ac-fill-hover: rgba(18, 18, 18, 0.06);
-  --ac-fill-strong: rgba(18, 18, 18, 0.09);
+  --ac-fill-hover: rgba(18, 18, 18, 0.07);
+  --ac-fill-strong: rgba(18, 18, 18, 0.12);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
   --ac-ok: #3d5a40;
@@ -305,6 +305,7 @@ html.light [data-component-part="search-backdrop"] {
 }
 
 [data-component-part="search-modal"] {
+  margin-top: 18vh !important;
   border-radius: 1.25rem !important;
   background: var(--ac-elevated) !important;
   box-shadow: 0 0 0 1px var(--ac-line-strong) !important;
@@ -315,6 +316,12 @@ html.light [data-component-part="search-backdrop"] {
   border-radius: var(--ac-radius-pill) !important;
   border-color: var(--ac-line-strong) !important;
   background: var(--ac-bg) !important;
+}
+
+body:has([data-component-part="search-backdrop"]:not([hidden])) #search-bar-entry,
+body:has([data-component-part="search-backdrop"]:not([hidden])) #search-bar-entry-mobile {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* ---------- Sidebar ---------- */

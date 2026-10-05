@@ -19,7 +19,8 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 
 - Aspen theme, **dark default**, IBM Plex Sans + IBM Plex Mono
 - Sharp near-black (`#0E0E10`) and bright white; faint hairlines
-- Sidebar page hover is quieter than the selected row
+- Sidebar **group headers** are brighter than leaf pages. Body copy is grey; headings and links stay bright.
+- Nested sidebar groups stay open until the reader collapses them. Dummy nested pages live under **Surfaces**.
 - Tabs: Docs / Examples / Reference
 - Header: logo, search, GitHub, theme. Skip link injected by `site.js`
 

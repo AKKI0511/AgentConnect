@@ -92,6 +92,9 @@
     "options": ["copy", "view", "chatgpt", "claude", "grok"],
     "display": "toc"
   },
+  "interaction": {
+    "drilldown": false
+  },
   "markdown": {
     "instructions": [
       "AgentConnect public terms are Team, Runtime, Membership, Session, Message, Delivery, Ticket, Thread, Address, and Skill. Keep those names. Do not substitute generic agent-framework language.",
@@ -148,6 +151,22 @@
           {
             "group": "Agents",
             "pages": ["agents/overview"]
+          },
+          {
+            "group": "Surfaces",
+            "pages": [
+              "surfaces/overview",
+              {
+                "group": "Cards",
+                "expanded": true,
+                "pages": ["surfaces/cards"]
+              },
+              {
+                "group": "Media",
+                "expanded": true,
+                "pages": ["surfaces/media"]
+              }
+            ]
           },
           {
             "group": "Contribute",

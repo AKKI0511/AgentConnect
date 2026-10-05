@@ -23,7 +23,7 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 - Body copy is grey; headings and links stay bright.
 - Code blocks use native Mintlify UI with Shiki `light-plus` / `dark-plus`. No custom syntax colors.
 - Tabs: Docs / Examples / Reference
-- Header: logo, search, GitHub, theme. Controlled glass on the sticky navbar only. Skip link injected by `site.js`
+- Header: logo, search, GitHub, theme. Controlled glass on the sticky navbar fill layer only (see-through frost + blur). Skip link injected by `site.js`
 
 ### Information architecture
 
@@ -36,7 +36,7 @@ Isolated Mintlify documentation project. The legacy Sphinx site under `docs/` is
 
 - No teal/cyan accent, gradients, or card mosaics. Glass is limited to the top navbar.
 - Light theme is designed, not inverted dark
-- Cards, if used, have no icons and no hover lift
+- Cards, if used, have no icons and no hover lift. All four corners share the same radius.
 - Next steps are lists, not tiles
 
 ### API navigation rules

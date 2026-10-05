@@ -21,13 +21,14 @@
   --ac-fill: rgba(244, 244, 242, 0.045);
   --ac-fill-hover: rgba(244, 244, 242, 0.03);
   --ac-fill-strong: rgba(244, 244, 242, 0.08);
-  --ac-nav-glass: rgba(22, 22, 22, 0.42);
+  --ac-nav-glass: rgba(255, 255, 255, 0.14);
+  --ac-nav-blur: blur(20px);
   --ac-warn: #c4b8a0;
   --ac-danger: #c9a3a0;
   --ac-ok: #b7c4b4;
   --ac-radius: 2px;
   --ac-radius-nav: 0.55rem;
-  --ac-radius-card: 0.75rem;
+  --ac-radius-card: 1rem;
   --ac-radius-pill: 9999px;
   --ac-measure: 40rem;
   --ac-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -46,7 +47,8 @@ html.light {
   --ac-fill: rgba(17, 17, 17, 0.035);
   --ac-fill-hover: rgba(17, 17, 17, 0.03);
   --ac-fill-strong: rgba(17, 17, 17, 0.06);
-  --ac-nav-glass: rgba(255, 255, 255, 0.55);
+  --ac-nav-glass: rgba(255, 255, 255, 0.42);
+  --ac-nav-blur: blur(20px);
   --ac-warn: #6e5f3a;
   --ac-danger: #8a403c;
   --ac-ok: #3d5a40;
@@ -185,13 +187,17 @@ samp {
 
 /* ---------- Header: glass on the sticky bar only, below search overlay ---------- */
 
+/* overflow-x-clip on this wrapper prevents backdrop-filter from sampling page content. */
+div:has(> #navbar) {
+  overflow: visible !important;
+  overflow-x: visible !important;
+}
+
 #navbar {
   z-index: 30 !important;
   border: none !important;
-  background: var(--ac-nav-glass) !important;
+  background: transparent !important;
   box-shadow: none !important;
-  backdrop-filter: blur(32px) !important;
-  -webkit-backdrop-filter: blur(32px) !important;
 }
 
 #navbar > .absolute {
@@ -206,14 +212,15 @@ samp {
   pointer-events: auto !important;
 }
 
-#navbar [class*="inset-0"],
-#navbar > .absolute.inset-0,
+/* Native fill is this inset layer (bg-background-dark), not #navbar itself. */
 #navbar > .z-0.absolute.inset-0,
-#navbar > div.z-0.absolute {
-  background: transparent !important;
+#navbar > div.z-0.absolute.inset-0 {
+  background: var(--ac-nav-glass) !important;
+  background-color: var(--ac-nav-glass) !important;
+  background-image: none !important;
   opacity: 1 !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  backdrop-filter: var(--ac-nav-blur) !important;
+  -webkit-backdrop-filter: var(--ac-nav-blur) !important;
 }
 
 #navbar > .z-10.absolute.w-full.h-full.border-b,
@@ -557,9 +564,14 @@ callout svg,
 
 card,
 .card,
+div.card,
 tile,
 .tile {
   border-radius: var(--ac-radius-card) !important;
+  border-top-left-radius: var(--ac-radius-card) !important;
+  border-top-right-radius: var(--ac-radius-card) !important;
+  border-bottom-right-radius: var(--ac-radius-card) !important;
+  border-bottom-left-radius: var(--ac-radius-card) !important;
   border: 1px solid var(--ac-line) !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -570,8 +582,13 @@ tile,
 card [data-component-part="card-content-container"],
 card [data-component-part="card-image"],
 .card [data-component-part="card-content-container"],
-.card [data-component-part="card-image"] {
+.card [data-component-part="card-image"],
+.card img {
   border-radius: var(--ac-radius-card) !important;
+  border-top-left-radius: var(--ac-radius-card) !important;
+  border-top-right-radius: var(--ac-radius-card) !important;
+  border-bottom-right-radius: var(--ac-radius-card) !important;
+  border-bottom-left-radius: var(--ac-radius-card) !important;
 }
 
 card:hover,

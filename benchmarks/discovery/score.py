@@ -159,7 +159,6 @@ async def _rank_directory(
             members,
             exclude_address="absent@discovery",
             limit=None,
-            detail="summary",
         )
         ranked[need_id] = [match.address.split("@", 1)[0] for match in found.matches]
     return ranked, directory

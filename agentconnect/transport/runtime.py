@@ -124,7 +124,6 @@ class RuntimeTransport(Protocol):
         query: str,
         *,
         limit: int | None = None,
-        detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory."""
 

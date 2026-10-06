@@ -118,13 +118,10 @@ class InProcessTransport:
         query: str,
         *,
         limit: int | None = None,
-        detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory."""
         try:
-            return await self._runtime.find(
-                session_token, query, limit=limit, detail=detail
-            )
+            return await self._runtime.find(session_token, query, limit=limit)
         except Exception as exc:
             raise wrap_runtime_error(exc) from exc
 

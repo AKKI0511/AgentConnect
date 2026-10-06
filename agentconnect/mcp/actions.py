@@ -3,7 +3,8 @@
 These functions take an already-resolved Session token. The MCP server
 resolves the caller, then calls here. Session-bound callables in
 ``agentconnect.agent.tools`` use the same send and wait rules. Model-facing
-``ask`` and ``get_result`` return TicketView JSON.
+``ask`` and ``get_result`` return TicketView JSON. ``tell``, ``get_profiles``,
+and ``get_history`` return lean views.
 """
 
 from __future__ import annotations
@@ -13,18 +14,37 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Protocol
 
 from agentconnect.core.base import dump_public, parse_schema
-from agentconnect.core.directory import FindRequest, GetProfileRequest
+from agentconnect.core.directory import (
+    DirectoryEntry,
+    FindRequest,
+    GetProfilesRequest,
+    GetProfilesResult,
+    ProfileFound,
+    ProfileMiss,
+)
+from agentconnect.core.error import ErrorObject
 from agentconnect.core.operations import (
+    AcceptedSendResult,
     AskToolRequest,
     GetHistoryRequest,
     GetResultRequest,
     TellToolRequest,
+    history_view,
+    parse_history_result,
+    parse_send_result,
+    tell_view,
 )
 from agentconnect.core.primitives import CollectMode
 from agentconnect.core.ticket import parse_ticket, ticket_view
 from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.team.errors import TeamError
 from agentconnect.team.session_auth import session_token_for_request
+
+KEYED_ID_CONFLICT_MESSAGE = (
+    "The same idempotency_key was used with different arguments. "
+    "Retry the identical call unchanged, or use a new key only for new work. "
+    "Do not drop the key after an uncertain accept; that can duplicate work."
+)
 
 
 class TeamRuntime(Protocol):
@@ -46,7 +66,6 @@ class TeamRuntime(Protocol):
         query: str,
         *,
         limit: int | None = None,
-        detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory."""
 
@@ -129,10 +148,9 @@ async def find_action(
     query: str,
     *,
     limit: int | None = None,
-    detail: str = "summary",
 ) -> dict[str, Any]:
     """Run Directory ``find`` as ``session_token``."""
-    payload: dict[str, Any] = {"query": query, "detail": detail}
+    payload: dict[str, Any] = {"query": query}
     if limit is not None:
         payload["limit"] = limit
     parsed = parse_schema(FindRequest, payload)
@@ -141,17 +159,41 @@ async def find_action(
             session_token,
             parsed.query,
             limit=parsed.limit,
-            detail=parsed.detail,
         )
     )
 
 
-async def get_profile_action(
-    runtime: TeamRuntime, session_token: str, address: str
+async def get_profiles_action(
+    runtime: TeamRuntime, session_token: str, addresses: list[str]
 ) -> dict[str, Any]:
-    """Return one Directory entry for ``address``."""
-    parsed = parse_schema(GetProfileRequest, {"address": address})
-    return dump_public(await runtime.get_profile(session_token, parsed.address))
+    """Return selected teammate Profiles, with per-item errors."""
+    parsed = parse_schema(GetProfilesRequest, {"addresses": addresses})
+    items: list[ProfileFound | ProfileMiss] = []
+    for requested in parsed.unique_requested():
+        try:
+            entry = await runtime.get_profile(session_token, requested)
+            if not isinstance(entry, DirectoryEntry):
+                entry = DirectoryEntry.model_validate(entry)
+            items.append(
+                ProfileFound(
+                    status="ok",
+                    address=entry.address,
+                    profile=entry.profile,
+                )
+            )
+        except TeamError as exc:
+            if exc.code == "unauthorized":
+                raise
+            if exc.code not in {"not_found", "forbidden", "address_outside_team"}:
+                raise
+            items.append(
+                ProfileMiss(
+                    status="error",
+                    address=requested,
+                    error=ErrorObject.model_validate(exc.to_error_object()),
+                )
+            )
+    return dump_public(GetProfilesResult(items=items))
 
 
 async def ask_action(
@@ -232,15 +274,14 @@ async def ask_action(
         deadline=deadline,
         thread_id=send_thread,
         reraise_conflict=recovered_before or not key,
+        idempotency_key=key,
     )
     if result is None and key:
         recovered = await _recover_generated_ask(
             runtime, session_token, message_id, arg_thread
         )
         if recovered is None:
-            raise TeamError(
-                "id_conflict", "Message id is already used with different data"
-            )
+            raise _keyed_id_conflict(key)
         send_thread, recovered_deadline = recovered
         if deadline_s is not None:
             deadline = recovered_deadline
@@ -256,9 +297,10 @@ async def ask_action(
             deadline=deadline,
             thread_id=send_thread,
             reraise_conflict=True,
+            idempotency_key=key,
         )
     if result is None:
-        raise TeamError("id_conflict", "Message id is already used with different data")
+        raise _keyed_id_conflict(key)
     ticket = result.get("ticket")
     if not isinstance(ticket, dict):
         raise TeamError("internal", "ask did not return a Ticket")
@@ -276,6 +318,7 @@ async def _send_ask(
     deadline: Optional[str],
     thread_id: str,
     reraise_conflict: bool = False,
+    idempotency_key: Optional[str] = None,
 ) -> dict[str, Any] | None:
     try:
         body: dict[str, Any] = {
@@ -292,6 +335,8 @@ async def _send_ask(
     except TeamError as exc:
         if exc.code == "id_conflict" and not reraise_conflict:
             return None
+        if exc.code == "id_conflict" and idempotency_key:
+            raise _keyed_id_conflict(idempotency_key) from exc
         raise
 
 
@@ -305,7 +350,7 @@ async def tell_action(
     thread_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Send without expecting a reply. Returns ``AcceptedSendResult``.
+    """Send without expecting a reply. Returns ``TellView``.
 
     A keyed retry with the same arguments returns the original accepted
     send. Changed keyed arguments raise ``id_conflict``.
@@ -333,7 +378,23 @@ async def tell_action(
     }
     if arg_thread is not None:
         body["thread_id"] = arg_thread
-    return dump_public(await runtime.send(session_token, body))
+    try:
+        sent = parse_send_result(await runtime.send(session_token, body))
+    except TeamError as exc:
+        if exc.code == "id_conflict" and key:
+            raise _keyed_id_conflict(key) from exc
+        raise
+    if not isinstance(sent, AcceptedSendResult):
+        raise TeamError("internal", "tell did not return an accepted event")
+    return dump_public(tell_view(sent))
+
+
+def _keyed_id_conflict(key: str | None = None) -> TeamError:
+    """Return tool-facing ``id_conflict`` that names ``idempotency_key``."""
+    details = {"argument": "idempotency_key"}
+    if key:
+        details["idempotency_key"] = True
+    return TeamError("id_conflict", KEYED_ID_CONFLICT_MESSAGE, details=details)
 
 
 async def get_result_action(
@@ -358,11 +419,10 @@ async def get_history_action(
     if before is not None:
         payload["before"] = before
     parsed = parse_schema(GetHistoryRequest, payload)
-    return dump_public(
-        await runtime.get_history(
-            session_token,
-            parsed.thread_id,
-            before=parsed.before,
-            limit=50 if parsed.limit is None else parsed.limit,
-        )
+    raw = await runtime.get_history(
+        session_token,
+        parsed.thread_id,
+        before=parsed.before,
+        limit=50 if parsed.limit is None else parsed.limit,
     )
+    return dump_public(history_view(parse_history_result(raw)))

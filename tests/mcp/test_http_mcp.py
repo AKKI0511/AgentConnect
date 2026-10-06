@@ -135,6 +135,30 @@ async def ping() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_http_session_bearer_can_call_extra_tool():
+    team = await Team("content-squad", tools=[ping]).start()
+    writer = Writer(name="writer")
+    try:
+        origin = await team.serve()
+        await writer.join(origin)
+        token = writer._session.session_token
+        assert token
+        async with create_mcp_http_client(
+            headers={"Authorization": f"Bearer {token}"}
+        ) as http:
+            async with Client(
+                streamable_http_client(
+                    team.mcp_url, http_client=http, terminate_on_close=False
+                )
+            ) as client:
+                pinged = _body(await client.call_tool("ping", {}))
+                assert pinged.get("status") == "ok" or "ok" in json.dumps(pinged)
+    finally:
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
 async def test_http_roster_and_extra_tool_use_session_boundary():
     team = await Team("content-squad", tools=[ping]).start()
     writer = Writer(name="writer")
@@ -264,4 +288,30 @@ async def test_http_mcp_raw_find_arguments_rejected():
             assert failed
     finally:
         await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_http_tools_list_marks_catalog_immediately_stale():
+    team = await Team("content-squad").start()
+    try:
+        await team.serve()
+        assert team.mcp_url is not None
+        async with Client(team.mcp_url) as client:
+            listed = await client.list_tools()
+            assert listed.ttl_ms == 0
+            tools = {item.name: item for item in listed.tools}
+            find = tools["find"]
+            assert "ranked candidate" in (find.description or "").lower()
+            for name in ("ask", "get_result"):
+                schema = tools[name].output_schema
+                if hasattr(schema, "model_dump"):
+                    schema = schema.model_dump(by_alias=True)
+                assert isinstance(schema, dict)
+                assert schema.get("type") == "object"
+                assert "oneOf" in schema or "anyOf" in schema
+            tools_cap = client.server_capabilities.tools
+            assert tools_cap is not None
+            assert tools_cap.list_changed is False
+    finally:
         await team.stop()

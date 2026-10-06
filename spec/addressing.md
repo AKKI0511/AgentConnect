@@ -153,7 +153,7 @@ Principal Memberships, including `operator`, are not in the Directory. The Direc
 
 The result is an ordered list of matches, best first, with no scores. Scores are implementation-specific and would imply a precision the specification does not define.
 
-Discovery is written for a model deciding who to hire, so it is cheap by default. Each match is a light card: the Address to send to, the Profile `summary`, the Agent's Skill names for a quick capability scan, and any Profile tags. A model skims the ranked cards, then reads the one it wants in full with `get_profile`. When a caller wants everything inline, `detail=full` adds the Agent DID and the complete Profile to every match. The longer Profile `description` and Skill `tags` are in that full Profile, not on the light card.
+Discovery is written for a model deciding who to hire, so it is cheap by default. Each match is a light card: the Address to send to, the Profile `summary`, the Agent's Skill names for a quick capability scan, and any Profile tags. A model skims the ranked cards, then reads the ones it wants in full with `get_profiles`. The longer Profile `description` and Skill `tags` are in that full Profile, not on the light card.
 
 The Runtime searches every Agent Membership except the caller. Principals are not candidates. Matches are ordered by relevance, with equal-relevance entries ordered by canonical Address.
 
@@ -202,10 +202,8 @@ Result:
 }
 ```
 
-The same query with `detail=full` returns each match with `agent_did` and the complete `profile` added.
-
 ## `get_profile`
 
-`get_profile` returns one full `DirectoryEntry` by local or same-Team qualified Address. Missing members and principals return `not_found`.
+Runtime, HTTP, and Client `get_profile` / `get_entry` return one full `DirectoryEntry` by local or same-Team qualified Address. MCP and Session-bound Team tools use `get_profiles` with a required `addresses` array of 1 to 20 Addresses and return `GetProfilesResult`. Duplicate requested strings are read once, keeping the first. Missing members and principals appear as per-item `not_found` errors; other requested Profiles still return.
 
-Profile access is explicit. The Runtime MUST NOT prepend a Profile to a Message, Delivery, Thread history, or handler input. A Client may pass Profile data to its Agent after explicitly calling `find` or `get_profile`.
+Profile access is explicit. The Runtime MUST NOT prepend a Profile to a Message, Delivery, Thread history, or handler input. A Client may pass Profile data to its Agent after explicitly calling `find` or `get_profiles`.

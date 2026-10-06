@@ -20,6 +20,7 @@ from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
+    TypeAdapter,
     ValidationError,
     model_validator,
 )
@@ -306,12 +307,35 @@ def public_json_schema(model: type[SchemaModel]) -> dict[str, Any]:
     return schema
 
 
+def public_result_schema(model: Any) -> dict[str, Any]:
+    """JSON Schema for a tool success result, including tagged unions.
+
+    MCP structuredContent may be any JSON value. Team tool results are
+    JSON objects, so this projection advertises ``type: object``. Tagged
+    unions of public objects keep ``oneOf``/``anyOf``; the wrapper does
+    not set ``additionalProperties``, which would make variants
+    uninhabitable.
+    """
+    if isinstance(model, type) and issubclass(model, SchemaModel):
+        return public_json_schema(model)
+    schema = _rewrite_json_schema(copy.deepcopy(TypeAdapter(model).json_schema()))
+    if not isinstance(schema, dict):
+        raise TypeError("result JSON Schema must be an object")
+    if schema.get("type") == "object" or "properties" in schema:
+        schema.setdefault("type", "object")
+        schema.setdefault("additionalProperties", False)
+        return schema
+    if "anyOf" in schema or "oneOf" in schema:
+        schema["type"] = "object"
+    return schema
+
+
 def dump_public(value: Any) -> Any:
     """Convert schema models to JSON-ready data.
 
-    MCP tools and Session-bound tools serialize through this helper. A
-    tool result is context for a model, and the MCP SDK rejects a typed
-    return. Session and ``BaseAgent`` methods return typed objects.
+    MCP tools and Session-bound tools serialize through this helper so
+    omit-only optional fields stay missing. Session and ``BaseAgent``
+    methods return typed objects.
     """
     if isinstance(value, SchemaModel):
         return value.to_public_dict()

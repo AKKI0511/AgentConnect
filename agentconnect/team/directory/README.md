@@ -49,8 +49,8 @@ entry.profile.skills[0].tags  # Skill tags ["msa"], not on the light card
 ```
 
 Omit ``limit`` to receive every other member, ordered, up to 100. Pass
-``limit=3`` when you want a shortlist. ``detail="full"`` adds ``agent_did``
-and the complete Profile to each match.
+``limit=3`` when you want a shortlist. Call ``get_entry`` for one full
+Profile.
 
 The Runtime never injects a Profile into handler input. Call ``find`` or
 ``get_entry`` when the Agent should read one. Ranking does not choose who

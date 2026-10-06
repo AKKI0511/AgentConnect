@@ -110,9 +110,8 @@ class Directory:
         *,
         exclude_address: str,
         limit: int | None,
-        detail: str,
     ) -> FindResult:
-        """Rank ``members`` for ``query`` and return light or full cards.
+        """Rank ``members`` for ``query`` and return light cards.
 
         Excludes ``exclude_address``. Omitting ``limit`` returns every
         remaining member, at most :data:`MAX_FIND_LIMIT`. Every match in
@@ -132,15 +131,11 @@ class Directory:
         try:
             async with self._lock:
                 try:
-                    return await self._rank_locked(
-                        query, candidates, limit=limit, detail=detail
-                    )
+                    return await self._rank_locked(query, candidates, limit=limit)
                 except _EmbeddingFailed:
                     if not self._activate_fallback():
                         raise
-                    return await self._rank_locked(
-                        query, candidates, limit=limit, detail=detail
-                    )
+                    return await self._rank_locked(query, candidates, limit=limit)
         finally:
             self.search_in_flight -= 1
 
@@ -163,7 +158,6 @@ class Directory:
         candidates: Sequence[Mapping[str, Any]],
         *,
         limit: int | None,
-        detail: str,
     ) -> FindResult:
         space = await self._ensure_space()
         query_vector = await self._embed_query(query, expected_dim=space.dim)
@@ -202,8 +196,7 @@ class Directory:
         by_address = {str(member["address"]): member for member in candidates}
         cap = MAX_FIND_LIMIT if limit is None else limit
         matches: list[DirectoryMatch] = [
-            _match_card(by_address[address], detail=detail)
-            for _, address in scored[:cap]
+            _match_card(by_address[address]) for _, address in scored[:cap]
         ]
         return FindResult(matches=matches)
 
@@ -466,7 +459,7 @@ def _score_rows(
     return scored
 
 
-def _match_card(member: Mapping[str, Any], *, detail: str) -> DirectoryMatch:
+def _match_card(member: Mapping[str, Any]) -> DirectoryMatch:
     profile = member["profile"]
     data: dict[str, Any] = {
         "address": str(member["address"]),
@@ -476,7 +469,4 @@ def _match_card(member: Mapping[str, Any], *, detail: str) -> DirectoryMatch:
     tags = profile.get("tags")
     if tags:
         data["tags"] = [str(tag) for tag in tags]
-    if detail == "full":
-        data["agent_did"] = str(member["agent_did"])
-        data["profile"] = dict(profile)
     return DirectoryMatch.model_validate(data)

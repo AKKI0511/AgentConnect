@@ -269,15 +269,13 @@ class Context:
             handling=self._delivery,
         )
 
-    async def find(
-        self, query: str, *, limit: int | None = None, detail: str = "summary"
-    ) -> FindResult:
+    async def find(self, query: str, *, limit: int | None = None) -> FindResult:
         """Search this Team's Directory, excluding this Agent.
 
         found = await ctx.find("someone who can review a contract")
         peer = found.matches[0].address
         """
-        return await self._session.find(query, limit=limit, detail=detail)
+        return await self._session.find(query, limit=limit)
 
     async def get_entry(self, address: str) -> DirectoryEntry:
         """Return the Directory entry for ``address`` in this Team.
@@ -295,7 +293,9 @@ class Context:
         """Page older retained Thread history.
 
         Omit ``before`` for the newest page of this Delivery's Thread.
-        Returns empty history when the Message has no ``thread_id``.
+        When ``has_more`` is true, pass ``next_before`` as the next
+        ``before``. Returns empty history when the Message has no
+        ``thread_id``.
         """
         thread_id = self.thread_id
         if thread_id is None:

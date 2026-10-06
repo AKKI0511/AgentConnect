@@ -75,6 +75,7 @@ After changing `pyproject.toml` dependencies, extras, or groups, refresh every l
 uv lock
 uv lock --directory examples/quickstart
 uv lock --directory examples/recipes
+uv lock --directory examples/tool_experience
 ```
 
 ## Public API

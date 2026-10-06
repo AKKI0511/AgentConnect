@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from agentconnect.agent.tools import Tool, _call_tool
 from agentconnect.core.base import public_json_schema
-from agentconnect.core.directory import FindRequest, GetProfileRequest
+from agentconnect.core.directory import FindRequest, GetProfilesRequest
 from agentconnect.core.operations import (
     AskToolRequest,
     GetHistoryRequest,
@@ -138,4 +138,4 @@ def test_team_tool_parameters_match_mcp_request_schemas():
     assert tools["tell"] == public_json_schema(TellToolRequest)
     assert tools["get_result"] == public_json_schema(GetResultRequest)
     assert tools["get_history"] == public_json_schema(GetHistoryRequest)
-    assert tools["get_profile"] == public_json_schema(GetProfileRequest)
+    assert tools["get_profiles"] == public_json_schema(GetProfilesRequest)

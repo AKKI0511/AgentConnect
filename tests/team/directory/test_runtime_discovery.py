@@ -63,7 +63,6 @@ async def _warm_directory(
         members[: min(8, len(members))],
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     return directory, members
 
@@ -76,7 +75,6 @@ async def test_warm_ranking_400_stays_within_loop_budget():
             members,
             exclude_address="researcher@content-squad",
             limit=None,
-            detail="summary",
         ),
         members=WARM_RANK_MEMBERS,
     )
@@ -151,7 +149,6 @@ async def test_concurrent_searches_share_one_space():
                 members,
                 exclude_address="researcher@content-squad",
                 limit=5,
-                detail="summary",
             )
             for _ in range(8)
         ]
@@ -173,7 +170,6 @@ async def test_profile_update_rebuilds_that_vector():
         [updated],
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert found.matches[0].address == "writer@content-squad"
 
@@ -207,7 +203,6 @@ async def test_backend_failure_rebuild_stays_responsive():
             members,
             exclude_address="researcher@content-squad",
             limit=None,
-            detail="summary",
         ),
         members=20,
         rebuild=True,

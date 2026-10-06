@@ -62,7 +62,7 @@ async def test_team_tools_before_join_fail_on_call():
         "tell",
         "get_result",
         "get_history",
-        "get_profile",
+        "get_profiles",
     ]
     with pytest.raises(SessionError) as exc:
         await agent.tools.find(query="someone who can draft a summary")
@@ -118,7 +118,10 @@ async def test_team_tools_collect_ticket_returns_json_without_content_sugar():
         assert ticket["state"] == "open"
         assert "content" not in ticket
         assert ticket["ticket_id"]
+        assert ticket["deadline"]
         assert ticket["poll_interval_ms"] == 1000
+        assert "ttl_ms" not in ticket
+        assert "Waiting" in ticket["status_message"]
         assert "id" not in ticket
     finally:
         await researcher.leave()
@@ -159,7 +162,9 @@ async def test_team_tools_idempotency_key_reuses_ticket():
         )
         assert first["ticket_id"] == second["ticket_id"]
         assert later["ticket_id"] == first["ticket_id"]
-        assert later["deadline"] == first["deadline"]
+        first_wire = await researcher.get_result(first["ticket_id"])
+        later_wire = await researcher.get_result(later["ticket_id"])
+        assert later_wire.deadline == first_wire.deadline
         assert first["ticket_id"] != third["ticket_id"]
         with pytest.raises(SessionError) as exc:
             await researcher.tools.ask(
@@ -169,6 +174,7 @@ async def test_team_tools_idempotency_key_reuses_ticket():
                 idempotency_key="draft-1",
             )
         assert exc.value.code == "id_conflict"
+        assert "idempotency_key" in exc.value.message
     finally:
         await researcher.leave()
         await writer.leave()
@@ -193,9 +199,10 @@ async def test_team_tools_keyed_tell_conflict_is_visible():
             content={"notice": "one"},
             idempotency_key="note-1",
         )
-        assert again["message"]["id"] == first["message"]["id"]
-        assert again["message"]["kind"] == "event"
-        assert "sender_did" in again["message"]
+        assert first["status"] == "accepted"
+        assert again["status"] == "accepted"
+        assert "message" not in again
+        assert "sender_did" not in again
         with pytest.raises(SessionError) as exc:
             await researcher.tools.tell(
                 recipient="writer",
@@ -203,6 +210,7 @@ async def test_team_tools_keyed_tell_conflict_is_visible():
                 idempotency_key="note-1",
             )
         assert exc.value.code == "id_conflict"
+        assert "idempotency_key" in exc.value.message
     finally:
         await researcher.leave()
         await writer.leave()

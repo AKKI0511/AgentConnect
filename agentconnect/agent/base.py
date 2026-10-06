@@ -291,18 +291,16 @@ class BaseAgent:
             metadata=metadata,
         )
 
-    async def find(
-        self, query: str, *, limit: int | None = None, detail: str = "summary"
-    ) -> FindResult:
+    async def find(self, query: str, *, limit: int | None = None) -> FindResult:
         """Search this Team's Directory, excluding this Agent.
 
         Light cards include Address, summary, Skill names, and Profile tags.
-        ``detail="full"`` adds the DID and complete Profile.
+        Call :meth:`get_entry` for one full Profile.
 
             found = await agent.find("someone who can draft a summary")
             found.matches[0].address
         """
-        return await self._require_session().find(query, limit=limit, detail=detail)
+        return await self._require_session().find(query, limit=limit)
 
     async def get_entry(self, address: str) -> DirectoryEntry:
         """Return the Directory entry for ``address``.
@@ -347,7 +345,7 @@ class BaseAgent:
     def team_tools(self) -> TeamTools:
         """Return Session-bound tools for this Agent.
 
-        Tools are find, ask, tell, get_result, get_history, and get_profile.
+        Tools are find, ask, tell, get_result, get_history, and get_profiles.
         Safe to call before ``join``. The callables fail until a Session
         exists. Use these when the host does not speak MCP. Results are
         JSON via :func:`~agentconnect.core.base.dump_public`. ``ask`` and

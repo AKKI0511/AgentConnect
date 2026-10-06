@@ -1,7 +1,7 @@
 """Session-bound callables for frameworks that do not speak MCP.
 
 A model calls tools. ``team_tools()`` is find, ask, tell, get_result,
-get_history, and get_profile bound to this Agent's Session. Results are
+get_history, and get_profiles bound to this Agent's Session. Results are
 JSON via :func:`~agentconnect.core.base.dump_public`. Wire them into
 LangGraph, ADK, or any other tool loop. The Team MCP server is the other
 door, for clients that speak MCP.
@@ -48,38 +48,33 @@ from typing_extensions import Annotated
 
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import Session
-from agentconnect.core.base import dump_public, public_json_schema
-from agentconnect.core.directory import FindRequest, GetProfileRequest
+from agentconnect.core.base import dump_public, parse_schema, public_json_schema
+from agentconnect.core.directory import (
+    DirectoryEntry,
+    GetProfilesRequest,
+    GetProfilesResult,
+    ProfileFound,
+    ProfileMiss,
+)
+from agentconnect.core.error import ErrorObject
 from agentconnect.core.operations import (
-    AskToolRequest,
-    GetHistoryRequest,
-    GetResultRequest,
-    TellToolRequest,
+    AcceptedSendResult,
+    history_view,
+    tell_view,
 )
 from agentconnect.core.primitives import CollectMode
+from agentconnect.core.team_tools import TEAM_TOOL_SPECS
 from agentconnect.core.ticket import ticket_view
 
 ToolHandler = Callable[..., Union[Any, Awaitable[Any]]]
 ToolLike = Union["Tool", ToolHandler]
 
-_FIND_PARAMS = public_json_schema(FindRequest)
+_ITEM_ERROR_CODES = frozenset({"not_found", "forbidden", "address_outside_team"})
 
-_ASK_PARAMS = public_json_schema(AskToolRequest)
-_TELL_PARAMS = public_json_schema(TellToolRequest)
-_GET_RESULT_PARAMS = public_json_schema(GetResultRequest)
-_GET_HISTORY_PARAMS = public_json_schema(GetHistoryRequest)
-_GET_PROFILE_PARAMS = public_json_schema(GetProfileRequest)
-
-_ASK_DESCRIPTION = (
-    "Send work that needs a reply. Returns a TicketView. Keep ticket_id and "
-    "pass it to get_result while the Ticket is open. Prefer this over tell "
-    "when you need an answer; tell does not create a Ticket."
-)
-
-_TELL_DESCRIPTION = (
-    "Send work that does not need a reply. Does not create a Ticket, so a "
-    "caller that needed an answer gets none and no error from tell itself. "
-    "Prefer ask when you need a reply."
+KEYED_ID_CONFLICT_MESSAGE = (
+    "The same idempotency_key was used with different arguments. "
+    "Retry the identical call unchanged, or use a new key only for new work. "
+    "Do not drop the key after an uncertain accept; that can duplicate work."
 )
 
 
@@ -171,7 +166,7 @@ async def _call_tool(tool: Tool, arguments: Mapping[str, Any] | str) -> str:
 
 
 class TeamTools(Sequence[Tool]):
-    """find, ask, tell, get_result, get_history, and get_profile for one Session.
+    """find, ask, tell, get_result, get_history, and get_profiles for one Session.
 
     ``ask`` matches :meth:`~agentconnect.agent.base.BaseAgent.ask` and the
     MCP ``ask`` tool. Model-facing ask/get_result results are TicketView JSON.
@@ -180,55 +175,22 @@ class TeamTools(Sequence[Tool]):
     def __init__(self, session_getter: Callable[[], Session]) -> None:
         """Bind to a getter so tools can be built before ``join``."""
         self._session_getter = session_getter
-        self._items = (
+        handlers = {
+            "find": self.find,
+            "ask": self.ask,
+            "tell": self.tell,
+            "get_result": self.get_result,
+            "get_history": self.get_history,
+            "get_profiles": self.get_profiles,
+        }
+        self._items = tuple(
             Tool(
-                name="find",
-                description=(
-                    "Find teammates by describing the work you need. Returns ranked "
-                    "matches. Omit limit to receive every other member, at most 100. "
-                    "Use get_profile to read one match in full."
-                ),
-                parameters=_FIND_PARAMS,
-                handler=self.find,
-            ),
-            Tool(
-                name="ask",
-                description=_ASK_DESCRIPTION,
-                parameters=_ASK_PARAMS,
-                handler=self.ask,
-            ),
-            Tool(
-                name="tell",
-                description=_TELL_DESCRIPTION,
-                parameters=_TELL_PARAMS,
-                handler=self.tell,
-            ),
-            Tool(
-                name="get_result",
-                description=(
-                    "Return the current TicketView. Repeatable. Does not consume "
-                    "the result. Pass ticket_id from ask."
-                ),
-                parameters=_GET_RESULT_PARAMS,
-                handler=self.get_result,
-            ),
-            Tool(
-                name="get_history",
-                description=(
-                    "Return one page of retained Thread history, newest page first."
-                ),
-                parameters=_GET_HISTORY_PARAMS,
-                handler=self.get_history,
-            ),
-            Tool(
-                name="get_profile",
-                description=(
-                    "Return one teammate's full Directory entry by Address. Prefer "
-                    "this over find(detail=full) when you need one Profile."
-                ),
-                parameters=_GET_PROFILE_PARAMS,
-                handler=self.get_profile,
-            ),
+                name=spec.name,
+                description=spec.description,
+                parameters=public_json_schema(spec.input_model),
+                handler=handlers[spec.name],
+            )
+            for spec in TEAM_TOOL_SPECS
         )
 
     def _session(self) -> Session:
@@ -251,16 +213,13 @@ class TeamTools(Sequence[Tool]):
         query: str,
         *,
         limit: int | None = None,
-        detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory, excluding this Agent.
 
         found = await tools.find(query="someone who can draft a summary")
         found["matches"][0]["address"]
         """
-        return dump_public(
-            await self._session().find(query, limit=limit, detail=detail)
-        )
+        return dump_public(await self._session().find(query, limit=limit))
 
     async def ask(
         self,
@@ -336,25 +295,32 @@ class TeamTools(Sequence[Tool]):
                 deadline=recovered_deadline,
             )
         except SessionError as exc:
-            if exc.code != "id_conflict" or not idempotency_key or recovered_before:
+            if exc.code != "id_conflict" or not idempotency_key:
                 raise
-            recovered = await _recover_keyed_ask(session, message_id, thread_id)
-            if recovered is None:
-                raise
-            send_thread, recovered_deadline = recovered
-            if deadline_seconds is None:
-                recovered_deadline = None
-            ticket = await session.ask(
-                recipient,
-                content,
-                deadline_seconds=deadline_seconds,
-                collect=collect,
-                thread_id=send_thread,
-                parent_id=parent_id,
-                metadata=metadata,
-                message_id=message_id,
-                deadline=recovered_deadline,
-            )
+            if not recovered_before:
+                recovered = await _recover_keyed_ask(session, message_id, thread_id)
+                if recovered is not None:
+                    send_thread, recovered_deadline = recovered
+                    if deadline_seconds is None:
+                        recovered_deadline = None
+                    ticket = await session.ask(
+                        recipient,
+                        content,
+                        deadline_seconds=deadline_seconds,
+                        collect=collect,
+                        thread_id=send_thread,
+                        parent_id=parent_id,
+                        metadata=metadata,
+                        message_id=message_id,
+                        deadline=recovered_deadline,
+                    )
+                    return dump_public(ticket_view(ticket))
+            raise SessionError(
+                "id_conflict",
+                KEYED_ID_CONFLICT_MESSAGE,
+                details={"argument": "idempotency_key"},
+                retryable=exc.retryable,
+            ) from exc
         return dump_public(ticket_view(ticket))
 
     async def tell(
@@ -377,8 +343,8 @@ class TeamTools(Sequence[Tool]):
             address,
             idempotency_key=idempotency_key,
         )
-        return dump_public(
-            await session.tell(
+        try:
+            result = await session.tell(
                 recipient,
                 content,
                 thread_id=thread_id,
@@ -386,7 +352,18 @@ class TeamTools(Sequence[Tool]):
                 metadata=metadata,
                 message_id=message_id,
             )
-        )
+        except SessionError as exc:
+            if exc.code == "id_conflict" and idempotency_key:
+                raise SessionError(
+                    "id_conflict",
+                    KEYED_ID_CONFLICT_MESSAGE,
+                    details={"argument": "idempotency_key"},
+                    retryable=exc.retryable,
+                ) from exc
+            raise
+        if not isinstance(result, AcceptedSendResult):
+            raise SessionError("internal", "tell did not return an accepted event")
+        return dump_public(tell_view(result))
 
     async def get_result(self, ticket_id: str) -> dict[str, Any]:
         """Return the current TicketView this Membership opened."""
@@ -401,12 +378,52 @@ class TeamTools(Sequence[Tool]):
     ) -> dict[str, Any]:
         """Return one page of retained Thread history."""
         return dump_public(
-            await self._session().get_history(thread_id, before=before, limit=limit)
+            history_view(
+                await self._session().get_history(thread_id, before=before, limit=limit)
+            )
         )
 
-    async def get_profile(self, address: str) -> dict[str, Any]:
-        """Return one Directory entry (Address, DID, and full Profile)."""
-        return dump_public(await self._session().get_entry(address))
+    async def get_profiles(self, addresses: list[str]) -> dict[str, Any]:
+        """Return selected teammate Profiles by Address."""
+        try:
+            parsed = parse_schema(GetProfilesRequest, {"addresses": addresses})
+        except ValueError as exc:
+            raise SessionError("invalid_request", str(exc)) from exc
+        items: list[ProfileFound | ProfileMiss] = []
+        session = self._session()
+        for requested in parsed.unique_requested():
+            try:
+                entry = await session.get_entry(requested)
+                if not isinstance(entry, DirectoryEntry):
+                    entry = DirectoryEntry.model_validate(entry)
+                items.append(
+                    ProfileFound(
+                        status="ok",
+                        address=entry.address,
+                        profile=entry.profile,
+                    )
+                )
+            except SessionError as exc:
+                if exc.code == "unauthorized":
+                    raise
+                if exc.code not in _ITEM_ERROR_CODES:
+                    raise
+                payload: dict[str, Any] = {
+                    "code": exc.code,
+                    "message": exc.message,
+                }
+                if exc.details is not None:
+                    payload["details"] = exc.details
+                if exc.retryable is not None:
+                    payload["retryable"] = exc.retryable
+                items.append(
+                    ProfileMiss(
+                        status="error",
+                        address=requested,
+                        error=ErrorObject.model_validate(payload),
+                    )
+                )
+        return dump_public(GetProfilesResult(items=items))
 
 
 def bind_team_tools(session: Session) -> TeamTools:

@@ -410,6 +410,7 @@ The operation is read-only. Reading an open or terminal Ticket any number of tim
 - a `before` value that is not a UUID fails with `invalid_request`
 - `limit` is between `1` and `200` and defaults to `50`.
 - `has_more` is `true` when older retained Messages remain before this page.
+- when `has_more` is `true` and the page is not empty, `next_before` is that page's first Message id; pass it as the next `before`. When `has_more` is `false`, `next_before` is omitted.
 
 Only a Membership in the Thread's participant set may read it. The set stores Membership identities, not Address spellings. Any other caller, including a replacement that reuses a participant Address, receives `not_found`, revealing no history. When retention has removed the oldest Messages, `get_history` returns the oldest that remain. The page is assembled from the requested id window. The Runtime MUST NOT load every retained Message in the Thread in order to slice it.
 
@@ -425,12 +426,12 @@ The Runtime MUST:
 - break equal-relevance ties by canonical Address
 - when `limit` is omitted, return every remaining member, at most 100
 - when `limit` is present, return at most that many matches; `limit` MUST be between `1` and `100`
-- return each match at the requested `detail`
+- return each match as a light card (Address, summary, Skill names, Profile tags)
 - rank every match in one `FindResult` in one embedding space
 - rebuild rather than mix when the embedding space changes or a stored vector is malformed
 - keep backend and fallback diagnostics out of the result
 
-`detail` is `summary` or `full` and defaults to `summary`; `full` adds `agent_did` and the complete Profile to each match. Search MUST work without optional infrastructure. The ranking method is an implementation choice, and changing it MUST NOT change the request shape or the match card.
+Search MUST work without optional infrastructure. The ranking method is an implementation choice, and changing it MUST NOT change the request shape or the match card. To read one Profile, call `get_profile`. Model-facing MCP and Session tools read selected Profiles with `get_profiles`.
 
 Directory ranking MUST NOT choose a `send` recipient, change Mailbox order, or change lease order.
 
@@ -440,7 +441,7 @@ A future addition may widen `find` to reach beyond the local Team. That is an ad
 
 `get_profile` resolves an Address in the current Team and returns its full `DirectoryEntry`. It may return the caller's own entry. A principal, including `operator`, returns `not_found`.
 
-The Runtime MUST NOT place the returned Profile into another handler's input unless that handler explicitly called `find` or `get_profile` and passed the data itself.
+The Runtime MUST NOT place the returned Profile into another handler's input unless that handler explicitly called `find` or `get_profile` / `get_profiles` and passed the data itself.
 
 | Situation | Required observation |
 | --- | --- |

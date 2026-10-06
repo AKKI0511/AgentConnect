@@ -38,6 +38,7 @@ jobs:
           uv lock --check
           uv lock --check --directory examples/quickstart
           uv lock --check --directory examples/recipes
+          uv lock --check --directory examples/tool_experience
           npm --prefix spec/schema ci
           npm --prefix spec/schema run check
 

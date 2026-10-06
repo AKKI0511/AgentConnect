@@ -36,7 +36,7 @@ Install the extra first::
 
 Conversation state for Team work comes from ``ctx.history``. Team tools
 (``find``, ``ask``, ``tell``, ``get_result``, ``get_history``,
-``get_profile``) are attached from the Session. Extra tools are yours:
+``get_profiles``) are attached from the Session. Extra tools are yours:
 pass a plain annotated function or an explicit ``Tool``.
 
 ``model`` is a LiteLLM model id, for example ``gpt-4o-mini`` or

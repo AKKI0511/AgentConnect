@@ -1,0 +1,15 @@
+[project]
+name = "agentconnect-tool-experience"
+version = "0.0.0"
+description = "Foreground ship-desk Team for native MCP tool-experience judging."
+readme = "README.md"
+requires-python = ">=3.11,<4"
+dependencies = [
+    "agentconnect[serve]",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agentconnect = { path = "../../", editable = true }

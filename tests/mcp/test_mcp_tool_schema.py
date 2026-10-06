@@ -7,13 +7,13 @@ from typing import Any
 
 import jsonschema
 import pytest
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.tools.base import Tool as SdkTool
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_PARAMS
 
 from agentconnect.agent import BaseAgent
 from agentconnect.core.base import parse_schema, public_json_schema
-from agentconnect.core.directory import FindRequest, GetProfileRequest
+from agentconnect.core.directory import FindRequest, GetProfilesRequest
 from agentconnect.core.operations import (
     AskToolRequest,
     GetHistoryRequest,
@@ -22,7 +22,6 @@ from agentconnect.core.operations import (
 )
 from agentconnect.core.primitives import ERROR_CODES
 from agentconnect.mcp.server import create_team_mcp
-from agentconnect.mcp.tool_schema import advertise_tool_schema
 from agentconnect.team import Team
 from mcp import Client
 
@@ -34,7 +33,7 @@ _TOOL_MODELS = {
     "tell": TellToolRequest,
     "get_result": GetResultRequest,
     "get_history": GetHistoryRequest,
-    "get_profile": GetProfileRequest,
+    "get_profiles": GetProfilesRequest,
 }
 
 
@@ -78,6 +77,20 @@ def _listed_schema(tool: Any) -> dict[str, Any]:
 
 def _schema_accepts(schema: dict[str, Any], instance: Any) -> bool:
     return jsonschema.Draft202012Validator(schema).is_valid(instance)
+
+
+def _description_texts(node: Any) -> list[str]:
+    found: list[str] = []
+    if isinstance(node, dict):
+        description = node.get("description")
+        if isinstance(description, str):
+            found.append(description)
+        for value in node.values():
+            found.extend(_description_texts(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_description_texts(item))
+    return found
 
 
 def _parse_ok(model: type, instance: Any) -> bool:
@@ -163,30 +176,6 @@ async def _invoke(
 
 
 @pytest.mark.asyncio
-async def test_advertise_tool_schema_replaces_handler_signature_schema():
-    async def find(
-        query: str, limit: int | None = None, detail: str = "summary"
-    ) -> dict[str, str]:
-        return {}
-
-    mcp = MCPServer("schema-adapter")
-    mcp.add_tool(find, name="find")
-    inferred = mcp._tool_manager.get_tool("find").parameters
-    assert _schema_accepts(inferred, {"query": _QUERY, "limit": None})
-    assert _schema_accepts(inferred, {"query": _QUERY, "limit": 101})
-
-    assigned = advertise_tool_schema(mcp, "find", FindRequest)
-    assert assigned == public_json_schema(FindRequest)
-    async with Client(mcp) as client:
-        tools = {item.name: item for item in (await client.list_tools()).tools}
-        listed = _listed_schema(tools["find"])
-    assert listed == assigned
-    assert not _schema_accepts(listed, {"query": _QUERY, "limit": None})
-    assert not _schema_accepts(listed, {"query": _QUERY, "limit": 101})
-    assert _schema_accepts(listed, {"query": _QUERY})
-
-
-@pytest.mark.asyncio
 async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
     team = await Team("content-squad").start()
     writer = Writer(name="writer")
@@ -212,13 +201,13 @@ async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
 
             static: list[tuple[str, dict[str, Any], str]] = [
                 ("find", {"query": _QUERY}, "ok"),
-                ("find", {"query": _QUERY, "limit": 5, "detail": "summary"}, "ok"),
+                ("find", {"query": _QUERY, "limit": 5}, "ok"),
                 ("find", {"query": _QUERY, "limit": None}, "invalid_params"),
                 ("find", {"query": _QUERY, "limit": 101}, "invalid_params"),
                 ("find", {"query": _QUERY, "limit": 0}, "invalid_params"),
                 ("find", {"query": _QUERY, "limit": "5"}, "invalid_params"),
                 ("find", {"query": _QUERY, "unknown": True}, "invalid_params"),
-                ("find", {"query": _QUERY, "detail": "brief"}, "invalid_params"),
+                ("find", {"query": _QUERY, "detail": "summary"}, "invalid_params"),
                 (
                     "ask",
                     {
@@ -343,6 +332,20 @@ async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
                 ("get_history", {"thread_id": _UUID, "limit": 201}, "invalid_params"),
                 ("get_history", {"thread_id": _UUID, "before": None}, "invalid_params"),
                 ("get_history", {"thread_id": _UUID}, "not_found"),
+                ("get_profiles", {"addresses": ["writer"]}, "ok"),
+                (
+                    "get_profiles",
+                    {"addresses": ["writer", "writer"]},
+                    "ok",
+                ),
+                ("get_profiles", {"addresses": []}, "invalid_params"),
+                (
+                    "get_profiles",
+                    {"addresses": [f"peer{i}" for i in range(21)]},
+                    "invalid_params",
+                ),
+                ("get_profiles", {"address": "writer"}, "invalid_params"),
+                ("get_profiles", {}, "invalid_params"),
             ]
 
             ticket_body = None
@@ -392,21 +395,92 @@ async def test_listed_schemas_agree_with_raw_call_for_builtin_tools():
 
 
 @pytest.mark.asyncio
-async def test_kwargs_extra_tool_keeps_open_declared_schema():
+async def test_advertised_tool_fields_explain_cursors_wait_and_threads():
+    team = await Team("content-squad").start()
+    mcp = create_team_mcp(team)
+    try:
+        async with Client(mcp) as client:
+            tools = {item.name: item for item in (await client.list_tools()).tools}
+
+        expected = {
+            "find": ("query", "limit"),
+            "ask": (
+                "deadline_seconds",
+                "collect",
+                "thread_id",
+                "idempotency_key",
+            ),
+            "tell": ("thread_id", "idempotency_key"),
+            "get_result": ("ticket_id",),
+            "get_history": ("before", "thread_id"),
+            "get_profiles": ("addresses",),
+        }
+        for name, fields in expected.items():
+            schema = _listed_schema(tools[name])
+            properties = schema.get("properties") or {}
+            for field in fields:
+                description = (properties.get(field) or {}).get("description")
+                assert isinstance(description, str) and description.strip(), (
+                    name,
+                    field,
+                )
+        ask_text = tools["ask"].description.lower()
+        assert "get_result" in ask_text
+        assert "saved" in ask_text
+        assert (
+            "forbidden" in tools["ask"].description.lower()
+            or "participant"
+            in (
+                (_listed_schema(tools["ask"]).get("properties") or {})
+                .get("thread_id", {})
+                .get("description")
+                or ""
+            ).lower()
+        )
+        ask_thread = (
+            (
+                (_listed_schema(tools["ask"]).get("properties") or {}).get("thread_id")
+                or {}
+            ).get("description")
+            or ""
+        ).lower()
+        assert "omit" in ask_thread
+        assert "invent" not in ask_thread
+        tell_text = tools["tell"].description.lower()
+        assert "unthreaded" in tell_text
+        assert "queued" in tell_text or "processed" in tell_text
+        history_text = tools["get_history"].description.lower()
+        assert "next_before" in history_text
+        assert "parent_id" in history_text
+        find_text = tools["find"].description.lower()
+        assert "candidate" in find_text
+        assert "get_profiles" in find_text
+        for name, tool in tools.items():
+            advertised = "\n".join(
+                [tool.description or "", *_description_texts(_listed_schema(tool))]
+            )
+            for jargon in ("TicketView", "TellView", "HistoryView"):
+                assert jargon not in advertised, (name, jargon)
+    finally:
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_extra_tool_listed_schema_matches_sdk_callable():
     team = await Team("content-squad", tools=[annotate, ping]).start()
     mcp = create_team_mcp(team)
     try:
         async with Client(mcp) as client:
             tools = {item.name: item for item in (await client.list_tools()).tools}
-            open_schema = _listed_schema(tools["annotate"])
-            assert open_schema.get("additionalProperties") is not False
-            closed_schema = _listed_schema(tools["ping"])
-            assert closed_schema.get("additionalProperties") is False
+            assert (
+                _listed_schema(tools["ping"]) == SdkTool.from_function(ping).parameters
+            )
+            assert (
+                _listed_schema(tools["annotate"])
+                == SdkTool.from_function(annotate).parameters
+            )
             kind, result = await _invoke(client, "ping", {})
             assert kind == "ok"
             assert _body(result).get("status") == "ok"
-            kind, _ = await _invoke(client, "ping", {"extra": True})
-            assert kind == "invalid_params"
-            assert not _schema_accepts(closed_schema, {"extra": True})
     finally:
         await team.stop()

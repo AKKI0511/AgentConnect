@@ -49,7 +49,7 @@ uvx ruff@latest format --check agentconnect tests examples benchmarks docs/gener
 Replace `tests/` with a file or directory for focused checks. Redis setup and
 lockfile refresh commands are in [CONTRIBUTING.md](CONTRIBUTING.md). Dependency,
 extra, or group changes must include all affected CI-checked locks: the root,
-`examples/quickstart`, and `examples/recipes`.
+`examples/quickstart`, `examples/recipes`, and `examples/tool_experience`.
 
 Performance lives under `benchmarks/runtime/` and runs separately from ordinary
 CI. [Runtime benchmarks](benchmarks/runtime/README.md) explains the commands,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agentconnect.core.team_tools import RESERVED_TEAM_TOOL_NAMES
+
 DEFAULT_MAX_MESSAGE_BYTES = 1_048_576
 DEFAULT_MAX_MAILBOX_DEPTH = 1000
 DEFAULT_DELIVERY_HISTORY_LIMIT = 50
@@ -57,6 +59,4 @@ TICKET_TERMINAL = frozenset({"completed", "failed", "expired", "declined"})
 
 # Reserved for the loopback operator Membership (CLI and MCP).
 OPERATOR_NAME = "operator"
-RESERVED_MCP_TOOL_NAMES = frozenset(
-    {"find", "ask", "tell", "get_result", "get_history", "get_profile"}
-)
+RESERVED_MCP_TOOL_NAMES = RESERVED_TEAM_TOOL_NAMES

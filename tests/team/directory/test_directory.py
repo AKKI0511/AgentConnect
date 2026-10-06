@@ -102,17 +102,17 @@ async def test_find_omitted_limit_returns_every_other_member():
 
 
 @pytest.mark.asyncio
-async def test_find_detail_full_includes_profile_and_did(team: Team):
+async def test_find_stays_light_and_get_profile_returns_did(team: Team):
     await join_member(team, "writer", profile=_writer())
     caller = await join_member(team, "researcher")
-    found = await team.find(caller["session_token"], "draft notes", detail="full")
+    found = await team.find(caller["session_token"], "draft notes")
     match = found["matches"][0]
-    assert match["agent_did"]
-    assert match["profile"]["skills"][0]["name"] == "drafting"
-    summary = await team.find(caller["session_token"], "draft notes")
-    assert "agent_did" not in summary["matches"][0]
-    assert "profile" not in summary["matches"][0]
-    assert "ranking" not in summary
+    assert "agent_did" not in match
+    assert "profile" not in match
+    assert "ranking" not in found
+    entry = await team.get_profile(caller["session_token"], "writer")
+    assert entry["agent_did"]
+    assert entry["profile"]["skills"][0]["name"] == "drafting"
 
 
 @pytest.mark.asyncio
@@ -357,7 +357,6 @@ async def test_find_rebuilds_when_custom_spaces_differ():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert "ranking" not in found
     assert found.matches[0].address == "reviewer@content-squad"
@@ -383,7 +382,6 @@ async def test_find_ignores_malformed_stored_vectors():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert found.matches[0].address == "reviewer@content-squad"
 
@@ -450,7 +448,6 @@ async def test_find_batches_vector_reads():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert len(found.matches) == 8
     assert many_calls["n"] == 1
@@ -473,7 +470,6 @@ async def test_sync_embed_does_not_block_event_loop():
             members,
             exclude_address="researcher@content-squad",
             limit=None,
-            detail="summary",
         )
     )
     await asyncio.sleep(0)
@@ -537,9 +533,9 @@ async def test_light_card_uses_profile_tags_not_skill_tags(team: Team):
     light = await team.find(caller["session_token"], "verify a contract")
     match = light["matches"][0]
     assert match["tags"] == ["legal", "contracts"]
-    full = await team.find(caller["session_token"], "verify a contract", detail="full")
-    assert full["matches"][0]["profile"]["skills"][0]["tags"] == ["msa"]
+    assert "profile" not in match
     entry = await team.get_profile(caller["session_token"], "reviewer")
+    assert entry["profile"]["skills"][0]["tags"] == ["msa"]
     assert entry["profile"]["description"].startswith("Use for MSAs")
 
 
@@ -606,7 +602,6 @@ async def test_blocked_embedder_does_not_monopolize_other_directory():
         [_member("writer", _writer())],
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert found.matches[0].address == "writer@content-squad"
     assert not first.using_fallback
@@ -638,7 +633,6 @@ async def test_store_failure_does_not_activate_hashed_fallback():
             members,
             exclude_address="researcher@content-squad",
             limit=None,
-            detail="summary",
         )
     assert not directory.using_fallback
     assert directory.backend_name == "custom"
@@ -648,7 +642,6 @@ async def test_store_failure_does_not_activate_hashed_fallback():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert "ranking" not in found
     assert found.matches[0].address == "reviewer@content-squad"
@@ -679,7 +672,6 @@ async def test_embed_fn_sync_async_and_awaitable_results():
                 members,
                 exclude_address="researcher@content-squad",
                 limit=None,
-                detail="summary",
             )
             assert "ranking" not in found
             assert found.matches[0].address == "writer@content-squad"
@@ -846,7 +838,6 @@ async def test_hashed_rebuild_keeps_event_loop_responsive():
             members,
             exclude_address="researcher@content-squad",
             limit=None,
-            detail="summary",
         ),
         members=12,
         rebuild=True,
@@ -873,7 +864,6 @@ async def test_warm_ranking_keeps_event_loop_responsive():
         members[:8],
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     found, delays = await probe_during(
         directory.search(
@@ -881,7 +871,6 @@ async def test_warm_ranking_keeps_event_loop_responsive():
             members,
             exclude_address="researcher@content-squad",
             limit=None,
-            detail="summary",
         ),
         members=400,
     )
@@ -966,7 +955,6 @@ async def test_bounded_inputs_keep_later_skills_and_avoid_provider_errors():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert embedder.oversize == 0
     assert found.matches[0].address == "salvage@content-squad"
@@ -994,7 +982,6 @@ async def test_old_space_without_representation_is_rebuilt():
         [_member("writer", _writer())],
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert found.matches[0].address == "writer@content-squad"
     assert calls["n"] > before
@@ -1041,7 +1028,6 @@ async def test_bge_later_skill_survives_long_profile():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     left = await store.get("dirvec:salvage")
     right = await store.get("dirvec:pedigree")
@@ -1176,7 +1162,6 @@ async def test_bge_token_dense_profile_keeps_later_skill():
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     left = await store.get("dirvec:salvage")
     right = await store.get("dirvec:pedigree")
@@ -1265,7 +1250,6 @@ async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert rejected["n"] == 0
     assert not directory.using_fallback
@@ -1339,7 +1323,6 @@ async def test_hosted_azure_litellm_respects_model_limit(monkeypatch):
         members,
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert rejected["n"] == 0
     assert not directory.using_fallback
@@ -1408,7 +1391,6 @@ async def test_previous_representation_cached_vector_is_rebuilt():
         [_member("writer", _writer())],
         exclude_address="researcher@content-squad",
         limit=None,
-        detail="summary",
     )
     assert found.matches[0].address == "writer@content-squad"
     fresh = await store.get("dirvec:writer")

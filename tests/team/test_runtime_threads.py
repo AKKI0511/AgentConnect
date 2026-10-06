@@ -55,13 +55,25 @@ async def test_delivery_history_window_and_paging(team: Team):
         page = await small.get_history(researcher["session_token"], thread_id, limit=2)
         assert [msg["content"] for msg in page["messages"]] == ["turn-3", "turn-4"]
         assert page["has_more"] is True
+        assert page["next_before"] == page["messages"][0]["id"]
         older = await small.get_history(
             researcher["session_token"],
             thread_id,
-            before=page["messages"][0]["id"],
+            before=page["next_before"],
             limit=2,
         )
         assert [msg["content"] for msg in older["messages"]] == ["turn-1", "turn-2"]
+        assert older["has_more"] is True
+        assert older["next_before"] == older["messages"][0]["id"]
+        oldest = await small.get_history(
+            researcher["session_token"],
+            thread_id,
+            before=older["next_before"],
+            limit=2,
+        )
+        assert [msg["content"] for msg in oldest["messages"]] == ["turn-0"]
+        assert oldest["has_more"] is False
+        assert oldest.get("next_before") is None
     finally:
         await small.stop()
 

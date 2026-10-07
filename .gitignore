@@ -200,6 +200,12 @@ data/
 # Project specific
 .cursor/
 .agents/
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/public-api-writing/
+!.agents/skills/public-api-writing/**
 .codex/
 .cursor-cache/
 .cursor-cache-v2/

@@ -163,7 +163,7 @@ async def test_call_tool_passes_advertised_names_as_keywords():
 
 
 @pytest.mark.asyncio
-async def test_team_tools_items_are_tools_and_include_get_profile():
+async def test_team_tools_items_are_tools_and_include_get_profiles():
     class Holder(BaseAgent):
         async def handle(self, message, ctx) -> Any:
             return None
@@ -177,7 +177,7 @@ async def test_team_tools_items_are_tools_and_include_get_profile():
         "tell",
         "get_result",
         "get_history",
-        "get_profile",
+        "get_profiles",
     ]
     for item in team_tools:
         assert isinstance(item, Tool)
@@ -261,7 +261,7 @@ async def test_aiagent_complete_advertises_team_tools_and_custom_override():
             "tell",
             "get_result",
             "get_history",
-            "get_profile",
+            "get_profiles",
             "search_docs",
         ]
         find_schema = next(
@@ -339,8 +339,9 @@ async def test_completed_ask_tool_result_is_ticket_view():
         )
         assert ticket["state"] == "completed"
         assert "ticket_id" in ticket
-        assert "ttl_ms" in ticket
-        assert ticket["status_message"] == "Completed."
+        assert "ttl_ms" not in ticket
+        assert "status_message" not in ticket
+        assert "deadline" not in ticket
         assert ticket["content"] == {"echo": "draft this"}
         bookkeeping = {
             "id",
@@ -355,8 +356,7 @@ async def test_completed_ask_tool_result_is_ticket_view():
             "seq",
         }
         assert bookkeeping.isdisjoint(ticket.keys())
-        assert isinstance(ticket["ttl_ms"], int)
-        assert ticket["ttl_ms"] >= 0
+        assert isinstance(ticket["ticket_id"], str)
     finally:
         await researcher.leave()
         await writer.leave()
@@ -364,7 +364,7 @@ async def test_completed_ask_tool_result_is_ticket_view():
 
 
 @pytest.mark.asyncio
-async def test_get_profile_returns_one_full_entry_while_find_summary_stays_light():
+async def test_get_profiles_returns_selected_profiles_while_find_summary_stays_light():
     class Writer(BaseAgent):
         profile = {
             "summary": "Writes short drafts from notes.",
@@ -403,11 +403,14 @@ async def test_get_profile_returns_one_full_entry_while_find_summary_stays_light
         assert "profile" not in match
         assert "agent_did" not in match
         assert "description" not in match
-        entry = await researcher.tools.get_profile(address="writer")
+        found_profiles = await researcher.tools.get_profiles(addresses=["writer"])
+        assert len(found_profiles["items"]) == 1
+        entry = found_profiles["items"][0]
+        assert entry["status"] == "ok"
         assert entry["address"].startswith("writer@")
         assert entry["profile"]["description"].startswith("Longer drafting")
         assert entry["profile"]["skills"][0]["tags"] == ["writing"]
-        assert "agent_did" in entry
+        assert "agent_did" not in entry
     finally:
         await researcher.leave()
         await writer.leave()

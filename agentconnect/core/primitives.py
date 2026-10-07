@@ -135,7 +135,6 @@ TraceEventType = Literal[
     "replied",
     "ticket_closed",
 ]
-FindDetail = Literal["summary", "full"]
 ReplyOutcome = Literal["completed", "failed"]
 SendStatus = Literal["accepted", "ticketed"]
 ERROR_CODES: tuple[str, ...] = get_args(ErrorCode)

@@ -301,9 +301,9 @@ class Team:
                 ``(list[str]) -> list[list[float]]`` to supply your own
                 embeddings. A failed backend is not mixed with leftover
                 vectors; ``find`` rebuilds one space.
-            tools: Extra MCP tools this Team serves beside find, ask, tell,
-                get_result, and get_history. Each item is a callable whose
-                ``__name__`` is the tool name. Those five names are reserved.
+            tools: Extra MCP tools this Team serves beside the reserved Team
+                tools. Each item is a callable whose ``__name__`` is the tool
+                name. Reserved and duplicate names are rejected.
         """
         team_name = parse_team_name(name)
         if team_name is None:
@@ -351,10 +351,14 @@ class Team:
             raise ValueError(str(exc)) from exc
         extras = list(tools or [])
         reserved = RESERVED_MCP_TOOL_NAMES
+        seen: set[str] = set()
         for fn in extras:
             name = getattr(fn, "__name__", "")
             if name in reserved:
                 raise ValueError(f"tool name {name!r} is reserved")
+            if name in seen:
+                raise ValueError(f"tool name {name!r} is already registered")
+            seen.add(name)
         self._extra_tools = extras
         self._operator_token: Optional[str] = None
         self._mcp: Any = None
@@ -2604,12 +2608,11 @@ class Team:
         page_ids, has_more = threads_mod.page_history_ids(ids, before=before, limit=n)
         records = await store.get_many([f"msg:{item}" for item in page_ids])
         page = [item for item in records if isinstance(item, dict)]
+        body: dict[str, Any] = {"messages": page, "has_more": has_more}
+        if has_more and page:
+            body["next_before"] = str(page[0]["id"])
         try:
-            return parse_history_result(
-                projection_mod.public_history_result(
-                    {"messages": page, "has_more": has_more}
-                )
-            )
+            return parse_history_result(projection_mod.public_history_result(body))
         except ValueError as exc:
             _fail("internal", str(exc))
 
@@ -2619,12 +2622,11 @@ class Team:
         query: str,
         *,
         limit: int | None = None,
-        detail: str = "summary",
     ) -> dict[str, Any]:
         """Search this Team's Directory. The caller is excluded from results.
 
         Omit ``limit`` to receive every other member, ordered by relevance,
-        at most 100. Pass ``detail="full"`` to include each Profile.
+        at most 100.
 
             found = await team.find(token, "someone who can review a contract")
             found["matches"][0]["address"]
@@ -2648,8 +2650,6 @@ class Team:
                     "invalid_request",
                     f"limit must be between 1 and {MAX_FIND_LIMIT}",
                 )
-        if detail not in {"summary", "full"}:
-            _fail("invalid_request", "detail must be summary or full")
         store = self._ensure_started()
         names = await store.set_members("members")
         records = await store.get_many([f"member:{name}" for name in names])
@@ -2668,7 +2668,6 @@ class Team:
                 members,
                 exclude_address=exclude,
                 limit=cap,
-                detail=detail,
             )
         except TeamError:
             raise

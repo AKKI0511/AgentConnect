@@ -7,7 +7,7 @@ from typing import Any
 import jsonschema
 
 from agentconnect.core.base import parse_schema, public_json_schema
-from agentconnect.core.directory import FindRequest
+from agentconnect.core.directory import FindRequest, GetProfilesRequest
 from agentconnect.core.operations import (
     AskToolRequest,
     GetHistoryRequest,
@@ -51,7 +51,7 @@ def test_find_public_schema_matches_parse_boundary():
     cases = [
         ({"query": "someone who can draft a summary"}, True),
         ({"query": "someone who can draft a summary", "limit": 5}, True),
-        ({"query": "someone who can draft a summary", "detail": "full"}, True),
+        ({"query": "someone who can draft a summary", "detail": "full"}, False),
         ({"query": "someone who can draft a summary", "limit": None}, False),
         ({"query": "someone who can draft a summary", "limit": 101}, False),
         ({"query": "someone who can draft a summary", "limit": 0}, False),
@@ -116,3 +116,19 @@ def test_tell_get_result_and_history_public_schemas():
     assert not _accepts(history, {**history_ok, "before": None})
     assert not _parse_ok(GetHistoryRequest, {**history_ok, "limit": 201})
     assert history["properties"]["limit"].get("maximum") == 200
+
+
+def test_get_profiles_public_schema_bounds_and_duplicates():
+    schema = public_json_schema(GetProfilesRequest)
+    assert schema.get("required") == ["addresses"]
+    assert schema["properties"]["addresses"].get("minItems") == 1
+    assert schema["properties"]["addresses"].get("maxItems") == 20
+    assert _accepts(schema, {"addresses": ["writer"]})
+    assert _parse_ok(GetProfilesRequest, {"addresses": ["writer"]})
+    assert _accepts(schema, {"addresses": ["writer", "writer"]})
+    assert not _accepts(schema, {"addresses": []})
+    assert not _parse_ok(GetProfilesRequest, {"addresses": []})
+    assert not _accepts(schema, {"addresses": [f"peer{i}" for i in range(21)]})
+    assert not _accepts(schema, {"address": "writer"})
+    parsed = parse_schema(GetProfilesRequest, {"addresses": ["writer", "writer"]})
+    assert parsed.unique_requested() == ["writer"]

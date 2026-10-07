@@ -161,7 +161,7 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
                 "tell",
                 "get_result",
                 "get_history",
-                "get_profile",
+                "get_profiles",
                 "ping",
             }
 
@@ -200,6 +200,29 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
                 await client.call_tool("get_history", {"thread_id": thread_id})
             )
             assert history["messages"]
+            first_turn = history["messages"][0]
+            assert "sender_did" not in first_turn
+            assert "trace_id" not in first_turn
+            replies = [
+                turn for turn in history["messages"] if turn["kind"] == "response"
+            ]
+            requests = [
+                turn for turn in history["messages"] if turn["kind"] == "request"
+            ]
+            assert replies
+            assert all(turn["parent_id"] == ticket_id for turn in replies)
+            assert all("parent_id" not in turn for turn in requests)
+            assert first_turn["kind"] in {"request", "response", "event", "error"}
+
+            profiles = _body(
+                await client.call_tool(
+                    "get_profiles",
+                    {"addresses": [recipient, "missing-agent", recipient]},
+                )
+            )
+            assert [item["status"] for item in profiles["items"]] == ["ok", "error"]
+            assert profiles["items"][0]["address"].startswith("writer@")
+            assert profiles["items"][1]["error"]["code"] == "not_found"
 
             told = _body(
                 await client.call_tool(
@@ -207,6 +230,8 @@ async def test_in_memory_tools_find_ask_tell_result_history_and_roster():
                 )
             )
             assert told["status"] == "accepted"
+            assert "message" not in told
+            assert "sender_did" not in told
 
             roster = await client.read_resource("agentconnect://team/roster")
             body = json.loads(roster.contents[0].text)
@@ -284,7 +309,9 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
             assert one["ticket_id"] == two["ticket_id"]
             assert one["thread_id"] == two["thread_id"]
             assert two_later["ticket_id"] == one["ticket_id"]
-            assert two_later["deadline"] == one["deadline"]
+            assert "deadline" not in one
+            assert "ttl_ms" not in one
+            assert "status_message" not in one
 
             conflict = await client.call_tool(
                 "ask",
@@ -297,6 +324,11 @@ async def test_identical_asks_open_two_tickets_unless_keyed():
             )
             error = _error(conflict)
             assert error["code"] == "id_conflict"
+            assert "idempotency_key" in error["message"]
+            texts = " ".join(
+                getattr(item, "text", "") or "" for item in conflict.content or []
+            )
+            assert "idempotency_key" in texts
     finally:
         await writer.leave()
         await team.stop()
@@ -320,6 +352,7 @@ async def test_keyed_tell_conflict_is_not_success():
                     },
                 )
             )
+            assert first["status"] == "accepted"
             again = _body(
                 await client.call_tool(
                     "tell",
@@ -331,8 +364,7 @@ async def test_keyed_tell_conflict_is_not_success():
                 )
             )
             assert again["status"] == "accepted"
-            assert again["message"]["id"] == first["message"]["id"]
-            assert again["message"]["sender_did"] == first["message"]["sender_did"]
+            assert "message" not in again
             conflict = await client.call_tool(
                 "tell",
                 {
@@ -343,6 +375,7 @@ async def test_keyed_tell_conflict_is_not_success():
             )
             error = _error(conflict)
             assert error["code"] == "id_conflict"
+            assert "idempotency_key" in error["message"]
     finally:
         await writer.leave()
         await team.stop()
@@ -395,6 +428,12 @@ async def test_runtime_error_is_tool_error():
             )
             error = _error(result)
             assert error["code"] == "not_found"
+            assert result.structured_content is not None
+            assert result.structured_content["error"]["code"] == "not_found"
+            texts = [getattr(item, "text", "") or "" for item in result.content or []]
+            blob = " ".join(texts)
+            assert "not_found" in blob
+            assert '{"error"' not in blob
     finally:
         await team.stop()
 
@@ -495,14 +534,17 @@ async def test_raw_find_arguments_rejected_before_coercion():
 
 
 @pytest.mark.asyncio
-async def test_extra_tool_rejects_undeclared_arguments():
-    team = await Team("content-squad", tools=[ping]).start()
+async def test_extra_tool_rejects_invalid_arguments():
+    def counted(count: int) -> dict[str, int]:
+        return {"count": count}
+
+    team = await Team("content-squad", tools=[ping, counted]).start()
     mcp = create_team_mcp(team)
     try:
         async with Client(mcp) as client:
             failed = False
             try:
-                result = await client.call_tool("ping", {"extra": True})
+                result = await client.call_tool("counted", {"count": "oops"})
             except* MCPError:
                 failed = True
             else:

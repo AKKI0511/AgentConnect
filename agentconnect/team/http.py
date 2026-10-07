@@ -271,7 +271,6 @@ def create_runtime_app(team: Team) -> FastAPI:
             token,
             parsed.query,
             limit=parsed.limit,
-            detail=parsed.detail,
         )
         return _json(result)
 

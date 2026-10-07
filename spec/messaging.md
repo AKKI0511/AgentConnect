@@ -200,7 +200,7 @@ A Client maps a handler outcome according to the delivered Message:
 | request raises a safe error | `reply` with `outcome=failed` | `failed` |
 | event finishes | `complete` | no Ticket exists |
 
-Declining is a first-class, benign outcome. A recipient may read a request and choose not to answer, the way a person ignores a message that does not warrant a reply. The Ticket becomes `declined`, which is explicit to the requester and is not a failure. A Client declines by calling `complete` on a request Delivery, so an SDK that maps a handler returning nothing to `complete` produces `declined`. To answer with deliberately empty content instead, the Client replies with `outcome=completed` and `content=null`.
+Declining is a first-class, benign outcome. A recipient may read a request and choose not to answer, the way a person ignores a message that does not warrant a reply. The Ticket becomes `declined`, which is explicit to the requester and is not a failure. A Client declines by calling `complete` on a request Delivery, so an SDK that maps a handler returning nothing to `complete` produces `declined`. This draft does not carry a decline reason. A recipient that wants the requester to see why SHOULD reply with that explanation or fail with a safe message. To answer with deliberately empty content instead, the Client replies with `outcome=completed` and `content=null`.
 
 A handler failure becomes an `ErrorObject` with `code=handler_failed`. The default Client mapping MUST use a short generic message. It MUST NOT copy an exception string, stack trace, or secret into the requester's Ticket. Diagnostic text MAY be written to a local log. An Agent that wants the requester to see a specific phrase uses an explicit fail with that phrase. An Agent application failure code belongs in that object's `details`, not in `code`.
 
@@ -345,7 +345,7 @@ This keeps every Delivery bounded no matter how long a Thread grows.
 
 ### Reading older history
 
-`get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `seq` ascending, and `has_more` states whether older retained Messages remain. Only a Membership in the Thread's participant set may read its history; a non-participant, including a replacement that reuses a participant Address, receives `not_found`.
+`get_history` pages the retained Thread transcript. A participant reads a page of Messages older than a cursor, ordered by `seq` ascending, and `has_more` states whether older retained Messages remain. When `has_more` is true, `next_before` is the Message id to pass as the next `before`; it equals the first Message id on this page. When `has_more` is false, `next_before` is omitted. Only a Membership in the Thread's participant set may read its history; a non-participant, including a replacement that reuses a participant Address, receives `not_found`.
 
 `before` is a Message id. Omit it to read the newest page.
 
@@ -406,6 +406,8 @@ These vectors are normative summaries. An implementation test may express them i
 | Thread longer than the window | Delivery `history_complete=false`; `get_history` pages the remainder |
 | Thread window exceeds `max_message_bytes` | Delivery `history` truncated by size; `history_complete=false` |
 | `get_history` for a non-participant | `not_found`; no history revealed |
+| `get_history` page with `has_more` true | `next_before` equals the first Message id on that page |
+| `get_history` page with `has_more` false | `next_before` omitted |
 | `get_history` `before` a well-formed UUID not in the retained transcript | newest page; same shape as omitting `before` |
 | `get_history` `before` a non-UUID | `invalid_request` |
 | open Ticket whose deadline has not passed | `get_result` returns the Ticket after `replay_horizon_seconds` would have elapsed |

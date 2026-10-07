@@ -19,9 +19,11 @@ from agentconnect.core.directory import DirectoryEntry, FindRequest
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.message import (
     Delivery,
+    ErrorMessage,
     EventMessage,
     Message,
     RequestMessage,
+    ResponseMessage,
     parse_delivery,
     parse_message,
 )
@@ -46,6 +48,7 @@ from agentconnect.core.ticket import (
     DeclinedTicket,
     FailedTicket,
     Ticket,
+    TicketViewError,
     parse_ticket,
 )
 
@@ -60,6 +63,7 @@ __all__ = [
     "EventSendRequest",
     "SendRequest",
     "AcceptedSendResult",
+    "TellView",
     "TicketedSendResult",
     "SendResult",
     "LeaseRequest",
@@ -76,6 +80,13 @@ __all__ = [
     "GetResultRequest",
     "GetHistoryRequest",
     "HistoryResult",
+    "HistoryTurnBase",
+    "HistoryRequestTurn",
+    "HistoryEventTurn",
+    "HistoryResponseTurn",
+    "HistoryErrorTurn",
+    "HistoryTurn",
+    "HistoryView",
     "AskToolRequest",
     "TellToolRequest",
     "TeamRoster",
@@ -101,6 +112,8 @@ __all__ = [
     "parse_complete_request",
     "parse_history_result",
     "parse_find_request",
+    "tell_view",
+    "history_view",
     "parse_issue_join_token_request",
     "parse_revoke_join_token_request",
 ]
@@ -241,6 +254,17 @@ class AcceptedSendResult(SchemaModel):
     message: EventMessage
 
 
+class TellView(SchemaModel):
+    """Model-facing ``tell`` result.
+
+    ``status: accepted`` means the Runtime queued the event, not that
+    the recipient finished processing. No Ticket is created.
+    """
+
+    status: Literal["accepted"]
+    thread_id: Optional[Uuid] = None
+
+
 class TicketedSendResult(SchemaModel):
     """Result for a request.
 
@@ -347,54 +371,214 @@ class ReplyResult(SchemaModel):
 
 
 class GetResultRequest(SchemaModel):
-    """Ticket lookup used by non-HTTP bindings."""
+    """Collect the current saved request result."""
 
-    ticket_id: Uuid
+    ticket_id: Uuid = Field(
+        description=(
+            "ticket_id from ask, equal to the request Message id. Repeat "
+            "while state is open. Ending a wait does not cancel work."
+        )
+    )
 
 
 class GetHistoryRequest(SchemaModel):
-    """Thread history lookup."""
+    """Thread history lookup.
 
-    thread_id: Uuid
-    before: Optional[Uuid] = None
-    limit: Optional[JsonInt] = Field(default=None, ge=1, le=200)
+    Pages are newest-first, but Messages inside a page are oldest to
+    newest by ``seq``. Pass ``next_before`` from the previous page as
+    ``before``. Stop when ``has_more`` is false.
+    """
+
+    thread_id: Uuid = Field(
+        description=(
+            "Conversation id from a saved request result or Message. Only a "
+            "participant may read it."
+        )
+    )
+    before: Optional[Uuid] = Field(
+        default=None,
+        description=(
+            "Return Messages older than this id. Omit for the newest page. "
+            "Prefer next_before from the previous page over picking an id."
+        ),
+    )
+    limit: Optional[JsonInt] = Field(
+        default=None,
+        ge=1,
+        le=200,
+        description="Page size from 1 to 200. Defaults to 50.",
+    )
 
 
 class HistoryResult(SchemaModel):
-    """One page of retained Thread history, ordered by ``seq`` ascending."""
+    """One page of retained Thread history.
+
+    ``messages`` are ordered by ``seq`` ascending. The newest page is
+    returned first. When ``has_more`` is true, pass ``next_before`` as
+    the next ``before``.
+    """
 
     messages: list[Message]
     has_more: bool
+    next_before: Optional[Uuid] = None
+
+
+class HistoryTurnBase(SchemaModel):
+    """Fields shared by every model-facing history turn."""
+
+    id: Uuid
+    seq: JsonInt = Field(ge=1)
+    sender: QualifiedAddress
+    created_at: Timestamp
+
+
+class HistoryRequestTurn(HistoryTurnBase):
+    """Request turn on a model-facing history page."""
+
+    kind: Literal["request"]
+    content: JsonValue
+
+
+class HistoryEventTurn(HistoryTurnBase):
+    """Event turn on a model-facing history page."""
+
+    kind: Literal["event"]
+    content: JsonValue
+
+
+class HistoryResponseTurn(HistoryTurnBase):
+    """Successful reply turn on a model-facing history page.
+
+    ``parent_id`` is the request Message id this reply answers, the same
+    value as that ask's ``ticket_id``.
+    """
+
+    kind: Literal["response"]
+    parent_id: Uuid
+    content: JsonValue
+
+
+class HistoryErrorTurn(HistoryTurnBase):
+    """Failed reply turn on a model-facing history page.
+
+    ``parent_id`` is the request Message id this error answers, the same
+    value as that ask's ``ticket_id``.
+    """
+
+    kind: Literal["error"]
+    parent_id: Uuid
+    error: TicketViewError
+
+
+HistoryTurn = Annotated[
+    Union[
+        HistoryRequestTurn,
+        HistoryEventTurn,
+        HistoryResponseTurn,
+        HistoryErrorTurn,
+    ],
+    Field(discriminator="kind"),
+]
+
+
+class HistoryView(SchemaModel):
+    """Model-facing Thread history page. Same paging as ``HistoryResult``."""
+
+    messages: list[HistoryTurn]
+    has_more: bool
+    next_before: Optional[Uuid] = None
 
 
 class AskToolRequest(SchemaModel):
-    """MCP ``ask`` arguments.
+    """Send work that needs a reply.
 
-    Omit ``idempotency_key`` to mint a fresh Message id. Pass a key only
-    when a retry must collapse onto the same Ticket. ``collect`` is
-    ``wait`` (default) or ``ticket``. ``wait`` returns the current Ticket
-    after the Runtime hold, which may still be ``open``.
+    Returns the saved request result. ``collect=wait`` (default) may
+    still return ``open``; call ``get_result`` with ``ticket_id``. A
+    Thread is fixed to its original participants; another peer is
+    ``forbidden``.
     """
 
-    recipient: Address
-    content: JsonValue
-    deadline_seconds: Optional[JsonInt] = Field(default=None, ge=1, le=86400)
-    collect: CollectMode = "wait"
-    thread_id: Optional[Uuid] = None
-    idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    recipient: Address = Field(
+        description="Local or same-Team qualified Address, for example writer."
+    )
+    content: JsonValue = Field(description="The work, as text or JSON.")
+    deadline_seconds: Optional[JsonInt] = Field(
+        default=None,
+        ge=1,
+        le=86400,
+        description=(
+            "Work cutoff in seconds (1–86400). Omit to inherit a request "
+            "parent or the Runtime work lifetime. This is not how long ask waits."
+        ),
+    )
+    collect: CollectMode = Field(
+        default="wait",
+        description=(
+            "How long this ask call waits. wait (default) holds until the "
+            "Ticket is terminal or the Runtime wait hold ends, then returns "
+            "the current saved request result, which may still be open. "
+            "ticket returns immediately. Neither cancels work. While open, "
+            "call get_result; do not send a second ask."
+        ),
+    )
+    thread_id: Optional[Uuid] = Field(
+        default=None,
+        description=(
+            "Continue this conversation with the same recipient (a current "
+            "participant). Omit to start a conversation; that is the usual "
+            "path. A well-formed unused id also starts one. Another peer "
+            "cannot join an existing conversation (forbidden); omit "
+            "thread_id and put needed context in content."
+        ),
+    )
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description=(
+            "Stable key so a retry does not create a second request. Changing "
+            "recipient, content, collect, or a supplied thread_id under the "
+            "same key fails with id_conflict. Retry identical arguments, or "
+            "use a new key only for new work; do not drop the key after an "
+            "uncertain accept."
+        ),
+    )
 
 
 class TellToolRequest(SchemaModel):
-    """MCP ``tell`` arguments.
+    """Send work that does not need a reply.
 
-    Omit ``idempotency_key`` to mint a fresh Message id. Pass a key only
-    when a retry must collapse onto the same event.
+    No Ticket is created. Prefer ask when you need an answer. A Thread
+    is fixed to its original participants; another peer is ``forbidden``.
+    Omit ``thread_id`` for an unthreaded notice; that is the usual path.
     """
 
-    recipient: Address
-    content: JsonValue
-    thread_id: Optional[Uuid] = None
-    idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    recipient: Address = Field(
+        description="Local or same-Team qualified Address, for example writer."
+    )
+    content: JsonValue = Field(
+        description="The notice or event, as text or JSON. No Ticket is created."
+    )
+    thread_id: Optional[Uuid] = Field(
+        default=None,
+        description=(
+            "Continue this conversation only with a current participant. "
+            "Omit for an unthreaded notice; that is the usual path. Another "
+            "peer cannot join an existing conversation (forbidden); omit "
+            "thread_id and put context in content."
+        ),
+    )
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description=(
+            "Stable key so a retry does not create a second send. Changing "
+            "recipient, content, or thread_id under the same key fails with "
+            "id_conflict. Retry identical arguments, or use a new key only "
+            "for new work; do not drop the key after an uncertain accept."
+        ),
+    )
 
 
 class TeamRoster(SchemaModel):
@@ -506,7 +690,11 @@ class RuntimeEvent(SchemaModel):
 
 
 class ToolErrorResult(SchemaModel):
-    """Structured result used when an MCP tool reaches a Runtime failure."""
+    """Structured MCP tool result when a Runtime operation fails.
+
+    The MCP error flag is set. ``error`` is the unchanged Runtime
+    ``ErrorObject``. Readable text is ``code: message``.
+    """
 
     error: ErrorObject
 
@@ -633,12 +821,73 @@ def parse_history_result(data: Any) -> HistoryResult:
     messages = data.get("messages") or []
     if not isinstance(messages, list):
         raise ValueError("messages must be an array")
+    body: dict[str, Any] = {
+        "messages": [parse_message(item) for item in messages],
+        "has_more": data.get("has_more"),
+    }
+    next_before = data.get("next_before")
+    if next_before is not None:
+        body["next_before"] = next_before
     try:
-        return HistoryResult.model_validate(
-            {
-                "messages": [parse_message(item) for item in messages],
-                "has_more": data.get("has_more"),
-            }
-        )
+        return HistoryResult.model_validate(body)
     except ValidationError as exc:
         raise ValueError(validation_message(exc)) from exc
+
+
+def tell_view(result: AcceptedSendResult) -> TellView:
+    """Project an accepted event send into the model-facing TellView."""
+    if result.message.thread_id is None:
+        return TellView(status="accepted")
+    return TellView(status="accepted", thread_id=result.message.thread_id)
+
+
+def history_view(result: HistoryResult) -> HistoryView:
+    """Project wire history Messages into the model-facing HistoryView."""
+    body: dict[str, Any] = {
+        "messages": [_history_turn(message) for message in result.messages],
+        "has_more": result.has_more,
+    }
+    if result.next_before is not None:
+        body["next_before"] = result.next_before
+    return HistoryView.model_validate(body)
+
+
+def _history_turn(message: Message) -> HistoryTurn:
+    if message.seq is None:
+        raise ValueError("history turns require seq")
+    base: dict[str, Any] = {
+        "id": message.id,
+        "seq": message.seq,
+        "sender": message.sender,
+        "created_at": message.created_at,
+    }
+    if isinstance(message, ErrorMessage):
+        return HistoryErrorTurn.model_validate(
+            {
+                **base,
+                "kind": "error",
+                "parent_id": message.parent_id,
+                "error": {
+                    "code": message.error.code,
+                    "message": message.error.message,
+                },
+            }
+        )
+    if isinstance(message, ResponseMessage):
+        return HistoryResponseTurn.model_validate(
+            {
+                **base,
+                "kind": "response",
+                "parent_id": message.parent_id,
+                "content": message.content,
+            }
+        )
+    return _HISTORY_CONTENT[message.kind].model_validate(
+        {**base, "kind": message.kind, "content": message.content}
+    )
+
+
+_HISTORY_CONTENT = {
+    "request": HistoryRequestTurn,
+    "event": HistoryEventTurn,
+}

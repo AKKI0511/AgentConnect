@@ -77,6 +77,9 @@
         "ticket_view_error": {
           "$ref": "#/definitions/TicketViewError"
         },
+        "ticket_view_base": {
+          "$ref": "#/definitions/TicketViewBase"
+        },
         "open_ticket_view": {
           "$ref": "#/definitions/OpenTicketView"
         },
@@ -100,6 +103,24 @@
         },
         "directory_match": {
           "$ref": "#/definitions/DirectoryMatch"
+        },
+        "profile_view": {
+          "$ref": "#/definitions/ProfileView"
+        },
+        "profile_found": {
+          "$ref": "#/definitions/ProfileFound"
+        },
+        "profile_miss": {
+          "$ref": "#/definitions/ProfileMiss"
+        },
+        "profile_item": {
+          "$ref": "#/definitions/ProfileItem"
+        },
+        "get_profiles_result": {
+          "$ref": "#/definitions/GetProfilesResult"
+        },
+        "tell_view": {
+          "$ref": "#/definitions/TellView"
         },
         "join_challenge": {
           "$ref": "#/definitions/JoinChallenge"
@@ -155,14 +176,35 @@
         "history_result": {
           "$ref": "#/definitions/HistoryResult"
         },
+        "history_turn_base": {
+          "$ref": "#/definitions/HistoryTurnBase"
+        },
+        "history_request_turn": {
+          "$ref": "#/definitions/HistoryRequestTurn"
+        },
+        "history_event_turn": {
+          "$ref": "#/definitions/HistoryEventTurn"
+        },
+        "history_response_turn": {
+          "$ref": "#/definitions/HistoryResponseTurn"
+        },
+        "history_error_turn": {
+          "$ref": "#/definitions/HistoryErrorTurn"
+        },
+        "history_turn": {
+          "$ref": "#/definitions/HistoryTurn"
+        },
+        "history_view": {
+          "$ref": "#/definitions/HistoryView"
+        },
         "find_request": {
           "$ref": "#/definitions/FindRequest"
         },
         "find_result": {
           "$ref": "#/definitions/FindResult"
         },
-        "get_profile_request": {
-          "$ref": "#/definitions/GetProfileRequest"
+        "get_profiles_request": {
+          "$ref": "#/definitions/GetProfilesRequest"
         },
         "ask_tool_request": {
           "$ref": "#/definitions/AskToolRequest"
@@ -350,7 +392,7 @@
         },
         "description": {
           "type": "string",
-          "description": "Longer optional explanation of suitable work and boundaries. Present on the full Profile (`get_profile` or `detail=full`), not on the light card.",
+          "description": "Longer optional explanation of suitable work and boundaries. Present on the full Profile from `get_profiles`, not on the light `find` card.",
           "minLength": 1,
           "maxLength": 2000,
           "pattern": "\\S"
@@ -1328,6 +1370,24 @@
       "additionalProperties": false,
       "description": "Lean failure on a model-facing Ticket view. Code and message only; no details, retryable flag, or Message envelope."
     },
+    "TicketViewBase": {
+      "type": "object",
+      "properties": {
+        "ticket_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id. The only id on this view."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Thread the request belongs to, when it has one. Reuse this with the same recipient."
+        }
+      },
+      "required": [
+        "ticket_id"
+      ],
+      "additionalProperties": false,
+      "description": "Fields shared by every model-facing Ticket view. MCP `ask` / `get_result` and Session-bound Team tools return this projection, not the wire Ticket. Runtime, HTTP, and Client `ask` / `get_result` still return the wire Ticket. Branch on `state`. Timing is not proof of state."
+    },
     "OpenTicketView": {
       "type": "object",
       "properties": {
@@ -1335,33 +1395,27 @@
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id. The only id on this view."
         },
-        "deadline": {
-          "$ref": "#/definitions/Timestamp",
-          "description": "Absolute time after which an open Ticket expires."
-        },
-        "ttl_ms": {
-          "type": "number",
-          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
-          "minimum": 0,
-          "multipleOf": 1
-        },
-        "status_message": {
-          "type": "string",
-          "description": "Short status text present on every state."
-        },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one."
+          "description": "Thread the request belongs to, when it has one. Reuse this with the same recipient."
         },
         "state": {
           "type": "string",
           "const": "open",
-          "description": "Ticket still waiting for its first accepted outcome."
+          "description": "Ticket still waiting for its first accepted outcome. Keep `ticket_id` and call `get_result`."
+        },
+        "deadline": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "Absolute work cutoff stamped at acceptance. Not an ETA, not a wait bound, and not proof of `state`."
         },
         "poll_interval_ms": {
           "type": "number",
           "const": 1000,
-          "description": "Hint for how often a model may poll `get_result`. Not a Runtime wait or lease change."
+          "description": "Hint for how often to call `get_result` while `state` is open. Not a wait bound, work duration, or lease change. Do not send a new ask to collect."
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Next action while open: keep `ticket_id` and call `get_result`; do not send a new ask."
         }
       },
       "required": [
@@ -1369,8 +1423,7 @@
         "poll_interval_ms",
         "state",
         "status_message",
-        "ticket_id",
-        "ttl_ms"
+        "ticket_id"
       ],
       "additionalProperties": false,
       "description": "Model-facing view of an open Ticket."
@@ -1382,23 +1435,9 @@
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id. The only id on this view."
         },
-        "deadline": {
-          "$ref": "#/definitions/Timestamp",
-          "description": "Absolute time after which an open Ticket expires."
-        },
-        "ttl_ms": {
-          "type": "number",
-          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
-          "minimum": 0,
-          "multipleOf": 1
-        },
-        "status_message": {
-          "type": "string",
-          "description": "Short status text present on every state."
-        },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one."
+          "description": "Thread the request belongs to, when it has one. Reuse this with the same recipient."
         },
         "state": {
           "type": "string",
@@ -1412,11 +1451,8 @@
       },
       "required": [
         "content",
-        "deadline",
         "state",
-        "status_message",
-        "ticket_id",
-        "ttl_ms"
+        "ticket_id"
       ],
       "additionalProperties": false,
       "description": "Model-facing view of a completed Ticket."
@@ -1428,23 +1464,9 @@
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id. The only id on this view."
         },
-        "deadline": {
-          "$ref": "#/definitions/Timestamp",
-          "description": "Absolute time after which an open Ticket expires."
-        },
-        "ttl_ms": {
-          "type": "number",
-          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
-          "minimum": 0,
-          "multipleOf": 1
-        },
-        "status_message": {
-          "type": "string",
-          "description": "Short status text present on every state."
-        },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one."
+          "description": "Thread the request belongs to, when it has one. Reuse this with the same recipient."
         },
         "state": {
           "type": "string",
@@ -1457,12 +1479,9 @@
         }
       },
       "required": [
-        "deadline",
         "error",
         "state",
-        "status_message",
-        "ticket_id",
-        "ttl_ms"
+        "ticket_id"
       ],
       "additionalProperties": false,
       "description": "Model-facing view of a failed Ticket."
@@ -1474,23 +1493,9 @@
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id. The only id on this view."
         },
-        "deadline": {
-          "$ref": "#/definitions/Timestamp",
-          "description": "Absolute time after which an open Ticket expires."
-        },
-        "ttl_ms": {
-          "type": "number",
-          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
-          "minimum": 0,
-          "multipleOf": 1
-        },
-        "status_message": {
-          "type": "string",
-          "description": "Short status text present on every state."
-        },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one."
+          "description": "Thread the request belongs to, when it has one. Reuse this with the same recipient."
         },
         "state": {
           "type": "string",
@@ -1503,12 +1508,9 @@
         }
       },
       "required": [
-        "deadline",
         "error",
         "state",
-        "status_message",
-        "ticket_id",
-        "ttl_ms"
+        "ticket_id"
       ],
       "additionalProperties": false,
       "description": "Model-facing view of an expired Ticket."
@@ -1520,36 +1522,24 @@
           "$ref": "#/definitions/Uuid",
           "description": "Request Message id. The only id on this view."
         },
-        "deadline": {
-          "$ref": "#/definitions/Timestamp",
-          "description": "Absolute time after which an open Ticket expires."
-        },
-        "ttl_ms": {
-          "type": "number",
-          "description": "Whole milliseconds remaining until `deadline` when this view was built. Never negative.",
-          "minimum": 0,
-          "multipleOf": 1
-        },
-        "status_message": {
-          "type": "string",
-          "description": "Short status text present on every state."
-        },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread the request belongs to, when it has one."
+          "description": "Thread the request belongs to, when it has one. Reuse this with the same recipient."
         },
         "state": {
           "type": "string",
           "const": "declined",
           "description": "Ticket closed because the recipient chose not to respond."
+        },
+        "status_message": {
+          "type": "string",
+          "description": "Next action: this is not a failure. Try another specialist or add context."
         }
       },
       "required": [
-        "deadline",
         "state",
         "status_message",
-        "ticket_id",
-        "ttl_ms"
+        "ticket_id"
       ],
       "additionalProperties": false,
       "description": "Model-facing view of a declined Ticket."
@@ -1572,7 +1562,7 @@
           "$ref": "#/definitions/DeclinedTicketView"
         }
       ],
-      "description": "Model-facing Ticket projection. Discriminated on `state` with the same Ticket states as the wire union."
+      "description": "Model-facing Ticket projection: the saved result of a request. Discriminated on `state` with the same Ticket states as the wire union."
     },
     "DirectoryEntry": {
       "type": "object",
@@ -1622,14 +1612,6 @@
             "$ref": "#/definitions/Tag"
           },
           "description": "Profile tags. Skill tags are not copied onto this card."
-        },
-        "agent_did": {
-          "$ref": "#/definitions/AgentDid",
-          "description": "Stable identity. Present only when detail is `full`."
-        },
-        "profile": {
-          "$ref": "#/definitions/AgentProfile",
-          "description": "Full discovery information. Present only when detail is `full`."
         }
       },
       "required": [
@@ -1638,7 +1620,116 @@
         "skill_names"
       ],
       "additionalProperties": false,
-      "description": "One ranked discovery result. It is light by default so a search can list a whole Team without flooding a model's context. `agent_did` and `profile` are present only when the search requested full detail."
+      "description": "One ranked discovery result. Light on purpose so a search can list a whole Team without flooding a model's context. Read selected Profiles with `get_profiles`."
+    },
+    "ProfileView": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Canonical qualified Address."
+        },
+        "profile": {
+          "$ref": "#/definitions/AgentProfile",
+          "description": "Full discovery information."
+        }
+      },
+      "required": [
+        "address",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "description": "Address and Profile without Directory DID bookkeeping. Runtime, HTTP, and Client `get_profile` / `get_entry` still return `DirectoryEntry`."
+    },
+    "ProfileFound": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "address": {
+          "$ref": "#/definitions/QualifiedAddress"
+        },
+        "profile": {
+          "$ref": "#/definitions/AgentProfile"
+        }
+      },
+      "required": [
+        "status",
+        "address",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "description": "Found item in `GetProfilesResult`. `address` is the canonical Directory Address, which may differ in qualification from the requested string."
+    },
+    "ProfileMiss": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "error"
+        },
+        "address": {
+          "$ref": "#/definitions/Address"
+        },
+        "error": {
+          "$ref": "#/definitions/ErrorObject"
+        }
+      },
+      "required": [
+        "status",
+        "address",
+        "error"
+      ],
+      "additionalProperties": false,
+      "description": "Missing or unauthorized item in `GetProfilesResult`. `address` is the requested string. `error` uses the same codes as a single Runtime lookup."
+    },
+    "ProfileItem": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProfileFound"
+        },
+        {
+          "$ref": "#/definitions/ProfileMiss"
+        }
+      ],
+      "description": "One `get_profiles` item. Discriminated on `status`."
+    },
+    "GetProfilesResult": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProfileItem"
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing `get_profiles` result. `items` follow the requested order after duplicate requested strings are dropped, keeping the first."
+    },
+    "TellView": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "accepted",
+          "description": "Discriminator for an accepted notice. No Ticket is created. This is not proof the recipient has processed the event."
+        },
+        "thread_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Conversation this event joined, when it has one."
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing `tell` result. MCP and Session-bound Team tools return this projection, not the wire `AcceptedSendResult`. `status: accepted` means the Runtime queued the event, not that the recipient finished processing. `thread_id` is present only when the event joined a Thread."
     },
     "JoinChallenge": {
       "type": "object",
@@ -2232,25 +2323,25 @@
       "properties": {
         "ticket_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Ticket id, equal to its original request Message id."
+          "description": "`ticket_id` from `ask`. Equal to the request Message id. Repeat while `state` is `open`. Ending a wait does not cancel work."
         }
       },
       "required": [
         "ticket_id"
       ],
       "additionalProperties": false,
-      "description": "Ticket lookup used by non-HTTP bindings."
+      "description": "Ticket lookup used by non-HTTP bindings. Collects a saved request result."
     },
     "GetHistoryRequest": {
       "type": "object",
       "properties": {
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Thread whose retained Messages are read."
+          "description": "Thread whose retained Messages are read. Only a participant may read it."
         },
         "before": {
           "$ref": "#/definitions/Uuid",
-          "description": "Return Messages older than this Message id, exclusive. Omit for the newest page. A well-formed UUID that is not in the retained transcript, including an evicted id, returns the newest page. A non-UUID value is `invalid_request`."
+          "description": "Return Messages older than this Message id, exclusive. Omit for the newest page. Prefer `next_before` from the previous page over picking an id from `messages`. A well-formed UUID that is not in the retained transcript, including an evicted id, returns the newest page. A non-UUID value is `invalid_request`."
         },
         "limit": {
           "type": "number",
@@ -2274,11 +2365,15 @@
           "items": {
             "$ref": "#/definitions/Message"
           },
-          "description": "Requested page ordered by `seq` ascending."
+          "description": "Requested page ordered by `seq` ascending. The newest page is returned first, but order inside the page is oldest to newest."
         },
         "has_more": {
           "type": "boolean",
           "description": "True when older retained Messages remain before this page."
+        },
+        "next_before": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Pass this as the next `before` to load the older page. Present when `has_more` is true and `messages` is not empty; equal to `messages[0].id`. Omit `before` when `has_more` is false; do not loop on the same cursor."
         }
       },
       "required": [
@@ -2288,12 +2383,256 @@
       "additionalProperties": false,
       "description": "One page of retained Thread history."
     },
+    "HistoryTurnBase": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message id. `HistoryView.next_before` is the paging cursor."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Thread sequence. History is ordered by `seq` ascending inside a page.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Address that sent this turn."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "When the Runtime accepted this Message."
+        }
+      },
+      "required": [
+        "id",
+        "seq",
+        "sender",
+        "created_at"
+      ],
+      "additionalProperties": false,
+      "description": "Fields shared by every model-facing history turn."
+    },
+    "HistoryRequestTurn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message id. `HistoryView.next_before` is the paging cursor."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Thread sequence. History is ordered by `seq` ascending inside a page.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Address that sent this turn."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "When the Runtime accepted this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "request"
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue"
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "kind",
+        "sender",
+        "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Request turn on a model-facing history page."
+    },
+    "HistoryEventTurn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message id. `HistoryView.next_before` is the paging cursor."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Thread sequence. History is ordered by `seq` ascending inside a page.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Address that sent this turn."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "When the Runtime accepted this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "event"
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue"
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "kind",
+        "sender",
+        "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Event turn on a model-facing history page."
+    },
+    "HistoryResponseTurn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message id. `HistoryView.next_before` is the paging cursor."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Thread sequence. History is ordered by `seq` ascending inside a page.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Address that sent this turn."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "When the Runtime accepted this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "response"
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id this reply answers. Same value as that ask's `ticket_id`."
+        },
+        "content": {
+          "$ref": "#/definitions/JsonValue"
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "kind",
+        "parent_id",
+        "sender",
+        "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Successful reply turn on a model-facing history page."
+    },
+    "HistoryErrorTurn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Message id. `HistoryView.next_before` is the paging cursor."
+        },
+        "seq": {
+          "type": "number",
+          "description": "Thread sequence. History is ordered by `seq` ascending inside a page.",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "sender": {
+          "$ref": "#/definitions/QualifiedAddress",
+          "description": "Address that sent this turn."
+        },
+        "created_at": {
+          "$ref": "#/definitions/Timestamp",
+          "description": "When the Runtime accepted this Message."
+        },
+        "kind": {
+          "type": "string",
+          "const": "error"
+        },
+        "parent_id": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Request Message id this error answers. Same value as that ask's `ticket_id`."
+        },
+        "error": {
+          "$ref": "#/definitions/TicketViewError"
+        }
+      },
+      "required": [
+        "created_at",
+        "error",
+        "id",
+        "kind",
+        "parent_id",
+        "sender",
+        "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Failed reply turn on a model-facing history page."
+    },
+    "HistoryTurn": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/HistoryRequestTurn"
+        },
+        {
+          "$ref": "#/definitions/HistoryEventTurn"
+        },
+        {
+          "$ref": "#/definitions/HistoryResponseTurn"
+        },
+        {
+          "$ref": "#/definitions/HistoryErrorTurn"
+        }
+      ],
+      "description": "One history turn. Discriminated on `kind`. MCP `get_history` and Session-bound Team tools return these instead of wire Messages."
+    },
+    "HistoryView": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HistoryTurn"
+          },
+          "description": "Requested page ordered by `seq` ascending. The newest page is returned first, but order inside the page is oldest to newest."
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "True when older retained Messages remain before this page."
+        },
+        "next_before": {
+          "$ref": "#/definitions/Uuid",
+          "description": "Pass this as the next `before` to load the older page. Present when `has_more` is true and `messages` is not empty; equal to `messages[0].id`."
+        }
+      },
+      "required": [
+        "messages",
+        "has_more"
+      ],
+      "additionalProperties": false,
+      "description": "Model-facing Thread history page. Same paging contract as `HistoryResult`. Runtime, HTTP, and Client `get_history` still return `HistoryResult`."
+    },
     "FindRequest": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "Natural-language discovery query.",
+          "description": "Natural-language description of the work. Ranked matches are candidates, not proof that someone is suitable.",
           "minLength": 1,
           "maxLength": 1000,
           "pattern": "\\S"
@@ -2304,14 +2643,6 @@
           "minimum": 1,
           "maximum": 100,
           "multipleOf": 1
-        },
-        "detail": {
-          "type": "string",
-          "enum": [
-            "summary",
-            "full"
-          ],
-          "description": "How much of each match to return. `summary` returns the light card; `full` adds `agent_did` and the complete Profile. Defaults to `summary`."
         }
       },
       "required": [
@@ -2337,19 +2668,24 @@
       "additionalProperties": false,
       "description": "Ordered local Directory search result."
     },
-    "GetProfileRequest": {
+    "GetProfilesRequest": {
       "type": "object",
       "properties": {
-        "address": {
-          "$ref": "#/definitions/Address",
-          "description": "Local or same-Team qualified member Address."
+        "addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Address"
+          },
+          "description": "Member Addresses to read. One to 20. Result items follow this order after duplicate requested strings are dropped, keeping the first.",
+          "minItems": 1,
+          "maxItems": 20
         }
       },
       "required": [
-        "address"
+        "addresses"
       ],
       "additionalProperties": false,
-      "description": "Directory lookup used by non-HTTP bindings."
+      "description": "MCP and Session-bound `get_profiles` arguments."
     },
     "AskToolRequest": {
       "type": "object",
@@ -2360,26 +2696,26 @@
         },
         "content": {
           "$ref": "#/definitions/JsonValue",
-          "description": "Work input."
+          "description": "Work input. Text or JSON."
         },
         "deadline_seconds": {
           "type": "number",
-          "description": "Relative work cutoff from 1 to 86400 seconds. Omit to inherit a request parent's stamped deadline, or to receive the Runtime work lifetime on a root request.",
+          "description": "Relative work cutoff from 1 to 86400 seconds. Omit to inherit a request parent's stamped deadline, or to receive the Runtime work lifetime on a root request. This cuts off work; it is not how long `ask` waits.",
           "minimum": 1,
           "maximum": 86400,
           "multipleOf": 1
         },
         "collect": {
           "$ref": "#/definitions/CollectMode",
-          "description": "Collection strategy for this send. Defaults to `wait`. Same closed set as Runtime `send` and Client `ask`: `wait` or `ticket`. `wait` returns the current Ticket after the Runtime wait hold. `ticket` returns immediately. Either Ticket may still be `open`."
+          "description": "How long this `ask` call waits. Defaults to `wait`. Same closed set as Runtime `send` and Client `ask`. `wait` holds until the Ticket is terminal or `wait_hold_seconds` elapses, then returns the current saved request result, which may still be `open`. `ticket` returns immediately. Neither cancels work. While `state` is `open`, call `get_result`; do not send a second `ask`."
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Conversation to continue. Omit to start a fresh Thread; the server mints one and the returned Ticket carries it."
+          "description": "Conversation to continue with the same recipient (a current Thread participant). Omit to start a conversation; that is the usual path. The server then mints a Thread id and the saved request result carries it. A well-formed unused id also starts a conversation. A Thread's participant set is fixed at creation. Another peer cannot join it (`forbidden`); omit `thread_id` and put needed context in `content`."
         },
         "idempotency_key": {
           "type": "string",
-          "description": "Stable key so a retried tool call does not create a second request. When present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. Equivalent retries reuse the original generated Thread and absolute deadline. Changed recipient, content, collect, or supplied `thread_id` fail with `id_conflict`. When omitted, the server mints a fresh UUID.",
+          "description": "Stable key so a retried tool call does not create a second request. When present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`. Equivalent retries reuse the original generated Thread and absolute deadline. Changed recipient, content, collect, or supplied `thread_id` fail with `id_conflict`. Retry identical arguments, or use a new key only for new work; do not drop the key after an uncertain accept. When omitted, the server mints a fresh UUID.",
           "minLength": 1,
           "maxLength": 200
         }
@@ -2400,15 +2736,15 @@
         },
         "content": {
           "$ref": "#/definitions/JsonValue",
-          "description": "Event data."
+          "description": "Event data. Text or JSON. `tell` never creates a Ticket."
         },
         "thread_id": {
           "$ref": "#/definitions/Uuid",
-          "description": "Conversation to continue. Omit to leave the event unthreaded."
+          "description": "Conversation to continue with a current participant. Omit for an unthreaded notice; that is the usual path. Another peer cannot join an existing Thread (`forbidden`); omit `thread_id` and put needed context in `content`."
         },
         "idempotency_key": {
           "type": "string",
-          "description": "Stable key so a retried tool call does not create a second event. Same derivation rule as `AskToolRequest.idempotency_key`. Equivalent retries return the original accepted event. Changed recipient, content, or `thread_id` fail with `id_conflict`.",
+          "description": "Stable key so a retried tool call does not create a second event. Same derivation rule as `AskToolRequest.idempotency_key`. Equivalent retries return the original accepted event. Changed recipient, content, or `thread_id` fail with `id_conflict`. Retry identical arguments, or use a new key only for new work; do not drop the key after an uncertain accept.",
           "minLength": 1,
           "maxLength": 200
         }
@@ -2747,7 +3083,7 @@
         "error"
       ],
       "additionalProperties": false,
-      "description": "Structured result used when an MCP tool reaches a Runtime failure."
+      "description": "Structured MCP tool result when a Runtime operation fails. The MCP error flag is set. `error` is the unchanged Runtime `ErrorObject`. Readable text is `code: message`. Malformed arguments and authentication failures stay MCP-level errors, not this object."
     }
   }
 }

@@ -311,9 +311,7 @@ class Session:
             raise SessionError("internal", "event send did not return accepted")
         return result
 
-    async def find(
-        self, query: str, *, limit: int | None = None, detail: str = "summary"
-    ) -> FindResult:
+    async def find(self, query: str, *, limit: int | None = None) -> FindResult:
         """Search this Team's Directory.
 
         found = await session.find("someone who can draft a summary")
@@ -325,7 +323,6 @@ class Session:
                 self._token(),
                 query,
                 limit=limit,
-                detail=detail,
             )
         )
 
@@ -352,8 +349,9 @@ class Session:
     ) -> HistoryResult:
         """Return one page of retained Thread history, ordered by ``seq``.
 
-        Omit ``before`` for the newest page. A UUID that is not in the
-        transcript returns that newest page.
+        Omit ``before`` for the newest page. Prefer ``next_before`` from
+        the previous page. A UUID that is not in the transcript returns
+        that newest page.
         """
         return parse_history_result(
             await self._call(

@@ -53,8 +53,13 @@ Defines:
 - concurrent Instances sharing one Mailbox, with conversation state in the Thread transcript rather than in a running copy
 - embedded and authenticated network joins, with an Instance-aware Session
 - Runtime operations and their HTTP mapping, including a typed Session event stream
-- MCP tools `find`, `ask`, `tell`, `get_result`, `get_history`, and `get_profile`
+- MCP tools `find`, `ask`, `tell`, `get_result`, `get_history`, and `get_profiles`
 - MCP and Session-bound `ask` / `get_result` return model-facing `TicketView` (wire `Ticket` remains on Runtime, HTTP, and Client `ask` / `get_result`)
+- MCP and Session-bound `tell` return `TellView`; `status: accepted` means queued, not processed
+- HistoryView response and error turns include `parent_id` (the answered request Message id / ticket_id)
+- advertised MCP success output schemas are the public result types; Team tool results are JSON objects (`type: object`), including tagged unions such as `TicketView`; structured domain errors stay on the error path
+- `TicketView` branches on `state`; open views keep `deadline` and `poll_interval_ms`; completed, failed, and expired views omit timing and status prose; declined keeps next-action text
+- `find` match cards are always light; `FindRequest` has no `detail` field; read selected Profiles with `get_profiles` (1 to 20 Addresses; per-item errors)
 - MCP roster resource at `agentconnect://team/roster` lists Agent Memberships only
 - a Membership that may act is not the same as an Agent that may be hired: a principal has no Profile, Directory entry, or Mailbox, and a `send` naming it fails `not_found`
 - the reserved `operator` is a principal; the Runtime reserves the name when it starts; `find` and the roster omit it; it stays visible in `status`
@@ -93,5 +98,11 @@ Defines:
 - one `FindResult` is ranked in one embedding space; a failed backend rebuilds rather than mixing leftover vectors; the result does not name the backend or a fallback
 - Directory ranking does not choose a `send` recipient or change Mailbox or lease order
 - Profile `summary` and Profile `tags` are the light Directory card; `description` and Skill `tags` belong to the full Profile
+- MCP `ask` / `tell` continue a Thread only with a current participant; another peer omits `thread_id`
+- `HistoryResult.next_before` is the cursor for the next older page; Messages inside a page stay oldest-to-newest
+- MCP Runtime failures set the error flag and return structured `ToolErrorResult`; readable text is `code: message`
+- keyed MCP `ask`/`tell` `id_conflict` names `idempotency_key` and how to recover
+- omit `thread_id` on MCP `ask` to start a conversation; a well-formed unused id also starts one; omit `thread_id` on `tell` for an unthreaded notice
+- a decline remains unexplained; a recipient that wants to explain replies or fails with a safe message
 
 This is a draft. No implementation may claim conformance yet.

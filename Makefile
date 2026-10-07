@@ -1,14 +1,15 @@
 .PHONY: check format test perf docs docs-preview
 
 check:
-	uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
-	uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
+	uvx ruff@latest check agentconnect tests examples experiments benchmarks docs/generate_docs.py
+	uvx ruff@latest format --check agentconnect tests examples experiments benchmarks docs/generate_docs.py
 	uv lock --check
 	uv lock --check --directory examples/quickstart
 	uv lock --check --directory examples/recipes
+	uv lock --check --directory experiments/team_tools
 
 format:
-	uvx ruff@latest format agentconnect tests examples benchmarks docs/generate_docs.py
+	uvx ruff@latest format agentconnect tests examples experiments benchmarks docs/generate_docs.py
 
 test:
 	uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q

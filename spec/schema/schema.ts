@@ -223,7 +223,7 @@ export interface AgentProfile {
   summary: string;
   /**
    * Longer optional explanation of suitable work and boundaries. Present on
-   * the full Profile (`get_profile` or `detail=full`), not on the light card.
+   * the full Profile from `get_profiles`, not on the light `find` card.
    * @minLength 1
    * @maxLength 2000
    * @pattern \S
@@ -531,34 +531,34 @@ export interface TicketViewError {
  * Fields shared by every model-facing Ticket view. MCP `ask` / `get_result`
  * and Session-bound Team tools return this projection, not the wire Ticket.
  * Runtime, HTTP, and Client `ask` / `get_result` still return the wire Ticket.
+ * Branch on `state`. Timing is not proof of state.
  */
 export interface TicketViewBase {
   /** Request Message id. The only id on this view. */
   ticket_id: Uuid;
-  /** Absolute time after which an open Ticket expires. */
-  deadline: Timestamp;
-  /**
-   * Whole milliseconds remaining until `deadline` when this view was built.
-   * Never negative.
-   * @minimum 0
-   * @multipleOf 1
-   */
-  ttl_ms: number;
-  /** Short status text present on every state. */
-  status_message: string;
-  /** Thread the request belongs to, when it has one. */
+  /** Thread the request belongs to, when it has one. Reuse this with the same recipient. */
   thread_id?: Uuid;
 }
 
 /** Model-facing view of an open Ticket. */
 export interface OpenTicketView extends TicketViewBase {
-  /** Ticket still waiting for its first accepted outcome. */
+  /** Ticket still waiting for its first accepted outcome. Keep `ticket_id` and call `get_result`. */
   state: "open";
   /**
-   * Hint for how often a model may poll `get_result`. Not a Runtime wait or
-   * lease change.
+   * Absolute work cutoff stamped at acceptance. Not an ETA, not a wait bound,
+   * and not proof of `state`.
+   */
+  deadline: Timestamp;
+  /**
+   * Hint for how often to call `get_result` while `state` is open. Not a wait
+   * bound, work duration, or lease change. Do not send a new ask to collect.
    */
   poll_interval_ms: 1000;
+  /**
+   * Next action while open: keep `ticket_id` and call `get_result`; do not
+   * send a new ask.
+   */
+  status_message: string;
 }
 
 /** Model-facing view of a completed Ticket. */
@@ -589,11 +589,16 @@ export interface ExpiredTicketView extends TicketViewBase {
 export interface DeclinedTicketView extends TicketViewBase {
   /** Ticket closed because the recipient chose not to respond. */
   state: "declined";
+  /**
+   * Next action: this is not a failure. Try another specialist or add
+   * context.
+   */
+  status_message: string;
 }
 
 /**
- * Model-facing Ticket projection. Discriminated on `state` with the same
- * Ticket states as the wire union.
+ * Model-facing Ticket projection: the saved result of a request.
+ * Discriminated on `state` with the same Ticket states as the wire union.
  */
 export type TicketView =
   | OpenTicketView
@@ -616,9 +621,9 @@ export interface DirectoryEntry {
 }
 
 /**
- * One ranked discovery result. It is light by default so a search can list a
- * whole Team without flooding a model's context. `agent_did` and `profile` are
- * present only when the search requested full detail.
+ * One ranked discovery result. Light on purpose so a search can list a whole
+ * Team without flooding a model's context. Read selected Profiles with
+ * `get_profiles`.
  */
 export interface DirectoryMatch {
   /** Canonical qualified Address to send work to. */
@@ -629,10 +634,64 @@ export interface DirectoryMatch {
   skill_names: string[];
   /** Profile tags. Skill tags are not copied onto this card. */
   tags?: Tag[];
-  /** Stable identity. Present only when detail is `full`. */
-  agent_did?: AgentDid;
-  /** Full discovery information. Present only when detail is `full`. */
-  profile?: AgentProfile;
+}
+
+/**
+ * Address and Profile without Directory DID bookkeeping. Runtime, HTTP,
+ * and Client `get_profile` / `get_entry` still return `DirectoryEntry`.
+ */
+export interface ProfileView {
+  /** Canonical qualified Address. */
+  address: QualifiedAddress;
+  /** Full discovery information. */
+  profile: AgentProfile;
+}
+
+/**
+ * Found item in `GetProfilesResult`. `address` is the canonical Directory
+ * Address, which may differ in qualification from the requested string.
+ */
+export interface ProfileFound {
+  status: "ok";
+  address: QualifiedAddress;
+  profile: AgentProfile;
+}
+
+/**
+ * Missing or unauthorized item in `GetProfilesResult`. `address` is the
+ * requested string. `error` uses the same codes as a single Runtime lookup.
+ */
+export interface ProfileMiss {
+  status: "error";
+  address: Address;
+  error: ErrorObject;
+}
+
+/** One `get_profiles` item. Discriminated on `status`. */
+export type ProfileItem = ProfileFound | ProfileMiss;
+
+/**
+ * Model-facing `get_profiles` result. `items` follow the requested order
+ * after duplicate requested strings are dropped, keeping the first.
+ */
+export interface GetProfilesResult {
+  items: ProfileItem[];
+}
+
+/**
+ * Model-facing `tell` result. MCP and Session-bound Team tools return this
+ * projection, not the wire `AcceptedSendResult`. `status: accepted` means the
+ * Runtime queued the event, not that the recipient finished processing.
+ * `thread_id` is present only when the event joined a Thread.
+ */
+export interface TellView {
+  /**
+   * Discriminator for an accepted notice. No Ticket is created. This is not
+   * proof the recipient has processed the event.
+   */
+  status: "accepted";
+  /** Conversation this event joined, when it has one. */
+  thread_id?: Uuid;
 }
 
 /** Short-lived challenge used to prove Agent DID control. */
@@ -969,21 +1028,24 @@ export interface ReplyResult {
   ticket: CompletedTicket | FailedTicket;
 }
 
-/** Ticket lookup used by non-HTTP bindings. */
+/** Ticket lookup used by non-HTTP bindings. Collects a saved request result. */
 export interface GetResultRequest {
-  /** Ticket id, equal to its original request Message id. */
+  /**
+   * `ticket_id` from `ask`. Equal to the request Message id. Repeat while
+   * `state` is `open`. Ending a wait does not cancel work.
+   */
   ticket_id: Uuid;
 }
 
 /** Thread history lookup. */
 export interface GetHistoryRequest {
-  /** Thread whose retained Messages are read. */
+  /** Thread whose retained Messages are read. Only a participant may read it. */
   thread_id: Uuid;
   /**
    * Return Messages older than this Message id, exclusive. Omit for the newest
-   * page. A well-formed UUID that is not in the retained transcript, including
-   * an evicted id, returns the newest page. A non-UUID value is
-   * `invalid_request`.
+   * page. Prefer `next_before` from the previous page over picking an id from `messages`.
+   * A well-formed UUID that is not in the retained transcript, including an
+   * evicted id, returns the newest page. A non-UUID value is `invalid_request`.
    */
   before?: Uuid;
   /**
@@ -997,16 +1059,105 @@ export interface GetHistoryRequest {
 
 /** One page of retained Thread history. */
 export interface HistoryResult {
-  /** Requested page ordered by `seq` ascending. */
+  /**
+   * Requested page ordered by `seq` ascending. The newest page is returned
+   * first, but order inside the page is oldest to newest.
+   */
   messages: Message[];
   /** True when older retained Messages remain before this page. */
   has_more: boolean;
+  /**
+   * Pass this as the next `before` to load the older page. Present when
+   * `has_more` is true and `messages` is not empty; equal to `messages[0].id`.
+   * Omit `before` when `has_more` is false; do not loop on the same cursor.
+   */
+  next_before?: Uuid;
+}
+
+/** Fields shared by every model-facing history turn. */
+export interface HistoryTurnBase {
+  /** Message id. `HistoryView.next_before` is the paging cursor. */
+  id: Uuid;
+  /**
+   * Thread sequence. History is ordered by `seq` ascending inside a page.
+   * @minimum 1
+   * @multipleOf 1
+   */
+  seq: number;
+  /** Address that sent this turn. */
+  sender: QualifiedAddress;
+  /** When the Runtime accepted this Message. */
+  created_at: Timestamp;
+}
+
+/** Request turn on a model-facing history page. */
+export interface HistoryRequestTurn extends HistoryTurnBase {
+  kind: "request";
+  content: JsonValue;
+}
+
+/** Event turn on a model-facing history page. */
+export interface HistoryEventTurn extends HistoryTurnBase {
+  kind: "event";
+  content: JsonValue;
+}
+
+/** Successful reply turn on a model-facing history page. */
+export interface HistoryResponseTurn extends HistoryTurnBase {
+  kind: "response";
+  /**
+   * Request Message id this reply answers. Same value as that ask's
+   * `ticket_id`.
+   */
+  parent_id: Uuid;
+  content: JsonValue;
+}
+
+/** Failed reply turn on a model-facing history page. */
+export interface HistoryErrorTurn extends HistoryTurnBase {
+  kind: "error";
+  /**
+   * Request Message id this error answers. Same value as that ask's
+   * `ticket_id`.
+   */
+  parent_id: Uuid;
+  error: TicketViewError;
+}
+
+/**
+ * One history turn. Discriminated on `kind`. MCP `get_history` and
+ * Session-bound Team tools return these instead of wire Messages.
+ */
+export type HistoryTurn =
+  | HistoryRequestTurn
+  | HistoryEventTurn
+  | HistoryResponseTurn
+  | HistoryErrorTurn;
+
+/**
+ * Model-facing Thread history page. Same paging contract as `HistoryResult`.
+ * Runtime, HTTP, and Client `get_history` still return `HistoryResult`.
+ */
+export interface HistoryView {
+  /**
+   * Requested page ordered by `seq` ascending. The newest page is returned
+   * first, but order inside the page is oldest to newest.
+   */
+  messages: HistoryTurn[];
+  /** True when older retained Messages remain before this page. */
+  has_more: boolean;
+  /**
+   * Pass this as the next `before` to load the older page. Present when
+   * `has_more` is true and `messages` is not empty; equal to `messages[0].id`.
+   */
+  next_before?: Uuid;
 }
 
 /** Local Directory search input. */
 export interface FindRequest {
   /**
-   * Natural-language discovery query.
+   * Natural-language description of the work. Ranked matches are candidates,
+   * not proof that someone is suitable.
    * @minLength 1
    * @maxLength 1000
    * @pattern \S
@@ -1020,11 +1171,6 @@ export interface FindRequest {
    * @multipleOf 1
    */
   limit?: number;
-  /**
-   * How much of each match to return. `summary` returns the light card;
-   * `full` adds `agent_did` and the complete Profile. Defaults to `summary`.
-   */
-  detail?: "summary" | "full";
 }
 
 /** Ordered local Directory search result. */
@@ -1033,37 +1179,48 @@ export interface FindResult {
   matches: DirectoryMatch[];
 }
 
-/** Directory lookup used by non-HTTP bindings. */
-export interface GetProfileRequest {
-  /** Local or same-Team qualified member Address. */
-  address: Address;
+/** MCP and Session-bound `get_profiles` arguments. */
+export interface GetProfilesRequest {
+  /**
+   * Member Addresses to read. One to 20. Result items follow this order
+   * after duplicate requested strings are dropped, keeping the first.
+   * @minItems 1
+   * @maxItems 20
+   */
+  addresses: Address[];
 }
 
 /** MCP `ask` arguments. The server generates the request Message id. */
 export interface AskToolRequest {
   /** Local or same-Team qualified recipient. */
   recipient: Address;
-  /** Work input. */
+  /** Work input. Text or JSON. */
   content: JsonValue;
   /**
    * Relative work cutoff from 1 to 86400 seconds. Omit to inherit a request
    * parent's stamped deadline, or to receive the Runtime work lifetime on a
-   * root request.
+   * root request. This cuts off work; it is not how long `ask` waits.
    * @minimum 1
    * @maximum 86400
    * @multipleOf 1
    */
   deadline_seconds?: number;
   /**
-   * Collection strategy for this send. Defaults to `wait`. Same closed set
-   * as Runtime `send` and Client `ask`: `wait` or `ticket`. `wait` returns
-   * the current Ticket after the Runtime wait hold. `ticket` returns
-   * immediately. Either Ticket may still be `open`.
+   * How long this `ask` call waits. Defaults to `wait`. Same closed set as
+   * Runtime `send` and Client `ask`. `wait` holds until the Ticket is terminal
+   * or `wait_hold_seconds` elapses, then returns the current saved request
+   * result, which may still be `open`. `ticket` returns immediately. Neither
+   * cancels work. While `state` is `open`, call `get_result`; do not send a
+   * second `ask`.
    */
   collect?: CollectMode;
   /**
-   * Conversation to continue. Omit to start a fresh Thread; the server mints
-   * one and the returned Ticket carries it.
+   * Conversation to continue with the same recipient (a current Thread
+   * participant). Omit to start a conversation; that is the usual path.
+   * The server then mints a Thread id and the saved request result carries
+   * it. A well-formed unused id also starts a conversation. A Thread's
+   * participant set is fixed at creation. Another peer cannot join it
+   * (`forbidden`); omit `thread_id` and put needed context in `content`.
    */
   thread_id?: Uuid;
   /**
@@ -1071,7 +1228,9 @@ export interface AskToolRequest {
    * present, the Message id is UUID5 of `ask|<caller_address>|<idempotency_key>`.
    * Equivalent retries reuse the original generated Thread and absolute
    * deadline. Changed recipient, content, collect, or supplied `thread_id`
-   * fail with `id_conflict`. When omitted, the server mints a fresh UUID.
+   * fail with `id_conflict`. Retry identical arguments, or use a new key
+   * only for new work; do not drop the key after an uncertain accept.
+   * When omitted, the server mints a fresh UUID.
    * @minLength 1
    * @maxLength 200
    */
@@ -1082,15 +1241,22 @@ export interface AskToolRequest {
 export interface TellToolRequest {
   /** Local or same-Team qualified recipient. */
   recipient: Address;
-  /** Event data. */
+  /** Event data. Text or JSON. `tell` never creates a Ticket. */
   content: JsonValue;
-  /** Conversation to continue. Omit to leave the event unthreaded. */
+  /**
+   * Conversation to continue with a current participant. Omit for an
+   * unthreaded notice; that is the usual path. Another peer cannot join
+   * an existing Thread (`forbidden`); omit `thread_id` and put needed
+   * context in `content`.
+   */
   thread_id?: Uuid;
   /**
    * Stable key so a retried tool call does not create a second event. Same
    * derivation rule as `AskToolRequest.idempotency_key`. Equivalent retries
    * return the original accepted event. Changed recipient, content, or
-   * `thread_id` fail with `id_conflict`.
+   * `thread_id` fail with `id_conflict`. Retry identical arguments, or use
+   * a new key only for new work; do not drop the key after an uncertain
+   * accept.
    * @minLength 1
    * @maxLength 200
    */
@@ -1281,7 +1447,12 @@ export interface RuntimeEvent {
   data: JsonObject;
 }
 
-/** Structured result used when an MCP tool reaches a Runtime failure. */
+/**
+ * Structured MCP tool result when a Runtime operation fails. The MCP error
+ * flag is set. `error` is the unchanged Runtime `ErrorObject`. Readable text
+ * is `code: message`. Malformed arguments and authentication failures stay
+ * MCP-level errors, not this object.
+ */
 export interface ToolErrorResult {
   /** Runtime failure preserved without reinterpretation. */
   error: ErrorObject;
@@ -1315,6 +1486,7 @@ export interface AgentConnectPublicSchema {
   delivery?: Delivery;
   ticket?: Ticket;
   ticket_view_error?: TicketViewError;
+  ticket_view_base?: TicketViewBase;
   open_ticket_view?: OpenTicketView;
   completed_ticket_view?: CompletedTicketView;
   failed_ticket_view?: FailedTicketView;
@@ -1323,6 +1495,12 @@ export interface AgentConnectPublicSchema {
   ticket_view?: TicketView;
   directory_entry?: DirectoryEntry;
   directory_match?: DirectoryMatch;
+  profile_view?: ProfileView;
+  profile_found?: ProfileFound;
+  profile_miss?: ProfileMiss;
+  profile_item?: ProfileItem;
+  get_profiles_result?: GetProfilesResult;
+  tell_view?: TellView;
   join_challenge?: JoinChallenge;
   join_request?: JoinRequest;
   runtime_limits?: RuntimeLimits;
@@ -1341,9 +1519,16 @@ export interface AgentConnectPublicSchema {
   get_result_request?: GetResultRequest;
   get_history_request?: GetHistoryRequest;
   history_result?: HistoryResult;
+  history_turn_base?: HistoryTurnBase;
+  history_request_turn?: HistoryRequestTurn;
+  history_event_turn?: HistoryEventTurn;
+  history_response_turn?: HistoryResponseTurn;
+  history_error_turn?: HistoryErrorTurn;
+  history_turn?: HistoryTurn;
+  history_view?: HistoryView;
   find_request?: FindRequest;
   find_result?: FindResult;
-  get_profile_request?: GetProfileRequest;
+  get_profiles_request?: GetProfilesRequest;
   ask_tool_request?: AskToolRequest;
   tell_tool_request?: TellToolRequest;
   team_roster?: TeamRoster;

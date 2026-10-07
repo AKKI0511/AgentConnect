@@ -206,10 +206,9 @@ class HttpRuntimeTransport:
         query: str,
         *,
         limit: int | None = None,
-        detail: str = "summary",
     ) -> dict[str, Any]:
         """POST /directory/find."""
-        body: dict[str, Any] = {"query": query, "detail": detail}
+        body: dict[str, Any] = {"query": query}
         if limit is not None:
             body["limit"] = limit
         return await self._request(

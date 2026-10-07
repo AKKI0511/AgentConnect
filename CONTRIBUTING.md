@@ -16,8 +16,8 @@ Use your fork's URL if contributing through a fork. Pull requests target `main`.
 
 ```bash
 uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
-uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
-uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
+uvx ruff@latest check agentconnect tests examples experiments benchmarks docs/generate_docs.py
+uvx ruff@latest format --check agentconnect tests examples experiments benchmarks docs/generate_docs.py
 ```
 
 A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Remove `--check` from the format command to apply formatting. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
@@ -75,8 +75,14 @@ After changing `pyproject.toml` dependencies, extras, or groups, refresh every l
 uv lock
 uv lock --directory examples/quickstart
 uv lock --directory examples/recipes
-uv lock --directory examples/tool_experience
+uv lock --directory experiments/team_tools
 ```
+
+## Qualitative Team tool-use
+
+[`experiments/team_tools/`](experiments/team_tools/README.md) is a durable, harness-independent environment for judging Team MCP tools from a coding harness. It is not a user example, an automated benchmark, or a mandatory LLM run.
+
+Use it when advertised Team tools, their descriptions, or the ship-desk fixtures change. Start `uv run python team.py`, add the printed MCP URL with native MCP support, then follow `PROMPT.md` and `CHECKLIST.md`. Deterministic startup and fixture checks live in `tests/experiments/test_team_tools.py`.
 
 ## Public API
 

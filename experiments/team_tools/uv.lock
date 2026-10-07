@@ -108,7 +108,7 @@ research = [
 ]
 
 [[package]]
-name = "agentconnect-tool-experience"
+name = "agentconnect-team-tools"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

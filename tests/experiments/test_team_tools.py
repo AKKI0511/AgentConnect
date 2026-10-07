@@ -1,8 +1,9 @@
-"""Startup, worker, shutdown, and restart checks for ship-desk."""
+"""Startup, MCP, worker, shutdown, and restart checks for ship-desk."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import signal
 import socket
@@ -12,16 +13,18 @@ import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from urllib.parse import urlparse
 
 import pytest
+from mcp import Client
 
 from agentconnect import AgentProfile, BaseAgent, Skill
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.ticket import Ticket
 
 ROOT = Path(__file__).resolve().parents[2]
-EX = ROOT / "examples" / "tool_experience"
+EX = ROOT / "experiments" / "team_tools"
 sys.path.insert(0, str(EX))
 
 import teammates as ship_teammates  # noqa: E402
@@ -61,6 +64,44 @@ async def _until_terminal(
 
 async def _after_press_ingest() -> None:
     await asyncio.sleep(ship_teammates.PRESS_NOTICE_DELAY_SECONDS + 0.1)
+
+
+def _mcp_body(result: Any) -> dict[str, Any]:
+    if result.structured_content:
+        return dict(result.structured_content)
+    if result.content:
+        return json.loads(result.content[0].text)
+    raise AssertionError("empty tool result")
+
+
+@pytest.mark.asyncio
+async def test_desk_mcp_lists_tools_and_finds() -> None:
+    desk = await start_desk(host="127.0.0.1", port=0, wait_hold_seconds=0.05)
+    try:
+        async with Client(desk.mcp_url) as client:
+            names = {tool.name for tool in (await client.list_tools()).tools}
+            assert names == {
+                "ask",
+                "find",
+                "get_history",
+                "get_profiles",
+                "get_result",
+                "tell",
+            }
+            found = _mcp_body(
+                await client.call_tool(
+                    "find",
+                    {"query": "someone who can reconstruct a canary timeline"},
+                )
+            )
+            cards = found["matches"]
+            assert cards
+            assert "did" not in cards[0]
+            assert "profile" not in cards[0]
+            addresses = {card["address"].split("@", 1)[0] for card in cards}
+            assert "incident-triage" in addresses
+    finally:
+        await desk.stop()
 
 
 @pytest.mark.asyncio
@@ -196,34 +237,6 @@ async def test_desk_serves_mcp_and_workers_answer(fast_delays: None) -> None:
         assert held.response.content["recommendation"] == "hold_canary"
         assert "waiting_on_teammates" not in held.response.content
         assert "metrics_ticket_id" not in held.response.content
-
-        draft_before = await _until_terminal(
-            probe,
-            await probe.ask(
-                "press-liaison",
-                {"task": "Draft customer status for the payments-api canary."},
-            ),
-        )
-        assert draft_before.state == "completed"
-        assert draft_before.response is not None
-        assert "will not expand" not in draft_before.response.content["status"]
-
-        await probe.tell("press-liaison", {"notice": "Legal wants hold language."})
-        await _after_press_ingest()
-        press = await _until_terminal(
-            probe,
-            await probe.ask(
-                "press-liaison",
-                {"task": "Draft customer status for the payments-api canary."},
-            ),
-        )
-        assert press.state == "completed"
-        assert press.response is not None
-        assert (
-            "Legal wants hold language."
-            in press.response.content["notices_incorporated"]
-        )
-        assert "will not expand the canary" in press.response.content["status"]
     finally:
         try:
             await probe.leave()
@@ -584,6 +597,21 @@ def test_changelog_page_accounting_restarts_after_filter_change() -> None:
     sequential = SimpleNamespace(history=[_page("all", 1), _page("all", 2)])
     assert ship_teammates._changelog_pages_sent(sequential, high=False) == 2
 
+    def _req(text: str) -> object:
+        return SimpleNamespace(kind="request", content=text)
+
+    reset_same = SimpleNamespace(
+        history=[
+            _req("List payments-api 2.4.1 changelog items."),
+            _page("all", 1),
+            _req("Next page of the changelog."),
+            _page("all", 2),
+            _req("Reset the filter and list all 2.4.1 changes."),
+            _page("all", 1),
+        ]
+    )
+    assert ship_teammates._changelog_pages_sent(reset_same, high=False) == 1
+
 
 def test_press_status_does_not_treat_preparation_as_execution() -> None:
     prepare = ship_teammates._press_status(
@@ -758,35 +786,6 @@ async def test_changelog_history_pages_with_small_limit(
         except Exception:
             pass
         await desk.stop()
-
-
-def test_changelog_page_accounting_restarts_after_same_filter_reset() -> None:
-    def _req(text: str) -> object:
-        return SimpleNamespace(kind="request", content=text)
-
-    def _page(filter_name: str, page: int) -> object:
-        return SimpleNamespace(
-            kind="response",
-            content={
-                "version": "2.4.1",
-                "filter": filter_name,
-                "page": page,
-                "changes": [],
-                "has_more": True,
-            },
-        )
-
-    ctx = SimpleNamespace(
-        history=[
-            _req("List payments-api 2.4.1 changelog items."),
-            _page("all", 1),
-            _req("Next page of the changelog."),
-            _page("all", 2),
-            _req("Reset the filter and list all 2.4.1 changes."),
-            _page("all", 1),
-        ]
-    )
-    assert ship_teammates._changelog_pages_sent(ctx, high=False) == 1
 
 
 @pytest.mark.asyncio

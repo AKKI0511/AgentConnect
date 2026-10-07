@@ -8,7 +8,7 @@ update the same report.
   unfamiliar but suitable task and one unsupported task.
 - Read several overlapping Profiles in one `get_profiles` call. Also
   try one address, a duplicate list, and a mix of valid and missing
-  addresses. Do not call `get_profile`.
+  addresses.
 - Get a quick answer and a delayed answer.
 - Keep more than one request outstanding on the same conversation, and
   on two independent conversations with the same specialist. Let replies
@@ -56,15 +56,11 @@ update the same report.
   sizes and whether the returned cursor continues the same Thread.
 - Record serialized result sizes (characters or bytes) for find cards,
   one `get_profiles` of several selected agents versus those Profiles
-  fetched one at a time, tell, open and terminal TicketViews, a history
-  page that includes `parent_id`, and tool-definition text if the
-  catalog shows it. Note token counts if the harness shows them;
+  fetched one at a time, tell, open and terminal saved request results,
+  a history page that includes `parent_id`, and tool-definition text if
+  the catalog shows it. Note token counts if the harness shows them;
   otherwise write unknown. Record call counts, not only one response
   size.
-- Confirm find has no detail argument, `get_profiles` has no DID and
-  takes `addresses`, tell has no Message envelope, response history
-  turns have `parent_id`, and completed TicketViews have no ttl_ms,
-  deadline, or status_message.
 - Pending work is not a terminal failure. A wait may return an open
   saved result; collect that same id. Ending the wait does not cancel
   work.

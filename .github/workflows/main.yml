@@ -31,14 +31,14 @@ jobs:
           node-version: "lts/*"
       - name: Lint and formatting
         run: |
-          uvx ruff@latest check agentconnect tests examples benchmarks docs/generate_docs.py
-          uvx ruff@latest format --check agentconnect tests examples benchmarks docs/generate_docs.py
+          uvx ruff@latest check agentconnect tests examples experiments benchmarks docs/generate_docs.py
+          uvx ruff@latest format --check agentconnect tests examples experiments benchmarks docs/generate_docs.py
       - name: Lockfiles and generated schema
         run: |
           uv lock --check
           uv lock --check --directory examples/quickstart
           uv lock --check --directory examples/recipes
-          uv lock --check --directory examples/tool_experience
+          uv lock --check --directory experiments/team_tools
           npm --prefix spec/schema ci
           npm --prefix spec/schema run check
 

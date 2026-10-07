@@ -1,7 +1,7 @@
 [project]
-name = "agentconnect-tool-experience"
+name = "agentconnect-team-tools"
 version = "0.0.0"
-description = "Foreground ship-desk Team for native MCP tool-experience judging."
+description = "Foreground ship-desk Team for qualitative Team MCP tool-use research."
 readme = "README.md"
 requires-python = ">=3.11,<4"
 dependencies = [

@@ -172,6 +172,21 @@ def test_hosted_agent_class_path() -> None:
         HostedAgentConfig.model_validate({"class": "agents.writer", "name": "writer"})
 
 
+def test_discovery_walks_beyond_sixteen_parents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nested = tmp_path
+    for index in range(20):
+        nested = nested / f"d{index}"
+    nested.mkdir(parents=True)
+    chosen = _write(
+        tmp_path / "agentconnect.toml", dump_team_toml(TeamConfig(team="from-root"))
+    )
+    monkeypatch.chdir(nested)
+    assert load_team_config().team == "from-root"
+    assert find_config_file() == chosen
+
+
 def test_nearest_pyproject_beats_ancestor_toml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

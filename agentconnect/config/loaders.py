@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 TOML_FILENAME = "agentconnect.toml"
 PYPROJECT_FILENAME = "pyproject.toml"
 YAML_FILENAMES = ("agentconnect.yaml", "agentconnect.yml")
-_MAX_PARENTS = 16
 _YAML_SUFFIXES = {".yaml", ".yml"}
 
 _EXAMPLE_HEADER = (
@@ -63,7 +62,7 @@ _EXAMPLE_HEADER = (
 
 def _ancestors(start: Optional[Path]) -> Iterator[Path]:
     probe = (start or Path.cwd()).resolve()
-    for _ in range(_MAX_PARENTS):
+    while True:
         yield probe
         parent = probe.parent
         if parent == probe:

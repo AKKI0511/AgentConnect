@@ -50,7 +50,7 @@ def test_failed_stop_keeps_state_and_is_nonzero(tmp_path: Path, monkeypatch) -> 
         "agentconnect.cli.main.is_owned_team_process", lambda state, path: True
     )
 
-    def boom(pid: int) -> None:
+    def boom(pid: int, created: str) -> None:
         raise RuntimeError("taskkill failed")
 
     monkeypatch.setattr("agentconnect.cli.main.terminate_pid", boom)

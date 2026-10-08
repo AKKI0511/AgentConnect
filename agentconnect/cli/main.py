@@ -371,8 +371,10 @@ def down(
         if status == "unknown" or recorded_token is None:
             _die("cannot verify process identity; not killed")
         _die(f"pid {pid} is not the Team started from {config_path}; not killed")
+    if recorded_token is None:
+        _die("cannot verify process identity; not killed")
     try:
-        terminate_pid(pid)
+        terminate_pid(pid, recorded_token)
     except Exception as exc:
         _die_exc(exc)
     if inspect_process(pid)[0] != "dead":

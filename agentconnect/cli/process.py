@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 _VERIFY_WAIT_SECONDS = 3.0
+_SIGKILL = getattr(signal, "SIGKILL", 9)
 
 ProcessStatus = Literal["dead", "live", "unknown"]
 
@@ -78,12 +79,23 @@ def is_owned_team_process(state: dict[str, Any], config_path: Path) -> bool:
     return status == "live" and live == recorded
 
 
-def terminate_pid(pid: int) -> None:
-    """Stop ``pid`` and wait until it is gone.
+def terminate_pid(pid: int, created: str) -> None:
+    """Stop ``pid`` only while it still matches ``created``.
+
+    A start-time token mismatch means the original process already
+    exited, including when the PID was reused during the wait. That is
+    treated as success and does not send another signal.
 
     Raises:
-        RuntimeError: The process could not be stopped.
+        RuntimeError: The process could not be stopped, or its identity
+            could not be verified.
     """
+    if not created:
+        raise RuntimeError("cannot verify process identity; not killed")
+    if _original_exited(pid, created):
+        return
+    if not _still_owned(pid, created):
+        raise RuntimeError("cannot verify process identity; not killed")
     if sys.platform == "win32":
         completed = subprocess.run(
             ["taskkill", "/PID", str(pid), "/F"],
@@ -105,27 +117,43 @@ def terminate_pid(pid: int) -> None:
             return
         except OSError as exc:
             raise RuntimeError(f"could not stop pid {pid}: {exc}") from exc
-    if _wait_until_gone(pid, _VERIFY_WAIT_SECONDS):
+    if _wait_until_gone(pid, created, _VERIFY_WAIT_SECONDS):
         return
     if sys.platform != "win32":
+        if _original_exited(pid, created):
+            return
+        if not _still_owned(pid, created):
+            raise RuntimeError("cannot verify process identity; not killed")
         try:
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, _SIGKILL)
         except ProcessLookupError:
             return
         except OSError as exc:
             raise RuntimeError(f"could not stop pid {pid}: {exc}") from exc
-        if _wait_until_gone(pid, 1.0):
+        if _wait_until_gone(pid, created, 1.0):
             return
     raise RuntimeError(f"pid {pid} is still running")
 
 
-def _wait_until_gone(pid: int, seconds: float) -> bool:
+def _still_owned(pid: int, created: str) -> bool:
+    status, live = inspect_process(pid)
+    return status == "live" and live == created
+
+
+def _original_exited(pid: int, created: str) -> bool:
+    status, live = inspect_process(pid)
+    if status == "dead":
+        return True
+    return status == "live" and live != created
+
+
+def _wait_until_gone(pid: int, created: str, seconds: float) -> bool:
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
-        if process_is_dead(pid):
+        if _original_exited(pid, created):
             return True
         time.sleep(0.05)
-    return process_is_dead(pid)
+    return _original_exited(pid, created)
 
 
 def _posix_inspect(pid: int) -> tuple[ProcessStatus, Optional[str]]:

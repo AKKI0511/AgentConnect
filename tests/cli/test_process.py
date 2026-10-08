@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from agentconnect.cli.process import (
+    _SIGKILL,
     _parse_proc_stat,
     _posix_inspect,
     inspect_process,
@@ -119,7 +120,74 @@ def test_killed_child_is_dead_before_parent_wait() -> None:
 def test_terminate_pid_succeeds_before_parent_wait() -> None:
     proc = _popen_sleeper()
     try:
-        terminate_pid(proc.pid)
+        status, token = inspect_process(proc.pid)
+        assert status == "live"
+        assert token
+        terminate_pid(proc.pid, token)
         assert inspect_process(proc.pid)[0] == "dead"
     finally:
         proc.wait(timeout=10)
+
+
+def test_terminate_pid_skips_sigkill_after_pid_reuse(monkeypatch) -> None:
+    signals: list[int] = []
+    current = ["orig"]
+
+    def fake_inspect(pid: int) -> tuple[str, str | None]:
+        return "live", current[0]
+
+    def fake_kill(pid: int, sig: int) -> None:
+        signals.append(sig)
+        if sig == signal.SIGTERM:
+            current[0] = "other"
+
+    monkeypatch.setattr("agentconnect.cli.process.sys.platform", "linux")
+    monkeypatch.setattr("agentconnect.cli.process.inspect_process", fake_inspect)
+    monkeypatch.setattr("agentconnect.cli.process.os.kill", fake_kill)
+    terminate_pid(4242, "orig")
+    assert signals == [signal.SIGTERM]
+
+
+def test_terminate_pid_sends_sigkill_when_same_process_stays_live(monkeypatch) -> None:
+    signals: list[int] = []
+    current_status = ["live"]
+
+    def fake_inspect(pid: int) -> tuple[str, str | None]:
+        if current_status[0] == "live":
+            return "live", "orig"
+        return "dead", None
+
+    def fake_kill(pid: int, sig: int) -> None:
+        signals.append(sig)
+        if sig == _SIGKILL:
+            current_status[0] = "dead"
+
+    clock = {"t": 0.0}
+
+    def monotonic() -> float:
+        return clock["t"]
+
+    def sleep(seconds: float) -> None:
+        clock["t"] += seconds
+
+    monkeypatch.setattr("agentconnect.cli.process.sys.platform", "linux")
+    monkeypatch.setattr("agentconnect.cli.process.inspect_process", fake_inspect)
+    monkeypatch.setattr("agentconnect.cli.process.os.kill", fake_kill)
+    monkeypatch.setattr("agentconnect.cli.process.time.monotonic", monotonic)
+    monkeypatch.setattr("agentconnect.cli.process.time.sleep", sleep)
+    terminate_pid(4242, "orig")
+    assert signals == [signal.SIGTERM, _SIGKILL]
+
+
+def test_terminate_pid_no_signal_when_token_already_mismatched(monkeypatch) -> None:
+    signals: list[int] = []
+    monkeypatch.setattr("agentconnect.cli.process.sys.platform", "linux")
+    monkeypatch.setattr(
+        "agentconnect.cli.process.inspect_process", lambda pid: ("live", "other")
+    )
+    monkeypatch.setattr(
+        "agentconnect.cli.process.os.kill",
+        lambda pid, sig: signals.append(sig),
+    )
+    terminate_pid(4242, "orig")
+    assert signals == []

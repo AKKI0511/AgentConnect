@@ -1,87 +1,32 @@
-"""
-Agent identity verification utilities for the AgentConnect framework.
+"""Verify an Index registration identity.
 
-This module provides functions for verifying agent identities using
-decentralized identifiers (DIDs) and cryptographic signatures.
+v0.5 Index records use Ed25519 ``did:key``. Other DID methods are refused
+until a consumer ships with verification rules.
 """
 
-# Standard library imports
+from __future__ import annotations
+
 import logging
 
-# Absolute imports from agentconnect package
 from agentconnect.core.identity import AgentIdentity
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
 
 async def verify_agent_identity(identity: AgentIdentity) -> bool:
-    """
-    Verify agent's DID and public key.
+    """Return True when ``identity.did`` is the Ed25519 ``did:key`` for its public key.
 
     Args:
-        identity: Agent's decentralized identity
+        identity: Keypair and DID presented with an Index registration.
 
     Returns:
-        True if the identity is verified, False otherwise
+        True when the DID is ``did:key`` and matches the public key.
     """
-    try:
-        # Start verification (avoid logging DID material)
-        method = "unknown"
-        try:
-            if identity.did.startswith("did:"):
-                parts = identity.did.split(":")
-                method = parts[1] if len(parts) > 1 else "unknown"
-        except Exception:
-            method = "unknown"
-
-        logger.debug("Verifying agent identity via method=%s", method)
-
-        # Verify DID format
-        if not identity.did.startswith(("did:ethr:", "did:key:")):
-            logger.warning("Invalid DID format")
-            return False
-
-        # Verify DID resolution
-        if identity.did.startswith("did:ethr:"):
-            return await verify_ethereum_did(identity)
-        else:  # did:key
-            return await verify_key_did(identity)
-
-    except Exception as e:
-        logger.error("Error verifying agent identity: %s", e)
+    if not identity.did.startswith("did:key:"):
+        logger.warning("Index identity must be a did:key")
         return False
-
-
-async def verify_ethereum_did(identity: AgentIdentity) -> bool:
-    """
-    Verify Ethereum-based DID.
-
-    Args:
-        identity: Agent's Ethereum-based decentralized identity
-
-    Returns:
-        True if the identity is verified, False otherwise
-    """
-    try:
-        eth_address = identity.did.split(":")[-1]
-
-        if not eth_address.startswith("0x") or len(eth_address) != 42:
-            logger.debug("Ethereum DID validation failed: invalid_format")
-            return False
-
-        # TODO: Implement full Ethereum DID verification
-        return True
-
-    except Exception as e:
-        logger.error("Error verifying Ethereum DID: %s", e)
-        return False
-
-
-async def verify_key_did(identity: AgentIdentity) -> bool:
-    """Return True when ``identity.did`` is the Ed25519 ``did:key`` for its public key."""
     try:
         return identity.matches_did()
-    except Exception as e:
-        logger.error("Error verifying key-based DID: %s", e)
+    except Exception as exc:
+        logger.error("Error verifying key-based DID: %s", exc)
         return False

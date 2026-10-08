@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from datetime import datetime
 
 from agentconnect.agent.base import BaseAgent
-from agentconnect.core.exceptions import SecurityError
+from agentconnect.compat.exceptions import SecurityError
 from agentconnect.core.kinds import MessageKind
 from agentconnect.prebuilt.ai_agent import AIAgent
 from demos.utils.demo_logger import get_logger

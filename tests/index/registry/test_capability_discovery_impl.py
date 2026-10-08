@@ -15,14 +15,14 @@ from tests.core.utils import (
     print_warning,
 )
 
-from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config.vector import VectorSearchSettings
 
 # Import implementation modules directly for testing
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     calculate_similarity,
     check_semantic_search_requirements,
     cosine_similarity,
-    create_huggingface_embeddings,
+    create_embeddings,
 )
 from agentconnect.index.registry.capability_discovery_impl.indexing import (
     extract_capability_index,
@@ -152,13 +152,13 @@ class TestEmbeddingUtils:
         not check_semantic_search_requirements()["embedding_model"],
         reason="Embedding model not available",
     )
-    def test_create_huggingface_embeddings(self):
+    def test_create_embeddings(self):
         """Test creating HuggingFace embeddings model."""
         print_header("Testing HuggingFace Embeddings Creation")
 
         print_step("Creating embeddings model with default config")
         vs = VectorSearchSettings.model_validate({"model_name": "hashed"})
-        embeddings_model = create_huggingface_embeddings(vs)
+        embeddings_model = create_embeddings(vs)
 
         if embeddings_model:
             print_success("Successfully created embeddings model")
@@ -257,7 +257,7 @@ class TestQdrantClient:
 
         print_step("Creating embeddings model")
         vs_emb = VectorSearchSettings.model_validate({"model_name": "hashed"})
-        embeddings_model = create_huggingface_embeddings(vs_emb)
+        embeddings_model = create_embeddings(vs_emb)
 
         if not embeddings_model:
             print_warning("Failed to create embeddings model, skipping test")
@@ -483,7 +483,7 @@ class TestIndexing:
         config = VectorSearchSettings.model_validate(
             {"model_name": "hashed"}
         )  # Use small model for tests
-        embeddings_model = create_huggingface_embeddings(config)
+        embeddings_model = create_embeddings(config)
 
         if not embeddings_model:
             print_warning("Failed to create embeddings model, skipping test")

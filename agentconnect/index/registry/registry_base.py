@@ -14,9 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from agentconnect.config.vector import VectorSearchSettings
 
 # Absolute imports from agentconnect package
-from agentconnect.core.types import (
-    VerificationStatus,
-)
+from agentconnect.core.identity import VerificationStatus
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
 from agentconnect.index.registry.identity_verification import (
     verify_agent_identity,

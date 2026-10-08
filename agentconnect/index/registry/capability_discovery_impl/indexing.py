@@ -386,7 +386,7 @@ async def main():
     )
 
     from .embedding_utils import (
-        create_huggingface_embeddings,
+        create_embeddings,
     )
 
     # Removed direct AsyncQdrantClient import here, will use our helper
@@ -424,7 +424,7 @@ async def main():
     )
 
     # Initialize Qdrant clients using the helper function (VectorSearchSettings)
-    from agentconnect.config.models import VectorSearchSettings
+    from agentconnect.config.vector import VectorSearchSettings
 
     vs = VectorSearchSettings.model_validate(
         {
@@ -434,7 +434,7 @@ async def main():
     )
     sync_client, async_client = await initialize_qdrant_clients(vs)
     collection_name = "test_indexing_collection"  # Using a distinct name for this test
-    embeddings_model = create_huggingface_embeddings(vs)
+    embeddings_model = create_embeddings(vs)
     agent_registrations = {"test_agent": registration}
     collection_initialized = await init_qdrant_collection(
         async_client=async_client,

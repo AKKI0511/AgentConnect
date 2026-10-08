@@ -1,7 +1,7 @@
 """Qdrant vector-search settings for the optional Index service.
 
-These models are not part of ``agentconnect.yaml``. The Index process
-reads them from ``AGENTCONNECT_REGISTRY_*`` environment variables.
+These models are not part of the Team file. The Index process reads
+them from ``AGENTCONNECT_REGISTRY_*`` environment variables.
 """
 
 from __future__ import annotations

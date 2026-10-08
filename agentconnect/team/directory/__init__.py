@@ -20,9 +20,11 @@ from agentconnect.team.directory.directory import (
     profile_text,
 )
 from agentconnect.team.directory.embedder import (
+    HASHED_DIM,
     Embedder,
     EmbeddingsArg,
     HashedEmbedder,
+    hashed_embedding,
     resolve_embedder,
 )
 
@@ -30,8 +32,10 @@ __all__ = [
     "Directory",
     "Embedder",
     "EmbeddingsArg",
+    "HASHED_DIM",
     "HashedEmbedder",
     "MAX_FIND_LIMIT",
+    "hashed_embedding",
     "profile_text",
     "resolve_embedder",
 ]

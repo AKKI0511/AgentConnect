@@ -1,0 +1,37 @@
+# Describes a Team and the Agents this process hosts.
+# Embedded Team("name").start() needs no file.
+# Secrets stay in the environment.
+#
+# store: memory  or  redis://localhost:6379/0
+# embeddings: auto | none | fastembed | openai | litellm:<model>
+# auto never sends Profiles or queries to a hosted embedder.
+#
+# Agents listed here are constructed by `agentconnect up`.
+# `class` is a BaseAgent subclass or create(name) -> BaseAgent.
+# Agents in other processes join by URL with a token from
+# `agentconnect token issue` and are not listed here.
+#
+# Extra `tools` are published on Team MCP. Connecting a harness is
+# a separate step: add the Team MCP URL there.
+#
+# Nearest directory wins. In that directory, agentconnect.toml beats
+# [tool.agentconnect] in pyproject.toml. YAML is last-resort
+# compatibility after no ancestor TOML Team file exists. Files are
+# never merged.
+
+[tool.agentconnect]
+team = "content-squad"
+store = "memory"
+embeddings = "auto"
+host = "127.0.0.1"
+port = 9000
+require_join_auth = true
+tools = ["tools.docs:search_our_docs"]
+
+[[tool.agentconnect.agents]]
+class = "agents.researcher:Researcher"
+name = "researcher"
+
+[[tool.agentconnect.agents]]
+class = "agents.writer:Writer"
+name = "writer"

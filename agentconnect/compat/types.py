@@ -1,6 +1,7 @@
-"""Re-exports of public schema primitives and the Profile and Message kinds.
+"""v0.4 ``agentconnect.core.types`` names, forwarded to current modules.
 
-Identity types load from ``agentconnect.core.identity``.
+Import schema types from ``agentconnect.core`` in new code. This module
+does not restore removed enumerations such as ``ModelProvider``.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    """Load identity types without an import cycle."""
+    """Load identity types without importing cryptography at module import."""
     target = _LAZY_EXPORTS.get(name)
     if target is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

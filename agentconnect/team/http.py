@@ -124,7 +124,12 @@ def _bound_session(request: Request) -> str:
 
 
 def create_runtime_app(team: Team) -> FastAPI:
-    """Return an ASGI app that serves ``team`` at ``/agentconnect/v1`` and ``/mcp``."""
+    """Return an ASGI app that serves ``team`` at ``/agentconnect/v1`` and ``/mcp``.
+
+    Use this behind your own HTTP server when you need authenticated or
+    non-loopback serving. ``Team.serve`` and ``agentconnect up`` bind
+    loopback only.
+    """
     from agentconnect.mcp.server import create_team_mcp
 
     mcp = create_team_mcp(team, in_process=False)

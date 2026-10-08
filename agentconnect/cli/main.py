@@ -1,8 +1,9 @@
 """AgentConnect CLI.
 
 A person is a Client of the Team. ``up`` starts the Runtime from
-``agentconnect.yaml``. The other commands talk to that Runtime over
-loopback HTTP as the reserved ``operator`` Membership.
+``agentconnect.toml`` or ``[tool.agentconnect]`` in ``pyproject.toml``.
+The other commands talk to that Runtime over loopback HTTP as the
+reserved ``operator`` Membership.
 
     agentconnect init
     agentconnect up
@@ -16,9 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import signal
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
@@ -28,14 +29,35 @@ from agentconnect import __version__
 from agentconnect.cli import doctor as doctor_cmds
 from agentconnect.cli.client import RuntimeClient
 from agentconnect.cli.hosting import (
-    ensure_cwd_on_path,
-    import_symbol,
+    construct_hosted_agent,
+    ensure_import_path,
     join_hosted_agent,
     team_from_config,
 )
-from agentconnect.cli.state import clear_state, read_state, write_state
-from agentconnect.cli.templates import AGENTS_INIT_PY, ASSISTANT_PY
-from agentconnect.config.loaders import load_team_config
+from agentconnect.cli.origin import resolve_runtime_origin
+from agentconnect.cli.process import (
+    inspect_process,
+    is_owned_team_process,
+    process_created_token,
+    terminate_pid,
+)
+from agentconnect.cli.state import (
+    clear_owned_state,
+    publish_state,
+    read_state,
+)
+from agentconnect.cli.templates import (
+    AGENTS_INIT_PY,
+    ASSISTANT_PY,
+    SHARED_PY,
+    TOOLS_INIT_PY,
+)
+from agentconnect.config.loaders import (
+    TOML_FILENAME,
+    dump_team_toml,
+    find_config_file,
+    load_selected_team,
+)
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
 from agentconnect.team.errors import TeamError
 
@@ -49,6 +71,24 @@ app = typer.Typer(
 def _die(message: str, code: int = 1) -> None:
     typer.echo(message, err=True)
     raise typer.Exit(code=code)
+
+
+def _concise(exc: BaseException, *, limit: int = 400) -> str:
+    text = str(exc).strip() or type(exc).__name__
+    text = " ".join(part.strip() for part in text.splitlines() if part.strip())
+    if len(text) > limit:
+        return text[: limit - 3] + "..."
+    return text
+
+
+def _die_exc(exc: BaseException) -> None:
+    _die(_concise(exc))
+
+
+def _die_startup(config_path: Path, exc: BaseException) -> None:
+    if os.environ.get("AGENTCONNECT_CLI_TRACE"):
+        traceback.print_exc()
+    _die(f"{config_path}: {_concise(exc)}")
 
 
 def _emit(data: Any, *, as_json: bool) -> None:
@@ -67,17 +107,10 @@ def _resolve_url(
     file: Optional[Path] = None,
     root: Optional[Path] = None,
 ) -> str:
-    if url:
-        return url.rstrip("/")
-    base = root or Path.cwd()
-    state = read_state(base)
-    if state and isinstance(state.get("url"), str) and state["url"]:
-        return str(state["url"]).rstrip("/")
     try:
-        config = load_team_config(file, start=base)
-    except (FileNotFoundError, ValueError):
-        return "http://127.0.0.1:9000"
-    return f"http://{config.host}:{config.port}"
+        return resolve_runtime_origin(url=url, file=file, start=root)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        _die_exc(exc)
 
 
 def _client(
@@ -105,15 +138,25 @@ def init(
     force: Annotated[
         bool,
         typer.Option(
-            "--force", help="Overwrite agentconnect.yaml and the starter Agent."
+            "--force",
+            help="Replace existing Team files and the starter Agent.",
         ),
     ] = False,
 ) -> None:
-    """Scaffold agentconnect.yaml and one hosted Agent."""
+    """Scaffold agentconnect.toml, one hosted Agent, and a shared MCP tool."""
     root = Path.cwd()
-    yaml_path = root / "agentconnect.yaml"
-    if yaml_path.exists() and not force:
-        _die("agentconnect.yaml already exists. Use --force to overwrite.")
+    try:
+        existing = find_config_file(root)
+    except ValueError as exc:
+        if not force:
+            _die_exc(exc)
+        existing = None
+    if existing is not None and not force:
+        _die(
+            f"Team configuration already exists at {existing}. "
+            "Start it with 'agentconnect up', or replace starter files with "
+            "'agentconnect init --force'."
+        )
     try:
         config = TeamConfig(
             team=name,
@@ -122,37 +165,44 @@ def init(
             host="127.0.0.1",
             port=9000,
             require_join_auth=True,
+            tools=["tools.shared:ping"],
             agents=[
                 HostedAgentConfig(
-                    class_path="agents.assistant:Assistant", name="assistant"
+                    class_path="agents.assistant:create_assistant",
+                    name="assistant",
                 )
             ],
         )
     except Exception as exc:
-        _die(str(exc))
-    import yaml as pyyaml
-
-    yaml_path.write_text(
+        _die_exc(exc)
+    toml_path = root / TOML_FILENAME
+    toml_path.write_text(
         "# Scaffold from `agentconnect init`. Secrets stay in the environment.\n"
-        + pyyaml.safe_dump(
-            config.model_dump(by_alias=True, exclude_none=True),
-            sort_keys=False,
-        ),
+        "# Extra tools are published on Team MCP; connecting a harness is a\n"
+        "# separate step. Independently deployed Agents join by URL/token.\n"
+        + dump_team_toml(config),
         encoding="utf-8",
     )
     agents_dir = root / "agents"
     agents_dir.mkdir(exist_ok=True)
+    tools_dir = root / "tools"
+    tools_dir.mkdir(exist_ok=True)
     init_py = agents_dir / "__init__.py"
     assistant_py = agents_dir / "assistant.py"
-    if init_py.exists() and not force:
-        pass
-    else:
+    tools_init_py = tools_dir / "__init__.py"
+    shared_py = tools_dir / "shared.py"
+    if not init_py.exists() or force:
         init_py.write_text(AGENTS_INIT_PY, encoding="utf-8")
+    if not tools_init_py.exists() or force:
+        tools_init_py.write_text(TOOLS_INIT_PY, encoding="utf-8")
+    if not shared_py.exists() or force:
+        shared_py.write_text(SHARED_PY, encoding="utf-8")
+        typer.echo(f"Wrote {shared_py}")
     if assistant_py.exists() and not force:
-        typer.echo(f"Wrote {yaml_path} (left existing {assistant_py})")
+        typer.echo(f"Wrote {toml_path} (left existing {assistant_py})")
     else:
         assistant_py.write_text(ASSISTANT_PY, encoding="utf-8")
-        typer.echo(f"Wrote {yaml_path}")
+        typer.echo(f"Wrote {toml_path}")
         typer.echo(f"Wrote {assistant_py}")
     typer.echo("Next: agentconnect up")
 
@@ -161,55 +211,102 @@ def init(
 def up(
     file: Annotated[
         Optional[Path],
-        typer.Option("--file", exists=True, readable=True, help="Team file."),
+        typer.Option(
+            "--file",
+            help="Team file. Overrides saved state and discovery.",
+        ),
     ] = None,
     detach: Annotated[
         bool, typer.Option("--detach", help="Start in the background.")
     ] = False,
 ) -> None:
-    """Start the Team and its hosted Agents from agentconnect.yaml."""
+    """Start the Team and its hosted Agents from a Team file."""
     root = Path.cwd()
     try:
-        config = load_team_config(file, start=root)
+        config_path, config = load_selected_team(file, start=root)
     except FileNotFoundError:
-        _die("agentconnect.yaml was not found. Run 'agentconnect init'.")
-    except ValueError as exc:
-        _die(str(exc))
-    config_path = file or (root / "agentconnect.yaml")
+        _die("Team file was not found. Run 'agentconnect init'.")
+    except (ValueError, OSError) as exc:
+        _die_exc(exc)
+    if config_path.suffix.lower() in {".yaml", ".yml"}:
+        typer.echo(
+            f"warning: {config_path} is a legacy YAML Team file; "
+            "migrate to agentconnect.toml",
+            err=True,
+        )
+    typer.echo(f"using {config_path}")
+    existing = read_state(config_path)
+    if existing and is_owned_team_process(existing, config_path):
+        _die(
+            f"Team {config.team} already running at {existing.get('url')} "
+            f"(pid {existing.get('pid')})"
+        )
     if detach:
-        _spawn_detached(config_path, root)
+        _spawn_detached(config_path)
         return
     try:
-        asyncio.run(_run_up(config, config_path, root))
+        asyncio.run(_run_up(config, config_path))
     except KeyboardInterrupt:
         raise typer.Exit(code=0)
+    except (SystemExit, typer.Exit):
+        raise
+    except Exception as exc:
+        _die_startup(config_path, exc)
 
 
-async def _run_up(config: TeamConfig, config_path: Path, root: Path) -> None:
-    ensure_cwd_on_path(root)
-    team = team_from_config(config)
-    await team.start()
-    agents: list[Any] = []
+async def _run_up(config: TeamConfig, config_path: Path) -> None:
     try:
-        url = await team.serve(host=config.host, port=config.port)
-        for spec in config.agents:
-            cls = import_symbol(spec.class_path)
-            agent = cls(name=spec.name)
-            await join_hosted_agent(team, agent)
-            agents.append(agent)
-        write_state(
-            root,
-            pid=os.getpid(),
-            url=url,
-            team=config.team,
-            config_file=str(config_path),
-        )
+        ensure_import_path(config_path.parent)
+        team = team_from_config(config)
+        agents = [construct_hosted_agent(spec) for spec in config.agents]
+    except (KeyboardInterrupt, SystemExit, typer.Exit):
+        raise
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        _die_startup(config_path, exc)
+    joined: list[Any] = []
+    pid = os.getpid()
+    published: Optional[str] = None
+    try:
+        await team.start()
+        try:
+            url = await team.serve(host=config.host, port=config.port)
+            for agent in agents:
+                await join_hosted_agent(team, agent)
+                joined.append(agent)
+        except KeyboardInterrupt:
+            raise
+        except SystemExit as exc:
+            if exc.code in {0, None}:
+                raise
+            _die_startup(config_path, RuntimeError(f"HTTP serving failed ({exc.code})"))
+        except typer.Exit:
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _die_startup(config_path, exc)
+        created = process_created_token(pid)
+        if not created:
+            _die_startup(config_path, RuntimeError("could not read process identity"))
+        try:
+            publish_state(
+                config_path,
+                pid=pid,
+                url=url,
+                team=config.team,
+                created=created,
+            )
+        except RuntimeError as exc:
+            _die_startup(config_path, exc)
+        published = created
         typer.echo(f"team {config.team} at {url}")
         typer.echo(f"mcp  {url}/mcp")
         while True:
             await asyncio.sleep(1)
     finally:
-        for agent in agents:
+        for agent in joined:
             leave = getattr(agent, "leave", None)
             if leave is not None:
                 try:
@@ -217,10 +314,11 @@ async def _run_up(config: TeamConfig, config_path: Path, root: Path) -> None:
                 except Exception:
                     pass
         await team.stop()
-        clear_state(root)
+        if published is not None:
+            clear_owned_state(config_path, pid=pid, created=published)
 
 
-def _spawn_detached(config_path: Path, root: Path) -> None:
+def _spawn_detached(config_path: Path) -> None:
     command = [
         sys.executable,
         "-m",
@@ -229,7 +327,7 @@ def _spawn_detached(config_path: Path, root: Path) -> None:
         "--file",
         str(config_path.resolve()),
     ]
-    kwargs: dict[str, Any] = {"cwd": str(root)}
+    kwargs: dict[str, Any] = {"cwd": str(config_path.parent)}
     if sys.platform == "win32":
         kwargs["creationflags"] = (
             subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -242,35 +340,61 @@ def _spawn_detached(config_path: Path, root: Path) -> None:
 
 
 @app.command("down")
-def down() -> None:
-    """Stop the Team started by ``up`` in this directory."""
+def down(
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
+) -> None:
+    """Stop the Team started by ``up`` for the selected Team file."""
     root = Path.cwd()
-    state = read_state(root)
-    if state is None or not isinstance(state.get("pid"), int):
+    try:
+        config_path, _config = load_selected_team(file, start=root)
+    except FileNotFoundError:
         _die("no running Team in this directory")
+    except (ValueError, OSError) as exc:
+        _die_exc(exc)
+    state = read_state(config_path)
+    if state is None or not isinstance(state.get("pid"), int):
+        _die(f"no running Team for {config_path}")
     pid = int(state["pid"])
     if pid == os.getpid():
         _die("refusing to stop the current process")
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/F"],
-            capture_output=True,
-            check=False,
-        )
-    else:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError as exc:
-            _die(f"could not stop pid {pid}: {exc}")
-    clear_state(root)
+    recorded = state.get("created")
+    recorded_token = recorded if isinstance(recorded, str) and recorded else None
+    status, _live = inspect_process(pid)
+    if status == "dead":
+        clear_owned_state(config_path, pid=pid, created=recorded_token)
+        typer.echo("stopped")
+        return
+    if not is_owned_team_process(state, config_path):
+        if status == "unknown" or recorded_token is None:
+            _die("cannot verify process identity; not killed")
+        _die(f"pid {pid} is not the Team started from {config_path}; not killed")
+    if recorded_token is None:
+        _die("cannot verify process identity; not killed")
+    try:
+        terminate_pid(pid, recorded_token)
+    except Exception as exc:
+        _die_exc(exc)
+    if inspect_process(pid)[0] != "dead":
+        _die(f"pid {pid} is still running")
+    clear_owned_state(config_path, pid=pid, created=recorded_token)
     typer.echo("stopped")
 
 
 @app.command("status")
 def status(
-    url: Annotated[Optional[str], typer.Option("--url", help="Runtime origin.")] = None,
+    url: Annotated[
+        Optional[str],
+        typer.Option(
+            "--url",
+            help="Runtime origin. Overrides --file, saved state, and discovery.",
+        ),
+    ] = None,
     file: Annotated[
-        Optional[Path], typer.Option("--file", help="Team file used to resolve origin.")
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
@@ -321,11 +445,15 @@ def token_issue(
         bool, typer.Option("--single-use", help="Consume the token on the first join.")
     ] = False,
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Issue a join token for a network Agent."""
     try:
-        with _client(url) as client:
+        with _client(url, file=file) as client:
             issued = client.issue_token(
                 name=name, agent_did=did, ttl_seconds=ttl, single_use=single_use
             )
@@ -342,10 +470,14 @@ def token_issue(
 def token_revoke(
     token: Annotated[str, typer.Argument(help="Token secret to revoke.")],
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
 ) -> None:
     """Revoke a join token and drop Sessions created from it."""
     try:
-        with _client(url) as client:
+        with _client(url, file=file) as client:
             client.revoke_token(token)
     except TeamError as exc:
         _handle_team_error(exc)
@@ -357,11 +489,15 @@ def find(
     query: Annotated[str, typer.Argument(help="Natural-language need.")],
     limit: Annotated[Optional[int], typer.Option("--limit", min=1, max=100)] = None,
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Search this Team's Directory."""
     try:
-        with _client(url) as client:
+        with _client(url, file=file) as client:
             result = client.find(query, limit=limit)
     except TeamError as exc:
         _handle_team_error(exc)
@@ -389,6 +525,10 @@ def ask(
         ),
     ] = None,
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Send reply-expected work and wait for the Ticket."""
@@ -400,7 +540,9 @@ def ask(
         except json.JSONDecodeError:
             content = question
     try:
-        with _client(url, timeout=max(35.0, (deadline or 0.0) + 10.0)) as client:
+        with _client(
+            url, file=file, timeout=max(35.0, (deadline or 0.0) + 10.0)
+        ) as client:
             result = client.ask(address, content, deadline_seconds=deadline)
     except TeamError as exc:
         _handle_team_error(exc)
@@ -428,11 +570,15 @@ def ask(
 def trace_cmd(
     trace_id: Annotated[str, typer.Argument(help="Trace UUID.")],
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Print the timeline for one causal operation."""
     try:
-        with _client(url) as client:
+        with _client(url, file=file) as client:
             result = client.get_trace(trace_id)
     except TeamError as exc:
         _handle_team_error(exc)
@@ -470,9 +616,13 @@ def _print_trace_event(event: dict[str, Any]) -> None:
 @app.command("watch")
 def watch(
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
 ) -> None:
     """Print new Trace events until interrupted."""
-    client = RuntimeClient(_resolve_url(url))
+    client = RuntimeClient(_resolve_url(url, file=file))
     try:
         for item in client.watch():
             data = item.get("data")
@@ -491,9 +641,13 @@ def watch(
 @app.command("doctor")
 def doctor(
     url: Annotated[Optional[str], typer.Option("--url")] = None,
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", help="Team file. Overrides saved state and discovery."),
+    ] = None,
 ) -> None:
     """Check the Team file, keys, and whether the Runtime is reachable."""
-    doctor_cmds.doctor(url=url)
+    doctor_cmds.doctor(url=url, file=file)
 
 
 def main() -> None:

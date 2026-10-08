@@ -98,7 +98,7 @@ class CapabilityDiscoveryService:
             # Check which backends are available
             from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
                 check_semantic_search_requirements,
-                create_huggingface_embeddings,
+                create_embeddings,
             )
 
             self._available_backends = check_semantic_search_requirements()
@@ -114,7 +114,7 @@ class CapabilityDiscoveryService:
             # Initialize embeddings model
             self._embeddings_model = cast(
                 "Optional[_Embeddings]",
-                create_huggingface_embeddings(self._vector_store_config),
+                create_embeddings(self._vector_store_config),
             )
             if not self._embeddings_model:
                 logger.warning("Failed to initialize embeddings model")

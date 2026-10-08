@@ -1,4 +1,4 @@
-"""Team file models for ``agentconnect.yaml``.
+"""Team file models for ``[tool.agentconnect]`` and ``agentconnect.toml``.
 
 Embedded ``Team("name").start()`` needs no file. This file describes a
 Team the CLI can start with ``agentconnect up``: store, embeddings,
@@ -10,8 +10,8 @@ hosted Agents, and extra MCP tools. Secrets stay in the environment.
     config.team
     config.agents[0].class_path
 
-The example file is generated from :meth:`TeamConfig.example` so the
-committed YAML cannot drift from these fields.
+The example file is generated from `TeamConfig.example` so the
+committed TOML cannot drift from these fields.
 """
 
 from __future__ import annotations
@@ -20,39 +20,24 @@ import ipaddress
 import re
 from typing import List
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from agentconnect.config.vector import VectorSearchSettings
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _IMPORT_REF = re.compile(r"^([A-Za-z_][\w.]*)\:([A-Za-z_]\w*)$")
 _EMBEDDING_KEYS = {"auto", "none", "hashed", "fastembed", "openai", "litellm"}
 
 
-class PaymentsSettings(BaseModel):
-    """Wallet defaults used by optional payment extras.
-
-    Not part of ``agentconnect.yaml``. CDP keys stay in the environment.
-    """
-
-    default_token_symbol: str = Field(default="USDC")
-    wallet_data_dir: str = Field(default="data/agent_wallets")
-
-    @field_validator("default_token_symbol")
-    @classmethod
-    def normalize_token_symbol(cls, value: str) -> str:
-        """Uppercase the token symbol."""
-        return (value or "").upper()
-
-
 class HostedAgentConfig(BaseModel):
-    """One Agent class this Team process should construct and join.
+    """One Agent this Team process constructs and joins.
 
-    ``class`` is ``module:ClassName``. ``name`` is unique within the Team.
+    `class` is `module:Name`. That name is a `BaseAgent` subclass, or a
+    function `create(name) -> BaseAgent` that returns an unjoined Agent.
+    `name` is unique within the Team.
 
-    .. code-block:: yaml
-
-        - class: agents.writer:Writer
-          name: writer
+    ```toml
+    [[tool.agentconnect.agents]]
+    class = "agents.writer:Writer"
+    name = "writer"
+    ```
     """
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -60,7 +45,10 @@ class HostedAgentConfig(BaseModel):
     class_path: str = Field(
         alias="class",
         min_length=1,
-        description="Import path module:ClassName for a BaseAgent subclass.",
+        description=(
+            "Import path module:Name of a BaseAgent subclass or a "
+            "function create(name) that returns an unjoined BaseAgent."
+        ),
     )
     name: str = Field(
         min_length=1,
@@ -71,9 +59,9 @@ class HostedAgentConfig(BaseModel):
     @field_validator("class_path")
     @classmethod
     def validate_class_path(cls, value: str) -> str:
-        """Require ``module:Class`` form."""
+        """Require ``module:Name`` form."""
         if _IMPORT_REF.fullmatch(value.strip()) is None:
-            raise ValueError("class must be module:ClassName")
+            raise ValueError("class must be module:Name")
         return value.strip()
 
     @field_validator("name")
@@ -89,19 +77,21 @@ class HostedAgentConfig(BaseModel):
 
 
 class TeamConfig(BaseModel):
-    """Contents of ``agentconnect.yaml``.
+    """Contents of a Team file.
 
-    .. code-block:: yaml
+    ```toml
+    [tool.agentconnect]
+    team = "content-squad"
+    store = "memory"
+    embeddings = "auto"
+    host = "127.0.0.1"
+    port = 9000
+    require_join_auth = true
 
-        team: content-squad
-        store: memory
-        embeddings: auto
-        host: 127.0.0.1
-        port: 9000
-        require_join_auth: true
-        agents:
-          - class: agents.writer:Writer
-            name: writer
+    [[tool.agentconnect.agents]]
+    class = "agents.writer:Writer"
+    name = "writer"
+    ```
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -131,7 +121,11 @@ class TeamConfig(BaseModel):
     )
     agents: List[HostedAgentConfig] = Field(
         default_factory=list,
-        description="Agent classes this process constructs and joins.",
+        description=(
+            "Agents this process constructs and joins. Each class is a "
+            "BaseAgent subclass or a function create(name) -> BaseAgent. "
+            "Independently deployed Agents join by URL and are not listed."
+        ),
     )
     tools: List[str] = Field(
         default_factory=list,
@@ -203,9 +197,19 @@ class TeamConfig(BaseModel):
             cleaned.append(text)
         return cleaned
 
+    @model_validator(mode="after")
+    def unique_agent_names(self) -> "TeamConfig":
+        """Reject two hosted Agents that share a name."""
+        seen: set[str] = set()
+        for spec in self.agents:
+            if spec.name in seen:
+                raise ValueError(f"duplicate Agent name {spec.name!r}")
+            seen.add(spec.name)
+        return self
+
     @classmethod
     def example(cls) -> "TeamConfig":
-        """Canonical example used to generate ``agentconnect.example.yaml``."""
+        """Canonical example used to generate ``agentconnect.example.toml``."""
         return cls(
             team="content-squad",
             store="memory",
@@ -230,6 +234,4 @@ class TeamConfig(BaseModel):
 __all__ = [
     "TeamConfig",
     "HostedAgentConfig",
-    "PaymentsSettings",
-    "VectorSearchSettings",
 ]

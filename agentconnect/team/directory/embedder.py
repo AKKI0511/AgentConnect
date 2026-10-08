@@ -614,6 +614,19 @@ def _fastembed_tokenizer(model: Any) -> Any:
     return None
 
 
+def hashed_embedding(text: str, dim: int = HASHED_DIM) -> list[float]:
+    """Return the hashed n-gram vector for ``text``.
+
+    Args:
+        text: Profile or query text to embed.
+        dim: Vector length. Defaults to 384.
+
+    Returns:
+        A unit-length vector of ``dim`` floats.
+    """
+    return _hash_text(text, dim)
+
+
 def _hash_texts(texts: list[str], dim: int) -> list[list[float]]:
     return [_hash_text(text, dim) for text in texts]
 

@@ -21,13 +21,19 @@ import httpx
 from agentconnect.team.errors import TeamError
 
 HTTP_PREFIX = "/agentconnect/v1"
+DEFAULT_TIMEOUT = 35.0
 
 
 class RuntimeClient:
     """Synchronous HTTP Client for operator CLI commands."""
 
-    def __init__(self, origin: str, *, timeout: float = 35.0) -> None:
-        """Talk to the Runtime at ``origin``, for example ``http://127.0.0.1:9000``."""
+    def __init__(self, origin: str, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+        """Talk to the Runtime at ``origin``, for example ``http://127.0.0.1:9000``.
+
+        ``timeout`` is the HTTP wait budget for ordinary calls. Work
+        deadlines on ``ask`` are separate; streaming ``watch`` waits
+        until the stream ends.
+        """
         self.origin = origin.rstrip("/")
         self._client = httpx.Client(
             base_url=self.origin,
@@ -79,13 +85,13 @@ class RuntimeClient:
             "content": content,
             "collect": collect,
         }
-        timeout = float(self._client.timeout.read or 35.0)
+        timeout = float(self._client.timeout.read or DEFAULT_TIMEOUT)
         if deadline_seconds is not None:
             deadline = datetime.now(timezone.utc) + timedelta(seconds=deadline_seconds)
             body["deadline"] = deadline.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             timeout = max(timeout, deadline_seconds + 10.0)
         else:
-            timeout = max(timeout, 35.0)
+            timeout = max(timeout, DEFAULT_TIMEOUT)
         return self._post("/messages", body, timeout=timeout)
 
     def get_trace(self, trace_id: str) -> dict[str, Any]:
@@ -177,7 +183,10 @@ class RuntimeClient:
     def _post(
         self, path: str, body: dict[str, Any], *, timeout: Optional[float] = None
     ) -> dict[str, Any]:
-        return self._result(self._request("POST", path, json=body, timeout=timeout))
+        kwargs: dict[str, Any] = {"json": body}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return self._result(self._request("POST", path, **kwargs))
 
     def _result(self, response: httpx.Response) -> dict[str, Any]:
         if response.status_code in {200, 204}:

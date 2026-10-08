@@ -190,8 +190,14 @@ def test_prebuilt_ai_agent_does_not_import_langchain():
     assert loaded == []
 
 
-def test_core_types_has_no_model_enums():
-    types_mod = importlib.import_module("agentconnect.core.types")
+def test_core_types_module_is_removed():
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("agentconnect.core.types")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("agentconnect.core.exceptions")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("agentconnect.utils")
+    types_mod = importlib.import_module("agentconnect.compat.types")
     assert not hasattr(types_mod, "ModelProvider")
     assert not hasattr(types_mod, "ModelName")
 
@@ -251,6 +257,9 @@ def test_removed_legacy_packages():
         "agentconnect.cli.registry",
         "agentconnect.providers",
         "agentconnect.prompts",
+        "agentconnect.core.types",
+        "agentconnect.core.exceptions",
+        "agentconnect.utils",
     ]:
         sys.modules.pop(name, None)
         try:

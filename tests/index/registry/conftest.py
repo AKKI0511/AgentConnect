@@ -12,7 +12,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from agentconnect.config.models import VectorSearchSettings
+from agentconnect.config.vector import VectorSearchSettings
 
 # Import from agentconnect
 from agentconnect.core.identity import AgentIdentity
@@ -20,7 +20,7 @@ from agentconnect.core.profile import Skill
 from agentconnect.index.registry.capability_discovery import CapabilityDiscoveryService
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     check_semantic_search_requirements,
-    create_huggingface_embeddings,
+    create_embeddings,
 )
 from agentconnect.index.registry.capability_discovery_impl.qdrant_client import (
     initialize_qdrant_clients,
@@ -207,7 +207,7 @@ async def embeddings_model():
         return None
 
     vs = VectorSearchSettings.model_validate({"model_name": "hashed"})
-    return create_huggingface_embeddings(vs)
+    return create_embeddings(vs)
 
 
 @pytest_asyncio.fixture

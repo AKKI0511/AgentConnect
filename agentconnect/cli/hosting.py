@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import sys
 from pathlib import Path
 from typing import Any
 
-from agentconnect.config.models import TeamConfig
+from agentconnect.agent.base import BaseAgent
+from agentconnect.config.models import HostedAgentConfig, TeamConfig
 from agentconnect.team.runtime import Team
 
 
-def ensure_cwd_on_path(root: Path | None = None) -> None:
-    """Put the project directory on ``sys.path`` so hosted classes import."""
-    directory = str((root or Path.cwd()).resolve())
-    if directory not in sys.path:
-        sys.path.insert(0, directory)
+def ensure_import_path(directory: Path) -> None:
+    """Put ``directory`` first on ``sys.path`` so its modules win over cwd.
+
+    Args:
+        directory: Directory of the selected Team file. Hosted Agents and
+            extra tools are imported from here.
+    """
+    resolved = str(directory.resolve())
+    sys.path[:] = [entry for entry in sys.path if entry != resolved]
+    sys.path.insert(0, resolved)
 
 
 def import_symbol(ref: str) -> Any:
@@ -33,9 +40,69 @@ def import_symbol(ref: str) -> Any:
         raise ValueError(f"{ref} was not found") from exc
 
 
+def construct_hosted_agent(spec: HostedAgentConfig) -> BaseAgent:
+    """Build an unjoined Agent from a Team-file ``class`` entry.
+
+    ``class`` is a ``BaseAgent`` subclass, or a function
+    ``create(name) -> BaseAgent``. The result must be an unjoined
+    ``BaseAgent`` whose ``name`` matches the file.
+    """
+    target = import_symbol(spec.class_path)
+    if inspect.iscoroutinefunction(target) or inspect.isasyncgenfunction(target):
+        raise ValueError(
+            f"{spec.class_path} must be synchronous; create(name) cannot be async"
+        )
+    if not callable(target):
+        raise ValueError(
+            f"{spec.class_path} must be a BaseAgent subclass or a function "
+            "create(name) that returns an unjoined BaseAgent"
+        )
+    try:
+        agent = target(name=spec.name)
+    except TypeError as exc:
+        raise ValueError(
+            f"{spec.class_path} must accept name={spec.name!r} and return an "
+            f"unjoined BaseAgent ({exc})"
+        ) from exc
+    except BaseException as exc:
+        if _is_control_flow(exc):
+            raise
+        raise ValueError(f"{spec.class_path}: {exc}") from exc
+    if inspect.iscoroutine(agent):
+        agent.close()
+        raise ValueError(
+            f"{spec.class_path} must be synchronous; create(name) returned a coroutine"
+        )
+    if not isinstance(agent, BaseAgent):
+        raise ValueError(
+            f"{spec.class_path} returned {type(agent).__name__}, not a BaseAgent"
+        )
+    if getattr(agent, "_session", None) is not None:
+        raise ValueError(
+            f"{spec.class_path} returned a joined Agent; create(name) must "
+            "return an unjoined BaseAgent"
+        )
+    if agent.name != spec.name:
+        raise ValueError(
+            f"{spec.class_path} built Agent {agent.name!r}, expected {spec.name!r}"
+        )
+    return agent
+
+
+def _is_control_flow(exc: BaseException) -> bool:
+    if isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+        return True
+    return type(exc).__name__ == "CancelledError"
+
+
 def team_from_config(config: TeamConfig) -> Team:
     """Build an unstarted Team from a Team file."""
-    extras = [import_symbol(ref) for ref in config.tools]
+    extras: list[Any] = []
+    for ref in config.tools:
+        try:
+            extras.append(import_symbol(ref))
+        except Exception as exc:
+            raise ValueError(f"could not import extra tool {ref}: {exc}") from exc
     return Team(
         config.team,
         store=config.store,

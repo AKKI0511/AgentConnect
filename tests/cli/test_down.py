@@ -94,14 +94,14 @@ def test_dead_pid_clears_state(tmp_path: Path) -> None:
 def test_two_configs_have_separate_state(tmp_path: Path) -> None:
     first = _toml(tmp_path / "one.toml", team="one", port=9001)
     second = _toml(tmp_path / "two.toml", team="two", port=9002)
-    write_state(first, pid=11, url="http://127.0.0.1:9001", team="one", created="a")
-    write_state(second, pid=22, url="http://127.0.0.1:9002", team="two", created="b")
+    write_state(first, pid=4242, url="http://127.0.0.1:9001", team="one", created="a")
+    write_state(second, pid=4243, url="http://127.0.0.1:9002", team="two", created="b")
     result = run_cli("down", "--file", str(first), cwd=tmp_path)
     assert result.returncode == 0
     assert read_state(first) is None
     leftover = read_state(second)
     assert leftover is not None
-    assert leftover["pid"] == 22
+    assert leftover["pid"] == 4243
 
 
 def test_nested_directory_stop_uses_parent_config(tmp_path: Path) -> None:

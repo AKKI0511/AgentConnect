@@ -1,0 +1,12 @@
+# Local Python env for API generation. Mintlify does not auto-ignore .venv.
+.venv/
+# Tooling is not website content.
+scripts/
+pyproject.toml
+uv.lock
+package.json
+package-lock.json
+# Repository instructions are not website pages.
+AGENTS.md
+README.md
+.agents/

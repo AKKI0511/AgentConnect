@@ -1,0 +1,18 @@
+# Isolated tooling for the Mintlify documentation site.
+# Runtime AgentConnect dependencies live in the repository root pyproject.toml.
+[project]
+name = "agentconnect-docs-v2"
+version = "0.0.0"
+description = "Mintlify documentation tooling for AgentConnect (API generation and checks)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "griffelib==2.3.2",
+    "griffe2md==1.5.1",
+    "griffe-pydantic==1.3.2",
+    # Static source for the SDK's BaseSettings ancestry, not SDK runtime imports.
+    "pydantic-settings==2.15.0",
+]
+
+[tool.uv]
+package = false

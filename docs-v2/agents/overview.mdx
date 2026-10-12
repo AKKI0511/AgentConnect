@@ -1,0 +1,28 @@
+---
+title: "For agents"
+sidebarTitle: "Overview"
+description: "How language models should read AgentConnect: llms.txt, Markdown pages, MCP, and the public nouns."
+keywords: ["ax", "llms.txt", "mcp", "agents"]
+---
+
+This site is for people and for agents. Humans get the reading column. Agents get Markdown, `llms.txt`, and MCP.
+
+## Indexes
+
+Mintlify hosts these at the site root once the docs are deployed:
+
+- `/llms.txt` — page index
+- `/llms-full.txt` — concatenated Markdown
+- append `.md` to any page URL for a Markdown copy
+
+## Nouns
+
+Keep these names: Team, Runtime, Membership, Session, Message, Delivery, Ticket, Thread, Address, Skill. The Runtime is not a wire standard.
+
+## Tools
+
+Prefer MCP tools and the Python SDK over scraping HTML. See [MCP](/integrate/mcp) and the [API reference](/api-reference).
+
+<Visibility for="agents">
+  Fetch `/llms.txt` first. Follow `.md` links. Do not invent modules under `agentconnect.gateway` or `agentconnect.utils`. Those are excluded from the public API.
+</Visibility>

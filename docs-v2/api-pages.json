@@ -1,0 +1,114 @@
+[
+  "api-reference",
+  "api/cli",
+  "api/compat",
+  {
+    "group": "agent",
+    "root": "api/agent",
+    "pages": [
+      "api/agent-base",
+      "api/agent-context",
+      "api/agent-errors",
+      "api/agent-identity",
+      "api/agent-session",
+      "api/agent-tools"
+    ]
+  },
+  {
+    "group": "config",
+    "root": "api/config",
+    "pages": [
+      "api/config-loaders",
+      "api/config-models",
+      "api/config-servers",
+      "api/config-vector"
+    ]
+  },
+  {
+    "group": "core",
+    "root": "api/core",
+    "pages": [
+      "api/core-address",
+      "api/core-base",
+      "api/core-directory",
+      "api/core-error",
+      "api/core-identity",
+      "api/core-kinds",
+      "api/core-message",
+      "api/core-operations",
+      "api/core-primitives",
+      "api/core-profile",
+      "api/core-spec",
+      "api/core-ticket"
+    ]
+  },
+  {
+    "group": "index",
+    "root": "api/index",
+    "pages": [
+      "api/index-client",
+      "api/index-service",
+      "api/index-types"
+    ]
+  },
+  {
+    "group": "mcp",
+    "root": "api/mcp",
+    "pages": [
+      "api/mcp-server"
+    ]
+  },
+  {
+    "group": "prebuilt",
+    "root": "api/prebuilt",
+    "pages": [
+      "api/prebuilt-ai_agent",
+      "api/prebuilt-human_agent",
+      "api/prebuilt-loop",
+      {
+        "group": "telegram",
+        "root": "api/prebuilt-telegram",
+        "pages": [
+          "api/prebuilt-telegram-telegram_agent"
+        ]
+      },
+      "api/prebuilt-tools"
+    ]
+  },
+  {
+    "group": "team",
+    "root": "api/team",
+    "pages": [
+      {
+        "group": "directory",
+        "root": "api/team-directory",
+        "pages": [
+          "api/team-directory-directory",
+          "api/team-directory-embedder"
+        ]
+      },
+      "api/team-errors",
+      "api/team-http",
+      "api/team-runtime",
+      {
+        "group": "store",
+        "root": "api/team-store",
+        "pages": [
+          "api/team-store-base",
+          "api/team-store-memory",
+          "api/team-store-ops",
+          "api/team-store-redis"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "transport",
+    "root": "api/transport",
+    "pages": [
+      "api/transport-agent_http",
+      "api/transport-inprocess",
+      "api/transport-runtime"
+    ]
+  }
+]

@@ -1,0 +1,27 @@
+---
+title: "Session"
+description: "The client connection that joins a Team and pulls deliveries."
+keywords: ["session", "join", "mailbox"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+A **Session** is how one process talks to a Team. It authenticates, pulls work from the mailbox, and maps handler results onto reply and complete.
+
+Sessions are disposable. Identity and tickets belong to the Team, not to the process that happened to be connected.
+
+## Join
+
+```python
+await Writer(name="writer").join(team)
+```
+
+A remote Team takes a URL and a join token instead of the in-process object.
+
+## Related
+
+- [Team](/concepts/team)
+- [Message](/concepts/message)
+- [Session API](/api/agent-session)

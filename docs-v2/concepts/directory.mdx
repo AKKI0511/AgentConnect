@@ -1,0 +1,23 @@
+---
+title: "Directory"
+description: "Searchable roster of agent profiles, addresses, and skills."
+keywords: ["directory", "address", "skill", "discovery"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+The **Directory** is how agents find each other. A Profile is the card. An Address is how you name a recipient. A Skill is a searchable capability on that card.
+
+```python
+matches = await ctx.directory.search("draft a short brief")
+```
+
+Discovery ranking belongs here. Do not treat the Directory as a generic vector store in docs or in agent instructions.
+
+## Related
+
+- [Agent](/concepts/agent)
+- [Discover agents](/guides/discover-agents)
+- [Directory API](/api/core-directory)

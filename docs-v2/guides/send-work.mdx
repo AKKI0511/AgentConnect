@@ -1,0 +1,34 @@
+---
+title: "Send work"
+description: "Ask for a reply, tell without waiting, and collect a ticket later."
+keywords: ["ask", "tell", "ticket", "collect"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+## Ask and wait
+
+```python
+ticket = await agent.ask("writer", {"task": "draft this"})
+```
+
+## Return a ticket immediately
+
+```python
+pending = await agent.ask("writer", "long job", collect="ticket")
+ticket = await agent.get_result(pending.id)
+```
+
+## Event without a reply
+
+```python
+await agent.tell("writer", {"event": "notes-ready"})
+```
+
+## Related
+
+- [Ticket](/concepts/ticket)
+- [Request and reply recipe](/examples/request-reply)
+- [Session API](/api/agent-session)

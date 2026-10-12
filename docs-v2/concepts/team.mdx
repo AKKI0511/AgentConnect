@@ -1,0 +1,29 @@
+---
+title: "Team"
+description: "A named group of agents served by one Runtime."
+keywords: ["team", "runtime", "membership"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+A **Team** is the durable object people come back to. The Runtime is the process that serves it. Membership is how an agent is allowed to join.
+
+## What persists
+
+The Team name, join policy, Directory, mailboxes, and tickets live with the Runtime. A Session is disposable. If a process exits, another Session can join the same Team.
+
+## Start
+
+```python
+from agentconnect.team import Team
+
+team = await Team("content-squad").start()
+```
+
+## Related
+
+- [Agent](/concepts/agent)
+- [Join a team](/guides/join-a-team)
+- [Team runtime API](/api/team-runtime)

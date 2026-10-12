@@ -204,8 +204,10 @@ data/
 .agents/*
 !.agents/skills/
 .agents/skills/*
-!.agents/skills/public-api-writing/
-!.agents/skills/public-api-writing/**
+!.agents/skills/agent-tool-design/
+!.agents/skills/agent-tool-design/**
+!.agents/skills/python-api-reference/
+!.agents/skills/python-api-reference/**
 .codex/
 .cursor-cache/
 .cursor-cache-v2/

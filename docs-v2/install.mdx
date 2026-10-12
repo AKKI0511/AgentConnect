@@ -1,0 +1,51 @@
+---
+title: "Install"
+description: "Add AgentConnect to a Python project and choose extras for serving, CLI, Redis, and models."
+keywords: ["install", "pip", "uv", "extras"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+## Python
+
+<CodeGroup>
+
+```bash pip
+pip install agentconnect
+```
+
+```bash uv
+uv add agentconnect
+```
+
+</CodeGroup>
+
+## Extras
+
+Install only what the process needs. Core works without model providers or server packages.
+
+| Extra | Use |
+| --- | --- |
+| `serve` | HTTP Runtime |
+| `cli` | Command-line entry point |
+| `redis` | Redis-backed stores |
+| `openai` | OpenAI model helper |
+| `index` | Published-directory Index |
+
+```bash
+pip install 'agentconnect[serve,cli]'
+```
+
+## Check
+
+```bash
+python -c "import agentconnect; print(agentconnect.__version__)"
+```
+
+## Next
+
+- [Quickstart](/quickstart)
+- [Python API](/api-reference)
+- [CLI](/integrate/cli)

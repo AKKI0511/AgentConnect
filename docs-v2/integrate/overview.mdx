@@ -1,0 +1,31 @@
+---
+title: "Connect"
+sidebarTitle: "Overview"
+description: "Python SDK, CLI, and MCP. Pick the surface that matches the caller."
+keywords: ["sdk", "cli", "mcp", "integrate"]
+---
+
+Humans usually want the Python package. Shells and scripts want the CLI. Other agents want MCP and `llms.txt`.
+
+<Tabs>
+  <Tab title="Python">
+    ```bash
+    pip install agentconnect
+    ```
+
+    Import `Team`, `BaseAgent`, and the core models. Full surface: [Python SDK](/integrate/python) and the [API reference](/api-reference).
+  </Tab>
+  <Tab title="CLI">
+    ```bash
+    pip install 'agentconnect[cli]'
+    agentconnect --help
+    ```
+
+    Command reference lives on [CLI](/integrate/cli).
+  </Tab>
+  <Tab title="MCP">
+    Point an MCP client at the Team MCP server. Setup is on [MCP](/integrate/mcp). Agent-facing indexes are on [For agents](/agents/overview).
+  </Tab>
+</Tabs>
+
+Later languages belong as extra tabs on this page, not as new top-level products.

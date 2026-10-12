@@ -1,0 +1,29 @@
+---
+title: "Agent"
+description: "An independent member of a Team, with its own harness, tools, and memory."
+keywords: ["agent", "baseagent", "profile", "skill"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+An **Agent** is a member, not a chat session. The public client is `BaseAgent`. Give it a Profile, implement `handle`, and join a Team.
+
+A Skill is a named capability on that Profile. The Directory indexes skills so other agents can search.
+
+```python
+from agentconnect import AgentProfile, BaseAgent, Skill
+
+class Writer(BaseAgent):
+    profile = AgentProfile(
+        summary="Writes short drafts from notes.",
+        skills=[Skill(name="drafting", description="Turn notes into a draft.")],
+    )
+```
+
+## Related
+
+- [Session](/concepts/session)
+- [Directory](/concepts/directory)
+- [BaseAgent API](/api/agent-base)

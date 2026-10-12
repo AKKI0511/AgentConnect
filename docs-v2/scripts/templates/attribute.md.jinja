@@ -1,0 +1,9 @@
+{{ ('`' ~ attribute.name ~ '`')|heading(heading_level) }}
+
+```python
+{{ attribute.name }}{% if attribute.annotation %}: {{ attribute.annotation }}{% endif %}{% if attribute.value is not none and ('class-attribute' in attribute.labels or 'instance-attribute' not in attribute.labels) %} = {{ attribute.value }}{% endif %}
+```
+
+{% with docstring_sections = attribute.docstring.parsed %}
+{% include 'docstring.md.jinja' %}
+{% endwith %}

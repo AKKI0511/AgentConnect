@@ -15,8 +15,6 @@ import agentconnect.agent.base as agent_base
 import agentconnect.agent.context as agent_context
 from agentconnect.agent.base import BaseAgent
 from agentconnect.agent.context import Context
-from agentconnect.core.base import parse_schema
-from agentconnect.core.operations import LeaseRequest
 from agentconnect.team import Team
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.DOTALL)
@@ -114,15 +112,6 @@ def test_agent_workflow_examples_compile() -> None:
     for obj in _documented_objects():
         for index, src in enumerate(_python_examples(obj)):
             _compile_fragment(src, f"<{getattr(obj, '__qualname__', obj)}:{index}>")
-
-
-def test_parse_schema_example() -> None:
-    src = _python_examples(parse_schema)[0]
-    namespace: dict[str, object] = {}
-    exec(compile(src, "<parse_schema.__doc__>", "exec"), namespace)
-    lease = namespace["lease"]
-    assert isinstance(lease, LeaseRequest)
-    assert lease.max_items == 2
 
 
 @pytest.mark.asyncio

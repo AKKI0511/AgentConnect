@@ -13,6 +13,7 @@ from agentconnect.core.directory import profile_view
 from agentconnect.core.operations import history_view, tell_view
 from agentconnect.core.ticket import ticket_view
 from agentconnect.team import Team
+from tests.support.tools import call_team_tool
 
 
 class Writer(BaseAgent):
@@ -97,7 +98,7 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
     for extra in extras:
         await extra.join(team)
     try:
-        found = await researcher.tools.find(query="draft a summary")
+        found = await call_team_tool(researcher.tools, "find", query="draft a summary")
         find_bytes = _bytes(found)
         assert all("agent_did" not in match for match in found["matches"])
         assert all("profile" not in match for match in found["matches"])
@@ -105,7 +106,9 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
         assert find_bytes < 2500
 
         entry = await researcher.get_entry("writer")
-        profile = await researcher.tools.get_profiles(addresses=["writer"])
+        profile = await call_team_tool(
+            researcher.tools, "get_profiles", addresses=["writer"]
+        )
         entry_bytes = _bytes(entry)
         profile_bytes = _bytes(profile)
         assert profile["items"][0]["status"] == "ok"
@@ -113,8 +116,10 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
         assert profile_bytes < entry_bytes
         assert profile_view(entry).address == entry.address
 
-        several = await researcher.tools.get_profiles(
-            addresses=["writer", "writer", extras[0].name]
+        several = await call_team_tool(
+            researcher.tools,
+            "get_profiles",
+            addresses=["writer", "writer", extras[0].name],
         )
         assert [item["status"] for item in several["items"]] == ["ok", "ok"]
         several_bytes = _bytes(several)
@@ -123,8 +128,8 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
         assert several_bytes > one_bytes
 
         told = await researcher.tell("writer", {"notice": "changed"})
-        tell = await researcher.tools.tell(
-            recipient="writer", content={"notice": "changed"}
+        tell = await call_team_tool(
+            researcher.tools, "tell", recipient="writer", content={"notice": "changed"}
         )
         tell_bytes = _bytes(tell)
         wire_tell_bytes = _bytes(told)
@@ -134,7 +139,9 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
         assert tell_bytes < wire_tell_bytes
         assert tell_bytes < 80
 
-        view = await researcher.tools.ask(
+        view = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="draft this",
             deadline_seconds=30,
@@ -151,7 +158,9 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
         assert thread_id
 
         history = await researcher.get_history(thread_id)
-        history_tool = await researcher.tools.get_history(thread_id=thread_id)
+        history_tool = await call_team_tool(
+            researcher.tools, "get_history", thread_id=thread_id
+        )
         history_bytes = _bytes(history)
         history_view_bytes = _bytes(history_tool)
         assert history_tool == dump_public(history_view(history))

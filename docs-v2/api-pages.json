@@ -10,7 +10,6 @@
       "api/agent-context",
       "api/agent-errors",
       "api/agent-identity",
-      "api/agent-session",
       "api/agent-tools"
     ]
   },

@@ -11,18 +11,16 @@ Embedded `Team("name").start()` needs no file. This file describes a
 Team the CLI can start with `agentconnect up`: store, embeddings,
 hosted Agents, and extra MCP tools. Secrets stay in the environment.
 
-The example file is generated from [`TeamConfig.example`](/api/config-models#agentconnect-config-models-teamconfig-example) so the
-committed TOML cannot drift from these fields.
-
-**Examples:**
-
-```python
+```
 from agentconnect.config import TeamConfig, load_team_config
 
 config = load_team_config()
 config.team
 config.agents[0].class_path
 ```
+
+The example file is generated from [`TeamConfig.example`](/api/config-models#agentconnect-config-models-teamconfig-example) so the
+committed TOML cannot drift from these fields.
 
 ## Public API
 

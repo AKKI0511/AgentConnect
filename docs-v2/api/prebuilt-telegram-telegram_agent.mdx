@@ -11,19 +11,18 @@ Join a Team like any other Agent, then `run()` to poll Telegram. Incoming
 Telegram text goes through the same LiteLLM loop as Team work. Telegram
 operations are extra tools.
 
-**Examples:**
-
-For a started Team. Close the Session with `leave` when finished:
-
-```python
+```
 from agentconnect.prebuilt import TelegramAIAgent
+from agentconnect.team import Team
 
 agent = TelegramAIAgent(
     name="telegram-bot",
     model="gpt-4o-mini",
     telegram_token="...",
 )
+team = await Team("content-squad").start()
 await agent.join(team)
+await agent.run()
 ```
 
 ## Public API
@@ -40,16 +39,9 @@ TelegramAIAgent(name: str, *, model: str, telegram_token: Optional[str] = None, 
 
 [`AIAgent`](/api/prebuilt-ai_agent#agentconnect-prebuilt-ai-agent-aiagent) with a Telegram bot. Team deliveries use `handle`.
 
-Join a Team first if teammates should reach you, then `run()` to poll.
-
-**Examples:**
-
-For a started Team:
-
-```python
 agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
 await agent.join(team)
-```
+await agent.run()
 
 Create a Telegram-backed Agent. It has not joined a Team or started polling.
 
@@ -62,36 +54,7 @@ Create a Telegram-backed Agent. It has not joined a Team or started polling.
 * `telegram_token` (`Optional[str]`): BotFather token. `TELEGRAM_BOT_TOKEN` is used
   when this is omitted.
 
-* `instructions` (`str`): System prompt for every model call.
-
-* `tools` (`Optional[Sequence[ToolLike]]`): Extra tools besides Telegram tools and Session Team tools.
-
-* `identity` (`Optional[AgentIdentity]`): Optional Agent identity. Omit to create one.
-
-* `profile` (`Any`): Discovery Profile mapping or [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
-
-* `completion` (`Optional[CompletionOptions]`): Extra LiteLLM kwargs such as `temperature`.
-
-* `api_key` (`Optional[str]`): Optional key. LiteLLM also reads provider env vars.
-
-* `complete` (`Optional[CompletionFn]`): Replace LiteLLM with another async callable of the
-  same shape.
-
-* `max_tool_rounds` (`int`): Cap on model-tool-model cycles per turn.
-
-* `include_team_tools` (`bool`): When True (default), Session Team tools are
-  attached on Team turns and Telegram replies.
-
 * `groups_file` (`str`): Path used to remember registered group chat ids.
-
-* `join_token` (`Optional[str]`): Token from [`Team.issue_join_token`](/api/team-runtime#agentconnect-team-runtime-team-issue-join-token), when required.
-
-* `instance_id` (`Optional[str]`): Stable id for this running copy.
-
-**Raises:**
-
-* (`ValueError`): No bot token was given and `TELEGRAM_BOT_TOKEN`
-  is unset.
 
 Inherits from [`AIAgent`](/api/prebuilt-ai_agent#agentconnect-prebuilt-ai-agent-aiagent).
 
@@ -171,10 +134,6 @@ start_telegram_bot() -> None
 
 Connect to Telegram and register handlers.
 
-**Raises:**
-
-* (`RuntimeError`): Polling could not start.
-
 <a id="agentconnect-prebuilt-telegram-telegram-agent-telegramaiagent-stop-telegram-bot"></a>
 
 `async`
@@ -197,10 +156,7 @@ Stop polling and persist registered group ids.
 run() -> None
 ```
 
-Poll Telegram until cancelled.
-
-Join a Team first if teammates should reach you. Cancellation
-stops polling and persists registered group ids.
+Poll Telegram until cancelled. Join a Team first if teammates should reach you.
 
 <a id="agentconnect-prebuilt-telegram-telegram-agent-telegramaiagent-on-shutdown"></a>
 

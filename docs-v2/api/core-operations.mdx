@@ -7,11 +7,6 @@ sidebarTitle: "operations"
 
 Runtime operation requests and results from the public schema.
 
-These are the JSON bodies for join, send, lease, reply, collect, history,
-status, and related calls. A Ticket is the requester's durable record for
-one request. An Address is an Agent name, optionally `name@team`. A DID
-is the Agent's `did:key` identity.
-
 ## Public API
 
 * [`JoinChallenge`](/api/core-operations#agentconnect-core-operations-joinchallenge)
@@ -84,18 +79,6 @@ is the Agent's `did:key` identity.
 
 Short-lived challenge used to prove Agent DID control.
 
-A DID is the Agent's `did:key` identity. The Client signs this
-challenge with [`issue_identity_proof`](/api/core-identity#agentconnect-core-identity-issue-identity-proof) and sends the JWT as
-`identity_proof` on join.
-
-**Attributes:**
-
-* `nonce` (`str`): At least 128 bits of random data in base64url form.
-
-* `audience` (`str`): Exact JWT audience required by the Runtime.
-
-* `expires_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Time after which this challenge cannot authenticate a join.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-joinchallenge-nonce"></a>
@@ -138,33 +121,9 @@ Required.
 
 Input that creates or reconnects a Membership and opens one Instance.
 
-`spec_version` is required on the wire. [`Team.join`](/api/team-runtime#agentconnect-team-runtime-team-join) fills it when you
-pass kwargs. `delivery_history="ids"` puts earlier Message ids on each
-Delivery instead of Message bodies. Omit it to receive bodies.
-
-**Attributes:**
-
-* `spec_version` ([`SpecVersion`](/api/core-primitives#agentconnect-core-primitives-specversion)): Exact public contract version implemented by the Client.
-
-* `name` ([`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname)): Requested Agent name, canonicalized by the Runtime.
-
-* `agent_did` ([`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid)): Agent-owned `did:key` proved by `identity_proof`.
-
-* `profile` ([`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile)): Discovery information that replaces the Membership's Profile.
-
-* `instance_id` (`Optional[Uuid]`): Stable id for one running copy. Omit to let the
-  Runtime assign one. Re-joining with the same value replaces
-  that Instance's Session.
-
-* `max_in_flight` (`Optional[JsonInt]`): Maximum active Delivery leases for this Session,
-  including deferred replies. Defaults to 1.
-
-* `join_token` (`Optional[str]`): Required by a network Runtime; omitted for trusted
-  embedded join.
-
-* `identity_proof` (`Optional[str]`): EdDSA JWT required by a network Runtime.
-
-* `delivery_history` (`Optional[DeliveryHistoryForm]`): How Deliveries carry Thread history. Omit for bodies.
+`spec_version` is required on the wire. [`Team.join`](/api/team-runtime#agentconnect-team-runtime-team-join) fills it when
+you pass kwargs. `delivery_history="ids"` puts earlier Message ids
+on each Delivery instead of Message bodies. Omit it to receive bodies.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -271,40 +230,22 @@ Default: `None`.
 
 Fixed operational limits a Runtime reports at join.
 
-**Attributes:**
+`max_message_bytes` bounds `send`, `reply`, and HTTP JSON
+ingress. `max_held_waits` caps concurrent `collect=wait` sends
+per Membership. `max_mailbox_depth` caps queued plus leased
+Mailbox items. `max_open_tickets` caps open Tickets one
+Membership may hold as requester. `work_lifetime_seconds` is the
+finite cutoff stamped on a new request whose send omitted
+`deadline` and that has no request parent to inherit from.
+`max_deadline_seconds` is the farthest a new request deadline may
+be. `replay_horizon_seconds` is how long an identical retry still
+returns the original result after the obligation ends, taken as the
+later of that interval after close and the Ticket deadline for a
+request. After the window, reuse of the id is new work only when no
+remaining owner names it.
+`max_retained_bytes` caps retained Message-body storage.
 
-* `max_message_bytes` (`JsonInt`): Maximum UTF-8 JSON bytes of a `send` or `reply`
-  body. HTTP applies the same budget to every JSON request body.
-
-* `max_mailbox_depth` (`JsonInt`): Maximum queued plus leased Mailbox items before
-  `send` returns `busy`.
-
-* `delivery_history_limit` (`JsonInt`): Maximum earlier Thread Messages included
-  in a Delivery `history` window.
-
-* `wait_hold_seconds` (`JsonFloat`): Seconds a `collect="wait"` send may stay open.
-
-* `max_held_waits` (`JsonInt`): Maximum concurrent `collect="wait"` sends one
-  Membership may hold. Further waits fail with `wait_limit`.
-
-* `work_lifetime_seconds` (`JsonFloat`): Cutoff stamped on a new request whose send
-  omitted `deadline` and that has no request parent to inherit from.
-
-* `max_deadline_seconds` (`JsonFloat`): Farthest a new request deadline may be from
-  acceptance.
-
-* `max_open_tickets` (`JsonInt`): Maximum open Tickets one Membership may hold as
-  requester. A Ticket is the durable record for one request.
-
-* `replay_horizon_seconds` (`JsonFloat`): Seconds after an obligation ends during
-  which an identical retry returns the original result.
-
-* `max_retained_bytes` (`JsonInt`): Maximum UTF-8 JSON bytes of retained Message
-  bodies this Runtime keeps.
-
-**Examples:**
-
-```python
+```
 result.limits.max_message_bytes
 result.limits.replay_horizon_seconds
 ```
@@ -437,26 +378,6 @@ Required.
 
 Result of a successful join.
 
-**Attributes:**
-
-* `session_token` ([`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken)): Bearer credential for the new Session.
-
-* `session_expires_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Current Session expiry.
-
-* `address` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Canonical qualified Address assigned to the Membership.
-
-* `team_name` ([`TeamName`](/api/core-primitives#agentconnect-core-primitives-teamname)): Canonical name of the Team served by this Runtime.
-
-* `agent_did` ([`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid)): Verified `did:key` bound to the Membership.
-
-* `instance_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Instance id for this Session, assigned when omitted.
-
-* `persistence` ([`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode)): Runtime restart guarantee, `volatile` or `durable`.
-
-* `limits` ([`RuntimeLimits`](/api/core-operations#agentconnect-core-operations-runtimelimits)): Operational limits this Runtime enforces.
-
-* `spec_version` ([`SpecVersion`](/api/core-primitives#agentconnect-core-primitives-specversion)): Exact public contract version implemented by the Runtime.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-joinresult-session-token"></a>
@@ -555,10 +476,6 @@ Required.
 
 Result of a successful Session heartbeat.
 
-**Attributes:**
-
-* `session_expires_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Current Session expiry after the heartbeat.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-heartbeatresult-session-expires-at"></a>
@@ -578,20 +495,6 @@ Required.
 Fields shared by request and event sends.
 
 `id` is Client-generated and becomes the accepted Message id.
-
-**Attributes:**
-
-* `id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Client-generated Message id and idempotency key.
-
-* `recipient` ([`Address`](/api/core-primitives#agentconnect-core-primitives-address)): Local name or same-Team qualified Address.
-
-* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Sender-controlled work or event data.
-
-* `thread_id` (`Optional[Uuid]`): Optional conversation grouping id.
-
-* `parent_id` (`Optional[Uuid]`): Optional Message this send replies to or continues.
-
-* `metadata` (`Optional[JsonObject]`): Sender-controlled data that never changes Runtime decisions.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -661,24 +564,11 @@ Default: `None`.
 
 Send a request. Always opens a Ticket.
 
-A Ticket is the requester's durable record for that request. `collect`
-is `wait` or `ticket`. `deadline` may be omitted; the Runtime stamps
-the effective cutoff on the accepted Message. Fire-and-forget work is
-[`EventSendRequest`](/api/core-operations#agentconnect-core-operations-eventsendrequest).
+`collect` is `wait` or `ticket`. `deadline` may be omitted;
+the Runtime stamps the effective cutoff on the accepted Message.
+Fire-and-forget work is :class:[`EventSendRequest`](/api/core-operations#agentconnect-core-operations-eventsendrequest).
 
-**Attributes:**
-
-* `kind` (`Literal['request']`): Always `request`.
-
-* `collect` ([`CollectMode`](/api/core-primitives#agentconnect-core-primitives-collectmode)): How the sender collects the result. `wait` holds the
-  call; `ticket` returns immediately.
-
-* `deadline` (`Optional[Timestamp]`): Future absolute work cutoff. Omit to inherit a request
-  parent, or to receive the Runtime work lifetime on a root request.
-
-**Examples:**
-
-```python
+```
 RequestSendRequest(
     id=message_id,
     recipient="writer",
@@ -727,8 +617,6 @@ Default: `None`.
 
 Send information without a reply.
 
-No Ticket is created. `kind` is always `event`.
-
 Inherits from [`SendBase`](/api/core-operations#agentconnect-core-operations-sendbase).
 
 <a id="agentconnect-core-operations-eventsendrequest-kind"></a>
@@ -749,22 +637,11 @@ Required.
 SendRequest = Union[RequestSendRequest, EventSendRequest]
 ```
 
-Input to Runtime `send`, discriminated on `kind`.
-
 <a id="agentconnect-core-operations-acceptedsendresult"></a>
 
 ## `AcceptedSendResult`
 
 Result for an event.
-
-`status: accepted` means the Runtime queued the event, not that the
-recipient finished processing.
-
-**Attributes:**
-
-* `status` (`Literal['accepted']`): Always `accepted`.
-
-* `message` ([`EventMessage`](/api/core-message#agentconnect-core-message-eventmessage)): Accepted and Runtime-stamped event.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -794,14 +671,8 @@ Required.
 
 Model-facing `tell` result.
 
-`status: accepted` means the Runtime queued the event, not that the
-recipient finished processing. No Ticket is created.
-
-**Attributes:**
-
-* `status` (`Literal['accepted']`): Always `accepted`.
-
-* `thread_id` (`Optional[Uuid]`): Conversation this event joined, when it has one.
+`status: accepted` means the Runtime queued the event, not that
+the recipient finished processing. No Ticket is created.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -831,21 +702,11 @@ Default: `None`.
 
 Result for a request.
 
-`ticket` is the current Ticket. Immediate `collect="ticket"` and an
-elapsed `wait` hold both use this wrapper. `state` may be `open` or
-terminal. Read completion from the Ticket, not from this wrapper.
+`ticket` is the current Ticket. Immediate `collect=ticket` and an
+elapsed `wait` hold both use this wrapper. `state` may be `open`
+or terminal.
 
-**Attributes:**
-
-* `status` (`Literal['ticketed']`): Always `ticketed`.
-
-* `message` ([`RequestMessage`](/api/core-message#agentconnect-core-message-requestmessage)): Accepted and Runtime-stamped request.
-
-* `ticket` ([`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket)): Current Ticket for this request.
-
-**Examples:**
-
-```python
+```
 result.ticket.state
 result.ticket.id
 ```
@@ -890,17 +751,11 @@ Required.
 SendResult = Annotated[Union[AcceptedSendResult, TicketedSendResult], Field(discriminator='status')]
 ```
 
-Result of Runtime `send`, discriminated on `status`.
-
 <a id="agentconnect-core-operations-leaserequest"></a>
 
 ## `LeaseRequest`
 
 Input to pull available work.
-
-**Attributes:**
-
-* `max_items` (`Optional[JsonInt]`): Number requested, from 1 to 100. Defaults to 1.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -923,10 +778,6 @@ Default: `None`.
 
 Deliveries currently leased to the Session.
 
-**Attributes:**
-
-* `deliveries` (`list[Delivery]`): Zero or more newly leased attempts.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-leaseresult-deliveries"></a>
@@ -945,15 +796,7 @@ Required.
 
 Input to extend one active Delivery lease.
 
-**Attributes:**
-
-* `lease_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Active lease owned by the calling Session.
-
-**Examples:**
-
-```python
-RenewRequest(lease_id=delivery.lease_id)
-```
+RenewRequest(lease\_id=delivery.lease\_id)
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -973,17 +816,7 @@ Required.
 
 Result of a successful `renew`.
 
-**Attributes:**
-
-* `lease_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Lease that was extended.
-
-* `lease_expires_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): New time after which this attempt is no longer active.
-
-**Examples:**
-
-```python
-result.lease_expires_at
-```
+result.lease\_expires\_at
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1013,12 +846,7 @@ Required.
 
 Finish one Delivery without a response.
 
-An event just ends. A request is declined: the Ticket, the requester's
-record for that work, becomes `declined`.
-
-**Attributes:**
-
-* `lease_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Active lease to finish.
+An event just ends. A request is declined.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1037,10 +865,6 @@ Required.
 ## `CompleteResult`
 
 Result of `complete`.
-
-**Attributes:**
-
-* `ticket` (`Optional[DeclinedTicket]`): Present only when completing a request, which declines it.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1061,14 +885,7 @@ Default: `None`.
 Fields shared by successful and failed replies.
 
 Replay equality includes `id`, the target request Message id, and
-the outcome data. `lease_id` authorizes the attempt and is not part
-of that equality.
-
-**Attributes:**
-
-* `id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Client-generated id for the response or error Message.
-
-* `lease_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Active lease for the reply-expected request.
+the outcome data. `lease_id` authorizes the attempt.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1098,13 +915,6 @@ Required.
 
 Complete a Delivery with successful content.
 
-**Attributes:**
-
-* `outcome` (`Literal['completed']`): Always `completed`.
-
-* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Successful application result. Use JSON null to answer
-  with no content.
-
 Inherits from [`ReplyBase`](/api/core-operations#agentconnect-core-operations-replybase).
 
 <a id="agentconnect-core-operations-replysuccessrequest-outcome"></a>
@@ -1132,12 +942,6 @@ Required.
 ## `ReplyFailureRequest`
 
 Complete a Delivery with a safe error.
-
-**Attributes:**
-
-* `outcome` (`Literal['failed']`): Always `failed`.
-
-* `error` ([`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject)): Safe application or handler failure.
 
 Inherits from [`ReplyBase`](/api/core-operations#agentconnect-core-operations-replybase).
 
@@ -1169,17 +973,11 @@ Required.
 ReplyRequest = Annotated[Union[ReplySuccessRequest, ReplyFailureRequest], Field(discriminator='outcome')]
 ```
 
-Input to Runtime `reply`, discriminated on `outcome`.
-
 <a id="agentconnect-core-operations-replyresult"></a>
 
 ## `ReplyResult`
 
 Result of an accepted reply.
-
-**Attributes:**
-
-* `ticket` (`Union[CompletedTicket, FailedTicket]`): Terminal Ticket containing the accepted outcome.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1198,9 +996,6 @@ Required.
 ## `GetResultRequest`
 
 Collect the current saved request result.
-
-Pass `ticket_id` from `ask`, equal to the request Message id. Repeat
-while `state` is `open`. Ending a wait does not cancel work.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1274,16 +1069,8 @@ Default: `None`.
 One page of retained Thread history.
 
 `messages` are ordered by `seq` ascending. The newest page is
-returned first. When `has_more` is true, pass `next_before` as the
-next `before`.
-
-**Attributes:**
-
-* `messages` (`list[Message]`): Requested page, oldest to newest by `seq`.
-
-* `has_more` (`bool`): True when older retained Messages remain before this page.
-
-* `next_before` (`Optional[Uuid]`): Pass as the next `before` to load the older page.
+returned first. When `has_more` is true, pass `next_before` as
+the next `before`.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1322,16 +1109,6 @@ Default: `None`.
 ## `HistoryTurnBase`
 
 Fields shared by every model-facing history turn.
-
-**Attributes:**
-
-* `id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Message id. [`HistoryView.next_before`](/api/core-operations#agentconnect-core-operations-historyview-next-before) is the paging cursor.
-
-* `seq` (`JsonInt`): Thread sequence. History is ordered by `seq` ascending inside a page.
-
-* `sender` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Address that sent this turn.
-
-* `created_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): When the Runtime accepted this Message.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1383,12 +1160,6 @@ Required.
 
 Request turn on a model-facing history page.
 
-**Attributes:**
-
-* `kind` (`Literal['request']`): Always `request`.
-
-* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Work input from that request.
-
 Inherits from [`HistoryTurnBase`](/api/core-operations#agentconnect-core-operations-historyturnbase).
 
 <a id="agentconnect-core-operations-historyrequestturn-kind"></a>
@@ -1416,12 +1187,6 @@ Required.
 ## `HistoryEventTurn`
 
 Event turn on a model-facing history page.
-
-**Attributes:**
-
-* `kind` (`Literal['event']`): Always `event`.
-
-* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Event data from that notice.
 
 Inherits from [`HistoryTurnBase`](/api/core-operations#agentconnect-core-operations-historyturnbase).
 
@@ -1453,14 +1218,6 @@ Successful reply turn on a model-facing history page.
 
 `parent_id` is the request Message id this reply answers, the same
 value as that ask's `ticket_id`.
-
-**Attributes:**
-
-* `kind` (`Literal['response']`): Always `response`.
-
-* `parent_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Request Message id this reply answers.
-
-* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Successful application result.
 
 Inherits from [`HistoryTurnBase`](/api/core-operations#agentconnect-core-operations-historyturnbase).
 
@@ -1503,14 +1260,6 @@ Failed reply turn on a model-facing history page.
 `parent_id` is the request Message id this error answers, the same
 value as that ask's `ticket_id`.
 
-**Attributes:**
-
-* `kind` (`Literal['error']`): Always `error`.
-
-* `parent_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Request Message id this error answers.
-
-* `error` ([`TicketViewError`](/api/core-ticket#agentconnect-core-ticket-ticketviewerror)): Failure code and message only.
-
 Inherits from [`HistoryTurnBase`](/api/core-operations#agentconnect-core-operations-historyturnbase).
 
 <a id="agentconnect-core-operations-historyerrorturn-kind"></a>
@@ -1551,24 +1300,11 @@ Required.
 HistoryTurn = Annotated[Union[HistoryRequestTurn, HistoryEventTurn, HistoryResponseTurn, HistoryErrorTurn], Field(discriminator='kind')]
 ```
 
-One history turn on a model-facing page, discriminated on `kind`.
-
 <a id="agentconnect-core-operations-historyview"></a>
 
 ## `HistoryView`
 
 Model-facing Thread history page. Same paging as [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
-
-MCP `get_history` and Session-bound tools return this projection.
-Runtime, HTTP, and Client `get_history` still return [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
-
-**Attributes:**
-
-* `messages` (`list[HistoryTurn]`): Requested page, oldest to newest by `seq`.
-
-* `has_more` (`bool`): True when older retained Messages remain before this page.
-
-* `next_before` (`Optional[Uuid]`): Pass as the next `before` to load the older page.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1608,10 +1344,10 @@ Default: `None`.
 
 Send work that needs a reply.
 
-Returns the saved request result as a Ticket view. `collect="wait"`
-(default) may still return `open`; call `get_result` with
-`ticket_id`. A Thread is fixed to its original participants; another
-peer is `forbidden`.
+Returns the saved request result. `collect=wait` (default) may
+still return `open`; call `get_result` with `ticket_id`. A
+Thread is fixed to its original participants; another peer is
+`forbidden`.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1762,12 +1498,6 @@ Default: `None`.
 
 MCP roster resource body. Agent Memberships only; principals omitted.
 
-**Attributes:**
-
-* `team_name` ([`TeamName`](/api/core-primitives#agentconnect-core-primitives-teamname)): Team this roster belongs to.
-
-* `members` (`list[DirectoryEntry]`): Every current Agent Membership.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-teamroster-team-name"></a>
@@ -1796,32 +1526,10 @@ Required.
 
 One recorded step of a causal operation.
 
-`parent_id` is the parent of `message_id` when that Message has one.
-`get_trace` still returns an ordered list.
+`parent_id` is the parent of `message_id` when that Message has
+one. `get_trace` still returns an ordered list.
 
-**Attributes:**
-
-* `at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): When the Runtime recorded the event.
-
-* `type` ([`TraceEventType`](/api/core-primitives#agentconnect-core-primitives-traceeventtype)): What happened (`accepted`, `ticket_opened`, `leased`,
-  `completed`, `replied`, or `ticket_closed`).
-
-* `trace_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Causal id shared with the Messages in this operation.
-
-* `actor` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Membership that performed the step, or the requester for
-  accept and open.
-
-* `message_id` (`Optional[Uuid]`): Message this step is about, when there is one.
-
-* `parent_id` (`Optional[Uuid]`): Parent of `message_id`, copied from that Message.
-
-* `ticket_id` (`Optional[Uuid]`): Ticket this step is about, when there is one.
-
-* `detail` ([`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject)): Type-specific fields. Unknown keys are ignored by a Client.
-
-**Examples:**
-
-```python
+```
 event.parent_id  # absent on a root Message
 ```
 
@@ -1913,12 +1621,6 @@ Required.
 
 Result of `get_trace`.
 
-**Attributes:**
-
-* `trace_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Requested causal id.
-
-* `events` (`list[TraceEvent]`): Recorded events, oldest first.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-traceresult-trace-id"></a>
@@ -1949,20 +1651,6 @@ Agent Membership row in `status`.
 
 `online` is true when this Membership has at least one unexpired
 Session in the store.
-
-**Attributes:**
-
-* `kind` (`Literal['agent']`): Always `agent`.
-
-* `name` ([`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname)): Canonical Agent name.
-
-* `address` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Canonical qualified Address.
-
-* `online` (`bool`): True when at least one unexpired Session exists.
-
-* `mailbox_depth` (`JsonInt`): Queued plus leased Mailbox items.
-
-* `open_tickets` (`JsonInt`): Open Tickets whose recipient is this Membership.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -2038,16 +1726,6 @@ Principal Membership row in `status`.
 
 No Mailbox or Ticket counts. `online` is read from stored Sessions.
 
-**Attributes:**
-
-* `kind` (`Literal['principal']`): Always `principal`.
-
-* `name` ([`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname)): Canonical Agent name.
-
-* `address` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Canonical qualified Address.
-
-* `online` (`bool`): True when at least one unexpired Session exists.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-statusprincipal-kind"></a>
@@ -2098,26 +1776,11 @@ Required.
 StatusMember = Annotated[Union[StatusAgent, StatusPrincipal], Field(discriminator='kind')]
 ```
 
-One Membership row in `status`, discriminated on `kind`.
-
 <a id="agentconnect-core-operations-statusresult"></a>
 
 ## `StatusResult`
 
 Result of `status`.
-
-**Attributes:**
-
-* `team_name` ([`TeamName`](/api/core-primitives#agentconnect-core-primitives-teamname)): Canonical Team name.
-
-* `persistence` ([`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode)): Runtime restart guarantee.
-
-* `origin` (`Optional[str]`): HTTP origin when the Runtime is serving, such as
-  `http://127.0.0.1:9000`. Omitted when it is not serving.
-
-* `open_tickets` (`JsonInt`): Open Tickets in the Team.
-
-* `members` (`list[StatusMember]`): Every Membership, including principals such as `operator`.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -2179,16 +1842,6 @@ Required.
 
 Operator input that creates a join token.
 
-**Attributes:**
-
-* `name` (`Optional[AgentName]`): Bind the token to this Agent name.
-
-* `agent_did` (`Optional[AgentDid]`): Bind the token to this Agent DID (`did:key`).
-
-* `ttl_seconds` (`Optional[JsonFloat]`): Lifetime in seconds. Omit to use the Runtime default.
-
-* `single_use` (`Optional[bool]`): When true, a successful join consumes the token.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-issuejointokenrequest-name"></a>
@@ -2238,19 +1891,6 @@ Default: `None`.
 ## `JoinTokenIssued`
 
 Operator view of a join token the Runtime just issued.
-
-**Attributes:**
-
-* `token` (`str`): Secret the Agent sends as `join_token`. Keep it out of
-  logs and Messages.
-
-* `expires_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Time after which this token cannot authenticate a join.
-
-* `single_use` (`bool`): Whether a successful join consumes the token.
-
-* `name` (`Optional[AgentName]`): Bound Agent name, when the operator set one.
-
-* `agent_did` (`Optional[AgentDid]`): Bound Agent DID, when the operator set one.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -2312,10 +1952,6 @@ Default: `None`.
 
 Operator input that revokes a join token.
 
-**Attributes:**
-
-* `token` (`str`): Token secret to revoke.
-
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
 <a id="agentconnect-core-operations-revokejointokenrequest-token"></a>
@@ -2335,16 +1971,6 @@ Required.
 ## `RuntimeEvent`
 
 One event pushed on the Session event stream.
-
-`type` is open so new event types can be added. A Client must ignore
-an unknown type. Defined types include `work_available`, whose `data`
-is empty, and `trace`, whose `data` is a [`TraceEvent`](/api/core-operations#agentconnect-core-operations-traceevent).
-
-**Attributes:**
-
-* `type` (`str`): Event type name.
-
-* `data` ([`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject)): Type-specific data.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -2377,12 +2003,7 @@ Required.
 Structured MCP tool result when a Runtime operation fails.
 
 The MCP error flag is set. `error` is the unchanged Runtime
-[`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject). Readable text is `code: message`. Malformed arguments
-and authentication failures stay MCP-level errors, not this object.
-
-**Attributes:**
-
-* `error` ([`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject)): Runtime failure preserved without reinterpretation.
+[`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject). Readable text is `code: message`.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -2406,18 +2027,6 @@ parse_join_request(data: Any) -> JoinRequest
 
 Parse join input from a mapping. `spec_version` is required.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest).
-
-**Returns:**
-
-* ([`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest)): A frozen [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
-
 <a id="agentconnect-core-operations-parse-join-result"></a>
 
 ## `parse_join_result`
@@ -2426,19 +2035,7 @@ Parse join input from a mapping. `spec_version` is required.
 parse_join_result(data: Any) -> JoinResult
 ```
 
-Parse a [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult) mapping.
-
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult).
-
-**Returns:**
-
-* ([`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult)): A frozen [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult).
-
-**Raises:**
-
-* (`ValueError`): Validation fails.
+Parse a JoinResult mapping.
 
 <a id="agentconnect-core-operations-parse-send-request"></a>
 
@@ -2450,19 +2047,6 @@ parse_send_request(data: Any) -> SendRequest
 
 Parse send input. A request requires `collect`. `deadline` may be omitted.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed send request.
-
-**Returns:**
-
-* ([`SendRequest`](/api/core-operations#agentconnect-core-operations-sendrequest)): A request or event send body.
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, `kind` is unknown, or
-  validation fails.
-
 <a id="agentconnect-core-operations-parse-send-result"></a>
 
 ## `parse_send_result`
@@ -2472,18 +2056,6 @@ parse_send_result(data: Any) -> SendResult
 ```
 
 Parse a send result, including nested Message and Ticket.
-
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed send result.
-
-**Returns:**
-
-* ([`SendResult`](/api/core-operations#agentconnect-core-operations-sendresult)): An accepted event result or a ticketed request result.
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or nested validation fails.
 
 <a id="agentconnect-core-operations-parse-reply-request"></a>
 
@@ -2495,18 +2067,6 @@ parse_reply_request(data: Any) -> ReplyRequest
 
 Parse reply input discriminated on `outcome`.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed reply request.
-
-**Returns:**
-
-* ([`ReplyRequest`](/api/core-operations#agentconnect-core-operations-replyrequest)): A success or failure reply body.
-
-**Raises:**
-
-* (`ValueError`): Validation fails.
-
 <a id="agentconnect-core-operations-parse-lease-result"></a>
 
 ## `parse_lease_result`
@@ -2516,19 +2076,6 @@ parse_lease_result(data: Any) -> LeaseResult
 ```
 
 Parse a lease result, including nested Deliveries.
-
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult).
-
-**Returns:**
-
-* ([`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult)): A frozen [`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, `deliveries` is not an array,
-  or nested validation fails.
 
 <a id="agentconnect-core-operations-parse-lease-request"></a>
 
@@ -2540,18 +2087,6 @@ parse_lease_request(data: Any) -> LeaseRequest
 
 Parse lease input. An empty object is valid.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, `None` (treated as empty), or a [`LeaseRequest`](/api/core-operations#agentconnect-core-operations-leaserequest).
-
-**Returns:**
-
-* ([`LeaseRequest`](/api/core-operations#agentconnect-core-operations-leaserequest)): A frozen [`LeaseRequest`](/api/core-operations#agentconnect-core-operations-leaserequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
-
 <a id="agentconnect-core-operations-parse-complete-request"></a>
 
 ## `parse_complete_request`
@@ -2561,18 +2096,6 @@ parse_complete_request(data: Any) -> CompleteRequest
 ```
 
 Parse complete input.
-
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`CompleteRequest`](/api/core-operations#agentconnect-core-operations-completerequest).
-
-**Returns:**
-
-* ([`CompleteRequest`](/api/core-operations#agentconnect-core-operations-completerequest)): A frozen [`CompleteRequest`](/api/core-operations#agentconnect-core-operations-completerequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-renew-request"></a>
 
@@ -2584,18 +2107,6 @@ parse_renew_request(data: Any) -> RenewRequest
 
 Parse renew input.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`RenewRequest`](/api/core-operations#agentconnect-core-operations-renewrequest).
-
-**Returns:**
-
-* ([`RenewRequest`](/api/core-operations#agentconnect-core-operations-renewrequest)): A frozen [`RenewRequest`](/api/core-operations#agentconnect-core-operations-renewrequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
-
 <a id="agentconnect-core-operations-parse-find-request"></a>
 
 ## `parse_find_request`
@@ -2605,18 +2116,6 @@ parse_find_request(data: Any) -> FindRequest
 ```
 
 Parse Directory find input.
-
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`FindRequest`](/api/core-directory#agentconnect-core-directory-findrequest).
-
-**Returns:**
-
-* ([`FindRequest`](/api/core-directory#agentconnect-core-directory-findrequest)): A frozen [`FindRequest`](/api/core-directory#agentconnect-core-directory-findrequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-issue-join-token-request"></a>
 
@@ -2628,18 +2127,6 @@ parse_issue_join_token_request(data: Any) -> IssueJoinTokenRequest
 
 Parse operator token issuance input.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, `None` (treated as empty), or a parsed request.
-
-**Returns:**
-
-* ([`IssueJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-issuejointokenrequest)): A frozen [`IssueJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-issuejointokenrequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
-
 <a id="agentconnect-core-operations-parse-revoke-join-token-request"></a>
 
 ## `parse_revoke_join_token_request`
@@ -2649,18 +2136,6 @@ parse_revoke_join_token_request(data: Any) -> RevokeJoinTokenRequest
 ```
 
 Parse operator token revoke input.
-
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`RevokeJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-revokejointokenrequest).
-
-**Returns:**
-
-* ([`RevokeJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-revokejointokenrequest)): A frozen [`RevokeJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-revokejointokenrequest).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-history-result"></a>
 
@@ -2672,19 +2147,6 @@ parse_history_result(data: Any) -> HistoryResult
 
 Parse a history page, including nested Messages.
 
-**Parameters:**
-
-* `data` (`Any`): JSON object, or an already parsed [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
-
-**Returns:**
-
-* ([`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult)): A frozen [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
-
-**Raises:**
-
-* (`ValueError`): `data` is not an object, `messages` is not an array,
-  or nested validation fails.
-
 <a id="agentconnect-core-operations-tell-view"></a>
 
 ## `tell_view`
@@ -2693,15 +2155,7 @@ Parse a history page, including nested Messages.
 tell_view(result: AcceptedSendResult) -> TellView
 ```
 
-Project an accepted event send into the model-facing [`TellView`](/api/core-operations#agentconnect-core-operations-tellview).
-
-**Parameters:**
-
-* `result` ([`AcceptedSendResult`](/api/core-operations#agentconnect-core-operations-acceptedsendresult)): Wire result of an event send.
-
-**Returns:**
-
-* ([`TellView`](/api/core-operations#agentconnect-core-operations-tellview)): Lean view with `status="accepted"` and optional `thread_id`.
+Project an accepted event send into the model-facing TellView.
 
 <a id="agentconnect-core-operations-history-view"></a>
 
@@ -2711,12 +2165,4 @@ Project an accepted event send into the model-facing [`TellView`](/api/core-oper
 history_view(result: HistoryResult) -> HistoryView
 ```
 
-Project wire history Messages into the model-facing [`HistoryView`](/api/core-operations#agentconnect-core-operations-historyview).
-
-**Parameters:**
-
-* `result` ([`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult)): Wire history page from Runtime, HTTP, or Client `get_history`.
-
-**Returns:**
-
-* ([`HistoryView`](/api/core-operations#agentconnect-core-operations-historyview)): Lean turns discriminated on `kind`, with the same paging fields.
+Project wire history Messages into the model-facing HistoryView.

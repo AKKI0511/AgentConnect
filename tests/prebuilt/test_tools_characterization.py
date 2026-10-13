@@ -13,12 +13,13 @@ from pydantic import ValidationError
 
 import pytest
 
-from agentconnect.agent import BaseAgent, TeamTools, Tool
-from agentconnect.agent.tools import _call_tool
+from agentconnect.agent import BaseAgent
+from agentconnect.agent.tools import TeamTools, Tool, _call_tool
 from agentconnect.prebuilt import AIAgent
 from agentconnect.prebuilt.loop import ToolLoopExhausted
 from agentconnect.team import Team
 from tests.prebuilt.test_loop_characterization import scripted, text_turn, tool_turn
+from tests.support.tools import call_team_tool
 
 
 def test_tool_openai_schema_shape():
@@ -332,7 +333,9 @@ async def test_completed_ask_tool_result_is_ticket_view():
     await writer.join(team)
     await researcher.join(team)
     try:
-        ticket = await researcher.tools.ask(
+        ticket = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="draft this",
             deadline_seconds=30,
@@ -396,14 +399,16 @@ async def test_get_profiles_returns_selected_profiles_while_find_summary_stays_l
     await writer.join(team)
     await researcher.join(team)
     try:
-        found = await researcher.tools.find(query="draft a summary")
+        found = await call_team_tool(researcher.tools, "find", query="draft a summary")
         match = next(
             item for item in found["matches"] if item["address"].startswith("writer@")
         )
         assert "profile" not in match
         assert "agent_did" not in match
         assert "description" not in match
-        found_profiles = await researcher.tools.get_profiles(addresses=["writer"])
+        found_profiles = await call_team_tool(
+            researcher.tools, "get_profiles", addresses=["writer"]
+        )
         assert len(found_profiles["items"]) == 1
         entry = found_profiles["items"][0]
         assert entry["status"] == "ok"

@@ -8,9 +8,7 @@ sidebarTitle: "runtime"
 Runtime operations a Client uses to talk to a Team.
 
 Session is a set of operations, not a wire format. In-process and HTTP
-both implement this protocol so Agent code does not change between them.
-Everyday Agent code uses [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent), which calls these operations through
-a Session transport.
+both implement this protocol so agent code does not change between them.
 
 ## Public API
 
@@ -29,30 +27,9 @@ TransportError(code: str, message: str, *, details: Optional[dict[str, Any]] = N
 A Runtime operation failed with a public error code.
 
 `code` matches the Runtime contract (for example `not_found`,
-`busy`, `unavailable`). Branch on `code`, not on the exception
-message.
-
-**Attributes:**
-
-* `code`: Public error code.
-
-* `message`: Human-readable explanation.
-
-* `details`: Optional extra fields from the Runtime.
-
-* `retryable`: True when a later identical call may succeed.
+`busy`, `unavailable`). Callers should branch on `code`.
 
 Record the public error `code` and human-readable `message`.
-
-**Parameters:**
-
-* `code` (`str`): Public error code from the Runtime contract.
-
-* `message` (`str`): Human-readable explanation.
-
-* `details` (`Optional[dict[str, Any]]`): Optional extra fields.
-
-* `retryable` (`Optional[bool]`): True when a later identical call may succeed.
 
 <a id="agentconnect-transport-runtime-transporterror-code"></a>
 
@@ -98,21 +75,15 @@ from_error_object(body: Mapping[str, Any]) -> 'TransportError'
 
 Build from a public ErrorObject mapping.
 
-**Parameters:**
-
-* `body` (`Mapping[str, Any]`): Mapping with `code` and `message`.
-
 <a id="agentconnect-transport-runtime-runtimetransport"></a>
 
 ## `RuntimeTransport`
 
 One Client connection to a Runtime.
 
-These token-taking methods are the Session transport. Everyday Agent
-code uses [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent), not these methods directly. Implementations
-must not import [`agentconnect.agent`](/api/agent). In-process implementations must
-not import [`agentconnect.team`](/api/team); they call methods on a duck-typed
-Runtime object supplied by the caller.
+Implementations must not import [`agentconnect.agent`](/api/agent). In-process
+implementations must not import [`agentconnect.team`](/api/team); they call methods
+on a duck-typed Runtime object supplied by the caller.
 
 <a id="agentconnect-transport-runtime-runtimetransport-join"></a>
 
@@ -125,10 +96,6 @@ join(request: Mapping[str, Any]) -> dict[str, Any]
 ```
 
 Create or reconnect a Membership and open a Session.
-
-**Parameters:**
-
-* `request` (`Mapping[str, Any]`): Join body (`name`, `agent_did`, `profile`, …).
 
 <a id="agentconnect-transport-runtime-runtimetransport-join-challenge"></a>
 
@@ -154,10 +121,6 @@ disconnect(session_token: str) -> None
 
 Close this Session. Membership is retained.
 
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
 <a id="agentconnect-transport-runtime-runtimetransport-heartbeat"></a>
 
 `async`
@@ -168,11 +131,7 @@ Close this Session. Membership is retained.
 heartbeat(session_token: str) -> dict[str, Any]
 ```
 
-Prove the Client still holds its Session and extend expiry.
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
+Prove the Client still holds its Session.
 
 <a id="agentconnect-transport-runtime-runtimetransport-send"></a>
 
@@ -186,14 +145,6 @@ send(session_token: str, request: Mapping[str, Any]) -> dict[str, Any]
 
 Accept one request or event for one recipient.
 
-Session transport. Agent code uses [`BaseAgent.ask`](/api/agent-base#agentconnect-agent-base-baseagent-ask).
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `request` (`Mapping[str, Any]`): Send body (`id`, `recipient`, `kind`, `content`, …).
-
 <a id="agentconnect-transport-runtime-runtimetransport-lease"></a>
 
 `async`
@@ -205,12 +156,6 @@ lease(session_token: str, max_items: int = 1) -> dict[str, Any]
 ```
 
 Pull available work from the Membership Mailbox.
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `max_items` (`int`): How many Deliveries to take, 1 to 100.
 
 <a id="agentconnect-transport-runtime-runtimetransport-renew"></a>
 
@@ -224,12 +169,6 @@ renew(session_token: str, lease_id: str) -> dict[str, Any]
 
 Extend one active Delivery lease owned by this Session.
 
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `lease_id` (`str`): `lease_id` from a Delivery this Session holds.
-
 <a id="agentconnect-transport-runtime-runtimetransport-complete"></a>
 
 `async`
@@ -241,12 +180,6 @@ complete(session_token: str, lease_id: str) -> dict[str, Any]
 ```
 
 Finish a Delivery without a response Message.
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `lease_id` (`str`): `lease_id` from a Delivery this Session holds.
 
 <a id="agentconnect-transport-runtime-runtimetransport-reply"></a>
 
@@ -260,12 +193,6 @@ reply(session_token: str, request: Mapping[str, Any]) -> dict[str, Any]
 
 Finish a reply-expected Delivery with a response or error.
 
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `request` (`Mapping[str, Any]`): Reply body (`id`, `lease_id`, `outcome`, …).
-
 <a id="agentconnect-transport-runtime-runtimetransport-get-result"></a>
 
 `async`
@@ -277,12 +204,6 @@ get_result(session_token: str, ticket_id: str) -> dict[str, Any]
 ```
 
 Return the current Ticket owned by the caller.
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `ticket_id` (`str`): Ticket id from a request this Membership sent.
 
 <a id="agentconnect-transport-runtime-runtimetransport-get-history"></a>
 
@@ -296,17 +217,6 @@ get_history(session_token: str, thread_id: str, *, before: str | None = None, li
 
 Return one page of retained Thread history.
 
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `thread_id` (`str`): Thread id from a Message or Ticket.
-
-* `before` (`str | None`): Return Messages older than this id. Omit for the
-  newest page.
-
-* `limit` (`int`): Page size from 1 to 200. Defaults to 50.
-
 <a id="agentconnect-transport-runtime-runtimetransport-find"></a>
 
 `async`
@@ -318,15 +228,6 @@ find(session_token: str, query: str, *, limit: int | None = None) -> dict[str, A
 ```
 
 Search this Team's Directory.
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `query` (`str`): Natural-language need.
-
-* `limit` (`int | None`): Maximum matches from 1 to 100. Omit for every other
-  member, at most 100.
 
 <a id="agentconnect-transport-runtime-runtimetransport-get-profile"></a>
 
@@ -340,12 +241,6 @@ get_profile(session_token: str, address: str) -> dict[str, Any]
 
 Return one Directory entry.
 
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
-
-* `address` (`str`): Agent name or qualified Address in this Team.
-
 <a id="agentconnect-transport-runtime-runtimetransport-events"></a>
 
 ### `events`
@@ -354,14 +249,10 @@ Return one Directory entry.
 events(session_token: str) -> AsyncIterator[dict[str, Any]]
 ```
 
-Yield work-hint events until the Session ends.
+Yield RuntimeEvent values until the Session ends.
 
 `work_available` is a hint to call `lease`. Unknown types are
 ignored by the Client. Correctness does not depend on this stream.
-
-**Parameters:**
-
-* `session_token` (`str`): Live Session token from `join`.
 
 <a id="agentconnect-transport-runtime-runtimetransport-close"></a>
 

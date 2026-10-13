@@ -12,7 +12,6 @@ PUBLIC_MODULES = frozenset(
         "agentconnect.agent.context",
         "agentconnect.agent.errors",
         "agentconnect.agent.identity",
-        "agentconnect.agent.session",
         "agentconnect.agent.tools",
         "agentconnect.cli",
         "agentconnect.compat",

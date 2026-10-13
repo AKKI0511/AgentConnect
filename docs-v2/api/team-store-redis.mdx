@@ -22,24 +22,14 @@ RedisStore(url: str, *, prefix: str = 'ac')
 Durable document store keyed under a per-Team prefix.
 
 Pass the same `url` and `prefix` to a new Runtime after a restart to
-recover open Tickets and queued Mailbox work. A dropped connection
-reconnects on the next operation. Sharing a Redis URL still does not
-make extra Runtime replicas safe. Writes with a lost reply are not
-replayed by the Store: callers must recover through their
-operation-level idempotency rules.
+recover open Tickets and queued Mailbox work. `insert` uses `SET NX`.
+`compare_and_set`, `put`, and `apply` use Lua or WATCH/MULTI so
+version updates themselves are atomic. A dropped connection reconnects
+on the next operation; sharing a Redis URL still does not make replicas
+safe. Writes with a lost reply are not replayed by the Store: callers
+must recover through their operation-level idempotency rules.
 
 Connect later via `open`. Keys are stored under `prefix`.
-
-**Parameters:**
-
-* `url` (`str`): Redis URL such as `redis://127.0.0.1:6379/0`.
-
-* `prefix` (`str`): Key namespace. Defaults to `ac`. [`Team`](/api/team-runtime#agentconnect-team-runtime-team) uses
-  `ac:<team-name>`.
-
-**Raises:**
-
-* (`ValueError`): `url` is empty.
 
 Inherits from [`Store`](/api/team-store-base#agentconnect-team-store-base-store).
 
@@ -62,10 +52,6 @@ open() -> None
 ```
 
 Open the Redis client connection.
-
-**Raises:**
-
-* (`ImportError`): The `redis` extra is not installed.
 
 <a id="agentconnect-team-store-redis-redisstore-close"></a>
 
@@ -113,10 +99,11 @@ Return the JSON value at `key`, or None.
 get_many(keys: Sequence[str]) -> list[Any | None]
 ```
 
-Return values for `keys` in the same order. Missing keys are None.
+Return values for `keys`.
 
-Large reads are batched so other Team operations can run while
-Directory vectors load.
+Large reads are split into MGET batches so send, renew, and expiry
+can run while a Directory ranking loads vectors. JSON decoding of
+large batches runs off the event loop and overlaps the next MGET.
 
 <a id="agentconnect-team-store-redis-redisstore-get-record"></a>
 
@@ -140,18 +127,10 @@ Return value and version at `key`, or None.
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
 
-Apply `ops` as one transition, or leave every key unchanged.
+Apply `ops` with WATCH/MULTI, or leave every key unchanged.
 
-Concurrent writers are retried. Callers see `ok=False` only when
+A lost WATCH is retried. Callers see a simulated conflict only when
 the batch itself cannot commit.
-
-**Parameters:**
-
-* `ops` (`Sequence[StoreOp]`): Store operations to apply together.
-
-**Returns:**
-
-* ([`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult)): [`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult). `ok` is True when every operation committed.
 
 <a id="agentconnect-team-store-redis-redisstore-put"></a>
 
@@ -163,7 +142,7 @@ the batch itself cannot commit.
 put(key: str, value: Any) -> None
 ```
 
-Write a JSON value at `key`, bumping the version.
+Write a JSON value at `key`, bumping the version in one Lua step.
 
 <a id="agentconnect-team-store-redis-redisstore-insert"></a>
 
@@ -175,7 +154,7 @@ Write a JSON value at `key`, bumping the version.
 insert(key: str, value: Any) -> bool
 ```
 
-Write `value` only if `key` is absent. True when inserted.
+Write `value` only if `key` is absent (`SET NX`).
 
 <a id="agentconnect-team-store-redis-redisstore-compare-and-set"></a>
 
@@ -187,7 +166,7 @@ Write `value` only if `key` is absent. True when inserted.
 compare_and_set(key: str, version: int, value: Any) -> bool
 ```
 
-Replace `key` when the stored version matches.
+Replace `key` when the stored version matches, via Lua.
 
 <a id="agentconnect-team-store-redis-redisstore-delete"></a>
 

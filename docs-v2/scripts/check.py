@@ -12,6 +12,7 @@ Checks:
 from __future__ import annotations
 
 import argparse
+import difflib
 import filecmp
 import json
 import re
@@ -209,7 +210,19 @@ def _trees_equal(left: Path, right: Path) -> list[str]:
             diffs.append(f"only in committed: {rel}")
             continue
         if not filecmp.cmp(left / rel, right / rel, shallow=False):
-            diffs.append(f"content differs: {rel}")
+            left_lines = (left / rel).read_text(encoding="utf-8").splitlines()
+            right_lines = (right / rel).read_text(encoding="utf-8").splitlines()
+            hunk = "".join(
+                difflib.unified_diff(
+                    left_lines,
+                    right_lines,
+                    fromfile=f"committed/{rel}",
+                    tofile=f"generated/{rel}",
+                    lineterm="\n",
+                    n=1,
+                )
+            )
+            diffs.append(f"content differs: {rel}\n{hunk[:6000]}")
     return diffs
 
 

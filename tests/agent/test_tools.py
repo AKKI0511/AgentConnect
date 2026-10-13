@@ -6,8 +6,10 @@ from typing import Any
 
 import pytest
 
-from agentconnect.agent import BaseAgent, SessionError, TeamTools
+from agentconnect.agent import BaseAgent, SessionError
+from agentconnect.agent.tools import TeamTools
 from agentconnect.team import Team
+from tests.support.tools import call_team_tool
 
 
 class Writer(BaseAgent):
@@ -65,7 +67,9 @@ async def test_team_tools_before_join_fail_on_call():
         "get_profiles",
     ]
     with pytest.raises(SessionError) as exc:
-        await agent.tools.find(query="someone who can draft a summary")
+        await call_team_tool(
+            agent.tools, "find", query="someone who can draft a summary"
+        )
     assert exc.value.code == "unauthorized"
 
 
@@ -77,13 +81,17 @@ async def test_team_tools_find_then_ask_without_hardcoded_address():
     await writer.join(team)
     await researcher.join(team)
     try:
-        found = await researcher.tools.find(query="someone who can draft a summary")
+        found = await call_team_tool(
+            researcher.tools, "find", query="someone who can draft a summary"
+        )
         recipient = next(
             match["address"]
             for match in found["matches"]
             if match["address"].startswith("writer@")
         )
-        ticket = await researcher.tools.ask(
+        ticket = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient=recipient,
             content="draft this",
             deadline_seconds=30,
@@ -109,7 +117,9 @@ async def test_team_tools_collect_ticket_returns_json_without_content_sugar():
     await writer.join(team)
     await researcher.join(team)
     try:
-        ticket = await researcher.tools.ask(
+        ticket = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="later",
             deadline_seconds=8,
@@ -137,25 +147,33 @@ async def test_team_tools_idempotency_key_reuses_ticket():
     await writer.join(team)
     await researcher.join(team)
     try:
-        first = await researcher.tools.ask(
+        first = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="same",
             deadline_seconds=30,
             idempotency_key="draft-1",
         )
-        second = await researcher.tools.ask(
+        second = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="same",
             deadline_seconds=30,
             idempotency_key="draft-1",
         )
-        later = await researcher.tools.ask(
+        later = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="same",
             deadline_seconds=60,
             idempotency_key="draft-1",
         )
-        third = await researcher.tools.ask(
+        third = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="same",
             deadline_seconds=30,
@@ -167,7 +185,9 @@ async def test_team_tools_idempotency_key_reuses_ticket():
         assert later_wire.deadline == first_wire.deadline
         assert first["ticket_id"] != third["ticket_id"]
         with pytest.raises(SessionError) as exc:
-            await researcher.tools.ask(
+            await call_team_tool(
+                researcher.tools,
+                "ask",
                 recipient="writer",
                 content="other",
                 deadline_seconds=30,
@@ -189,12 +209,16 @@ async def test_team_tools_keyed_tell_conflict_is_visible():
     await writer.join(team)
     await researcher.join(team)
     try:
-        first = await researcher.tools.tell(
+        first = await call_team_tool(
+            researcher.tools,
+            "tell",
             recipient="writer",
             content={"notice": "one"},
             idempotency_key="note-1",
         )
-        again = await researcher.tools.tell(
+        again = await call_team_tool(
+            researcher.tools,
+            "tell",
             recipient="writer",
             content={"notice": "one"},
             idempotency_key="note-1",
@@ -204,7 +228,9 @@ async def test_team_tools_keyed_tell_conflict_is_visible():
         assert "message" not in again
         assert "sender_did" not in again
         with pytest.raises(SessionError) as exc:
-            await researcher.tools.tell(
+            await call_team_tool(
+                researcher.tools,
+                "tell",
                 recipient="writer",
                 content={"notice": "two"},
                 idempotency_key="note-1",
@@ -230,7 +256,9 @@ async def test_team_tools_wait_hold_can_return_open_ticket():
     await writer.join(team)
     await researcher.join(team)
     try:
-        ticket = await researcher.tools.ask(
+        ticket = await call_team_tool(
+            researcher.tools,
+            "ask",
             recipient="writer",
             content="later",
             deadline_seconds=8,
@@ -238,6 +266,31 @@ async def test_team_tools_wait_hold_can_return_open_ticket():
         )
         assert ticket["state"] == "open"
         assert "content" not in ticket
+    finally:
+        await researcher.leave()
+        await writer.leave()
+        await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_omitted_thread_id_differs_between_session_ask_and_team_tools():
+    team = await Team("demo").start()
+    writer = Writer(name="writer")
+    researcher = Coordinator(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        session_ticket = await researcher.ask("writer", "session-ask")
+        tools_ticket = await call_team_tool(
+            researcher.tools,
+            "ask",
+            recipient="writer",
+            content="tools-ask",
+        )
+        assert session_ticket.state == "completed"
+        assert session_ticket.thread_id is None
+        assert tools_ticket["state"] == "completed"
+        assert tools_ticket["thread_id"]
     finally:
         await researcher.leave()
         await writer.leave()

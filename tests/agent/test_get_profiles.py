@@ -8,6 +8,7 @@ import pytest
 
 from agentconnect.agent import BaseAgent, SessionError
 from agentconnect.team import Team
+from tests.support.tools import call_team_tool
 
 
 class Writer(BaseAgent):
@@ -37,8 +38,10 @@ async def test_get_profiles_keeps_order_drops_duplicates_and_returns_item_errors
     await writer.join(team)
     await researcher.join(team)
     try:
-        found = await researcher.tools.get_profiles(
-            addresses=["writer", "missing", "writer", "operator", "writer@other-team"]
+        found = await call_team_tool(
+            researcher.tools,
+            "get_profiles",
+            addresses=["writer", "missing", "writer", "operator", "writer@other-team"],
         )
         statuses = [item["status"] for item in found["items"]]
         assert statuses == ["ok", "error", "error", "error"]
@@ -48,14 +51,18 @@ async def test_get_profiles_keeps_order_drops_duplicates_and_returns_item_errors
         assert found["items"][1]["error"]["code"] == "not_found"
         assert found["items"][2]["error"]["code"] == "not_found"
         assert found["items"][3]["error"]["code"] == "address_outside_team"
-        one = await researcher.tools.get_profiles(addresses=["writer"])
+        one = await call_team_tool(
+            researcher.tools, "get_profiles", addresses=["writer"]
+        )
         assert one["items"][0]["status"] == "ok"
         with pytest.raises(SessionError) as exc:
-            await researcher.tools.get_profiles(addresses=[])
+            await call_team_tool(researcher.tools, "get_profiles", addresses=[])
         assert exc.value.code == "invalid_request"
         with pytest.raises(SessionError) as oversized:
-            await researcher.tools.get_profiles(
-                addresses=[f"peer{index}" for index in range(21)]
+            await call_team_tool(
+                researcher.tools,
+                "get_profiles",
+                addresses=[f"peer{index}" for index in range(21)],
             )
         assert oversized.value.code == "invalid_request"
     finally:

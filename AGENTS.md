@@ -9,7 +9,7 @@ This file describes the codebase and its constraints. There is no required edito
 | Package | Responsibility |
 | --- | --- |
 | `agentconnect.core` | Public data models and schema projection |
-| `agentconnect.agent` | Client SDK and handler context |
+| `agentconnect.agent` | Client SDK and handler context. `BaseAgent` owns the connection. |
 | `agentconnect.team` | Team Runtime, directory, mailboxes, tickets, and stores |
 | `agentconnect.transport` | Client Session transports |
 | `agentconnect.mcp` | Team MCP server |

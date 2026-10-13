@@ -58,3 +58,21 @@ def test_load_identity_rejects_a_file_without_a_private_key(tmp_path):
     path.write_text(json.dumps(identity.to_dict()), encoding="utf-8")
     with pytest.raises(ValueError, match="private key"):
         load_identity(path)
+
+
+def test_save_identity_rejects_missing_private_key(tmp_path):
+    path = tmp_path / "public-only.json"
+    identity = AgentIdentity.create_key_based()
+    public_only = AgentIdentity.from_dict(identity.to_dict())
+    with pytest.raises(ValueError, match="private key"):
+        save_identity(public_only, path)
+    assert not path.exists()
+
+
+def test_save_identity_rejects_mismatched_did(tmp_path):
+    path = tmp_path / "mismatch.json"
+    identity = AgentIdentity.create_key_based()
+    identity.did = AgentIdentity.create_key_based().did
+    with pytest.raises(ValueError, match="DID does not match"):
+        save_identity(identity, path)
+    assert not path.exists()

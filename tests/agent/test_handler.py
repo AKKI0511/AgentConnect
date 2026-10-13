@@ -7,6 +7,7 @@ import asyncio
 import pytest
 from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
+from agentconnect.agent import BaseAgent
 from agentconnect.agent.context import Context
 from agentconnect.core.base import JsonValue
 from agentconnect.core.message import MailboxMessage
@@ -156,6 +157,29 @@ async def test_ctx_sender_is_the_requester_address(team: Team):
         assert ticket.state == "completed"
         assert ticket.response.content["sender"] == researcher.address
         assert ticket.response.content["did"] == researcher.agent_did
+    finally:
+        await writer.leave()
+        await researcher.leave()
+
+
+@pytest.mark.asyncio
+async def test_deferred_fail_keeps_caller_message(team: Team):
+    class FailAgent(BaseAgent):
+        async def handle(
+            self, message: MailboxMessage, ctx: Context
+        ) -> JsonValue | None:
+            await ctx.defer().fail("source list was empty")
+            return None
+
+    writer = FailAgent(name="writer")
+    researcher = EchoAgent(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        ticket = await researcher.ask("writer", "please", deadline_seconds=5)
+        assert ticket.state == "failed"
+        assert ticket.error.code == "handler_failed"
+        assert ticket.error.message == "source list was empty"
     finally:
         await writer.leave()
         await researcher.leave()

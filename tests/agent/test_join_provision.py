@@ -132,3 +132,27 @@ async def test_reconnect_reuses_token_and_denial_does_not_mint() -> None:
         await writer.leave()
         await caller.leave()
         await team.stop()
+
+
+@pytest.mark.asyncio
+async def test_auto_minted_token_is_not_sent_to_another_team() -> None:
+    first = await Team("alpha", require_join_auth=True).start()
+    second = await Team("beta", require_join_auth=False).start()
+    agent = EchoAgent(name="writer")
+    try:
+        await agent.join(first)
+        minted = agent.join_token
+        assert minted
+        await agent.leave()
+        await agent.join(second)
+        assert agent.connected
+        assert agent.join_token is None
+        await agent.leave()
+        await agent.join(first)
+        assert agent.connected
+        assert agent.join_token
+        assert agent.join_token != minted
+    finally:
+        await agent.leave()
+        await first.stop()
+        await second.stop()

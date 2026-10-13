@@ -191,8 +191,12 @@ rejected token is not replaced. Two copies must not share an
 
 Pass a Team object that has `require_join_auth=True`, and omit
 the token, to mint one bound to this Agent's name and DID.
-A URL never mints a token. [`Team.issue_join_token`](/api/team-runtime#agentconnect-team-runtime-team-issue-join-token) remains the
-operator call for a token you want to hand out.
+That minted token is reused only when joining the same Team
+object again. A different in-process Team drops it, and mints
+another when that Team requires auth. A URL never mints a token.
+A token from the constructor, the environment, or this call is
+kept as given. [`Team.issue_join_token`](/api/team-runtime#agentconnect-team-runtime-team-issue-join-token) remains the operator call
+for a token you want to hand out.
 
 **Parameters:**
 

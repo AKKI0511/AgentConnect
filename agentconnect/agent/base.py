@@ -130,6 +130,8 @@ class BaseAgent:
         self.agent_did = self.identity.did
         env_token = os.environ.get("AGENTCONNECT_JOIN_TOKEN")
         self.join_token = join_token if join_token is not None else env_token
+        self._join_token_explicit = self.join_token is not None
+        self._issued_team_id: int | None = None
         self.profile = _discovery_profile(
             profile if profile is not None else _class_profile(type(self)),
             self._agent_name,
@@ -178,8 +180,12 @@ class BaseAgent:
 
         Pass a Team object that has `require_join_auth=True`, and omit
         the token, to mint one bound to this Agent's name and DID.
-        A URL never mints a token. `Team.issue_join_token` remains the
-        operator call for a token you want to hand out.
+        That minted token is reused only when joining the same Team
+        object again. A different in-process Team drops it, and mints
+        another when that Team requires auth. A URL never mints a token.
+        A token from the constructor, the environment, or this call is
+        kept as given. `Team.issue_join_token` remains the operator call
+        for a token you want to hand out.
 
         Args:
             team_or_url: A started `Team` in this process, or a Runtime
@@ -197,13 +203,22 @@ class BaseAgent:
         """
         if join_token is not None:
             self.join_token = join_token
-        elif self.join_token is None and _in_process_team(team_or_url):
-            if getattr(team_or_url, "require_join_auth", False):
-                issued = await team_or_url.issue_join_token(
-                    name=self.name,
-                    agent_did=self.agent_did,
-                )
-                self.join_token = issued.token
+            self._join_token_explicit = True
+            self._issued_team_id = None
+        elif not self._join_token_explicit and _in_process_team(team_or_url):
+            if self._issued_team_id != id(team_or_url):
+                self.join_token = None
+                self._issued_team_id = None
+                if getattr(team_or_url, "require_join_auth", False):
+                    issued = await team_or_url.issue_join_token(
+                        name=self.name,
+                        agent_did=self.agent_did,
+                    )
+                    self.join_token = issued.token
+                    self._issued_team_id = id(team_or_url)
+        elif not self._join_token_explicit:
+            self.join_token = None
+            self._issued_team_id = None
         if self._session is not None:
             await self.leave()
         session = Session(

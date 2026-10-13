@@ -68,6 +68,27 @@ def load_package(root: Path = ROOT, package: str = "agentconnect"):
     return loader
 
 
+def _is_pydantic_validator(member) -> bool:
+    """True for field and model validators.
+
+    griffe-pydantic labels these when it resolves the decorator to
+    ``pydantic.model_validator``. A different canonical path leaves the
+    label unset, and the validator would otherwise be documented as a
+    normal method.
+    """
+    if "pydantic-validator" in member.labels:
+        return True
+    for decorator in getattr(member, "decorators", ()) or ():
+        path = str(getattr(decorator, "callable_path", "") or "")
+        value = str(getattr(decorator, "value", "") or "")
+        name = path.rsplit(".", 1)[-1]
+        if name in {"model_validator", "field_validator"} or value.startswith(
+            ("model_validator(", "field_validator(")
+        ):
+            return True
+    return False
+
+
 def public_members(obj):
     """Use exports for modules, and declared public members for classes."""
     selected = MEMBERS.get(obj.path, obj.exports if obj.is_module else None)
@@ -86,7 +107,7 @@ def public_members(obj):
                 member.final_target
             except AliasResolutionError as exc:
                 raise ValueError(f"Cannot resolve public export {member.path}") from exc
-        if member.is_module or "pydantic-validator" in member.labels:
+        if member.is_module or _is_pydantic_validator(member):
             continue
         if (
             obj.is_module

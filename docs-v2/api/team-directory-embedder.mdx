@@ -10,6 +10,13 @@ Pluggable embedding backends for a Team Directory.
 Profiles are embedded on join and when they change. `find` embeds the
 query and ranks with a dot product. Nothing here talks to a vector database.
 
+```
+async def embed_with_my_model(texts: list[str]) -> list[list[float]]:
+    return [[float(len(text)), 1.0] for text in texts]
+
+team = await Team("content-squad", embeddings=embed_with_my_model).start()
+```
+
 `"auto"` (the default) uses a local ONNX model when
 `agentconnect[embeddings]` is installed, and hashed n-grams otherwise.
 An API key in the environment is not permission to send Profiles or
@@ -24,17 +31,6 @@ selected model's per-input budget and, for hosted calls, the request
 budget. Hosted OpenAI and Azure paths send token ids from tiktoken.
 Directory character packing is only for backends that publish a
 character limit. Missing hosted extras raise before indexing.
-
-**Examples:**
-
-Supply your own embedder:
-
-```python
-async def embed_with_my_model(texts: list[str]) -> list[list[float]]:
-    return [[float(len(text)), 1.0] for text in texts]
-
-team = await Team("content-squad", embeddings=embed_with_my_model).start()
-```
 
 ## Public API
 
@@ -100,14 +96,6 @@ embed(texts: Sequence[str]) -> list[list[float]]
 
 Return one vector per string, in the same order.
 
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings to embed.
-
-**Returns:**
-
-* (`list[list[float]]`): One L2-normalized vector per input, same order.
-
 <a id="agentconnect-team-directory-embedder-as-unit-vector"></a>
 
 ## `as_unit_vector`
@@ -117,16 +105,6 @@ as_unit_vector(vector: Sequence[float], *, expected_dim: int | None = None) -> l
 ```
 
 Return `vector` as a finite unit vector, or raise `ValueError`.
-
-**Parameters:**
-
-* `vector` (`Sequence[float]`): Numeric components.
-
-* `expected_dim` (`int | None`): When set, reject a different length.
-
-**Returns:**
-
-* (`list[float]`): An L2-normalized copy of `vector`.
 
 <a id="agentconnect-team-directory-embedder-normalize-rows"></a>
 
@@ -138,22 +116,6 @@ normalize_rows(rows: Sequence[Sequence[float]], texts: Sequence[str], *, expecte
 
 Validate one vector per text, one dimension, and finite values.
 
-**Parameters:**
-
-* `rows` (`Sequence[Sequence[float]]`): Embedding rows from a backend.
-
-* `texts` (`Sequence[str]`): Strings that produced `rows`.
-
-* `expected_dim` (`int | None`): When set, every row must have this length.
-
-**Returns:**
-
-* (`list[list[float]]`): L2-normalized rows in the same order.
-
-**Raises:**
-
-* (`ValueError`): Count, dimension, or values are invalid.
-
 <a id="agentconnect-team-directory-embedder-l2-normalize"></a>
 
 ## `l2_normalize`
@@ -163,10 +125,6 @@ l2_normalize(vector: Sequence[float]) -> list[float]
 ```
 
 Return `vector` scaled to unit length. A zero vector stays zero.
-
-**Parameters:**
-
-* `vector` (`Sequence[float]`): Numeric components.
 
 <a id="agentconnect-team-directory-embedder-cosine"></a>
 
@@ -178,16 +136,6 @@ cosine(left: Sequence[float], right: Sequence[float]) -> float
 
 Dot product of two equal-length vectors. Callers pass unit vectors.
 
-**Parameters:**
-
-* `left` (`Sequence[float]`): First unit vector.
-
-* `right` (`Sequence[float]`): Second unit vector.
-
-**Raises:**
-
-* (`ValueError`): The vectors have different lengths.
-
 <a id="agentconnect-team-directory-embedder-mean-pool"></a>
 
 ## `mean_pool`
@@ -197,14 +145,6 @@ mean_pool(vectors: Sequence[Sequence[float]]) -> list[float]
 ```
 
 Average unit vectors and L2-normalize the result.
-
-**Parameters:**
-
-* `vectors` (`Sequence[Sequence[float]]`): One or more same-dimension unit vectors.
-
-**Raises:**
-
-* (`ValueError`): `vectors` is empty or dimensions differ.
 
 <a id="agentconnect-team-directory-embedder-char-windows"></a>
 
@@ -216,16 +156,6 @@ char_windows(text: str, limit: int) -> list[str]
 
 Split `text` into chunks of at most `limit` characters.
 
-**Parameters:**
-
-* `text` (`str`): Input to split.
-
-* `limit` (`int`): Maximum characters per chunk. Must be at least 1.
-
-**Returns:**
-
-* (`list[str]`): One or more windows covering `text`.
-
 <a id="agentconnect-team-directory-embedder-input-char-limit"></a>
 
 ## `input_char_limit`
@@ -236,10 +166,6 @@ input_char_limit(embedder: Any) -> int | None
 
 Character budget for one backend input, or `None` when unbounded.
 
-**Parameters:**
-
-* `embedder` (`Any`): Embedding backend.
-
 <a id="agentconnect-team-directory-embedder-max-batch"></a>
 
 ## `max_batch`
@@ -249,10 +175,6 @@ max_batch(embedder: Any) -> int
 ```
 
 Maximum texts one `embed` call should receive.
-
-**Parameters:**
-
-* `embedder` (`Any`): Embedding backend.
 
 <a id="agentconnect-team-directory-embedder-hashedembedder"></a>
 
@@ -313,15 +235,7 @@ max_batch = HASHED_BATCH
 embed(texts: Sequence[str]) -> list[list[float]]
 ```
 
-Hash each string into a 384-dimension unit vector.
-
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings.
-
-**Returns:**
-
-* (`list[list[float]]`): One unit vector per string, same order.
+Hash each string into a 384-dimension unit vector off the loop.
 
 <a id="agentconnect-team-directory-embedder-callableembedder"></a>
 
@@ -331,7 +245,7 @@ Hash each string into a 384-dimension unit vector.
 CallableEmbedder(fn: EmbedFn, *, name: str = 'custom')
 ```
 
-Wrap a user function as an [`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder).
+Wrap a user function as an :class:[`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder).
 
 The function receives `list[str]` and returns one vector per string.
 Coroutine functions run on the event loop. Other callables run on this
@@ -340,13 +254,6 @@ here. Two different callables are different embedding spaces even when
 both would otherwise be named `custom`.
 
 Bind `fn` as the embedding implementation.
-
-**Parameters:**
-
-* `fn` (`EmbedFn`): Callable `(list[str]) -> list[list[float]]`, sync or async.
-
-* `name` (`str`): Backend name recorded on stored vectors. Defaults to
-  `custom`.
 
 <a id="agentconnect-team-directory-embedder-callableembedder-input-char-limit"></a>
 
@@ -384,10 +291,6 @@ embed(texts: Sequence[str]) -> list[list[float]]
 
 Call the wrapped function and L2-normalize each row.
 
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings.
-
 <a id="agentconnect-team-directory-embedder-openaiembedder"></a>
 
 ## `OpenAIEmbedder`
@@ -402,11 +305,6 @@ Requires `agentconnect[openai]` so tiktoken can split to the model's
 token limit. Missing tiktoken is a setup error, not hashed fallback.
 
 Use `model`. `text-embedding-3-*` requests 384 dimensions.
-
-**Parameters:**
-
-* `model` (`str`): OpenAI embedding model id. Defaults to
-  `text-embedding-3-small`.
 
 <a id="agentconnect-team-directory-embedder-openaiembedder-input-char-limit"></a>
 
@@ -458,11 +356,7 @@ name
 embed(texts: Sequence[str]) -> list[list[float]]
 ```
 
-POST `/v1/embeddings`. Requires `OPENAI_API_KEY`.
-
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings.
+POST /v1/embeddings. Requires `OPENAI_API_KEY`.
 
 <a id="agentconnect-team-directory-embedder-litellmembedder"></a>
 
@@ -479,11 +373,6 @@ providers are refused: their advertised tokenizer is a generic
 tiktoken fallback, not the hosted model's tokenizer.
 
 Use LiteLLM model id `model` after checking its metadata.
-
-**Parameters:**
-
-* `model` (`str`): LiteLLM embedding model id. Defaults to
-  `text-embedding-3-small`.
 
 <a id="agentconnect-team-directory-embedder-litellmembedder-input-char-limit"></a>
 
@@ -537,10 +426,6 @@ embed(texts: Sequence[str]) -> list[list[float]]
 
 Call `litellm.aembedding` with tiktoken token-id windows.
 
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings.
-
 <a id="agentconnect-team-directory-embedder-fastembedembedder"></a>
 
 ## `FastEmbedEmbedder`
@@ -556,10 +441,6 @@ snapshot. That is not the same as sending Profile or query text to a
 hosted provider.
 
 Load `model` on first embed (about 50MB for the default).
-
-**Parameters:**
-
-* `model` (`str`): FastEmbed model id. Defaults to `BAAI/bge-small-en-v1.5`.
 
 <a id="agentconnect-team-directory-embedder-fastembedembedder-input-char-limit"></a>
 
@@ -596,10 +477,6 @@ embed(texts: Sequence[str]) -> list[list[float]]
 ```
 
 Load the ONNX model and embed on this instance's worker.
-
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings.
 
 <a id="agentconnect-team-directory-embedder-autoembedder"></a>
 
@@ -659,10 +536,6 @@ embed(texts: Sequence[str]) -> list[list[float]]
 
 Embed with the selected backend. Does not swap after a success.
 
-**Parameters:**
-
-* `texts` (`Sequence[str]`): Profile or query strings.
-
 <a id="agentconnect-team-directory-embedder-resolve-embedder"></a>
 
 ## `resolve_embedder`
@@ -671,7 +544,7 @@ Embed with the selected backend. Does not swap after a success.
 resolve_embedder(spec: EmbeddingsArg) -> Embedder
 ```
 
-Turn a Team `embeddings=` value into an [`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder).
+Turn a Team `embeddings=` value into an :class:[`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder).
 
 Strings:
 
@@ -680,21 +553,6 @@ Strings:
 * `fastembed` or `fastembed:<model>`
 * `openai` or `openai:<model>` (explicit hosted; needs tiktoken)
 * `litellm` or `litellm:<model>` (explicit hosted OpenAI/Azure)
-
-**Parameters:**
-
-* `spec` ([`EmbeddingsArg`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embeddingsarg)): Spec string, callable `(list[str]) -> list[list[float]]`,
-  or an [`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder).
-
-**Returns:**
-
-* ([`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder)): An embedder ready for Directory ranking.
-
-**Raises:**
-
-* (`TypeError`): `spec` is not a string, callable, or Embedder.
-
-* (`ValueError`): The spec string is empty or unknown.
 
 <a id="agentconnect-team-directory-embedder-hashed-embedding"></a>
 

@@ -7,8 +7,7 @@ sidebarTitle: "kinds"
 
 Closed Message kinds.
 
-`kind` is one of `request`, `event`, `response`, or `error`. Put
-application-level typing in Message `content` or `metadata`.
+Application-level typing belongs in Message `content` or `metadata`.
 
 ## Public API
 
@@ -20,20 +19,6 @@ application-level typing in Message `content` or `metadata`.
 
 Closed set of Message kinds.
 
-A request always expects a reply and opens a Ticket, the requester's
-durable record for that work. An event does not. Response and error
-Messages are created by the Runtime on reply.
-
-**Attributes:**
-
-* `REQUEST`: Work that expects a reply.
-
-* `RESPONSE`: Successful reply to a request.
-
-* `ERROR`: Failed reply to a request.
-
-* `EVENT`: Information sent without a reply or Ticket.
-
 <a id="agentconnect-core-kinds-messagekind-request"></a>
 
 ### `REQUEST`
@@ -41,8 +26,6 @@ Messages are created by the Runtime on reply.
 ```python
 REQUEST = 'request'
 ```
-
-Work that expects a reply.
 
 <a id="agentconnect-core-kinds-messagekind-response"></a>
 
@@ -52,8 +35,6 @@ Work that expects a reply.
 RESPONSE = 'response'
 ```
 
-Successful reply to a request.
-
 <a id="agentconnect-core-kinds-messagekind-error"></a>
 
 ### `ERROR`
@@ -62,8 +43,6 @@ Successful reply to a request.
 ERROR = 'error'
 ```
 
-Failed reply to a request.
-
 <a id="agentconnect-core-kinds-messagekind-event"></a>
 
 ### `EVENT`
@@ -71,5 +50,3 @@ Failed reply to a request.
 ```python
 EVENT = 'event'
 ```
-
-Information sent without a reply or Ticket.

@@ -8,12 +8,11 @@ sidebarTitle: "ops"
 Atomic store operations used by Runtime transitions.
 
 A transition builds a list of these operations and passes them to
-`apply`. The backend applies every operation or none of them. Ordinary
-Agent code never constructs these values.
+:meth:`~agentconnect.team.store.base.Store.apply`. The backend applies
+every operation or none of them. Ordinary Agent code never constructs
+these values.
 
-**Examples:**
-
-```python
+```
 from agentconnect.team.store import Insert, Store
 
 result = await store.apply(
@@ -52,20 +51,12 @@ if not result.ok and result.reason == "exists":
 ApplyResult(ok: bool, reason: Optional[str] = None, op_index: Optional[int] = None)
 ```
 
-Outcome of `apply`.
+Outcome of :meth:`~agentconnect.team.store.base.Store.apply`.
 
 `ok` means every operation committed. When `ok` is False, the
 store is unchanged. `reason` is `exists` (insert hit a live
-key), `cas` (version mismatch or missing compare-and-set target),
-`busy` (index cardinality cap), or `limit` (increment cap).
-
-**Attributes:**
-
-* `ok` (`bool`): True when every operation committed.
-
-* `reason` (`Optional[str]`): Conflict kind when `ok` is False.
-
-* `op_index` (`Optional[int]`): Index of the operation that conflicted, when known.
+key), `cas` (version mismatch or missing CAS target), `busy`
+(index cardinality cap), or `limit` (increment cap).
 
 <a id="agentconnect-team-store-ops-applyresult-ok"></a>
 
@@ -101,12 +92,6 @@ Insert(key: str, value: Any)
 
 Write `value` only if `key` is absent. Fails the batch with `exists`.
 
-**Attributes:**
-
-* `key` (`str`): Document key.
-
-* `value` (`Any`): JSON-compatible document.
-
 <a id="agentconnect-team-store-ops-insert-key"></a>
 
 ### `key`
@@ -132,14 +117,6 @@ Cas(key: str, version: int, value: Any)
 ```
 
 Replace `key` when its stored version equals `version`.
-
-**Attributes:**
-
-* `key` (`str`): Document key.
-
-* `version` (`int`): Expected current version.
-
-* `value` (`Any`): JSON-compatible document to store.
 
 <a id="agentconnect-team-store-ops-cas-key"></a>
 
@@ -175,12 +152,6 @@ Put(key: str, value: Any)
 
 Unconditionally write `value`, bumping the stored version.
 
-**Attributes:**
-
-* `key` (`str`): Document key.
-
-* `value` (`Any`): JSON-compatible document.
-
 <a id="agentconnect-team-store-ops-put-key"></a>
 
 ### `key`
@@ -207,10 +178,6 @@ Delete(key: str)
 
 Remove the document, set, and index stored at `key`.
 
-**Attributes:**
-
-* `key` (`str`): Document, set, or index key.
-
 <a id="agentconnect-team-store-ops-delete-key"></a>
 
 ### `key`
@@ -228,12 +195,6 @@ DeleteIfVersion(key: str, version: int)
 ```
 
 Delete `key` only when its stored version equals `version`.
-
-**Attributes:**
-
-* `key` (`str`): Document key.
-
-* `version` (`int`): Expected current version.
 
 <a id="agentconnect-team-store-ops-deleteifversion-key"></a>
 
@@ -261,12 +222,6 @@ SetAdd(key: str, member: str)
 
 Add `member` to the set at `key`.
 
-**Attributes:**
-
-* `key` (`str`): Set key.
-
-* `member` (`str`): Value to add.
-
 <a id="agentconnect-team-store-ops-setadd-key"></a>
 
 ### `key`
@@ -293,12 +248,6 @@ SetRemove(key: str, member: str)
 
 Remove `member` from the set at `key`.
 
-**Attributes:**
-
-* `key` (`str`): Set key.
-
-* `member` (`str`): Value to remove.
-
 <a id="agentconnect-team-store-ops-setremove-key"></a>
 
 ### `key`
@@ -324,14 +273,6 @@ IndexAdd(key: str, score: float, member: str)
 ```
 
 Add or update `member` in the sorted index at `key`.
-
-**Attributes:**
-
-* `key` (`str`): Index key.
-
-* `score` (`float`): Sort score.
-
-* `member` (`str`): Indexed member.
 
 <a id="agentconnect-team-store-ops-indexadd-key"></a>
 
@@ -367,12 +308,6 @@ IndexRemove(key: str, member: str)
 
 Remove `member` from the sorted index at `key`.
 
-**Attributes:**
-
-* `key` (`str`): Index key.
-
-* `member` (`str`): Indexed member.
-
 <a id="agentconnect-team-store-ops-indexremove-key"></a>
 
 ### `key`
@@ -401,16 +336,6 @@ Add `member` when the index has fewer than `max_card` members.
 
 Updating an existing member's score always succeeds. A new member
 past the cap fails the batch with `busy`.
-
-**Attributes:**
-
-* `key` (`str`): Index key.
-
-* `score` (`float`): Sort score.
-
-* `member` (`str`): Indexed member.
-
-* `max_card` (`int`): Maximum distinct members allowed.
 
 <a id="agentconnect-team-store-ops-indexaddifcardbelow-key"></a>
 
@@ -454,14 +379,6 @@ IncrementIfBelow(key: str, limit: int, ttl_seconds: Optional[float] = None)
 
 Atomically increment an integer document when it is below `limit`.
 
-**Attributes:**
-
-* `key` (`str`): Integer document key.
-
-* `limit` (`int`): Exclusive upper bound for the value before increment.
-
-* `ttl_seconds` (`Optional[float]`): Optional lifetime hint for durable backends.
-
 <a id="agentconnect-team-store-ops-incrementifbelow-key"></a>
 
 ### `key`
@@ -496,12 +413,6 @@ DecrementFloor(key: str, ttl_seconds: Optional[float] = None)
 
 Decrement an integer document, not below `0`.
 
-**Attributes:**
-
-* `key` (`str`): Integer document key.
-
-* `ttl_seconds` (`Optional[float]`): Optional lifetime hint for durable backends.
-
 <a id="agentconnect-team-store-ops-decrementfloor-key"></a>
 
 ### `key`
@@ -527,14 +438,6 @@ clone_value(value: Any) -> Any
 ```
 
 Return a deep copy of a JSON-compatible value.
-
-**Parameters:**
-
-* `value` (`Any`): Mapping, list, or scalar.
-
-**Returns:**
-
-* (`Any`): A new nested structure; scalars are returned unchanged.
 
 <a id="agentconnect-team-store-ops-storeop"></a>
 

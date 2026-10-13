@@ -22,7 +22,8 @@ SortedIndex()
 
 Membership scores with range reads that skip unrelated members.
 
-`index_range` walks only the requested score window.
+`index_range` walks only the requested score window. Add and remove
+are `O(log n)`.
 
 Create an empty score index.
 
@@ -56,12 +57,6 @@ add(member: str, score: float) -> None
 
 Insert or replace `member` at `score`.
 
-**Parameters:**
-
-* `member` (`str`): Indexed member.
-
-* `score` (`float`): Sort score.
-
 <a id="agentconnect-team-store-memory-sortedindex-remove"></a>
 
 ### `remove`
@@ -82,14 +77,6 @@ range(*, min_score: float, max_score: float, limit: Optional[int] = None) -> lis
 
 Return members with scores in `[min_score, max_score]`, lowest first.
 
-**Parameters:**
-
-* `min_score` (`float`): Inclusive lower bound.
-
-* `max_score` (`float`): Inclusive upper bound.
-
-* `limit` (`Optional[int]`): Maximum members to return. Omit for the full window.
-
 <a id="agentconnect-team-store-memory-memorystore"></a>
 
 ## `MemoryStore`
@@ -100,9 +87,9 @@ MemoryStore()
 
 Volatile document store backed by dicts in this process.
 
-`insert`, `compare_and_set`, and `apply` are atomic with respect to
-other MemoryStore operations. State survives Client disconnects, not
-process exit.
+`insert`, `compare_and_set`, and `apply` are atomic with
+respect to other MemoryStore operations. Mailbox index updates use
+the same lock.
 
 Create an empty in-process store.
 
@@ -162,10 +149,11 @@ Return a copy of the value at `key`, or None.
 get_many(keys: Sequence[str]) -> list[Any | None]
 ```
 
-Return copied values for `keys` in the same order.
+Return copied values for `keys`.
 
-Missing keys are None. Large reads yield between copies so other
-Team operations can run.
+The lock covers only the snapshot. Cloning happens afterwards and
+yields so a large Directory read cannot freeze the event loop or
+hold send/lease behind vector copies.
 
 <a id="agentconnect-team-store-memory-memorystore-get-record"></a>
 
@@ -189,15 +177,7 @@ Return a copied value and its version, or None.
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
 
-Apply `ops` as one transition, or leave every key unchanged.
-
-**Parameters:**
-
-* `ops` (`Sequence[StoreOp]`): Store operations to apply together.
-
-**Returns:**
-
-* ([`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult)): [`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult). `ok` is True when every operation committed.
+Apply `ops` under the store lock, or leave every key unchanged.
 
 <a id="agentconnect-team-store-memory-memorystore-put"></a>
 
@@ -221,7 +201,7 @@ Write a copied value at `key`, bumping the version.
 insert(key: str, value: Any) -> bool
 ```
 
-Write `value` only if `key` is absent. True when inserted.
+Write `value` only if `key` is absent.
 
 <a id="agentconnect-team-store-memory-memorystore-compare-and-set"></a>
 
@@ -365,7 +345,7 @@ Add `member` when the index has fewer than `max_card` members.
 increment_if_below(key: str, limit: int, *, ttl_seconds: Optional[float] = None) -> bool
 ```
 
-Increment an integer document when it is below `limit`. Memory ignores `ttl_seconds`.
+Increment an integer document when it is below `limit`.
 
 <a id="agentconnect-team-store-memory-memorystore-decrement-floor"></a>
 
@@ -377,7 +357,7 @@ Increment an integer document when it is below `limit`. Memory ignores `ttl_seco
 decrement_floor(key: str, *, ttl_seconds: Optional[float] = None) -> int
 ```
 
-Decrement an integer document, not below `0`. Memory ignores `ttl_seconds`.
+Decrement an integer document, not below `0`.
 
 <a id="agentconnect-team-store-memory-memorystore-ping"></a>
 

@@ -11,12 +11,12 @@ The Directory lists this Team's Memberships only. It does not search other
 Teams and it does not use a vector database. Vectors sit in the Team Store
 beside Memberships. One `find` ranks in one embedding space.
 
-**Examples:**
+```
+from agentconnect.team import Team
 
-For a joined Agent:
-
-```python
-found = await agent.find("someone who can review a contract")
+team = await Team("content-squad").start()
+await researcher.join(team)
+found = await researcher.find("someone who can review a contract")
 found.matches[0].address
 ```
 
@@ -38,17 +38,9 @@ Directory(store: Store, embedder: Embedder)
 Rank this Team's members for a natural-language query.
 
 The Runtime owns one Directory per Team. Pass `embeddings=` to
-[`Team`](/api/team-runtime#agentconnect-team-runtime-team) to choose a backend. Most callers only use [`BaseAgent.find`](/api/agent-base#agentconnect-agent-base-baseagent-find).
+[`Team`](/api/team-runtime#agentconnect-team-runtime-team) to choose a backend. Most callers only use `agent.find`.
 
-Bind this Directory to `store` and `embedder`.
-
-Ordinary Agent code does not construct a Directory.
-
-**Parameters:**
-
-* `store` ([`Store`](/api/team-store-base#agentconnect-team-store-base-store)): Team Store that holds Memberships and vectors.
-
-* `embedder` ([`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder)): Embedding backend resolved from `Team(embeddings=...)`.
+Bind to `store` and `embedder`. Vectors use keys `dirvec:<name>`.
 
 <a id="agentconnect-team-directory-directory-directory-search-in-flight"></a>
 
@@ -76,7 +68,7 @@ search_in_flight_peak
 backend_name: str
 ```
 
-Name of the embedding backend currently selected, such as `hashed`.
+Name of the embedding backend currently selected.
 
 <a id="agentconnect-team-directory-directory-directory-using-fallback"></a>
 
@@ -102,12 +94,6 @@ upsert(name: str, profile: Mapping[str, Any]) -> None
 
 Embed `profile` and store the vector when it changed.
 
-**Parameters:**
-
-* `name` (`str`): Agent name of the Membership.
-
-* `profile` (`Mapping[str, Any]`): Discovery Profile mapping.
-
 <a id="agentconnect-team-directory-directory-directory-drop"></a>
 
 `async`
@@ -119,10 +105,6 @@ drop(name: str) -> None
 ```
 
 Remove the stored vector for `name`.
-
-**Parameters:**
-
-* `name` (`str`): Agent name of the Membership.
 
 <a id="agentconnect-team-directory-directory-directory-search"></a>
 
@@ -137,23 +119,8 @@ search(query: str, members: Sequence[Mapping[str, Any]], *, exclude_address: str
 Rank `members` for `query` and return light cards.
 
 Excludes `exclude_address`. Omitting `limit` returns every
-remaining member, at most [`MAX_FIND_LIMIT`](/api/team-directory-directory#agentconnect-team-directory-directory-max-find-limit). Every match in
+remaining member, at most :data:[`MAX_FIND_LIMIT`](/api/team-directory-directory#agentconnect-team-directory-directory-max-find-limit). Every match in
 the result is ranked in one embedding space.
-
-**Parameters:**
-
-* `query` (`str`): Natural-language need.
-
-* `members` (`Sequence[Mapping[str, Any]]`): Membership records with `address` and `profile`.
-
-* `exclude_address` (`str`): Qualified Address to omit, usually the caller.
-
-* `limit` (`int | None`): Maximum matches. Omit for every remaining member, at
-  most 100.
-
-**Returns:**
-
-* ([`FindResult`](/api/core-directory#agentconnect-core-directory-findresult)): A [`FindResult`](/api/core-directory#agentconnect-core-directory-findresult) with `matches` ordered best-first.
 
 <a id="agentconnect-team-directory-directory-profile-text"></a>
 
@@ -164,14 +131,6 @@ profile_text(profile: Mapping[str, Any]) -> str
 ```
 
 Flatten a discovery Profile into the string that gets embedded.
-
-**Parameters:**
-
-* `profile` (`Mapping[str, Any]`): Discovery Profile mapping (`summary`, `skills`, …).
-
-**Returns:**
-
-* (`str`): Combined Profile text used for embedding.
 
 <a id="agentconnect-team-directory-directory-profile-windows"></a>
 
@@ -185,17 +144,7 @@ Bounded Profile windows for one embedding space.
 
 When `limit` is omitted, the whole Profile is one window and the
 embedder owns token splitting. Otherwise later Skills keep their own
-character windows.
-
-**Parameters:**
-
-* `profile` (`Mapping[str, Any]`): Discovery Profile mapping.
-
-* `limit` (`int | None`): Maximum characters per window, or None when unbounded.
-
-**Returns:**
-
-* (`list[str]`): One or more text windows to embed.
+character windows. The packing is an implementation detail.
 
 <a id="agentconnect-team-directory-directory-max-find-limit"></a>
 

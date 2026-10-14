@@ -236,7 +236,7 @@ async def _run_team_tool(
         elif spec.name == "get_profiles":
             payload = await get_profiles_action(runtime, token, list(parsed.addresses))
         elif spec.name == "ask":
-            address = await runtime.caller_address(token)
+            address = await runtime._caller_address(token)
             payload = await ask_action(
                 runtime,
                 token,
@@ -249,7 +249,7 @@ async def _run_team_tool(
                 idempotency_key=parsed.idempotency_key,
             )
         elif spec.name == "tell":
-            address = await runtime.caller_address(token)
+            address = await runtime._caller_address(token)
             payload = await tell_action(
                 runtime,
                 token,

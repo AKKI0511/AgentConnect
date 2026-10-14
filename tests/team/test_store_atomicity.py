@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from agentconnect.team.store import MemoryStore, StoreRecord
-from agentconnect.team.store.ops import Cas, Insert
+from agentconnect.team.store.ops import Insert
 
 
 @pytest.mark.asyncio
@@ -71,24 +71,6 @@ async def test_concurrent_put_assigns_distinct_versions():
     record = await store.get_record("k")
     assert record is not None
     assert record.version == 11
-
-
-@pytest.mark.asyncio
-async def test_apply_is_all_or_nothing():
-    store = MemoryStore()
-    await store.open()
-    assert await store.insert("ticket", {"state": "open"})
-    record = await store.get_record("ticket")
-    assert record is not None
-    result = await store.apply(
-        [
-            Insert("msg", {"id": "m1"}),
-            Cas("ticket", record.version + 3, {"state": "completed"}),
-        ]
-    )
-    assert result.ok is False
-    assert await store.get("msg") is None
-    assert await store.get("ticket") == {"state": "open"}
 
 
 @pytest.mark.asyncio

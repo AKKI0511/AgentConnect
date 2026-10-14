@@ -2,7 +2,7 @@
 
 A join token is an opaque value the Runtime issues and verifies. Its
 encoding is not public. A network join also requires an identity proof
-JWT from :mod:`agentconnect.core.identity`.
+JWT from `agentconnect.core.identity`.
 
     issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
     await writer.join(url, join_token=issued["token"])

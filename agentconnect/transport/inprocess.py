@@ -134,7 +134,7 @@ class InProcessTransport:
 
     async def events(self, session_token: str) -> AsyncIterator[dict[str, Any]]:
         """Yield work hints when the Mailbox has leaseable items."""
-        wait = getattr(self._runtime, "wait_for_work", None)
+        wait = getattr(self._runtime, "_wait_for_work", None)
         if wait is None:
             return
         while True:

@@ -12,10 +12,12 @@ call the model, run any tool calls, append results, repeat until the model
 stops calling tools or `max_rounds` is hit.
 
 When the turn budget is exhausted while the model is still calling tools,
-:class:[`ToolLoopExhausted`](/api/prebuilt-loop#agentconnect-prebuilt-loop-toolloopexhausted) is raised. That is an unsuccessful outcome, not
+[`ToolLoopExhausted`](/api/prebuilt-loop#agentconnect-prebuilt-loop-toolloopexhausted) is raised. That is an unsuccessful outcome, not
 a successful string reply.
 
-```
+**Examples:**
+
+```python
 from agentconnect.prebuilt.loop import run_tool_loop
 from agentconnect.prebuilt.tools import Tool
 
@@ -44,9 +46,13 @@ ToolLoopExhausted(max_rounds: int)
 
 The model was still calling tools when `max_rounds` was reached.
 
-Raised by :func:[`run_tool_loop`](/api/prebuilt-loop#agentconnect-prebuilt-loop-run-tool-loop). [`AIAgent.handle`](/api/prebuilt-ai_agent#agentconnect-prebuilt-ai-agent-aiagent-handle) does not catch it, so
+Raised by [`run_tool_loop`](/api/prebuilt-loop#agentconnect-prebuilt-loop-run-tool-loop). [`AIAgent.handle`](/api/prebuilt-ai_agent#agentconnect-prebuilt-ai-agent-aiagent-handle) does not catch it, so
 an in-Team request fails through the handler-failure path. `chat` and
 `complete` let the same exception reach the caller.
+
+**Attributes:**
+
+* `max_rounds`: Turn budget that was exhausted.
 
 <a id="agentconnect-prebuilt-loop-toolloopexhausted-max-rounds"></a>
 
@@ -56,6 +62,8 @@ an in-Team request fails through the handler-failure path. `chat` and
 max_rounds
 ```
 
+Turn budget that was exhausted.
+
 <a id="agentconnect-prebuilt-loop-completionfn"></a>
 
 ## `CompletionFn`
@@ -63,8 +71,8 @@ max_rounds
 Async callable with the LiteLLM `acompletion` shape.
 
 The loop passes `model`, `messages`, and when tools exist, `tools`.
-Extra keyword arguments from the caller (temperature, api\_key, ...) are
-forwarded unchanged.
+Extra keyword arguments from the caller (`temperature`, `api_key`,
+and others) are forwarded unchanged.
 
 <a id="agentconnect-prebuilt-loop-run-tool-loop"></a>
 
@@ -81,10 +89,36 @@ Call `complete` until the model returns text or raise on exhaustion.
 `messages` is an OpenAI-style chat history. The loop mutates a local copy
 only. Tool results stay in that copy; they are not written to a Thread.
 A tool exception becomes one error JSON payload and the loop continues.
-Hitting `max_rounds` while tool calls remain raises
-:class:[`ToolLoopExhausted`](/api/prebuilt-loop#agentconnect-prebuilt-loop-toolloopexhausted).
+Hitting `max_rounds` while tool calls remain raises [`ToolLoopExhausted`](/api/prebuilt-loop#agentconnect-prebuilt-loop-toolloopexhausted).
 
-```
+**Parameters:**
+
+* `complete` ([`CompletionFn`](/api/prebuilt-loop#agentconnect-prebuilt-loop-completionfn)): Async callable with the LiteLLM `acompletion` shape.
+
+* `model` (`str`): LiteLLM model id.
+
+* `messages` (`Sequence[Mapping[str, Any]]`): Chat history. Copied; the original is not mutated.
+
+* `tools` (`Sequence[ToolLike] | None`): Callables or [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) objects. Omit when the model has none.
+
+* `max_rounds` (`int`): Cap on model-tool-model cycles. Defaults to 8.
+
+* `**complete_kwargs` (`Any`): Extra kwargs forwarded to `complete`.
+
+**Returns:**
+
+* (`str`): Model text when it stops calling tools.
+
+**Raises:**
+
+* (`ValueError`): `max_rounds` is below 1.
+
+* ([`ToolLoopExhausted`](/api/prebuilt-loop#agentconnect-prebuilt-loop-toolloopexhausted)): The model was still calling tools after
+  `max_rounds`.
+
+**Examples:**
+
+```python
 reply = await run_tool_loop(
     complete=scripted_complete,
     model="gpt-4o-mini",
@@ -102,4 +136,24 @@ messages_from_thread(history: Sequence[Any], current: Any, *, self_address: Opti
 
 Build a chat history from Runtime Messages (`ctx.history` plus this turn).
 
-messages = messages\_from\_thread(ctx.history, msg, self\_address=agent.address)
+**Parameters:**
+
+* `history` (`Sequence[Any]`): Earlier Thread Messages or chat dicts.
+
+* `current` (`Any`): This turn as a Message, chat dict, or string.
+
+* `self_address` (`Optional[str]`): Address treated as this Agent (`assistant` role).
+
+* `instructions` (`Optional[str]`): Optional system prompt prepended to the history.
+
+**Returns:**
+
+* (`list[dict[str, Any]]`): OpenAI-style chat messages.
+
+**Examples:**
+
+```python
+messages = messages_from_thread(
+    ctx.history, msg, self_address=agent.address
+)
+```

@@ -46,6 +46,8 @@ directly when annotations cannot express the schema.
 name: str
 ```
 
+Tool name advertised to the host.
+
 <a id="agentconnect-agent-tools-tool-description"></a>
 
 ### `description`
@@ -53,6 +55,8 @@ name: str
 ```python
 description: str
 ```
+
+Text the host shows for this tool.
 
 <a id="agentconnect-agent-tools-tool-parameters"></a>
 
@@ -62,6 +66,8 @@ description: str
 parameters: dict[str, Any]
 ```
 
+JSON Schema object for keyword arguments.
+
 <a id="agentconnect-agent-tools-tool-handler"></a>
 
 ### `handler`
@@ -70,6 +76,8 @@ parameters: dict[str, Any]
 handler: ToolHandler
 ```
 
+Callable invoked with those keywords.
+
 <a id="agentconnect-agent-tools-tool-params-model"></a>
 
 ### `params_model`
@@ -77,6 +85,8 @@ handler: ToolHandler
 ```python
 params_model: Any = None
 ```
+
+Optional Pydantic model used to validate arguments.
 
 <a id="agentconnect-agent-tools-tool-from-callable"></a>
 

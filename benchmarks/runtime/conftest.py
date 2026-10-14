@@ -14,8 +14,8 @@ from tests.support.async_bridge import AsyncBridge
 from tests.support.runtime import platform_report
 
 from agentconnect.team.directory.embedder import (
-    DEFAULT_FASTEMBED_MODEL,
-    HASHED_DIM,
+    _DEFAULT_FASTEMBED_MODEL,
+    _HASHED_DIM,
     HashedEmbedder,
 )
 
@@ -87,10 +87,10 @@ def pytest_benchmark_update_json(
 
     output_json["revision"] = _git_revision()
     output_json["provenance"] = {
-        "hashed": {"name": HashedEmbedder.name, "dim": HASHED_DIM},
+        "hashed": {"name": HashedEmbedder.name, "dim": _HASHED_DIM},
         "neural": {
-            "backend": f"fastembed:{DEFAULT_FASTEMBED_MODEL}",
-            "model": DEFAULT_FASTEMBED_MODEL,
+            "backend": f"fastembed:{_DEFAULT_FASTEMBED_MODEL}",
+            "model": _DEFAULT_FASTEMBED_MODEL,
             "packages": {
                 "fastembed": _package_version("fastembed"),
                 "onnxruntime": _package_version("onnxruntime"),

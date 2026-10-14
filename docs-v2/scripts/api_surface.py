@@ -48,7 +48,6 @@ PUBLIC_MODULES = frozenset(
         "agentconnect.prebuilt.tools",
         "agentconnect.team",
         "agentconnect.team.directory",
-        "agentconnect.team.directory.directory",
         "agentconnect.team.directory.embedder",
         "agentconnect.team.errors",
         "agentconnect.team.http",

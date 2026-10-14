@@ -19,8 +19,19 @@ Public ErrorObject and deadline-exceeded failure.
 
 Public failure data shared by Runtime errors and handler failures.
 
-`code` is a well-known ErrorCode. An Agent application failure code
-belongs in `details` of a `handler_failed` error.
+`code` is a well-known [`ErrorCode`](/api/core-primitives#agentconnect-core-primitives-errorcode). An Agent application failure
+code belongs in `details` of a `handler_failed` error.
+
+**Attributes:**
+
+* `code` ([`ErrorCode`](/api/core-primitives#agentconnect-core-primitives-errorcode)): Closed public error code.
+
+* `message` (`str`): Safe human-readable explanation.
+
+* `details` (`Optional[JsonObject]`): Optional structured data safe to reveal to the requester.
+
+* `retryable` (`Optional[bool]`): Whether repeating the failed action may succeed
+  without changing input. Omit when unknown.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -32,6 +43,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 code: ErrorCode
 ```
 
+Closed public error code.
+
 Required.
 
 <a id="agentconnect-core-error-errorobject-message"></a>
@@ -41,6 +54,8 @@ Required.
 ```python
 message: str
 ```
+
+Safe human-readable explanation.
 
 Required.
 
@@ -56,6 +71,8 @@ Required.
 details: Optional[JsonObject] = None
 ```
 
+Optional structured data safe to reveal to the requester.
+
 Default: `None`.
 
 <a id="agentconnect-core-error-errorobject-retryable"></a>
@@ -66,6 +83,9 @@ Default: `None`.
 retryable: Optional[bool] = None
 ```
 
+Whether repeating the failed action may succeed
+without changing input. Omit when unknown.
+
 Default: `None`.
 
 <a id="agentconnect-core-error-deadlineexceedederror"></a>
@@ -73,6 +93,10 @@ Default: `None`.
 ## `DeadlineExceededError`
 
 Error stored by an expired Ticket.
+
+A Ticket is the requester's record for one request. When its
+deadline passes before an accepted reply, the Ticket is `expired`
+and carries this object. `code` is always `deadline_exceeded`.
 
 Inherits from [`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject).
 

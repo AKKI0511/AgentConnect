@@ -228,43 +228,6 @@ def cas_ticket_ops(
     return ops
 
 
-async def retain_message(store: Store, message_id: str) -> None:
-    """Keep ``message_id`` in Thread history while a Ticket still needs it."""
-    await store.set_add(RETAIN_MESSAGES_SET, message_id)
-
-
-async def drop_retained_message(store: Store, message_id: str) -> None:
-    """Stop protecting ``message_id`` from Thread retention."""
-    await store.set_remove(RETAIN_MESSAGES_SET, message_id)
-
-
-async def retained_message_ids(store: Store) -> set[str]:
-    """Return Message ids Thread trim must keep."""
-    return set(await store.set_members(RETAIN_MESSAGES_SET))
-
-
-async def save_ticket(store: Store, ticket: dict[str, Any]) -> None:
-    """Persist a Ticket and update the open/all Ticket sets."""
-    ticket_id = ticket["id"]
-    await store.put(ticket_key(ticket_id), ticket)
-    await store.set_add(ALL_TICKETS_SET, ticket_id)
-    if ticket["state"] == "open":
-        await store.set_add(OPEN_TICKETS_SET, ticket_id)
-        await expiry_mod.schedule(
-            store, expiry_mod.OPEN_TICKETS, ticket_id, ticket["deadline"]
-        )
-        await retain_message(store, ticket_id)
-    else:
-        await store.set_remove(OPEN_TICKETS_SET, ticket_id)
-        await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
-
-
-async def insert_ticket(store: Store, ticket: dict[str, Any]) -> bool:
-    """Insert an open Ticket. False if that id already exists."""
-    result = await store.apply(insert_ticket_ops(ticket))
-    return result.ok
-
-
 async def cas_ticket(
     store: Store,
     ticket: dict[str, Any],
@@ -327,19 +290,3 @@ def delete_ticket_ops(ticket: dict[str, Any], version: int) -> list[StoreOp]:
     if isinstance(result_id, str) and result_id:
         ops.append(SetRemove(RETAIN_MESSAGES_SET, result_id))
     return ops
-
-
-async def delete_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:
-    """Remove a Ticket, drop indexes, and return the deleted record if any."""
-    record = await load_ticket_record(store, ticket_id)
-    ticket = None if record is None else dict(record.value)
-    if record is not None and ticket is not None:
-        await store.apply(delete_ticket_ops(ticket, record.version))
-        return ticket
-    await store.delete(ticket_key(ticket_id))
-    await store.set_remove(OPEN_TICKETS_SET, ticket_id)
-    await store.set_remove(ALL_TICKETS_SET, ticket_id)
-    await expiry_mod.cancel(store, expiry_mod.OPEN_TICKETS, ticket_id)
-    await expiry_mod.cancel(store, expiry_mod.TERMINAL_TICKETS, ticket_id)
-    await drop_retained_message(store, ticket_id)
-    return ticket

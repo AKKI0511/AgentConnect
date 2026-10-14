@@ -4,6 +4,6 @@
 {{ attribute.name }}{% if attribute.annotation %}: {{ attribute.annotation }}{% endif %}{% if attribute.value is not none and ('class-attribute' in attribute.labels or 'instance-attribute' not in attribute.labels) %} = {{ attribute.value }}{% endif %}
 ```
 
-{% with docstring_sections = attribute.docstring.parsed %}
+{% with docstring_sections = attribute|attribute_sections %}
 {% include 'docstring.md.jinja' %}
 {% endwith %}

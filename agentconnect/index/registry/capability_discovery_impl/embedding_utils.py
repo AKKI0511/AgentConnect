@@ -12,7 +12,7 @@ import math
 from typing import Dict, Optional, Protocol, Sequence, Union
 
 from agentconnect.config.vector import VectorSearchSettings
-from agentconnect.team.directory.embedder import HASHED_DIM, hashed_embedding
+from agentconnect.team.directory.embedder import _HASHED_DIM, _hashed_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ class HashedEmbeddings:
 
     def embed_query(self, text: str) -> list[float]:
         """Hash ``text`` into a 384-dimension unit vector."""
-        return hashed_embedding(text, dim=HASHED_DIM)
+        return _hashed_embedding(text, dim=_HASHED_DIM)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Hash each string."""
-        return [hashed_embedding(text, dim=HASHED_DIM) for text in texts]
+        return [_hashed_embedding(text, dim=_HASHED_DIM) for text in texts]
 
 
 class FastEmbedSync:

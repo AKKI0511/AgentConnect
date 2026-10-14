@@ -1,7 +1,9 @@
-"""
-Registry API Server for AgentConnect
+"""ASGI app for the optional published-directory Index.
 
-This server provides a REST API for the AgentConnect Registry, allowing agents to register, search, and manage their own metadata.
+`create_registry_api_app` returns a FastAPI app that registers published
+Agents and answers search. Settings come from `RegistryAPISettings` in
+the environment (`AGENTCONNECT_REGISTRY_*`). This is not the Team
+Runtime Directory.
 """
 
 import logging
@@ -33,10 +35,15 @@ _agent_registry_instance: Optional[AgentRegistry] = None
 def create_registry_api_app(
     settings: Optional[RegistryAPISettings] = None,
 ) -> FastAPI:
-    """Factory to create a FastAPI app for the Registry API.
+    """Return an ASGI app that serves the Index HTTP API.
 
-    - If settings is None, load from environment using RegistryAPISettings().
-    - Configures CORS and lifespan using the provided settings.
+    Args:
+        settings: Index process settings. When omitted, loaded from
+            `AGENTCONNECT_REGISTRY_*` environment variables.
+
+    Returns:
+        A FastAPI app. Run it with uvicorn. Install
+        `agentconnect[index]` first.
     """
 
     resolved_settings = settings or RegistryAPISettings()

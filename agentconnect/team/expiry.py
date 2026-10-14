@@ -1,7 +1,7 @@
 """Time-ordered expiry indexes used by the Runtime sweep.
 
 Each expiring record is a member of a sorted index scored by unix time.
-The sweep reads :func:`due` and processes those ids. It does not walk
+The sweep reads `due` and processes those ids. It does not walk
 every stored Session, lease, Ticket, or join credential.
 
     await schedule(store, SESSIONS, token, session["expires_at"])

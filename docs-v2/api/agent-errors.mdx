@@ -73,6 +73,8 @@ Record the public error `code` and human-readable `message`.
 code
 ```
 
+Public Runtime error code.
+
 <a id="agentconnect-agent-errors-sessionerror-message"></a>
 
 ### `message`
@@ -80,6 +82,8 @@ code
 ```python
 message
 ```
+
+Human-readable explanation.
 
 <a id="agentconnect-agent-errors-sessionerror-details"></a>
 
@@ -89,6 +93,8 @@ message
 details
 ```
 
+Optional JSON object with more data.
+
 <a id="agentconnect-agent-errors-sessionerror-retryable"></a>
 
 ### `retryable`
@@ -96,6 +102,9 @@ details
 ```python
 retryable
 ```
+
+Whether the caller may retry the same operation, when
+the Runtime said so. `None` means unspecified.
 
 <a id="agentconnect-agent-errors-sessionerror-from-transport"></a>
 

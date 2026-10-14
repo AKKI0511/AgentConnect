@@ -37,7 +37,14 @@ class Base:
         """An inherited operation."""
 
 class Widget(Base):
-    """A widget."""
+    """A widget.
+
+    Attributes:
+        label: Visible label stored on the widget.
+        timeout: Maximum wait in seconds for this widget.
+    """
+    label: str
+    """Visible label stored on the widget."""
     def __init__(self, name: str, /, *, count: int = 2):
         """Construct a widget.
 
@@ -46,6 +53,10 @@ class Widget(Base):
             count: Number of widgets.
         """
         self.name: str = str(name)
+        self.hidden = 1
+        self.timeout: float = 5.0
+        self.note: str = name
+        """An ordinary instance field with its own documentation."""
 
     @property
     def value(self) -> str:
@@ -142,6 +153,27 @@ raise RuntimeError("Documentation must never execute this module")
             {"Widget", "Model", "Choice", "Base"},
         )
         widget = self.module["Widget"]
+        names = [obj.name for obj in public_members(widget)]
+        self.assertIn("value", names)
+        self.assertIn("label", names)
+        self.assertIn("timeout", names)
+        self.assertIn("note", names)
+        self.assertNotIn("name", names)
+        self.assertNotIn("hidden", names)
+        timeout = render_object(self.env, widget["timeout"])
+        self.assertIn("Maximum wait in seconds", timeout)
+        self.assertIn("timeout: float", timeout)
+        self.assertNotIn("= 5.0", timeout)
+        self.assertIn(
+            "An ordinary instance field", render_object(self.env, widget["note"])
+        )
+        self.assertIn(
+            "Visible label stored on the widget.", render_object(self.env, widget)
+        )
+        self.assertIn(
+            "Visible label stored on the widget.",
+            render_object(self.env, widget["label"]),
+        )
         text = render_object(self.env, widget["value"])
         self.assertIn("value: str", text)
         self.assertNotIn("value(", text)
@@ -152,6 +184,7 @@ raise RuntimeError("Documentation must never execute this module")
 
     def test_model_fields_and_validators(self):
         model = self.module["Model"]
+        self.assertIn("name", [obj.name for obj in public_members(model)])
         self.assertNotIn("validate_name", [obj.name for obj in public_members(model)])
         text = render_object(self.env, model["name"])
         self.assertIn("Required.", text)

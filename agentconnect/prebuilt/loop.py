@@ -2,12 +2,14 @@
 
 LiteLLM normalizes provider APIs. It does not run tools. This loop does:
 call the model, run any tool calls, append results, repeat until the model
-stops calling tools or ``max_rounds`` is hit.
+stops calling tools or `max_rounds` is hit.
 
 When the turn budget is exhausted while the model is still calling tools,
-:class:`ToolLoopExhausted` is raised. That is an unsuccessful outcome, not
+`ToolLoopExhausted` is raised. That is an unsuccessful outcome, not
 a successful string reply.
 
+Examples:
+    ```python
     from agentconnect.prebuilt.loop import run_tool_loop
     from agentconnect.prebuilt.tools import Tool
 
@@ -17,6 +19,7 @@ a successful string reply.
         messages=[{"role": "user", "content": "ping the tool"}],
         tools=[Tool.from_callable(ping)],
     )
+    ```
 """
 
 from __future__ import annotations
@@ -34,11 +37,14 @@ DEFAULT_MAX_ROUNDS = 8
 
 
 class ToolLoopExhausted(Exception):
-    """The model was still calling tools when ``max_rounds`` was reached.
+    """The model was still calling tools when `max_rounds` was reached.
 
-    Raised by :func:`run_tool_loop`. ``AIAgent.handle`` does not catch it, so
-    an in-Team request fails through the handler-failure path. ``chat`` and
-    ``complete`` let the same exception reach the caller.
+    Raised by `run_tool_loop`. `AIAgent.handle` does not catch it, so
+    an in-Team request fails through the handler-failure path. `chat` and
+    `complete` let the same exception reach the caller.
+
+    Attributes:
+        max_rounds: Turn budget that was exhausted.
     """
 
     def __init__(self, max_rounds: int) -> None:
@@ -47,11 +53,11 @@ class ToolLoopExhausted(Exception):
 
 
 class CompletionFn(Protocol):
-    """Async callable with the LiteLLM ``acompletion`` shape.
+    """Async callable with the LiteLLM `acompletion` shape.
 
-    The loop passes ``model``, ``messages``, and when tools exist, ``tools``.
-    Extra keyword arguments from the caller (temperature, api_key, ...) are
-    forwarded unchanged.
+    The loop passes `model`, `messages`, and when tools exist, `tools`.
+    Extra keyword arguments from the caller (`temperature`, `api_key`,
+    and others) are forwarded unchanged.
     """
 
     async def __call__(self, **kwargs: Any) -> Any: ...
@@ -66,19 +72,37 @@ async def run_tool_loop(
     max_rounds: int = DEFAULT_MAX_ROUNDS,
     **complete_kwargs: Any,
 ) -> str:
-    """Call ``complete`` until the model returns text or raise on exhaustion.
+    """Call `complete` until the model returns text or raise on exhaustion.
 
-    ``messages`` is an OpenAI-style chat history. The loop mutates a local copy
+    `messages` is an OpenAI-style chat history. The loop mutates a local copy
     only. Tool results stay in that copy; they are not written to a Thread.
     A tool exception becomes one error JSON payload and the loop continues.
-    Hitting ``max_rounds`` while tool calls remain raises
-    :class:`ToolLoopExhausted`.
+    Hitting `max_rounds` while tool calls remain raises `ToolLoopExhausted`.
 
+    Args:
+        complete: Async callable with the LiteLLM `acompletion` shape.
+        model: LiteLLM model id.
+        messages: Chat history. Copied; the original is not mutated.
+        tools: Callables or `Tool` objects. Omit when the model has none.
+        max_rounds: Cap on model-tool-model cycles. Defaults to 8.
+        **complete_kwargs: Extra kwargs forwarded to `complete`.
+
+    Returns:
+        Model text when it stops calling tools.
+
+    Raises:
+        ValueError: `max_rounds` is below 1.
+        ToolLoopExhausted: The model was still calling tools after
+            `max_rounds`.
+
+    Examples:
+        ```python
         reply = await run_tool_loop(
             complete=scripted_complete,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "hello"}],
         )
+        ```
     """
     if max_rounds < 1:
         raise ValueError("max_rounds must be at least 1")
@@ -132,9 +156,23 @@ def messages_from_thread(
     self_address: Optional[str] = None,
     instructions: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    """Build a chat history from Runtime Messages (``ctx.history`` plus this turn).
+    """Build a chat history from Runtime Messages (`ctx.history` plus this turn).
 
-    messages = messages_from_thread(ctx.history, msg, self_address=agent.address)
+    Args:
+        history: Earlier Thread Messages or chat dicts.
+        current: This turn as a Message, chat dict, or string.
+        self_address: Address treated as this Agent (`assistant` role).
+        instructions: Optional system prompt prepended to the history.
+
+    Returns:
+        OpenAI-style chat messages.
+
+    Examples:
+        ```python
+        messages = messages_from_thread(
+            ctx.history, msg, self_address=agent.address
+        )
+        ```
     """
     out: list[dict[str, Any]] = []
     if instructions:

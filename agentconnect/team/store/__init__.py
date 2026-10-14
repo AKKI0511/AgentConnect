@@ -1,7 +1,12 @@
-"""Store backends used only by the Team Runtime.
+"""Storage backends for a Team.
 
-Runtime transitions call :meth:`~agentconnect.team.store.base.Store.apply`
-so a Message, Ticket, Thread append, and Mailbox item commit together.
+Pass `store="memory"` or a Redis URL to `Team`. Memory ends when the
+process stops. Redis keeps memberships, mailboxes, open Tickets, and
+Thread history for the next `start` of this Team. Use one Runtime for
+a Team's stored state. Redis requires `agentconnect[redis]`.
+
+A custom backend subclasses `Store`. `apply` commits every operation in
+the call, or leaves the store unchanged.
 """
 
 from agentconnect.team.store.base import Store, StoreRecord

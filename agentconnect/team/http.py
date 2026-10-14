@@ -1,11 +1,4 @@
-"""HTTP binding for agent-to-team Runtime operations.
-
-Routes match ``spec/bindings/http.md``. This is the Session binding, not
-the later gateway. Loopback serving binds loopback only. Loopback calls with
-no Authorization header run as the reserved ``operator`` principal Membership
-only when the HTTP peer is loopback and the request has no forwarded-client
-headers, including empty ``X-Forwarded-*`` values.
-"""
+"""Host a Team through an ASGI server you run."""
 
 from __future__ import annotations
 
@@ -35,7 +28,9 @@ from agentconnect.team.errors import TeamError
 from agentconnect.team.runtime import Team
 from agentconnect.team.session_auth import session_token_for_request
 
-HTTP_PREFIX = "/agentconnect/v1"
+__all__ = ["create_runtime_app"]
+
+_HTTP_PREFIX = "/agentconnect/v1"
 _NO_STORE = {"Cache-Control": "no-store"}
 
 _STATUS = {
@@ -73,13 +68,13 @@ def _wire(parse_fn, body: Any):
 
 _PUBLIC_PATHS = frozenset(
     {
-        HTTP_PREFIX + "/join",
-        HTTP_PREFIX + "/join/challenge",
+        _HTTP_PREFIX + "/join",
+        _HTTP_PREFIX + "/join/challenge",
     }
 )
 
 
-class SessionAuthMiddleware:
+class _SessionAuthMiddleware:
     """Authenticate Runtime HTTP routes once and store the Session on the request."""
 
     def __init__(self, app: ASGIApp, team: Team) -> None:
@@ -93,7 +88,7 @@ class SessionAuthMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path") or ""
-        if not str(path).startswith(HTTP_PREFIX) or path in _PUBLIC_PATHS:
+        if not str(path).startswith(_HTTP_PREFIX) or path in _PUBLIC_PATHS:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
@@ -116,7 +111,7 @@ class SessionAuthMiddleware:
 
 
 def _bound_session(request: Request) -> str:
-    """Return the Session token stored by :class:`SessionAuthMiddleware`."""
+    """Return the Session token stored by `_SessionAuthMiddleware`."""
     token = getattr(request.state, "session_token", None)
     if not isinstance(token, str) or not token:
         raise TeamError("unauthorized", "Session is missing or invalid")
@@ -124,11 +119,20 @@ def _bound_session(request: Request) -> str:
 
 
 def create_runtime_app(team: Team) -> FastAPI:
-    """Return an ASGI app that serves ``team`` at ``/agentconnect/v1`` and ``/mcp``.
+    """Return an ASGI app for a Team that is already started.
 
-    Use this behind your own HTTP server when you need authenticated or
-    non-loopback serving. ``Team.serve`` and ``agentconnect up`` bind
-    loopback only.
+    Session routes are under `/agentconnect/v1`. Team MCP is at `/mcp`.
+    Call `start` before you pass `team` in. Stop `team` when your server
+    shuts down. Install `agentconnect[serve]` before calling this, then
+    pass `app` to your ASGI server.
+
+    `POST /agentconnect/v1/join` and `GET /agentconnect/v1/join/challenge`
+    need no Session bearer. Every other Session route needs the bearer
+    token from a join. A join token is only for joining. On a loopback
+    peer, a request with no Authorization header runs as the operator
+    membership when it has no forwarded-client headers. An empty
+    forwarded-client header still blocks that path. On any other peer, a
+    missing bearer fails with `unauthorized`.
     """
     from agentconnect.mcp.server import create_team_mcp
 
@@ -159,20 +163,20 @@ def create_runtime_app(team: Team) -> FastAPI:
         """Map a TeamError onto an HTTP error object."""
         return _error_response(exc)
 
-    @app.get(HTTP_PREFIX + "/join/challenge")
+    @app.get(_HTTP_PREFIX + "/join/challenge")
     async def join_challenge() -> JSONResponse:
         """Return a one-time join challenge for an identity proof."""
         body = await team.join_challenge()
         return _json(body, headers=_NO_STORE)
 
-    @app.post(HTTP_PREFIX + "/join")
+    @app.post(_HTTP_PREFIX + "/join")
     async def join(request: Request) -> JSONResponse:
         """Open a Session."""
         body = await _json_object(request)
         result = await team.join(request=body)
         return _json(result, headers=_NO_STORE)
 
-    @app.post(HTTP_PREFIX + "/session/disconnect")
+    @app.post(_HTTP_PREFIX + "/session/disconnect")
     async def disconnect(
         request: Request,
     ) -> Response:
@@ -181,7 +185,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         await team.disconnect(token)
         return Response(status_code=204)
 
-    @app.post(HTTP_PREFIX + "/session/heartbeat")
+    @app.post(_HTTP_PREFIX + "/session/heartbeat")
     async def heartbeat(
         request: Request,
     ) -> JSONResponse:
@@ -190,7 +194,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.heartbeat(token)
         return _json(result, headers=_NO_STORE)
 
-    @app.post(HTTP_PREFIX + "/messages")
+    @app.post(_HTTP_PREFIX + "/messages")
     async def send(request: Request) -> JSONResponse:
         """Accept a Message."""
         token = _bound_session(request)
@@ -198,7 +202,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.send(token, body)
         return _json(result)
 
-    @app.post(HTTP_PREFIX + "/mailbox/lease")
+    @app.post(_HTTP_PREFIX + "/mailbox/lease")
     async def lease(request: Request) -> JSONResponse:
         """Lease work from this Membership's Mailbox."""
         token = _bound_session(request)
@@ -208,7 +212,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.lease(token, max_items)
         return _json(result)
 
-    @app.post(HTTP_PREFIX + "/deliveries/renew")
+    @app.post(_HTTP_PREFIX + "/deliveries/renew")
     async def renew(request: Request) -> JSONResponse:
         """Extend one active Delivery lease."""
         token = _bound_session(request)
@@ -217,7 +221,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.renew(token, parsed.lease_id)
         return _json(result)
 
-    @app.post(HTTP_PREFIX + "/deliveries/complete")
+    @app.post(_HTTP_PREFIX + "/deliveries/complete")
     async def complete(request: Request) -> JSONResponse:
         """Finish a Delivery without a response Message."""
         token = _bound_session(request)
@@ -226,7 +230,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.complete(token, parsed.lease_id)
         return _json(result)
 
-    @app.post(HTTP_PREFIX + "/deliveries/reply")
+    @app.post(_HTTP_PREFIX + "/deliveries/reply")
     async def reply(request: Request) -> JSONResponse:
         """Finish a leased reply-expected Delivery."""
         token = _bound_session(request)
@@ -234,7 +238,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.reply(token, body)
         return _json(result)
 
-    @app.get(HTTP_PREFIX + "/tickets/{ticket_id}")
+    @app.get(_HTTP_PREFIX + "/tickets/{ticket_id}")
     async def get_result(
         request: Request,
         ticket_id: str,
@@ -244,7 +248,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.get_result(token, ticket_id)
         return _json(result)
 
-    @app.get(HTTP_PREFIX + "/threads/{thread_id}/history")
+    @app.get(_HTTP_PREFIX + "/threads/{thread_id}/history")
     async def get_history(
         request: Request,
         thread_id: str,
@@ -266,7 +270,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         )
         return _json(result)
 
-    @app.post(HTTP_PREFIX + "/directory/find")
+    @app.post(_HTTP_PREFIX + "/directory/find")
     async def find(request: Request) -> JSONResponse:
         """Search this Team's Directory."""
         token = _bound_session(request)
@@ -279,7 +283,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         )
         return _json(result)
 
-    @app.get(HTTP_PREFIX + "/directory/members/{address}")
+    @app.get(_HTTP_PREFIX + "/directory/members/{address}")
     async def get_profile(
         request: Request,
         address: str,
@@ -289,18 +293,18 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.get_profile(token, address)
         return _json(result)
 
-    @app.get(HTTP_PREFIX + "/status")
+    @app.get(_HTTP_PREFIX + "/status")
     async def status(request: Request) -> JSONResponse:
         """Return members, online state, Mailbox depths, and open Tickets."""
         token = _bound_session(request)
         result = await team.status(token)
         return _json(result)
 
-    @app.get(HTTP_PREFIX + "/traces/events")
+    @app.get(_HTTP_PREFIX + "/traces/events")
     async def trace_events(request: Request) -> StreamingResponse:
         """Stream new Trace events. Operator only."""
         token = _bound_session(request)
-        queue = await team.subscribe_trace_events(token)
+        queue = await team._subscribe_trace_events(token)
 
         async def generate_trace():
             """Yield SSE frames until the client disconnects."""
@@ -318,7 +322,7 @@ def create_runtime_app(team: Team) -> FastAPI:
                         break
                     yield f"event: trace\ndata: {json.dumps(event)}\n\n"
             finally:
-                await team.unsubscribe_trace_events(token, queue)
+                await team._unsubscribe_trace_events(token, queue)
 
         return StreamingResponse(
             generate_trace(),
@@ -326,7 +330,7 @@ def create_runtime_app(team: Team) -> FastAPI:
             headers=_NO_STORE,
         )
 
-    @app.get(HTTP_PREFIX + "/traces/{trace_id}")
+    @app.get(_HTTP_PREFIX + "/traces/{trace_id}")
     async def get_trace(
         request: Request,
         trace_id: str,
@@ -336,7 +340,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         result = await team.get_trace(token, trace_id)
         return _json(result)
 
-    @app.post(HTTP_PREFIX + "/tokens")
+    @app.post(_HTTP_PREFIX + "/tokens")
     async def issue_join_token(request: Request) -> JSONResponse:
         """Issue a join token. Operator only."""
         token = _bound_session(request)
@@ -351,7 +355,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         )
         return _json(result, headers=_NO_STORE)
 
-    @app.post(HTTP_PREFIX + "/tokens/revoke")
+    @app.post(_HTTP_PREFIX + "/tokens/revoke")
     async def revoke_join_token(request: Request) -> Response:
         """Revoke a join token. Operator only."""
         token = _bound_session(request)
@@ -361,11 +365,11 @@ def create_runtime_app(team: Team) -> FastAPI:
         await team.revoke_join_token(parsed.token)
         return Response(status_code=204)
 
-    @app.get(HTTP_PREFIX + "/session/events")
+    @app.get(_HTTP_PREFIX + "/session/events")
     async def session_events(request: Request) -> StreamingResponse:
         """Stream work hints for this Session."""
         token = _bound_session(request)
-        queue = await team.subscribe_events(token)
+        queue = await team._subscribe_events(token)
 
         async def generate():
             """Yield SSE frames until the client disconnects."""
@@ -387,7 +391,7 @@ def create_runtime_app(team: Team) -> FastAPI:
                     )
                     yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
             finally:
-                await team.unsubscribe_events(token, queue)
+                await team._unsubscribe_events(token, queue)
 
         return StreamingResponse(
             generate(),
@@ -396,7 +400,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         )
 
     app.mount("/mcp", mcp_asgi)
-    app.add_middleware(SessionAuthMiddleware, team=team)
+    app.add_middleware(_SessionAuthMiddleware, team=team)
     return app
 
 

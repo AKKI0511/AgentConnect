@@ -443,7 +443,7 @@ async def test_missing_auth_is_operator_and_bad_bearer_is_not():
     team = await Team("content-squad").start()
     try:
         token = await resolve_session(team, None, in_process=True)
-        address = await team.caller_address(token)
+        address = await team._caller_address(token)
         assert address.startswith("operator@")
 
         with pytest.raises(TeamError) as exc:

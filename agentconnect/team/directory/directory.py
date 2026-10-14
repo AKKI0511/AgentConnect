@@ -1,15 +1,16 @@
-"""Local Team Directory: member Profiles, stored vectors, ranked ``find``.
+"""Local Team Directory: member Profiles, stored vectors, ranked `find`.
 
 The Directory lists this Team's Memberships only. It does not search other
 Teams and it does not use a vector database. Vectors sit in the Team Store
-beside Memberships. One ``find`` ranks in one embedding space.
+beside Memberships. One `find` ranks in one embedding space.
 
-    from agentconnect.team import Team
+Examples:
+    For a joined Agent:
 
-    team = await Team("content-squad").start()
-    await researcher.join(team)
-    found = await researcher.find("someone who can review a contract")
+    ```python
+    found = await agent.find("someone who can review a contract")
     found.matches[0].address
+    ```
 """
 
 from __future__ import annotations
@@ -27,20 +28,20 @@ from agentconnect.team.directory.embedder import (
     Embedder,
     HashedEmbedder,
     _OwnedPool,
-    as_unit_vector,
-    char_windows,
-    cosine,
-    input_char_limit,
-    max_batch,
-    mean_pool,
-    normalize_rows,
+    _as_unit_vector,
+    _char_windows,
+    _cosine,
+    _input_char_limit,
+    _max_batch,
+    _mean_pool,
+    _normalize_rows,
 )
 from agentconnect.team.directory.tokens import EmbeddingSetupError
 from agentconnect.team.store.base import Store
 
 logger = logging.getLogger(__name__)
 
-MAX_FIND_LIMIT = 100
+_MAX_FIND_LIMIT = 100
 _VECTOR_KEY = "dirvec:{name}"
 _SPACE_KEY = "dirspace"
 _SPACE_PROBE = "agentconnect directory embedding space"
@@ -60,15 +61,22 @@ class _Space:
     dim: int
 
 
-class Directory:
+class _Directory:
     """Rank this Team's members for a natural-language query.
 
-    The Runtime owns one Directory per Team. Pass ``embeddings=`` to
-    ``Team`` to choose a backend. Most callers only use ``agent.find``.
+    The Runtime owns one Directory per Team. Pass `embeddings=` to
+    `Team` to choose a backend. Most callers only use `BaseAgent.find`.
     """
 
     def __init__(self, store: Store, embedder: Embedder) -> None:
-        """Bind to ``store`` and ``embedder``. Vectors use keys ``dirvec:<name>``."""
+        """Bind this Directory to `store` and `embedder`.
+
+        Ordinary Agent code does not construct a Directory.
+
+        Args:
+            store: Team Store that holds Memberships and vectors.
+            embedder: Embedding backend resolved from `Team(embeddings=...)`.
+        """
         self._store = store
         self._active = embedder
         self._fallback = False
@@ -81,7 +89,7 @@ class Directory:
 
     @property
     def backend_name(self) -> str:
-        """Name of the embedding backend currently selected."""
+        """Name of the embedding backend currently selected, such as `hashed`."""
         return self._active.name
 
     @property
@@ -90,7 +98,12 @@ class Directory:
         return self._fallback
 
     async def upsert(self, name: str, profile: Mapping[str, Any]) -> None:
-        """Embed ``profile`` and store the vector when it changed."""
+        """Embed `profile` and store the vector when it changed.
+
+        Args:
+            name: Agent name of the Membership.
+            profile: Discovery Profile mapping.
+        """
         async with self._lock:
             try:
                 await self._embed_member(name, profile, force=False)
@@ -100,7 +113,11 @@ class Directory:
                 await self._embed_member(name, profile, force=True)
 
     async def drop(self, name: str) -> None:
-        """Remove the stored vector for ``name``."""
+        """Remove the stored vector for `name`.
+
+        Args:
+            name: Agent name of the Membership.
+        """
         await self._store.delete(_VECTOR_KEY.format(name=name))
 
     async def search(
@@ -111,11 +128,21 @@ class Directory:
         exclude_address: str,
         limit: int | None,
     ) -> FindResult:
-        """Rank ``members`` for ``query`` and return light cards.
+        """Rank `members` for `query` and return light cards.
 
-        Excludes ``exclude_address``. Omitting ``limit`` returns every
-        remaining member, at most :data:`MAX_FIND_LIMIT`. Every match in
+        Excludes `exclude_address`. Omitting `limit` returns every
+        remaining member, at most `_MAX_FIND_LIMIT`. Every match in
         the result is ranked in one embedding space.
+
+        Args:
+            query: Natural-language need.
+            members: Membership records with `address` and `profile`.
+            exclude_address: Qualified Address to omit, usually the caller.
+            limit: Maximum matches. Omit for every remaining member, at
+                most 100.
+
+        Returns:
+            A `FindResult` with `matches` ordered best-first.
         """
         candidates = [
             member
@@ -167,7 +194,7 @@ class Directory:
             records, candidates, space
         )
         if missing:
-            batch = max_batch(self._active)
+            batch = _max_batch(self._active)
             for start in range(0, len(missing), batch):
                 group = missing[start : start + batch]
                 profiles = [candidates[index]["profile"] for index in group]
@@ -194,7 +221,7 @@ class Directory:
             addresses.append(str(member["address"]))
         scored = await self._score(query_vector, resolved, addresses)
         by_address = {str(member["address"]): member for member in candidates}
-        cap = MAX_FIND_LIMIT if limit is None else limit
+        cap = _MAX_FIND_LIMIT if limit is None else limit
         matches: list[DirectoryMatch] = [
             _match_card(by_address[address]) for _, address in scored[:cap]
         ]
@@ -269,10 +296,10 @@ class Directory:
         return space
 
     async def _embed_query(self, query: str, *, expected_dim: int) -> list[float]:
-        limit = input_char_limit(self._active)
-        windows = char_windows(query, limit) if limit is not None else [query]
+        limit = _input_char_limit(self._active)
+        windows = _char_windows(query, limit) if limit is not None else [query]
         rows = await self._embed_texts(windows, expected_dim=expected_dim)
-        return rows[0] if len(rows) == 1 else mean_pool(rows)
+        return rows[0] if len(rows) == 1 else _mean_pool(rows)
 
     async def _embed_profiles(
         self,
@@ -281,7 +308,7 @@ class Directory:
         expected_dim: int,
     ) -> list[list[float]]:
         grouped = [
-            profile_windows(profile, input_char_limit(self._active))
+            _profile_windows(profile, _input_char_limit(self._active))
             for profile in profiles
         ]
         flat = [window for group in grouped for window in group]
@@ -293,7 +320,7 @@ class Directory:
             pooled.append(
                 rows[cursor]
                 if next_cursor - cursor == 1
-                else mean_pool(rows[cursor:next_cursor])
+                else _mean_pool(rows[cursor:next_cursor])
             )
             cursor = next_cursor
         return pooled
@@ -304,13 +331,13 @@ class Directory:
         payload = list(texts)
         if not payload:
             return []
-        batch = max_batch(self._active)
+        batch = _max_batch(self._active)
         out: list[list[float]] = []
         for index in range(0, len(payload), batch):
             chunk = payload[index : index + batch]
             try:
                 rows = await self._active.embed(chunk)
-                out.extend(normalize_rows(rows, chunk, expected_dim=expected_dim))
+                out.extend(_normalize_rows(rows, chunk, expected_dim=expected_dim))
             except EmbeddingSetupError:
                 raise
             except _EmbeddingFailed:
@@ -322,17 +349,31 @@ class Directory:
         return out
 
 
-def profile_text(profile: Mapping[str, Any]) -> str:
-    """Flatten a discovery Profile into the string that gets embedded."""
+def _profile_text(profile: Mapping[str, Any]) -> str:
+    """Flatten a discovery Profile into the string that gets embedded.
+
+    Args:
+        profile: Discovery Profile mapping (`summary`, `skills`, …).
+
+    Returns:
+        Combined Profile text used for embedding.
+    """
     return "\n".join(_profile_units(profile)).strip()
 
 
-def profile_windows(profile: Mapping[str, Any], limit: int | None) -> list[str]:
+def _profile_windows(profile: Mapping[str, Any], limit: int | None) -> list[str]:
     """Bounded Profile windows for one embedding space.
 
-    When ``limit`` is omitted, the whole Profile is one window and the
+    When `limit` is omitted, the whole Profile is one window and the
     embedder owns token splitting. Otherwise later Skills keep their own
-    character windows. The packing is an implementation detail.
+    character windows.
+
+    Args:
+        profile: Discovery Profile mapping.
+        limit: Maximum characters per window, or None when unbounded.
+
+    Returns:
+        One or more text windows to embed.
     """
     units = _profile_units(profile)
     if limit is None:
@@ -345,7 +386,7 @@ def profile_windows(profile: Mapping[str, Any], limit: int | None) -> list[str]:
             if buf:
                 packed.append(buf)
                 buf = ""
-            packed.extend(char_windows(unit, limit))
+            packed.extend(_char_windows(unit, limit))
             continue
         candidate = unit if not buf else f"{buf}\n{unit}"
         if len(candidate) <= limit:
@@ -441,7 +482,7 @@ def _usable_vector(record: Any, space: _Space, fingerprint: str) -> list[float] 
     if record.get("fingerprint") != fingerprint:
         return None
     try:
-        return as_unit_vector(record.get("vector"), expected_dim=space.dim)
+        return _as_unit_vector(record.get("vector"), expected_dim=space.dim)
     except (TypeError, ValueError):
         return None
 
@@ -452,7 +493,7 @@ def _score_rows(
     addresses: Sequence[str],
 ) -> list[tuple[float, str]]:
     scored = [
-        (cosine(query_vector, vector), address)
+        (_cosine(query_vector, vector), address)
         for vector, address in zip(vectors, addresses, strict=True)
     ]
     scored.sort(key=lambda item: (-item[0], item[1]))

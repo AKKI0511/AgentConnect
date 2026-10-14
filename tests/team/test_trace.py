@@ -141,7 +141,7 @@ async def test_trace_complete_declines_request(team):
 
 async def test_watch_queue_receives_accepted(team):
     operator = await team.ensure_operator_session()
-    queue = await team.subscribe_trace_events(operator)
+    queue = await team._subscribe_trace_events(operator)
     await join_member(team, "writer")
     researcher = await join_member(team, "researcher")
     await team.send(
@@ -155,7 +155,7 @@ async def test_watch_queue_receives_accepted(team):
     )
     event = await asyncio.wait_for(queue.get(), timeout=1.0)
     assert event["type"] == "accepted"
-    await team.unsubscribe_trace_events(operator, queue)
+    await team._unsubscribe_trace_events(operator, queue)
 
 
 async def test_unknown_trace_is_not_found(team):

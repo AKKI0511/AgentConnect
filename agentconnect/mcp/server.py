@@ -1,21 +1,9 @@
-"""Team MCP server: discovery, send, collect, roster, extra tools.
+"""Team MCP server built on the SDK low-level `Server`.
 
-One MCP server per Team, built on the SDK low-level ``Server`` so advertised
-schemas are the public argument and result types. Members point a model at
-it. So does any MCP client, including Cursor, by adding the Team MCP URL.
-
-    from agentconnect import Team
-    from agentconnect.mcp import create_team_mcp
-
-    team = await Team("content-squad").start()
-    url = await team.serve()
-    print(team.mcp_url)  # http://127.0.0.1:<port>/mcp
-
-The SDK's OAuth resource-server helpers need issuer metadata and wrap every
-HTTP method, including initialize. That does not match Session Bearer tokens
-or loopback operator. This server uses SDK ``Server.middleware`` for
-authentication. ``Server`` does not apply ``input_schema`` to calls, so
-``tools/call`` validates public argument types before dispatch.
+One server per Team. Advertised argument and result schemas are the
+public types. Add `team.mcp_url` to Cursor or any MCP client. Session
+bearer tokens authenticate `tools/call` and resource reads.
+`tools/call` validates public argument types before dispatch.
 """
 
 from __future__ import annotations
@@ -142,7 +130,7 @@ class _TeamBoundary:
 
 
 def _bound_session() -> str:
-    """Return the Session stored by :class:`_TeamBoundary`."""
+    """Return the Session stored by `_TeamBoundary`."""
     token = _resolved_session.get()
     if not token:
         raise MCPError(INVALID_PARAMS, "Session is missing or invalid")
@@ -236,7 +224,7 @@ async def _run_team_tool(
         elif spec.name == "get_profiles":
             payload = await get_profiles_action(runtime, token, list(parsed.addresses))
         elif spec.name == "ask":
-            address = await runtime.caller_address(token)
+            address = await runtime._caller_address(token)
             payload = await ask_action(
                 runtime,
                 token,
@@ -249,7 +237,7 @@ async def _run_team_tool(
                 idempotency_key=parsed.idempotency_key,
             )
         elif spec.name == "tell":
-            address = await runtime.caller_address(token)
+            address = await runtime._caller_address(token)
             payload = await tell_action(
                 runtime,
                 token,
@@ -310,20 +298,40 @@ def create_team_mcp(
     *,
     in_process: bool = True,
 ) -> Server:
-    """Return the MCP server for ``runtime``.
+    """Return the MCP `Server` for one Team.
 
-    Tools are ``find``, ``ask``, ``tell``, ``get_result``, ``get_history``,
-    and ``get_profiles``. The roster is the resource
-    ``agentconnect://team/roster``. Extra callables are registered by
+    Tools are `find`, `ask`, `tell`, `get_result`, `get_history`, and
+    `get_profiles`. The roster is the resource
+    `agentconnect://team/roster`. Extra callables are registered by
     function name and must not reuse a reserved or duplicate name.
 
-    ``in_process=True`` (the default) is the explicit in-process trust path
-    used by ``Client(server)``. HTTP serving passes ``in_process=False`` so a
-    missing request cannot become operator.
+    Args:
+        runtime: A started `Team`.
+        extra_tools: Extra callables to publish. When omitted, uses
+            `Team(..., tools=[...])` if that list was passed at
+            construction. Duplicate or reserved names are rejected.
+        in_process: `True` (default) is the in-process trust path used
+            by `mcp.Client(server)`. HTTP serving must pass `False` so
+            a missing request cannot become the loopback operator.
+
+    Returns:
+        An MCP `Server`. `Team.serve` mounts it at `/mcp`.
+
+    Examples:
+        This fragment uses a started `team`. In-process MCP uses the
+        operator Session.
+
+        ```python
+        from mcp import Client
+
+        from agentconnect.mcp import create_team_mcp
 
         mcp = create_team_mcp(team)
         async with Client(mcp) as client:
-            found = await client.call_tool("find", {"query": "draft a summary"})
+            found = await client.call_tool(
+                "find", {"query": "draft a summary"}
+            )
+        ```
     """
     extras = list(
         extra_tools

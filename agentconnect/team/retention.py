@@ -117,14 +117,6 @@ def message_bytes(value: Any) -> int:
     return json_size(value)
 
 
-async def sizes_of(store: Store, message_ids: list[str]) -> int:
-    """Return the stored JSON size of ``message_ids`` that still exist."""
-    if not message_ids:
-        return 0
-    records = await store.get_many([f"msg:{item}" for item in message_ids])
-    return sum(message_bytes(item) for item in records)
-
-
 async def is_live_work(store: Store, message_id: str) -> bool:
     """Return True when a Mailbox item still queues or leases ``message_id``."""
     return await store.set_is_member(LIVE_MESSAGES_SET, message_id)

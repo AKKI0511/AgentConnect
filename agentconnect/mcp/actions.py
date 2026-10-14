@@ -88,10 +88,10 @@ class TeamRuntime(Protocol):
     async def roster(self) -> dict[str, Any]:
         """Return every Membership as a DirectoryEntry list."""
 
-    async def require_live_session(self, session_token: str) -> str:
+    async def _require_live_session(self, session_token: str) -> str:
         """Return ``session_token`` if the Session is live. Does not renew it."""
 
-    async def caller_address(self, session_token: str) -> str:
+    async def _caller_address(self, session_token: str) -> str:
         """Return the qualified Address stamped on this Session."""
 
 

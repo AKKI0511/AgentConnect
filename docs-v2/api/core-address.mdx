@@ -7,15 +7,17 @@ sidebarTitle: "address"
 
 Address grammar and same-Team resolution.
 
-An Address is an Agent name, optionally qualified by a location. The current
-draft resolves a qualified Address only when its location equals the Runtime's
-Team name. Invalid syntax is `invalid_address`. A valid location that is not
-this Team is `address_outside_team`.
+An Address is an Agent name, optionally qualified by a location, such as
+`writer` or `writer@content-squad`. A qualified Address resolves only
+when its location equals the Runtime's Team name. Invalid syntax is
+`invalid_address`. A valid location that is not this Team is
+`address_outside_team`.
 
 ## Public API
 
 * [`INVALID_ADDRESS`](/api/core-address#agentconnect-core-address-invalid-address)
 * [`ADDRESS_OUTSIDE_TEAM`](/api/core-address#agentconnect-core-address-address-outside-team)
+* [`AddressErrorCode`](/api/core-address#agentconnect-core-address-addresserrorcode)
 * [`ParsedAddress`](/api/core-address#agentconnect-core-address-parsedaddress)
 * [`parse_agent_name`](/api/core-address#agentconnect-core-address-parse-agent-name)
 * [`parse_team_name`](/api/core-address#agentconnect-core-address-parse-team-name)
@@ -31,6 +33,8 @@ this Team is `address_outside_team`.
 INVALID_ADDRESS: Literal['invalid_address'] = 'invalid_address'
 ```
 
+Returned when an Address string fails the grammar.
+
 <a id="agentconnect-core-address-address-outside-team"></a>
 
 ## `ADDRESS_OUTSIDE_TEAM`
@@ -38,6 +42,18 @@ INVALID_ADDRESS: Literal['invalid_address'] = 'invalid_address'
 ```python
 ADDRESS_OUTSIDE_TEAM: Literal['address_outside_team'] = 'address_outside_team'
 ```
+
+Returned when a valid location is not this Team.
+
+<a id="agentconnect-core-address-addresserrorcode"></a>
+
+## `AddressErrorCode`
+
+```python
+AddressErrorCode = Literal['invalid_address', 'address_outside_team']
+```
+
+Error codes [`resolve_address`](/api/core-address#agentconnect-core-address-resolve-address) returns instead of a canonical Address.
 
 <a id="agentconnect-core-address-parsedaddress"></a>
 
@@ -49,6 +65,12 @@ ParsedAddress(name: str, location: Optional[str] = None)
 
 Canonical Agent name and optional location after parse.
 
+**Attributes:**
+
+* `name` (`str`): Lowercase Agent name.
+
+* `location` (`Optional[str]`): Lowercase location when the input was qualified, else omitted.
+
 <a id="agentconnect-core-address-parsedaddress-name"></a>
 
 ### `name`
@@ -57,6 +79,8 @@ Canonical Agent name and optional location after parse.
 name: str
 ```
 
+Lowercase Agent name.
+
 <a id="agentconnect-core-address-parsedaddress-location"></a>
 
 ### `location`
@@ -64,6 +88,8 @@ name: str
 ```python
 location: Optional[str] = None
 ```
+
+Lowercase location when the input was qualified, else omitted.
 
 <a id="agentconnect-core-address-parse-agent-name"></a>
 
@@ -75,6 +101,18 @@ parse_agent_name(value: str) -> Optional[str]
 
 Return the canonical Agent name, or None when the grammar fails.
 
+Length is 1 to 63 ASCII characters. The name must start and end
+alphanumeric; `-` and `_` may appear in the middle. ASCII uppercase
+is lowercased.
+
+**Parameters:**
+
+* `value` (`str`): Submitted Agent name.
+
+**Returns:**
+
+* (`Optional[str]`): Lowercase name, or None when the grammar fails.
+
 <a id="agentconnect-core-address-parse-team-name"></a>
 
 ## `parse_team_name`
@@ -85,6 +123,18 @@ parse_team_name(value: str) -> Optional[str]
 
 Return the canonical Team name, or None when the grammar fails.
 
+A Team name is a DNS label: 1 to 63 ASCII characters, alphanumeric
+at each end, `-` allowed in the middle. Underscores are invalid.
+ASCII uppercase is lowercased.
+
+**Parameters:**
+
+* `value` (`str`): Submitted Team name.
+
+**Returns:**
+
+* (`Optional[str]`): Lowercase Team name, or None when the grammar fails.
+
 <a id="agentconnect-core-address-parse-location"></a>
 
 ## `parse_location`
@@ -94,6 +144,17 @@ parse_location(value: str) -> Optional[str]
 ```
 
 Return a canonical location, or None when the grammar fails.
+
+A location is one or more dot-separated DNS labels, at most 253
+characters, with no trailing dot. ASCII uppercase is lowercased.
+
+**Parameters:**
+
+* `value` (`str`): Location part of a qualified Address, without `@`.
+
+**Returns:**
+
+* (`Optional[str]`): Lowercase location, or None when the grammar fails.
 
 <a id="agentconnect-core-address-parse-address"></a>
 
@@ -106,6 +167,23 @@ parse_address(value: str) -> Union[ParsedAddress, Literal['invalid_address']]
 Parse an Address string into a name and optional location.
 
 Input may contain uppercase ASCII letters. Non-ASCII input is invalid.
+
+**Parameters:**
+
+* `value` (`str`): Unqualified name such as `writer`, or `writer@content-squad`.
+
+**Returns:**
+
+* (`Union[ParsedAddress, Literal['invalid_address']]`): A [`ParsedAddress`](/api/core-address#agentconnect-core-address-parsedaddress), or `invalid_address` when the grammar fails.
+
+**Examples:**
+
+```python
+from agentconnect.core.address import parse_address
+
+parse_address("Writer")
+parse_address("writer@content-squad")
+```
 
 <a id="agentconnect-core-address-resolve-address"></a>
 
@@ -120,3 +198,26 @@ Resolve an Address against one Team.
 An unqualified name becomes `name@team_name`. A qualified Address whose
 location equals `team_name` is returned in canonical form. Any other
 valid location is `address_outside_team`.
+
+**Parameters:**
+
+* `value` (`str`): Local name or qualified Address.
+
+* `team_name` (`str`): Canonical Team this Runtime serves.
+
+**Returns:**
+
+* (`Union[str, AddressErrorCode]`): Canonical `name@team`, `invalid_address`, or `address_outside_team`.
+
+**Raises:**
+
+* (`ValueError`): `team_name` is not a valid Team name.
+
+**Examples:**
+
+```python
+from agentconnect.core.address import resolve_address
+
+resolve_address("writer", "content-squad")
+resolve_address("writer@legal.example.com", "content-squad")
+```

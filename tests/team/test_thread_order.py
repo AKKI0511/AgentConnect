@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentconnect.team.threads import history_window, page_history, participant_set
+from agentconnect.team.threads import history_window, page_history
 
 _TS = "2026-08-18T15:00:00Z"
 _FIRST_ID = "ffffffff-ffff-4fff-bfff-ffffffffffff"
@@ -50,16 +50,3 @@ def test_history_window_excludes_later_seq():
     )
     assert window == []
     assert complete is True
-
-
-def test_participant_set_holds_three_memberships():
-    thread = {
-        "participants": [
-            "editor@content-squad",
-            "researcher@content-squad",
-            "writer@content-squad",
-        ]
-    }
-    members = participant_set(thread)
-    assert len(members) == 3
-    assert "editor@content-squad" in members

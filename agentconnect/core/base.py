@@ -1,12 +1,7 @@
-"""Frozen pydantic base for public schema objects.
+"""Parse and serialize public schema objects.
 
-Validate at the untrusted edge. The Runtime keeps accepted documents as
-mappings after that check; it does not re-parse them as schema models.
-
-    from agentconnect.core.base import parse_schema
-    from agentconnect.core.operations import LeaseRequest
-
-    lease = parse_schema(LeaseRequest, {"max_items": 4})
+`parse_schema` validates untrusted JSON as a schema type. `dump_public`
+returns JSON-ready data. Optional fields that were omitted stay missing.
 """
 
 from __future__ import annotations
@@ -108,10 +103,15 @@ def _annotation_allows_json_null(annotation: Any) -> bool:
 
 
 class SchemaModel(BaseModel):
-    """Public schema object. Undeclared fields are rejected. Instances are frozen.
+    """Frozen public schema object. Undeclared fields are rejected.
 
-    Wire input is strict: a string is not an integer, ``true`` is not ``1``,
-    and an optional field must be omitted rather than sent as JSON null.
+    Parse untrusted JSON with `parse_schema`. Serialize with `dump_public`
+    or `to_public_dict`. Wire input is strict: a string is not an integer,
+    `true` is not `1`, and an optional field must be omitted rather than
+    sent as JSON null.
+
+    Mapping-style access (`result["ticket"]`, `.get`, `in`) works on
+    operation results and Messages. An omitted optional field is absent.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -125,8 +125,11 @@ class SchemaModel(BaseModel):
     def to_public_dict(self) -> dict[str, Any]:
         """JSON-ready mapping. Optional fields that were omitted stay missing.
 
-        Required fields whose JSON value is ``null`` are kept. That matters
-        for Message ``content``, which may be null.
+        Required fields whose JSON value is `null` are kept. That matters
+        for Message `content`, which may be null.
+
+        Returns:
+            A dict suitable for JSON encoding.
         """
         out: dict[str, Any] = {}
         for name, field in type(self).model_fields.items():
@@ -137,7 +140,17 @@ class SchemaModel(BaseModel):
         return out
 
     def __getitem__(self, key: str) -> Any:
-        """Allow ``result["ticket"]`` on operation results and Messages."""
+        """Return a declared field by name, as `result["ticket"]`.
+
+        Args:
+            key: Field name on this model.
+
+        Returns:
+            The field value.
+
+        Raises:
+            KeyError: `key` is not a field, or an optional field was omitted.
+        """
         if key not in type(self).model_fields:
             raise KeyError(key)
         value = getattr(self, key)
@@ -146,14 +159,29 @@ class SchemaModel(BaseModel):
         return value
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Return ``self[key]`` or ``default`` when the field is absent."""
+        """Return `self[key]` or `default` when the field is absent.
+
+        Args:
+            key: Field name on this model.
+            default: Value when `key` is missing or omitted.
+
+        Returns:
+            The field value, or `default`.
+        """
         try:
             return self[key]
         except KeyError:
             return default
 
     def __contains__(self, key: object) -> bool:
-        """Return True when ``self[key]`` succeeds."""
+        """Return True when `self[key]` succeeds.
+
+        Args:
+            key: Field name to test.
+
+        Returns:
+            True when the field is present and was not omitted.
+        """
         if not isinstance(key, str):
             return False
         try:
@@ -333,9 +361,28 @@ def public_result_schema(model: Any) -> dict[str, Any]:
 def dump_public(value: Any) -> Any:
     """Convert schema models to JSON-ready data.
 
-    MCP tools and Session-bound tools serialize through this helper so
-    omit-only optional fields stay missing. Session and ``BaseAgent``
-    methods return typed objects.
+    Omit-only optional fields stay missing. Nested models, lists, and
+    dicts are converted recursively. MCP tools and Session-bound tools
+    serialize through this helper. Session and `BaseAgent` methods
+    return typed objects.
+
+    Args:
+        value: A `SchemaModel`, mapping, sequence, or JSON scalar.
+
+    Returns:
+        JSON-ready data with the same shape.
+
+    Examples:
+        ```python
+        from agentconnect.core.base import dump_public
+        from agentconnect.core.profile import AgentProfile, Skill
+
+        profile = AgentProfile(
+            summary="Writes short drafts from notes.",
+            skills=[Skill(name="drafting", description="Turn notes into a draft.")],
+        )
+        dump_public(profile)["summary"]
+        ```
     """
     if isinstance(value, SchemaModel):
         return value.to_public_dict()
@@ -347,9 +394,28 @@ def dump_public(value: Any) -> Any:
 
 
 def parse_schema(model: type[TSchema], data: Any) -> TSchema:
-    """Parse a mapping as ``model`` at an untrusted edge.
+    """Parse a mapping as `model` at an untrusted edge.
 
-    lease = parse_schema(LeaseRequest, {"max_items": 2})
+    An instance of `model` is returned unchanged. Any other non-mapping
+    value fails.
+
+    Args:
+        model: Schema class to validate against.
+        data: JSON object, or an existing `model` instance.
+
+    Returns:
+        A frozen `model` instance.
+
+    Raises:
+        ValueError: `data` is not an object, or it fails validation.
+
+    Examples:
+        ```python
+        from agentconnect.core.base import parse_schema
+        from agentconnect.core.operations import LeaseRequest
+
+        lease = parse_schema(LeaseRequest, {"max_items": 2})
+        ```
     """
     if isinstance(data, model):
         return data
@@ -362,7 +428,14 @@ def parse_schema(model: type[TSchema], data: Any) -> TSchema:
 
 
 def validation_message(exc: ValidationError) -> str:
-    """Short ``invalid_request`` text from a pydantic error."""
+    """Short `invalid_request` text from a pydantic error.
+
+    Args:
+        exc: Pydantic validation failure.
+
+    Returns:
+        One-line text naming the first field and its problem.
+    """
     errors = exc.errors()
     if not errors:
         return "request is invalid"

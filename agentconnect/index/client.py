@@ -1,8 +1,23 @@
-"""
-Registry Client for AgentConnect
+"""HTTP client for the optional published-directory Index.
 
-This client provides a high-level interface for interacting with the AgentConnect Registry API Server.
-It mimics the interface of agentconnect.index.registry.AgentRegistry, but uses HTTPX for asynchronous requests.
+`RegistryAPIClient` talks to an Index process over HTTP. Use it to
+register published Agents and search across Teams you did not configure
+locally. Same-Team discovery uses `BaseAgent.find`, not this client.
+
+Default origin is `http://localhost:8000`. Pass `base_url` to target
+another Index. Close the client with `close` or use it as an async
+context manager.
+
+Examples:
+    The Index process must already be up:
+
+    ```python
+    from agentconnect.index import RegistryAPIClient
+
+    async with RegistryAPIClient(base_url="http://127.0.0.1:8000") as client:
+        agents = await client.get_all_agents()
+        len(agents)
+    ```
 """
 
 import asyncio
@@ -119,31 +134,12 @@ def with_retry(
 
 
 class RegistryAPIClient:
-    """
-    Client for interacting with the AgentConnect Registry API Server.
-    This client mimics the interface of `agentconnect.index.registry.AgentRegistry`.
+    """HTTP client for one Index origin.
 
-    Quickstart Example:
-        .. code-block:: python
-
-            import asyncio
-            from agentconnect.index import RegistryAPIClient
-
-            async def main():
-                async with RegistryAPIClient() as client:
-                    # Get all registered agents
-                    agents = await client.get_all_agents()
-                    print(f"Found {len(agents)} agents")
-
-                    # Search for agents by capability
-                    results = await client.get_by_capability_semantic(
-                        capability_description="data analysis",
-                        limit=5
-                    )
-                    for agent, score in results:
-                        print(f"{agent.name}: {score:.3f}")
-
-            asyncio.run(main())
+    Construct with `base_url`, then `register`, `get_all_agents`, or
+    `get_by_capability_semantic`. Timeouts are seconds. Omitted values
+    use the client defaults (30s request, 10s connect). Retry on 502,
+    503, and 504 up to three times.
     """
 
     def __init__(
@@ -156,19 +152,21 @@ class RegistryAPIClient:
         max_connections: Optional[int] = None,
         max_keepalive_connections: Optional[int] = None,
     ):
-        """
-        Initialize the API client.
-
-        All None values use the Index client defaults.
+        """Open an HTTP client for one Index origin.
 
         Args:
-            base_url: The base URL of the `AgentRegistry` API server.
-            timeout: Default timeout for HTTP requests in seconds.
-            connect_timeout: Timeout for establishing connections in seconds.
-            read_timeout: Timeout for reading responses in seconds.
-            pool_timeout: Timeout for acquiring connection from pool in seconds.
-            max_connections: Maximum number of connections in the pool.
-            max_keepalive_connections: Maximum number of keep-alive connections.
+            base_url: Index origin, for example `http://127.0.0.1:8000`.
+                Defaults to `http://localhost:8000`.
+            timeout: Default request timeout in seconds. Defaults to 30.
+            connect_timeout: Connect timeout in seconds. Defaults to 10.
+            read_timeout: Read timeout in seconds. Defaults to 30.
+            pool_timeout: How long to wait for a pooled connection, in
+                seconds. Defaults to 5.
+            max_connections: Connection pool size. Defaults to 10.
+            max_keepalive_connections: Keep-alive pool size. Defaults to 5.
+
+        Raises:
+            ValueError: `base_url` is missing after defaults.
         """
         client_settings = _RegistryClientDefaults
 

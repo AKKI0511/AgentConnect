@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -80,7 +81,11 @@ def main() -> None:
     parser.add_argument("--prefix", required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
-    asyncio.run(_run(args.url, args.prefix, Path(args.out)))
+    try:
+        asyncio.run(_run(args.url, args.prefix, Path(args.out)))
+    except BaseException as exc:
+        sys.stderr.write(f"{type(exc).__name__}: {exc}\n")
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

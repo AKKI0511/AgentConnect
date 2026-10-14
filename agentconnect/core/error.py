@@ -15,8 +15,15 @@ __all__ = ["ErrorCode", "ErrorObject", "DeadlineExceededError"]
 class ErrorObject(SchemaModel):
     """Public failure data shared by Runtime errors and handler failures.
 
-    ``code`` is a well-known ErrorCode. An Agent application failure code
-    belongs in ``details`` of a ``handler_failed`` error.
+    `code` is a well-known `ErrorCode`. An Agent application failure
+    code belongs in `details` of a `handler_failed` error.
+
+    Attributes:
+        code: Closed public error code.
+        message: Safe human-readable explanation.
+        details: Optional structured data safe to reveal to the requester.
+        retryable: Whether repeating the failed action may succeed
+            without changing input. Omit when unknown.
     """
 
     code: ErrorCode
@@ -26,6 +33,11 @@ class ErrorObject(SchemaModel):
 
 
 class DeadlineExceededError(ErrorObject):
-    """Error stored by an expired Ticket."""
+    """Error stored by an expired Ticket.
+
+    A Ticket is the requester's record for one request. When its
+    deadline passes before an accepted reply, the Ticket is `expired`
+    and carries this object. `code` is always `deadline_exceeded`.
+    """
 
     code: Literal["deadline_exceeded"]

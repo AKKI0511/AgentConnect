@@ -1,8 +1,32 @@
-"""Team MCP package: one server per Team.
+"""Team MCP server: discovery, messaging, and results for models and IDEs.
 
-``create_team_mcp(team)`` builds the low-level MCP ``Server``. ``Team.serve()``
-mounts it at ``/mcp``. Point Cursor at ``team.mcp_url``. Frameworks that do
-not speak MCP use ``BaseAgent.team_tools()`` instead.
+`create_team_mcp(team)` builds the low-level MCP `Server` for one Team.
+`Team.serve()` mounts it at `{origin}/mcp`. Point Cursor, Claude Code, or
+any MCP client at `team.mcp_url`.
+
+The six reserved tools are `find`, `get_profiles`, `ask`, `tell`,
+`get_result`, and `get_history`. Extra callables passed as `Team(...,
+tools=[...])` or `create_team_mcp(..., extra_tools=[...])` are published
+by function name. Connecting a harness is adding that URL in the
+harness; `tools=` does not attach them to a model's tool list by itself.
+
+Frameworks that do not speak MCP use `BaseAgent.team_tools()` instead.
+Those callables are bound to the Agent's Session, not served by the Team.
+
+`ask` returns the saved request result. If `state` is `open`, keep
+`ticket_id` and call `get_result`; do not send another `ask` to collect.
+`tell` returns an acknowledgement that the Runtime queued the event, not
+that the recipient finished. Bounded waits may return open work.
+
+Examples:
+    For a started Team. HTTP clients use `team.mcp_url` after
+    `Team.serve()`:
+
+    ```python
+    from agentconnect.mcp import create_team_mcp
+
+    mcp = create_team_mcp(team)
+    ```
 """
 
 from agentconnect.mcp.server import create_team_mcp

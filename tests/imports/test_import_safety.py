@@ -100,8 +100,9 @@ def test_import_team_directory_without_torch_or_qdrant(monkeypatch):
         sys.modules.pop(name, None)
 
     mod = importlib.import_module("agentconnect.team.directory")
-    assert hasattr(mod, "Directory")
     assert hasattr(mod, "HashedEmbedder")
+    assert hasattr(mod, "Embedder")
+    assert not hasattr(mod, "Directory")
 
 
 def test_server_module_import_without_optional_extras(monkeypatch):

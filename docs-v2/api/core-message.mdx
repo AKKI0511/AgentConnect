@@ -7,16 +7,21 @@ sidebarTitle: "message"
 
 Immutable Message kinds and Delivery.
 
-A handler receives a MailboxMessage (request or event) with attribute
-access. A request always expects a reply. Fire-and-forget work is an
+A handler receives a [`MailboxMessage`](/api/core-message#agentconnect-core-message-mailboxmessage) (request or event) with attribute
+access. A request always expects a reply and opens a Ticket, the
+requester's durable record for that work. Fire-and-forget work is an
 event. Response and error Messages are created by the Runtime on reply.
 
-```
+**Examples:**
+
+Read fields on a delivered Message:
+
+```python
 msg.kind
 msg.content
 msg.sender_did
-msg.deadline   # requests only
-msg.seq        # present when the Message belongs to a Thread
+msg.deadline  # requests only
+msg.seq  # present when the Message belongs to a Thread
 ```
 
 ## Public API
@@ -39,12 +44,34 @@ msg.seq        # present when the Message belongs to a Thread
 
 Fields shared by every accepted Message.
 
-`id` is Client-proposed on `send` and `reply` and stored
-unchanged at acceptance. The Runtime sets canonical Addresses,
-`sender_did`, `created_at`, `trace_id`, and `seq` when
-`thread_id` is present. `seq` is present exactly when
-`thread_id` is present. History and `before` cursors order by
-`seq`, not by `created_at`.
+`id` is Client-proposed on `send` and `reply` and stored unchanged at
+acceptance. The Runtime sets canonical Addresses (`name@team`),
+`sender_did` (the sender's `did:key`), `created_at`, `trace_id`, and
+`seq` when `thread_id` is present. `seq` is present exactly when
+`thread_id` is present. History and `before` cursors order by `seq`,
+not by `created_at`.
+
+**Attributes:**
+
+* `id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Immutable Message id and idempotency key.
+
+* `sender` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Canonical qualified Address set by the Runtime.
+
+* `sender_did` ([`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid)): Verified DID of the sending Membership, copied from
+  the Session at acceptance.
+
+* `recipient` ([`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress)): Canonical qualified Address set by the Runtime.
+
+* `created_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Runtime acceptance time.
+
+* `trace_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Correlation id for one causal operation.
+
+* `thread_id` (`Optional[Uuid]`): Conversation grouping id, when the Message has one.
+
+* `parent_id` (`Optional[Uuid]`): Message this one replies to or continues.
+
+* `seq` (`Optional[JsonInt]`): Position in the Thread, assigned on acceptance. Present
+  exactly when `thread_id` is present. First Message is `1`.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -56,6 +83,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 id: Uuid
 ```
 
+Immutable Message id and idempotency key.
+
 Required.
 
 <a id="agentconnect-core-message-messagebase-sender"></a>
@@ -65,6 +94,8 @@ Required.
 ```python
 sender: QualifiedAddress
 ```
+
+Canonical qualified Address set by the Runtime.
 
 Required.
 
@@ -76,6 +107,9 @@ Required.
 sender_did: AgentDid
 ```
 
+Verified DID of the sending Membership, copied from
+the Session at acceptance.
+
 Required.
 
 <a id="agentconnect-core-message-messagebase-recipient"></a>
@@ -85,6 +119,8 @@ Required.
 ```python
 recipient: QualifiedAddress
 ```
+
+Canonical qualified Address set by the Runtime.
 
 Required.
 
@@ -96,6 +132,8 @@ Required.
 created_at: Timestamp
 ```
 
+Runtime acceptance time.
+
 Required.
 
 <a id="agentconnect-core-message-messagebase-trace-id"></a>
@@ -105,6 +143,8 @@ Required.
 ```python
 trace_id: Uuid
 ```
+
+Correlation id for one causal operation.
 
 Required.
 
@@ -116,6 +156,8 @@ Required.
 thread_id: Optional[Uuid] = None
 ```
 
+Conversation grouping id, when the Message has one.
+
 Default: `None`.
 
 <a id="agentconnect-core-message-messagebase-parent-id"></a>
@@ -125,6 +167,8 @@ Default: `None`.
 ```python
 parent_id: Optional[Uuid] = None
 ```
+
+Message this one replies to or continues.
 
 Default: `None`.
 
@@ -136,6 +180,9 @@ Default: `None`.
 seq: Optional[JsonInt] = None
 ```
 
+Position in the Thread, assigned on acceptance. Present
+exactly when `thread_id` is present. First Message is `1`.
+
 Default: `None`.
 
 * `ge`: `1`
@@ -146,12 +193,27 @@ Default: `None`.
 
 Request that always expects a reply and opens a Ticket.
 
-`deadline` is required. Fire-and-forget work is an `event`.
+`deadline` is required on an accepted request. Fire-and-forget work
+is an `event`. A Ticket is the requester's durable record whose id
+equals this Message id.
 
-```
-msg.kind      # "request"
+**Attributes:**
+
+* `kind` (`Literal['request']`): Always `request`.
+
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Sender-controlled work input.
+
+* `metadata` (`Optional[JsonObject]`): Sender-controlled application data. Never used for
+  Runtime decisions.
+
+* `deadline` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Absolute time after which an open Ticket expires.
+
+**Examples:**
+
+```python
+msg.kind  # "request"
 msg.deadline
-msg.seq       # set when the Message belongs to a Thread
+msg.seq  # set when the Message belongs to a Thread
 ```
 
 Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messagebase).
@@ -164,6 +226,8 @@ Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messag
 kind: Literal['request']
 ```
 
+Always `request`.
+
 Required.
 
 <a id="agentconnect-core-message-requestmessage-content"></a>
@@ -173,6 +237,8 @@ Required.
 ```python
 content: JsonValue
 ```
+
+Sender-controlled work input.
 
 Required.
 
@@ -184,6 +250,9 @@ Required.
 metadata: Optional[JsonObject] = None
 ```
 
+Sender-controlled application data. Never used for
+Runtime decisions.
+
 Default: `None`.
 
 <a id="agentconnect-core-message-requestmessage-deadline"></a>
@@ -194,6 +263,8 @@ Default: `None`.
 deadline: Timestamp
 ```
 
+Absolute time after which an open Ticket expires.
+
 Required.
 
 <a id="agentconnect-core-message-eventmessage"></a>
@@ -202,7 +273,20 @@ Required.
 
 Information sent without a reply or Ticket.
 
-await agent.tell("writer", \{"note": "source changed"\})
+**Attributes:**
+
+* `kind` (`Literal['event']`): Always `event`.
+
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Sender-controlled event data.
+
+* `metadata` (`Optional[JsonObject]`): Sender-controlled application data. Never used for
+  Runtime decisions.
+
+**Examples:**
+
+```python
+await agent.tell("writer", {"note": "source changed"})
+```
 
 Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messagebase).
 
@@ -214,6 +298,8 @@ Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messag
 kind: Literal['event']
 ```
 
+Always `event`.
+
 Required.
 
 <a id="agentconnect-core-message-eventmessage-content"></a>
@@ -223,6 +309,8 @@ Required.
 ```python
 content: JsonValue
 ```
+
+Sender-controlled event data.
 
 Required.
 
@@ -234,6 +322,9 @@ Required.
 metadata: Optional[JsonObject] = None
 ```
 
+Sender-controlled application data. Never used for
+Runtime decisions.
+
 Default: `None`.
 
 <a id="agentconnect-core-message-responsemessage"></a>
@@ -241,6 +332,14 @@ Default: `None`.
 ## `ResponseMessage`
 
 Successful reply created by the Runtime.
+
+**Attributes:**
+
+* `kind` (`Literal['response']`): Always `response`.
+
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Successful application result. May be JSON null.
+
+* `parent_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Request Message id this reply answers.
 
 Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messagebase).
 
@@ -252,6 +351,8 @@ Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messag
 kind: Literal['response']
 ```
 
+Always `response`.
+
 Required.
 
 <a id="agentconnect-core-message-responsemessage-content"></a>
@@ -261,6 +362,8 @@ Required.
 ```python
 content: JsonValue
 ```
+
+Successful application result. May be JSON null.
 
 Required.
 
@@ -272,6 +375,8 @@ Required.
 parent_id: Uuid
 ```
 
+Request Message id this reply answers.
+
 Required.
 
 <a id="agentconnect-core-message-errormessage"></a>
@@ -279,6 +384,14 @@ Required.
 ## `ErrorMessage`
 
 Failed reply created by the Runtime.
+
+**Attributes:**
+
+* `kind` (`Literal['error']`): Always `error`.
+
+* `error` ([`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject)): Safe failure returned to the requester.
+
+* `parent_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Request Message id this error answers.
 
 Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messagebase).
 
@@ -290,6 +403,8 @@ Inherits from [`MessageBase`](/api/core-message#agentconnect-core-message-messag
 kind: Literal['error']
 ```
 
+Always `error`.
+
 Required.
 
 <a id="agentconnect-core-message-errormessage-error"></a>
@@ -299,6 +414,8 @@ Required.
 ```python
 error: ErrorObject
 ```
+
+Safe failure returned to the requester.
 
 Required.
 
@@ -310,6 +427,8 @@ Required.
 parent_id: Uuid
 ```
 
+Request Message id this error answers.
+
 Required.
 
 <a id="agentconnect-core-message-mailboxmessage"></a>
@@ -320,6 +439,8 @@ Required.
 MailboxMessage = Union[RequestMessage, EventMessage]
 ```
 
+Request or event a handler receives. A request expects a reply; an event does not.
+
 <a id="agentconnect-core-message-message"></a>
 
 ## `Message`
@@ -328,19 +449,42 @@ MailboxMessage = Union[RequestMessage, EventMessage]
 Message = Union[RequestMessage, EventMessage, ResponseMessage, ErrorMessage]
 ```
 
+Immutable Message stored by the Runtime.
+
 <a id="agentconnect-core-message-delivery"></a>
 
 ## `Delivery`
 
 One exclusive attempt to handle a Message.
 
-`history` is the bounded recent Thread window, ordered by `seq`
-and excluding `message`. After `join(..., delivery_history="ids")`
+`history` is the bounded recent Thread window, ordered by `seq` and
+excluding `message`. After `join(..., delivery_history="ids")`,
 `history` is empty and `history_ids` lists those earlier ids.
 
-```
+**Attributes:**
+
+* `lease_id` ([`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid)): Opaque id authorizing completion of this attempt.
+
+* `lease_expires_at` ([`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp)): Time after which this attempt is no longer active.
+
+* `attempt` (`JsonInt`): Starts at 1 and increases after recovery.
+
+* `message` (`Union[RequestMessage, EventMessage]`): Request or event leased from the Membership's Mailbox.
+
+* `history` (`list[Message]`): Bounded recent window of earlier Messages. Empty when
+  the Session joined with `delivery_history="ids"`.
+
+* `history_ids` (`Optional[list[Uuid]]`): Earlier Message ids when the Session joined with
+  `delivery_history="ids"`. Omitted when the window is bodies.
+
+* `history_complete` (`bool`): True when the delivered window already contains
+  every earlier retained Message.
+
+**Examples:**
+
+```python
 delivery.history
-delivery.history_ids   # present only for ids mode
+delivery.history_ids  # present only for ids mode
 delivery.history_complete
 ```
 
@@ -354,6 +498,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 lease_id: Uuid
 ```
 
+Opaque id authorizing completion of this attempt.
+
 Required.
 
 <a id="agentconnect-core-message-delivery-lease-expires-at"></a>
@@ -364,6 +510,8 @@ Required.
 lease_expires_at: Timestamp
 ```
 
+Time after which this attempt is no longer active.
+
 Required.
 
 <a id="agentconnect-core-message-delivery-attempt"></a>
@@ -373,6 +521,8 @@ Required.
 ```python
 attempt: JsonInt
 ```
+
+Starts at 1 and increases after recovery.
 
 Required.
 
@@ -386,6 +536,8 @@ Required.
 message: Union[RequestMessage, EventMessage]
 ```
 
+Request or event leased from the Membership's Mailbox.
+
 Required.
 
 <a id="agentconnect-core-message-delivery-history"></a>
@@ -395,6 +547,9 @@ Required.
 ```python
 history: list[Message]
 ```
+
+Bounded recent window of earlier Messages. Empty when
+the Session joined with `delivery_history="ids"`.
 
 Required.
 
@@ -406,6 +561,9 @@ Required.
 history_ids: Optional[list[Uuid]] = None
 ```
 
+Earlier Message ids when the Session joined with
+`delivery_history="ids"`. Omitted when the window is bodies.
+
 Default: `None`.
 
 <a id="agentconnect-core-message-delivery-history-complete"></a>
@@ -415,6 +573,9 @@ Default: `None`.
 ```python
 history_complete: bool
 ```
+
+True when the delivered window already contains
+every earlier retained Message.
 
 Required.
 
@@ -430,6 +591,14 @@ Return True when `message` is a request.
 
 Every request expects a reply. An event does not.
 
+**Parameters:**
+
+* `message` ([`Message`](/api/core-message#agentconnect-core-message-message)): Any stored Message kind.
+
+**Returns:**
+
+* (`bool`): True for a [`RequestMessage`](/api/core-message#agentconnect-core-message-requestmessage), False otherwise.
+
 <a id="agentconnect-core-message-parse-message"></a>
 
 ## `parse_message`
@@ -440,6 +609,19 @@ parse_message(data: Any) -> Message
 
 Parse a Message mapping. A request requires `deadline`.
 
+**Parameters:**
+
+* `data` (`Any`): JSON object, or an already parsed Message instance.
+
+**Returns:**
+
+* ([`Message`](/api/core-message#agentconnect-core-message-message)): A frozen request, event, response, or error Message.
+
+**Raises:**
+
+* (`ValueError`): `data` is not an object, `kind` is unknown, or
+  validation fails.
+
 <a id="agentconnect-core-message-parse-delivery"></a>
 
 ## `parse_delivery`
@@ -449,3 +631,16 @@ parse_delivery(data: Any) -> Delivery
 ```
 
 Parse a Delivery, including nested Messages.
+
+**Parameters:**
+
+* `data` (`Any`): JSON object, or an already parsed [`Delivery`](/api/core-message#agentconnect-core-message-delivery).
+
+**Returns:**
+
+* ([`Delivery`](/api/core-message#agentconnect-core-message-delivery)): A frozen Delivery with nested Messages parsed.
+
+**Raises:**
+
+* (`ValueError`): `data` is not an object, `history` is not an array,
+  or nested validation fails.

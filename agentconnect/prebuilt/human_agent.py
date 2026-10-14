@@ -1,11 +1,14 @@
 """Terminal human on a Team.
 
-``HumanAgent`` is a :class:`~agentconnect.agent.base.BaseAgent` that prints
-incoming work and reads a reply from stdin. It needs the ``cli`` extra
-(``aioconsole``).
+`HumanAgent` is a `BaseAgent` that prints incoming work and reads a
+reply from stdin. It needs the `cli` extra (`aioconsole`).
 
+Examples:
+    ```bash
     pip install 'agentconnect[cli]'
+    ```
 
+    ```python
     from agentconnect.prebuilt import HumanAgent, AIAgent
     from agentconnect.team import Team
 
@@ -15,6 +18,7 @@ incoming work and reads a reply from stdin. It needs the ``cli`` extra
     await human.join(team)
     await assistant.join(team)
     await human.start_interaction("assistant")
+    ```
 """
 
 from __future__ import annotations
@@ -35,9 +39,12 @@ _EXIT = frozenset({"exit", "quit", "bye"})
 class HumanAgent(BaseAgent):
     """Person on a Team. Incoming work is printed; stdin is the reply.
 
-    human = HumanAgent(name="operator-human")
-    await human.join(team)
-    await human.start_interaction("assistant")
+    Examples:
+        ```python
+        human = HumanAgent(name="operator-human")
+        await human.join(team)
+        await human.start_interaction("assistant")
+        ```
     """
 
     profile = AgentProfile(
@@ -65,9 +72,12 @@ class HumanAgent(BaseAgent):
 
         Args:
             name: Agent name, unique within the Team.
+            identity: Optional Agent identity. Omit to create one.
             prompt: Stdin prompt shown when a reply is needed.
-            read_line: Optional async ``(prompt) -> str``. Tests and non-stdin
-                UIs pass this instead of using the terminal.
+            read_line: Optional async `(prompt) -> str`. Non-stdin UIs
+                pass this instead of using the terminal.
+            instance_id: Stable id for this running copy.
+            join_token: Token from `Team.issue_join_token`, when required.
         """
         super().__init__(
             name=name,
@@ -81,8 +91,12 @@ class HumanAgent(BaseAgent):
     async def handle(self, message: MailboxMessage, ctx: Context) -> JsonValue:
         """Print the Delivery and wait for a typed reply.
 
-        Empty input declines a request. ``exit``, ``quit``, or ``bye`` also
+        Empty input declines a request. `exit`, `quit`, or `bye` also
         declines.
+
+        Args:
+            message: Incoming Delivery Message.
+            ctx: Handler context for this Delivery.
         """
         sender = message.sender or "teammate"
         print(f"{sender}: {message.content}")
@@ -97,11 +111,17 @@ class HumanAgent(BaseAgent):
         return text
 
     async def start_interaction(self, recipient: str) -> None:
-        """Read lines from stdin and ``ask`` ``recipient`` until exit.
+        """Read lines from stdin and `ask` `recipient` until exit.
 
-        Join a Team first. Type ``exit`` to stop.
+        Join a Team first. Type `exit` to stop.
 
+        Args:
+            recipient: Directory name or Address of the peer Agent.
+
+        Examples:
+            ```python
             await human.start_interaction("assistant")
+            ```
         """
         print(f"Talking to {recipient}. Type exit, quit, or bye to stop.")
         while True:

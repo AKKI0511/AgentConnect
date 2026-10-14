@@ -37,15 +37,15 @@ MAX_GET_PROFILES = 20
 class DirectoryEntry(SchemaModel):
     """Full Directory record for one Membership.
 
-    Runtime ``get_profile`` returns Address, DID, and Profile together.
-    The Client method is :meth:`~agentconnect.agent.base.BaseAgent.get_entry`.
-    Model-facing tools return :class:`GetProfilesResult` instead.
+    Runtime `get_profile` returns Address, DID, and Profile together.
+    The client method is `BaseAgent.get_entry`. Model-facing tools
+    return `GetProfilesResult` instead.
 
-    .. code-block:: python
-
-        entry = await agent.get_entry("writer")
-        entry.profile.summary
-        entry.profile.description
+    ```python
+    entry = await agent.get_entry("writer")
+    entry.profile.summary
+    entry.profile.description
+    ```
     """
 
     address: QualifiedAddress
@@ -133,11 +133,11 @@ class FindResult(SchemaModel):
     Matches are best-first. The result does not name the embedding
     backend or a fallback.
 
-    .. code-block:: python
-
-        found = await agent.find("someone who can draft a summary")
-        found.matches[0].address
-        found.matches[0].summary
+    ```python
+    found = await agent.find("someone who can draft a summary")
+    found.matches[0].address
+    found.matches[0].summary
+    ```
     """
 
     matches: list[DirectoryMatch]

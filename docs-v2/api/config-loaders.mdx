@@ -19,7 +19,9 @@ ancestor. An explicit path skips discovery and never falls back to
 another file. Relative `module:Name` imports resolve from the chosen
 file's directory.
 
-```
+**Examples:**
+
+```python
 from agentconnect.config import load_team_config
 
 config = load_team_config()
@@ -53,6 +55,10 @@ no TOML Team file.
 **Parameters:**
 
 * `start` (`Optional[Path]`): Directory to walk from. Defaults to the current directory.
+
+**Returns:**
+
+* (`Optional[Path]`): The chosen file path, or None when no Team file exists.
 
 **Raises:**
 
@@ -99,6 +105,12 @@ Load an explicit Team file, or the nearest discovered one.
 An explicit `path` must exist and be valid. This never chooses a
 different Team file.
 
+**Parameters:**
+
+* `path` (`Optional[Path]`): Explicit file. Omit to discover from `start`.
+
+* `start` (`Optional[Path]`): Directory used when `path` is omitted.
+
 **Returns:**
 
 * (`tuple[Path, TeamConfig]`): The resolved file path and its configuration.
@@ -119,6 +131,14 @@ dump_team_toml(config: TeamConfig) -> str
 
 Serialize `config` as a `[tool.agentconnect]` table.
 
+**Parameters:**
+
+* `config` ([`TeamConfig`](/api/config-models#agentconnect-config-models-teamconfig)): Validated Team configuration.
+
+**Returns:**
+
+* (`str`): TOML text including the `[tool.agentconnect]` header.
+
 <a id="agentconnect-config-loaders-render-example-toml"></a>
 
 ## `render_example_toml`
@@ -128,6 +148,10 @@ render_example_toml() -> str
 ```
 
 Return example TOML generated from [`TeamConfig.example`](/api/config-models#agentconnect-config-models-teamconfig-example).
+
+**Returns:**
+
+* (`str`): Commented example `agentconnect.toml` text.
 
 <a id="agentconnect-config-loaders-save-example-config"></a>
 
@@ -139,6 +163,15 @@ save_example_config(path: Optional[Path] = None) -> Path
 
 Write the generated example TOML to `path`.
 
+**Parameters:**
+
+* `path` (`Optional[Path]`): Destination file. Defaults to `agentconnect.toml` in the
+  current directory.
+
+**Returns:**
+
+* (`Path`): The path written.
+
 <a id="agentconnect-config-loaders-validate-config-file"></a>
 
 ## `validate_config_file`
@@ -148,3 +181,13 @@ validate_config_file(path: Path) -> bool
 ```
 
 Return True when `path` is a valid Team file.
+
+**Parameters:**
+
+* `path` (`Path`): Team file to validate.
+
+**Returns:**
+
+* (`bool`): True when the file loads as [`TeamConfig`](/api/config-models#agentconnect-config-models-teamconfig). False on parse or
+
+* (`bool`): validation errors (logged).

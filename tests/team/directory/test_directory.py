@@ -17,16 +17,21 @@ from tests.team.conftest import join_member, make_did, profile
 from agentconnect.core.directory import FindResult
 from agentconnect.core.profile import AgentProfile
 from agentconnect.team import Team, TeamError
-from agentconnect.team.directory import HashedEmbedder, profile_text, resolve_embedder
-from agentconnect.team.directory.directory import Directory, profile_windows
+from agentconnect.team.directory import HashedEmbedder
+from agentconnect.team.directory.directory import (
+    _Directory,
+    _profile_text,
+    _profile_windows,
+)
+from agentconnect.team.directory.embedder import _resolve_embedder
 from agentconnect.team.directory.embedder import (
-    AutoEmbedder,
-    CallableEmbedder,
+    _AutoEmbedder,
+    _CallableEmbedder,
     FastEmbedEmbedder,
     LiteLLMEmbedder,
     OpenAIEmbedder,
-    as_unit_vector,
-    cosine,
+    _as_unit_vector,
+    _cosine,
     _fastembed_tokenizer,
     _select_auto_backend,
 )
@@ -254,12 +259,12 @@ async def test_find_ranks_one_hundred_members_quickly():
 
 
 def test_resolve_embedder_none_is_hashed():
-    embedder = resolve_embedder("none")
+    embedder = _resolve_embedder("none")
     assert isinstance(embedder, HashedEmbedder)
 
 
 def test_profile_text_includes_skills_and_examples():
-    text = profile_text(
+    text = _profile_text(
         {
             "summary": "Reviews contracts.",
             "skills": [
@@ -288,19 +293,19 @@ async def test_hashed_embedder_is_deterministic():
 
 
 def test_as_unit_vector_rejects_non_finite_and_wrong_dim():
-    assert as_unit_vector([3, 4.0], expected_dim=2) == [0.6, 0.8]
-    assert as_unit_vector((0.0, 0), expected_dim=2) == [0.0, 0.0]
+    assert _as_unit_vector([3, 4.0], expected_dim=2) == [0.6, 0.8]
+    assert _as_unit_vector((0.0, 0), expected_dim=2) == [0.0, 0.0]
     for value in (True, "1.0", None):
         with pytest.raises(ValueError, match="finite numbers"):
-            as_unit_vector([value, 0.0])
+            _as_unit_vector([value, 0.0])
     with pytest.raises(ValueError):
-        as_unit_vector([float("nan"), 0.0])
+        _as_unit_vector([float("nan"), 0.0])
     with pytest.raises(ValueError):
-        as_unit_vector([float("inf"), 0.0])
+        _as_unit_vector([float("inf"), 0.0])
     with pytest.raises(ValueError):
-        as_unit_vector([1.0, 0.0], expected_dim=3)
+        _as_unit_vector([1.0, 0.0], expected_dim=3)
     with pytest.raises(ValueError):
-        cosine([1.0, 0.0], [1.0])
+        _cosine([1.0, 0.0], [1.0])
 
 
 def _member(name: str, member_profile: dict) -> dict:
@@ -347,11 +352,11 @@ async def _writing_embed(texts: Sequence[str]) -> list[list[float]]:
 @pytest.mark.asyncio
 async def test_find_rebuilds_when_custom_spaces_differ():
     store = MemoryStore()
-    first = Directory(store, CallableEmbedder(_legal_embed))
+    first = _Directory(store, _CallableEmbedder(_legal_embed))
     members = [_member("writer", _writer()), _member("reviewer", _legal())]
     for member in members:
         await first.upsert(member["name"], member["profile"])
-    second = Directory(store, CallableEmbedder(_writing_embed))
+    second = _Directory(store, _CallableEmbedder(_writing_embed))
     found = await second.search(
         "legal contract clause review",
         members,
@@ -365,7 +370,7 @@ async def test_find_rebuilds_when_custom_spaces_differ():
 @pytest.mark.asyncio
 async def test_find_ignores_malformed_stored_vectors():
     store = MemoryStore()
-    directory = Directory(store, CallableEmbedder(_legal_embed))
+    directory = _Directory(store, _CallableEmbedder(_legal_embed))
     members = [_member("writer", _writer()), _member("reviewer", _legal())]
     for member in members:
         await directory.upsert(member["name"], member["profile"])
@@ -423,7 +428,7 @@ async def test_find_fallback_does_not_mix_spaces(caplog):
 @pytest.mark.asyncio
 async def test_find_batches_vector_reads():
     store = MemoryStore()
-    directory = Directory(store, CallableEmbedder(_legal_embed))
+    directory = _Directory(store, _CallableEmbedder(_legal_embed))
     members = [_member(f"member{index:02d}", _writer()) for index in range(8)]
     for member in members:
         await directory.upsert(member["name"], member["profile"])
@@ -461,7 +466,7 @@ async def test_sync_embed_does_not_block_event_loop():
         return [[1.0, 0.0] for _ in texts]
 
     store = MemoryStore()
-    directory = Directory(store, CallableEmbedder(slow_embed))
+    directory = _Directory(store, _CallableEmbedder(slow_embed))
     members = [_member("writer", _writer())]
     await directory.upsert("writer", _writer())
     task = asyncio.create_task(
@@ -542,7 +547,7 @@ async def test_light_card_uses_profile_tags_not_skill_tags(team: Team):
 @pytest.mark.asyncio
 async def test_auto_embedder_does_not_swap_after_pin():
     inner = _FailAfter(fail_after=1)
-    auto = AutoEmbedder()
+    auto = _AutoEmbedder()
     auto._inner = inner
     first = await auto.embed(["ok"])
     assert len(first[0]) == 2
@@ -561,7 +566,7 @@ async def test_auto_backend_selection_does_not_block_event_loop(monkeypatch):
         "agentconnect.team.directory.embedder._select_auto_backend",
         slow_select,
     )
-    auto = AutoEmbedder()
+    auto = _AutoEmbedder()
     task = asyncio.create_task(auto.embed(["probe"]))
     await asyncio.sleep(0)
     delays: list[float] = []
@@ -587,8 +592,8 @@ async def test_blocked_embedder_does_not_monopolize_other_directory():
     def fast(texts: Sequence[str]) -> list[list[float]]:
         return [[0.0, 1.0] for _ in texts]
 
-    first = Directory(MemoryStore(), CallableEmbedder(blocked))
-    second = Directory(MemoryStore(), CallableEmbedder(fast))
+    first = _Directory(MemoryStore(), _CallableEmbedder(blocked))
+    second = _Directory(MemoryStore(), _CallableEmbedder(fast))
     task = asyncio.create_task(first.upsert("writer", _writer()))
     assert await asyncio.to_thread(started.wait, 2)
     task.cancel()
@@ -622,7 +627,7 @@ class _FlakyMemory(MemoryStore):
 @pytest.mark.asyncio
 async def test_store_failure_does_not_activate_hashed_fallback():
     store = _FlakyMemory()
-    directory = Directory(store, CallableEmbedder(_legal_embed))
+    directory = _Directory(store, _CallableEmbedder(_legal_embed))
     members = [_member("writer", _writer()), _member("reviewer", _legal())]
     for member in members:
         await directory.upsert(member["name"], member["profile"])
@@ -665,7 +670,7 @@ async def test_embed_fn_sync_async_and_awaitable_results():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         for fn in (async_fn, sync_fn, sync_returns_awaitable):
-            directory = Directory(MemoryStore(), CallableEmbedder(fn))
+            directory = _Directory(MemoryStore(), _CallableEmbedder(fn))
             await directory.upsert("writer", _writer())
             found = await directory.search(
                 "anything",
@@ -774,7 +779,7 @@ async def test_auto_ignores_ambient_hosted_key(monkeypatch):
     monkeypatch.setattr(LiteLLMEmbedder, "embed", spy)
     selected = _select_auto_backend()
     assert isinstance(selected, HashedEmbedder)
-    auto = AutoEmbedder()
+    auto = _AutoEmbedder()
     rows = await auto.embed(["contract review"])
     assert len(rows[0]) == 384
     assert auto.name == "hashed"
@@ -827,7 +832,7 @@ async def test_fallback_with_ambient_key_does_not_host_content(monkeypatch, capl
 @pytest.mark.asyncio
 async def test_hashed_rebuild_keeps_event_loop_responsive():
     store = MemoryStore()
-    directory = Directory(store, HashedEmbedder())
+    directory = _Directory(store, HashedEmbedder())
     members = [
         _member(f"agent{index:02d}", _heavy_profile(f"task{index:02d}"))
         for index in range(12)
@@ -849,7 +854,7 @@ async def test_hashed_rebuild_keeps_event_loop_responsive():
 @pytest.mark.asyncio
 async def test_warm_ranking_keeps_event_loop_responsive():
     store = MemoryStore()
-    directory = Directory(store, HashedEmbedder())
+    directory = _Directory(store, HashedEmbedder())
     members = [
         _member(
             f"agent{index:03d}",
@@ -925,11 +930,11 @@ def test_profile_windows_keep_later_skill_out_of_first_budget():
         last_name="salvage_arbitration",
         last_blurb="Handles maritime salvage arbitration disputes.",
     )
-    text = profile_text(salvage)
+    text = _profile_text(salvage)
     assert 3000 < len(text) < 5000
     assert "maritime salvage" not in text[:2000]
     assert "maritime salvage" in text
-    windows = profile_windows(salvage, 512)
+    windows = _profile_windows(salvage, 512)
     assert "maritime salvage" not in windows[0]
     assert any("maritime salvage" in window for window in windows)
 
@@ -944,9 +949,9 @@ async def test_bounded_inputs_keep_later_skills_and_avoid_provider_errors():
         last_name="horse_pedigree",
         last_blurb="Tracks icelandic horse pedigree records.",
     )
-    assert profile_text(salvage)[:2000] == profile_text(pedigree)[:2000]
+    assert _profile_text(salvage)[:2000] == _profile_text(pedigree)[:2000]
     embedder = _TruncatingKeyword()
-    directory = Directory(MemoryStore(), embedder)
+    directory = _Directory(MemoryStore(), embedder)
     members = [_member("salvage", salvage), _member("pedigree", pedigree)]
     for member in members:
         await directory.upsert(member["name"], member["profile"])
@@ -970,7 +975,7 @@ async def test_old_space_without_representation_is_rebuilt():
         calls["n"] += 1
         return [[1.0, 0.0] for _ in texts]
 
-    directory = Directory(store, CallableEmbedder(embed))
+    directory = _Directory(store, _CallableEmbedder(embed))
     await directory.upsert("writer", _writer())
     record = await store.get("dirvec:writer")
     assert isinstance(record, dict)
@@ -996,8 +1001,8 @@ async def test_bge_later_skill_survives_long_profile():
     from fastembed import TextEmbedding
 
     from agentconnect.team.directory.embedder import (
-        DEFAULT_FASTEMBED_MODEL,
-        l2_normalize,
+        _DEFAULT_FASTEMBED_MODEL,
+        _l2_normalize,
     )
 
     salvage = _about_3600(
@@ -1008,18 +1013,18 @@ async def test_bge_later_skill_survives_long_profile():
         last_name="horse_pedigree",
         last_blurb="Tracks icelandic horse pedigree records.",
     )
-    salvage_text = profile_text(salvage)
-    pedigree_text = profile_text(pedigree)
+    salvage_text = _profile_text(salvage)
+    pedigree_text = _profile_text(pedigree)
     assert salvage_text[:2000] == pedigree_text[:2000]
     assert "maritime salvage" not in salvage_text[:2000]
-    model = TextEmbedding(model_name=DEFAULT_FASTEMBED_MODEL)
+    model = TextEmbedding(model_name=_DEFAULT_FASTEMBED_MODEL)
     naive = [
-        l2_normalize(list(map(float, vector)))
+        _l2_normalize(list(map(float, vector)))
         for vector in model.embed([salvage_text, pedigree_text])
     ]
     assert naive[0] == naive[1]
     store = MemoryStore()
-    directory = Directory(store, FastEmbedEmbedder())
+    directory = _Directory(store, FastEmbedEmbedder())
     members = [_member("salvage", salvage), _member("pedigree", pedigree)]
     for member in members:
         await directory.upsert(member["name"], member["profile"])
@@ -1088,7 +1093,7 @@ def _over_limit_profile(marker: str, encoding, max_tokens: int) -> dict:
     extra = 1
     profile = _schema_hosted_profile(marker=marker, extra_skills=extra)
     while extra < 49:
-        text = profile_text(profile)
+        text = _profile_text(profile)
         if len(encode_hosted(encoding, text)) > max_tokens:
             AgentProfile.model_validate(profile)
             return profile
@@ -1101,13 +1106,13 @@ def test_fastembed_token_windows_keep_content_beyond_first_window():
     pytest.importorskip("fastembed")
     from fastembed import TextEmbedding
 
-    from agentconnect.team.directory.embedder import DEFAULT_FASTEMBED_MODEL
+    from agentconnect.team.directory.embedder import _DEFAULT_FASTEMBED_MODEL
 
     prefix = _CJK_FILL * 40
     suffix = "Handles maritime salvage arbitration disputes."
     text = f"{prefix}\n{suffix}"
     assert 600 < len(text) < 900
-    model = TextEmbedding(model_name=DEFAULT_FASTEMBED_MODEL)
+    model = TextEmbedding(model_name=_DEFAULT_FASTEMBED_MODEL)
     tokenizer = _fastembed_tokenizer(model)
     assert tokenizer is not None
     truncated = tokenizer.encode(text, add_special_tokens=False)
@@ -1129,8 +1134,8 @@ async def test_bge_token_dense_profile_keeps_later_skill():
     from fastembed import TextEmbedding
 
     from agentconnect.team.directory.embedder import (
-        DEFAULT_FASTEMBED_MODEL,
-        l2_normalize,
+        _DEFAULT_FASTEMBED_MODEL,
+        _l2_normalize,
     )
 
     salvage = _token_dense(
@@ -1141,19 +1146,19 @@ async def test_bge_token_dense_profile_keeps_later_skill():
         last_name="horse_pedigree",
         last_blurb="Tracks icelandic horse pedigree records.",
     )
-    salvage_text = profile_text(salvage)
-    pedigree_text = profile_text(pedigree)
+    salvage_text = _profile_text(salvage)
+    pedigree_text = _profile_text(pedigree)
     assert 600 < len(salvage_text) < 900
     assert salvage_text[:500] == pedigree_text[:500]
     assert "maritime salvage" not in salvage_text[:500]
-    model = TextEmbedding(model_name=DEFAULT_FASTEMBED_MODEL)
+    model = TextEmbedding(model_name=_DEFAULT_FASTEMBED_MODEL)
     naive = [
-        l2_normalize(list(map(float, vector)))
+        _l2_normalize(list(map(float, vector)))
         for vector in model.embed([salvage_text, pedigree_text])
     ]
     assert naive[0] == naive[1]
     store = MemoryStore()
-    directory = Directory(store, FastEmbedEmbedder())
+    directory = _Directory(store, FastEmbedEmbedder())
     members = [_member("salvage", salvage), _member("pedigree", pedigree)]
     for member in members:
         await directory.upsert(member["name"], member["profile"])
@@ -1186,8 +1191,8 @@ async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
         encoding,
         8191,
     )
-    salvage_text = profile_text(salvage)
-    pedigree_text = profile_text(pedigree)
+    salvage_text = _profile_text(salvage)
+    pedigree_text = _profile_text(pedigree)
     salvage_ids = encode_hosted(encoding, salvage_text)
     pedigree_ids = encode_hosted(encoding, pedigree_text)
     assert salvage_text[:800] == pedigree_text[:800]
@@ -1227,7 +1232,7 @@ async def test_hosted_token_windows_avoid_limit_rejection(monkeypatch):
     with pytest.raises(RuntimeError, match="max input tokens"):
         await fake_request(embedder, [salvage_ids])
     rejected["n"] = 0
-    directory = Directory(MemoryStore(), embedder)
+    directory = _Directory(MemoryStore(), embedder)
     await directory.upsert("warmup", _writer())
     seen.clear()
     await directory.upsert("salvage", salvage)
@@ -1279,7 +1284,7 @@ async def test_hosted_azure_litellm_respects_model_limit(monkeypatch):
         encoding,
         8191,
     )
-    salvage_text = profile_text(salvage)
+    salvage_text = _profile_text(salvage)
     seen: list[list[list[int]]] = []
     rejected = {"n": 0}
 
@@ -1309,7 +1314,7 @@ async def test_hosted_azure_litellm_respects_model_limit(monkeypatch):
     monkeypatch.setattr(LiteLLMEmbedder, "_embed_request", fake_request)
     embedder = LiteLLMEmbedder("azure/text-embedding-3-small")
     assert embedder.input_token_limit == 8191
-    directory = Directory(MemoryStore(), embedder)
+    directory = _Directory(MemoryStore(), embedder)
     await directory.upsert("warmup", _writer())
     seen.clear()
     await directory.upsert("salvage", salvage)
@@ -1340,7 +1345,7 @@ async def test_hosted_setup_error_does_not_switch_to_hashed():
                 "Install it with pip install 'agentconnect[openai]'."
             )
 
-    directory = Directory(MemoryStore(), _SetupBoom())
+    directory = _Directory(MemoryStore(), _SetupBoom())
     with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
         await directory.upsert("writer", _writer())
     assert not directory.using_fallback
@@ -1379,7 +1384,7 @@ async def test_hosted_setup_error_does_not_switch_to_hashed():
 @pytest.mark.asyncio
 async def test_previous_representation_cached_vector_is_rebuilt():
     store = MemoryStore()
-    directory = Directory(store, HashedEmbedder())
+    directory = _Directory(store, HashedEmbedder())
     await directory.upsert("writer", _writer())
     record = await store.get("dirvec:writer")
     assert isinstance(record, dict)

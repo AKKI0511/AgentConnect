@@ -18,9 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from agentconnect.team.directory.directory import Directory, profile_text
+from agentconnect.team.directory.directory import _Directory, _profile_text
 from agentconnect.team.directory.embedder import (
-    DEFAULT_FASTEMBED_MODEL,
+    _DEFAULT_FASTEMBED_MODEL,
     FastEmbedEmbedder,
     HashedEmbedder,
 )
@@ -149,8 +149,8 @@ def attribution_error(
 
 async def _rank_directory(
     roster: Roster, needs: Sequence[Need], embedder: Any
-) -> tuple[dict[str, list[str]], Directory]:
-    directory = Directory(MemoryStore(), embedder)
+) -> tuple[dict[str, list[str]], _Directory]:
+    directory = _Directory(MemoryStore(), embedder)
     members = _members(roster)
     ranked: dict[str, list[str]] = {}
     for need_id, query in _queries(needs, roster.id):
@@ -235,7 +235,9 @@ def _bm25_ranks(
 ) -> dict[str, list[str]]:
     ranked: dict[str, list[str]] = {}
     for roster in rosters.values():
-        docs = {addr: profile_text(profile) for addr, profile in roster.members.items()}
+        docs = {
+            addr: _profile_text(profile) for addr, profile in roster.members.items()
+        }
         for need_id, query in _queries(needs, roster.id):
             ranked[need_id] = bm25_rank(query, docs)
     return ranked
@@ -463,7 +465,7 @@ async def run() -> dict[str, Any]:
         "bm25_revision": BM25_REVISION,
         "shuffle_seed": SHUFFLE_SEED,
         "neural": {
-            "model_id": DEFAULT_FASTEMBED_MODEL,
+            "model_id": _DEFAULT_FASTEMBED_MODEL,
             "load_failure": neural_error,
         },
         "gates": {

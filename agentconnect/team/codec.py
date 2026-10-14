@@ -101,7 +101,7 @@ def canonical_json(value: Any) -> str:
 
 
 def semantic_hash(value: Any) -> str:
-    """SHA-256 of :func:`canonical_json` for cheap idempotency lookup."""
+    """SHA-256 of `canonical_json` for cheap idempotency lookup."""
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 

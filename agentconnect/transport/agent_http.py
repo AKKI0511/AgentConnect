@@ -1,15 +1,15 @@
 """HTTP client for agent-to-team Runtime operations.
 
 POST for every operation except Ticket and history reads. SSE on
-``GET /session/events`` is a work hint, not a correctness channel.
+`GET /session/events` is a work hint, not a correctness channel.
 
-This binding is the agent Session over HTTP. It is not the gateway
-outbound stack in ``transport/http.py``.
+This binding is the agent Session over HTTP. Everyday Agent code uses
+`BaseAgent`, which calls these operations through a Session.
 
 Ordinary operations use the configured finite timeout, including
-Ticket reads and heartbeat. A ``collect=wait`` send may use a longer
-finite timeout that covers ``wait_hold_seconds``. The SSE work hint
-stays open until the Session ends. Timeouts are ``unavailable`` and
+Ticket reads and heartbeat. A `collect=wait` send may use a longer
+finite timeout that covers `wait_hold_seconds`. The SSE work hint
+stays open until the Session ends. Timeouts are `unavailable` and
 do not claim the Runtime rejected the work. A lost send response
 retries the same body.
 """
@@ -55,7 +55,14 @@ _HTTP_ERROR_STATUS = {
 
 
 def normalize_runtime_url(url: str) -> str:
-    """Return the Runtime origin plus ``/agentconnect/v1`` without a trailing slash."""
+    """Return the Runtime origin plus `/agentconnect/v1` without a trailing slash.
+
+    Args:
+        url: Runtime origin, with or without `/agentconnect/v1`.
+
+    Raises:
+        ValueError: `url` is empty.
+    """
     if not isinstance(url, str) or not url.strip():
         raise ValueError("join URL must be a non-empty string")
     origin = url.strip().rstrip("/")
@@ -65,10 +72,19 @@ def normalize_runtime_url(url: str) -> str:
 
 
 class HttpRuntimeTransport:
-    """Runtime operations over HTTP POST and an optional SSE event stream."""
+    """Runtime operations over HTTP POST and an optional SSE event stream.
+
+    Session transport. Everyday Agent code uses `BaseAgent.join` with a
+    URL rather than constructing this class.
+    """
 
     def __init__(self, url: str, *, timeout: float = 30.0) -> None:
-        """Connect to a Runtime origin. ``url`` may omit ``/agentconnect/v1``."""
+        """Connect to a Runtime origin. `url` may omit `/agentconnect/v1`.
+
+        Args:
+            url: Runtime origin such as `http://127.0.0.1:9000`.
+            timeout: Ordinary operation timeout in seconds. Defaults to 30.
+        """
         self._base = normalize_runtime_url(url)
         self._timeout = timeout
         self._wait_hold_seconds = 25.0
@@ -77,38 +93,58 @@ class HttpRuntimeTransport:
         )
 
     def configure_wait_hold(self, wait_hold_seconds: float) -> None:
-        """Keep the send timeout finite and above the Runtime wait hold."""
+        """Keep the send timeout finite and above the Runtime wait hold.
+
+        Args:
+            wait_hold_seconds: Runtime `wait_hold_seconds` from `join`.
+        """
         self._wait_hold_seconds = max(0.0, float(wait_hold_seconds))
 
     def _send_timeout(self) -> float:
         return max(self._timeout, self._wait_hold_seconds + 5.0)
 
     async def join_challenge(self) -> dict[str, Any]:
-        """GET /join/challenge."""
+        """GET `/join/challenge`. Return a short-lived identity-proof challenge."""
         return await self._request("GET", "/join/challenge", auth=None)
 
     async def join(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        """POST /join."""
+        """POST `/join`. Create or reconnect a Membership and open a Session.
+
+        Args:
+            request: Join body (`name`, `agent_did`, `profile`, …).
+        """
         return await self._request("POST", "/join", json=dict(request), auth=None)
 
     async def disconnect(self, session_token: str) -> None:
-        """POST /session/disconnect."""
+        """POST `/session/disconnect`. Close this Session. Membership is retained.
+
+        Args:
+            session_token: Live Session token from `join`.
+        """
         await self._request(
             "POST", "/session/disconnect", auth=session_token, expect_json=False
         )
 
     async def heartbeat(self, session_token: str) -> dict[str, Any]:
-        """POST /session/heartbeat."""
+        """POST `/session/heartbeat`. Prove the Client still holds its Session.
+
+        Args:
+            session_token: Live Session token from `join`.
+        """
         return await self._request("POST", "/session/heartbeat", auth=session_token)
 
     async def send(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
-        """POST /messages.
+        """POST `/messages`. Accept one request or event for one recipient.
 
-        A dropped wait connection retries the same body so the Runtime
-        returns the stored ``SendResult``. This method does not invent a
-        Message.
+        Session transport. Agent code uses `BaseAgent.ask`. A dropped wait
+        connection retries the same body so the Runtime returns the stored
+        `SendResult`. This method does not invent a Message.
+
+        Args:
+            session_token: Live Session token from `join`.
+            request: Send body (`id`, `recipient`, `kind`, `content`, …).
         """
         body = dict(request)
         timeout = self._send_timeout()
@@ -141,7 +177,12 @@ class HttpRuntimeTransport:
                 raise
 
     async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
-        """POST /mailbox/lease."""
+        """POST `/mailbox/lease`. Pull available work from the Membership Mailbox.
+
+        Args:
+            session_token: Live Session token from `join`.
+            max_items: How many Deliveries to take, 1 to 100.
+        """
         return await self._request(
             "POST",
             "/mailbox/lease",
@@ -150,7 +191,12 @@ class HttpRuntimeTransport:
         )
 
     async def renew(self, session_token: str, lease_id: str) -> dict[str, Any]:
-        """POST /deliveries/renew."""
+        """POST `/deliveries/renew`. Extend one active Delivery lease.
+
+        Args:
+            session_token: Live Session token from `join`.
+            lease_id: `lease_id` from a Delivery this Session holds.
+        """
         return await self._request(
             "POST",
             "/deliveries/renew",
@@ -159,7 +205,12 @@ class HttpRuntimeTransport:
         )
 
     async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
-        """POST /deliveries/complete."""
+        """POST `/deliveries/complete`. Finish a Delivery without a response Message.
+
+        Args:
+            session_token: Live Session token from `join`.
+            lease_id: `lease_id` from a Delivery this Session holds.
+        """
         return await self._request(
             "POST",
             "/deliveries/complete",
@@ -170,13 +221,23 @@ class HttpRuntimeTransport:
     async def reply(
         self, session_token: str, request: Mapping[str, Any]
     ) -> dict[str, Any]:
-        """POST /deliveries/reply."""
+        """POST `/deliveries/reply`. Finish a reply-expected Delivery.
+
+        Args:
+            session_token: Live Session token from `join`.
+            request: Reply body (`id`, `lease_id`, `outcome`, …).
+        """
         return await self._request(
             "POST", "/deliveries/reply", json=dict(request), auth=session_token
         )
 
     async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """GET /tickets/{ticket_id}."""
+        """GET `/tickets/{ticket_id}`. Return the current Ticket owned by the caller.
+
+        Args:
+            session_token: Live Session token from `join`.
+            ticket_id: Ticket id from a request this Membership sent.
+        """
         return await self._request(
             "GET", f"/tickets/{quote(ticket_id, safe='')}", auth=session_token
         )
@@ -189,7 +250,15 @@ class HttpRuntimeTransport:
         before: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """GET /threads/{thread_id}/history."""
+        """GET `/threads/{thread_id}/history`. Return one page of retained Thread history.
+
+        Args:
+            session_token: Live Session token from `join`.
+            thread_id: Thread id from a Message or Ticket.
+            before: Return Messages older than this id. Omit for the
+                newest page.
+            limit: Page size from 1 to 200. Defaults to 50.
+        """
         params: dict[str, Any] = {"limit": limit}
         if before is not None:
             params["before"] = before
@@ -207,7 +276,14 @@ class HttpRuntimeTransport:
         *,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        """POST /directory/find."""
+        """POST `/directory/find`. Search this Team's Directory.
+
+        Args:
+            session_token: Live Session token from `join`.
+            query: Natural-language need.
+            limit: Maximum matches from 1 to 100. Omit for every other
+                member, at most 100.
+        """
         body: dict[str, Any] = {"query": query}
         if limit is not None:
             body["limit"] = limit
@@ -219,7 +295,12 @@ class HttpRuntimeTransport:
         )
 
     async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
-        """GET /directory/members/{address}."""
+        """GET `/directory/members/{address}`. Return one Directory entry.
+
+        Args:
+            session_token: Live Session token from `join`.
+            address: Agent name or qualified Address in this Team.
+        """
         return await self._request(
             "GET",
             f"/directory/members/{quote(address, safe='')}",
@@ -227,7 +308,11 @@ class HttpRuntimeTransport:
         )
 
     async def events(self, session_token: str) -> AsyncIterator[dict[str, Any]]:
-        """GET /session/events. Yields work hints, not a correctness channel."""
+        """GET `/session/events`. Yield work hints, not a correctness channel.
+
+        Args:
+            session_token: Live Session token from `join`.
+        """
         url = self._base + "/session/events"
         headers = {
             "Authorization": f"Bearer {session_token}",
@@ -267,7 +352,7 @@ class HttpRuntimeTransport:
             ) from exc
 
     async def close(self) -> None:
-        """Close the HTTP client."""
+        """Close the HTTP client. Does not disconnect the Session."""
         await self._client.aclose()
 
     async def _request(

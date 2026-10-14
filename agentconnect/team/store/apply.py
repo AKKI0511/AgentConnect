@@ -30,7 +30,7 @@ from agentconnect.team.store.ops import (
     SetAdd,
     SetRemove,
     StoreOp,
-    clone_value,
+    _clone_value,
 )
 
 _MISSING = object()
@@ -63,7 +63,7 @@ class Overlay:
 
     def write_doc(self, key: str, value: Any, version: int) -> None:
         """Replace the overlay document at ``key``."""
-        self.docs[key] = StoreRecord(value=clone_value(value), version=int(version))
+        self.docs[key] = StoreRecord(value=_clone_value(value), version=int(version))
 
     def iter_docs(self):
         """Yield ``(key, record_or_none)`` for documents touched by the batch."""

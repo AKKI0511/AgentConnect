@@ -4,16 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
+import operator
 import shutil
 import subprocess
 import sys
+from copy import copy
 from pathlib import Path
 
 from griffe import (
     AliasResolutionError,
     DataclassesExtension,
+    DocstringSectionText,
     GriffeLoader,
+    NameResolutionError,
+    Parameters,
     Parser,
     load_extensions,
 )
@@ -118,11 +124,191 @@ def public_members(obj):
             )
         ):
             continue
+        # Constructor parameters already document these settings. An
+        # instance assignment with no docstring becomes an empty section.
+        # Class attributes, including enum members, stay.
+        if (
+            obj.is_class
+            and member.is_attribute
+            and "instance-attribute" in member.labels
+            and "class-attribute" not in member.labels
+            and "property" not in member.labels
+            and "pydantic-field" not in member.labels
+            and not member.docstring
+            and not _documented_attribute(member)
+        ):
+            continue
         yield member
+
+
+def _documented_attribute(member):
+    """Find an ordinary field's contract in its class Attributes section."""
+    parent = member.parent
+    if not parent.is_class or not parent.docstring:
+        return None
+    for section in parent.docstring.parsed:
+        if section.kind.value == "attributes":
+            for field in section.value:
+                if field.name == member.name and field.description:
+                    return field
+    return None
+
+
+def _attribute_sections(member):
+    if member.docstring:
+        return member.docstring.parsed
+    field = _documented_attribute(member)
+    return [DocstringSectionText(field.description)] if field else []
+
+
+_TEAM_OPERATOR = {
+    "persistence",
+    "limits",
+    "identity",
+    "team_did",
+    "url",
+    "mcp_url",
+    "start",
+    "stop",
+    "__aenter__",
+    "__aexit__",
+    "serve",
+    "stop_serving",
+    "roster",
+    "issue_join_token",
+    "revoke_join_token",
+    "remove_membership",
+}
+_TEAM_OBSERVE = {
+    "ensure_operator_session",
+    "status",
+    "get_trace",
+    "membership_attestation",
+}
+
+
+def _render_team_groups(env, children) -> list[str]:
+    """Keep everyday Team methods ahead of transport contracts."""
+    operator = []
+    observe = []
+    transport = []
+    for child in children:
+        if child.name in _TEAM_OPERATOR:
+            operator.append(child)
+        elif child.name in _TEAM_OBSERVE:
+            observe.append(child)
+        else:
+            transport.append(child)
+    sections = [(None, operator)]
+    if observe:
+        sections.append(
+            (
+                "Operator access\n\n"
+                "`status` and `get_trace` take the token from "
+                "`ensure_operator_session`. Keep it secret: it grants "
+                "operator access to this Team.",
+                observe,
+            )
+        )
+    if transport:
+        sections.append(
+            (
+                "Transport contracts\n\n"
+                "HTTP, MCP, and the in-process transport call these methods. "
+                "Agent code uses `BaseAgent`.",
+                transport,
+            )
+        )
+    rendered = []
+    for heading, group in sections:
+        if heading:
+            rendered.append(f"## {heading}\n")
+        rendered.extend(render_object(env, child) for child in group)
+    return rendered
 
 
 def anchor(obj) -> str:
     return obj.path.replace(".", "-").replace("_", "-").lower()
+
+
+def _resolved_default(default, scope):
+    """Resolve scalar source constants without importing or executing SDK code."""
+    operations = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+    }
+
+    def resolve(node, owner, seen):
+        if isinstance(node, ast.Constant) and (
+            node.value is None or type(node.value) in {str, bool, int, float}
+        ):
+            return node.value
+        if isinstance(node, (ast.Name, ast.Attribute)):
+            name, *parts = ast.unparse(node).split(".")
+            path = ".".join([owner.resolve(name), *parts])
+            if path in seen:
+                raise ValueError("Cyclic default constant")
+            target = owner.modules_collection[path]
+            if target.is_alias:
+                target = target.final_target
+            if (
+                target.is_attribute
+                and target.parent.is_module
+                and target.value is not None
+            ):
+                return resolve(
+                    ast.parse(str(target.value), mode="eval").body,
+                    target.parent,
+                    seen | {path},
+                )
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = resolve(node.operand, owner, seen)
+            if type(value) in {int, float}:
+                return value if isinstance(node.op, ast.UAdd) else -value
+        if isinstance(node, ast.BinOp) and type(node.op) in operations:
+            left = resolve(node.left, owner, seen)
+            right = resolve(node.right, owner, seen)
+            if type(left) in {int, float} and type(right) in {int, float}:
+                return operations[type(node.op)](left, right)
+        raise ValueError("Unsupported default expression")
+
+    try:
+        expression = ast.parse(str(default), mode="eval").body
+        if isinstance(expression, ast.Constant):
+            return default
+        return repr(resolve(expression, scope, set()))
+    except (
+        AliasResolutionError,
+        NameResolutionError,
+        KeyError,
+        SyntaxError,
+        ValueError,
+        TypeError,
+        ArithmeticError,
+        RecursionError,
+    ):
+        return default
+
+
+def _format_signature(name, function, line_length, **kwargs):
+    rendered = copy(function)
+    parameters = []
+    for parameter in function.parameters:
+        parameter = copy(parameter)
+        if (
+            function.module.path.startswith("agentconnect.team.")
+            and parameter.default is not None
+        ):
+            parameter.default = _resolved_default(parameter.default, function.parent)
+        parameters.append(parameter)
+    rendered.parameters = Parameters(*parameters)
+    return rendered.signature(
+        name=str(name).strip(), return_type=function.name != "__init__"
+    )
 
 
 def create_environment():
@@ -131,11 +317,8 @@ def create_environment():
         [FileSystemLoader(DOCS / "scripts" / "templates"), env.loader]
     )
     # Griffe owns Python call syntax, including unannotated and positional-only args.
-    env.filters["format_signature"] = lambda name, function, line_length, **kwargs: (
-        function.signature(
-            name=str(name).strip(), return_type=function.name != "__init__"
-        )
-    )
+    env.filters["format_signature"] = _format_signature
+    env.filters["attribute_sections"] = _attribute_sections
     return env
 
 
@@ -249,9 +432,13 @@ def generate(output: Path, *, root: Path = ROOT) -> None:
                     ]
                     if bases:
                         definitions.append("Inherits from " + ", ".join(bases) + ".\n")
-                    definitions.extend(
-                        render_object(env, child) for child in public_members(obj)
-                    )
+                    children = list(public_members(obj))
+                    if obj.path == "agentconnect.team.runtime.Team":
+                        definitions.extend(_render_team_groups(env, children))
+                    else:
+                        definitions.extend(
+                            render_object(env, child) for child in children
+                        )
         children = [
             f"- [`{child.removeprefix(name + '.')}`](/{_module_to_relpath(child)})"
             for child in modules

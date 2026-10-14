@@ -1,4 +1,10 @@
-"""Ticket union discriminated on ``state``, plus model-facing TicketView."""
+"""Ticket union discriminated on `state`, plus model-facing TicketView.
+
+A Ticket is the requester's durable record for one request Message. Its
+id equals that request id. Read completion from `state`: `open`,
+`completed`, `failed`, `expired`, or `declined`. MCP `ask` / `get_result`
+return `TicketView`; Runtime, HTTP, and Client `ask` return the wire Ticket.
+"""
 
 from __future__ import annotations
 
@@ -36,12 +42,24 @@ __all__ = [
 class TicketBase(SchemaModel):
     """Fields shared by every Ticket state.
 
-    Read completion from ``state``. A completed Ticket carries
-    ``response``; a failed or expired Ticket carries ``error``. Do not
-    treat missing content as pending, declined, and failed at once.
+    Read completion from `state`. A completed Ticket carries `response`;
+    a failed or expired Ticket carries `error`. Do not treat missing
+    content as pending, declined, and failed at once.
 
-    ``trace_id`` is the request Message's causal id, retained so
-    ``get_result`` can feed ``get_trace`` after Session replacement.
+    `trace_id` is the request Message's causal id, retained so
+    `get_result` can feed `get_trace` after Session replacement.
+
+    Attributes:
+        id: Request Message id.
+        requester: Membership that sent the request and owns this Ticket.
+        recipient: Membership asked to handle the request.
+        thread_id: Conversation the request belongs to, when it has one.
+        trace_id: Causal id of the request this Ticket records.
+        created_at: Request acceptance time.
+        updated_at: Time of the last state transition or late-reply observation.
+        deadline: Absolute time after which an open Ticket expires.
+        late_reply_count: Distinct replies observed after this Ticket
+            became terminal.
     """
 
     id: Uuid
@@ -62,7 +80,12 @@ class OpenTicket(TicketBase):
 
 
 class CompletedTicket(TicketBase):
-    """Ticket completed by one successful response."""
+    """Ticket completed by one successful response.
+
+    Attributes:
+        state: Always `completed`.
+        response: Immutable winning response Message.
+    """
 
     state: Literal["completed"]
     response: ResponseMessage
@@ -74,21 +97,36 @@ class CompletedTicket(TicketBase):
 
 
 class FailedTicket(TicketBase):
-    """Ticket completed by an Agent or Runtime failure."""
+    """Ticket completed by an Agent or Runtime failure.
+
+    Attributes:
+        state: Always `failed`.
+        error: Immutable winning failure.
+    """
 
     state: Literal["failed"]
     error: ErrorObject
 
 
 class ExpiredTicket(TicketBase):
-    """Ticket whose deadline passed before an accepted reply."""
+    """Ticket whose deadline passed before an accepted reply.
+
+    Attributes:
+        state: Always `expired`.
+        error: Fixed `deadline_exceeded` failure.
+    """
 
     state: Literal["expired"]
     error: DeadlineExceededError
 
 
 class DeclinedTicket(TicketBase):
-    """Ticket the recipient deliberately declined."""
+    """Ticket the recipient deliberately declined.
+
+    The recipient handled the request and chose not to answer. This is a
+    terminal, non-failure outcome, distinct from a handler failure and
+    from a deadline that expired with no handling.
+    """
 
     state: Literal["declined"]
 
@@ -97,12 +135,23 @@ Ticket = Annotated[
     Union[OpenTicket, CompletedTicket, FailedTicket, ExpiredTicket, DeclinedTicket],
     Field(discriminator="state"),
 ]
+"""Requester-owned durable result record, discriminated on `state`."""
 
 TICKET_ADAPTER: TypeAdapter[Ticket] = TypeAdapter(Ticket)
 
 
 def parse_ticket(data: Any) -> Ticket:
-    """Parse a Ticket mapping discriminated on ``state``."""
+    """Parse a Ticket mapping discriminated on `state`.
+
+    Args:
+        data: JSON object, or an already parsed Ticket instance.
+
+    Returns:
+        A frozen Ticket of the matching state.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     if isinstance(
         data,
         (OpenTicket, CompletedTicket, FailedTicket, ExpiredTicket, DeclinedTicket),
@@ -126,7 +175,14 @@ DECLINED_STATUS_MESSAGE = (
 
 
 class TicketViewError(SchemaModel):
-    """Lean failure on a model-facing Ticket view."""
+    """Lean failure on a model-facing Ticket view.
+
+    Code and message only. No details, retryable flag, or Message envelope.
+
+    Attributes:
+        code: Well-known failure code.
+        message: Requester-visible explanation.
+    """
 
     code: ErrorCode
     message: str = Field(min_length=1, max_length=2000, pattern=r"\S")
@@ -135,8 +191,12 @@ class TicketViewError(SchemaModel):
 class TicketViewBase(SchemaModel):
     """Fields shared by every model-facing Ticket view.
 
-    Branch on ``state``. Timing is not proof of state. A completed
-    Ticket stays completed after its original deadline while retained.
+    Branch on `state`. Timing is not proof of state. A completed Ticket
+    stays completed after its original deadline while retained.
+
+    Attributes:
+        ticket_id: Request Message id. The only id on this view.
+        thread_id: Conversation the request belongs to, when it has one.
     """
 
     ticket_id: Uuid
@@ -144,7 +204,7 @@ class TicketViewBase(SchemaModel):
 
 
 class OpenTicketView(TicketViewBase):
-    """Open Ticket. Keep ``ticket_id`` and call ``get_result``."""
+    """Open Ticket. Keep `ticket_id` and call `get_result`."""
 
     state: Literal["open"]
     deadline: Timestamp = Field(
@@ -168,21 +228,36 @@ class OpenTicketView(TicketViewBase):
 
 
 class CompletedTicketView(TicketViewBase):
-    """Model-facing view of a completed Ticket."""
+    """Model-facing view of a completed Ticket.
+
+    Attributes:
+        state: Always `completed`.
+        content: Reply content alone.
+    """
 
     state: Literal["completed"]
     content: JsonValue
 
 
 class FailedTicketView(TicketViewBase):
-    """Model-facing view of a failed Ticket."""
+    """Model-facing view of a failed Ticket.
+
+    Attributes:
+        state: Always `failed`.
+        error: Failure code and message only.
+    """
 
     state: Literal["failed"]
     error: TicketViewError
 
 
 class ExpiredTicketView(TicketViewBase):
-    """Model-facing view of an expired Ticket."""
+    """Model-facing view of an expired Ticket.
+
+    Attributes:
+        state: Always `expired`.
+        error: Deadline failure code and message only.
+    """
 
     state: Literal["expired"]
     error: TicketViewError
@@ -209,12 +284,23 @@ TicketView = Annotated[
     ],
     Field(discriminator="state"),
 ]
+"""Model-facing Ticket projection, discriminated on `state` with the same states as the wire union."""
 
 TICKET_VIEW_ADAPTER: TypeAdapter[TicketView] = TypeAdapter(TicketView)
 
 
 def parse_ticket_view(data: Any) -> TicketView:
-    """Parse a TicketView mapping discriminated on ``state``."""
+    """Parse a TicketView mapping discriminated on `state`.
+
+    Args:
+        data: JSON object, or an already parsed TicketView instance.
+
+    Returns:
+        A frozen TicketView of the matching state.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     if isinstance(
         data,
         (
@@ -235,7 +321,25 @@ def parse_ticket_view(data: Any) -> TicketView:
 
 
 def ticket_view(ticket: Ticket) -> TicketView:
-    """Project a wire Ticket into the model-facing TicketView."""
+    """Project a wire Ticket into the model-facing TicketView.
+
+    Args:
+        ticket: Wire Ticket returned by Runtime, HTTP, or Client `ask`.
+
+    Returns:
+        The lean view MCP `ask` / `get_result` and Session-bound tools return.
+
+    Examples:
+        Branch on `state` after a model-facing collect:
+
+        ```python
+        from agentconnect.core.ticket import ticket_view
+
+        view = ticket_view(ticket)
+        if view.state == "completed":
+            view.content
+        ```
+    """
     base: dict[str, Any] = {"ticket_id": ticket.id}
     if ticket.thread_id is not None:
         base["thread_id"] = ticket.thread_id

@@ -1,6 +1,8 @@
 """Shared names, descriptions, and schemas for MCP and Session Team tools.
 
-``agent`` and ``mcp`` both import this module. It has no I/O.
+`agent` and `mcp` both import this module. It has no I/O. The
+description constants are the advertised tool catalog. Do not restyle
+them without a behavior change or demonstrated confusion.
 """
 
 from __future__ import annotations

@@ -143,7 +143,17 @@ def init(
         ),
     ] = False,
 ) -> None:
-    """Scaffold agentconnect.toml, one hosted Agent, and a shared MCP tool."""
+    """Scaffold agentconnect.toml, one hosted Agent, and a shared MCP tool.
+
+    Writes `agentconnect.toml`, `agents/assistant.py`, and `tools/shared.py`
+    in the current directory. Existing files are left alone unless
+    `--force` is set.
+
+    Examples:
+        ```bash
+        agentconnect init --name content-squad
+        ```
+    """
     root = Path.cwd()
     try:
         existing = find_config_file(root)
@@ -220,7 +230,19 @@ def up(
         bool, typer.Option("--detach", help="Start in the background.")
     ] = False,
 ) -> None:
-    """Start the Team and its hosted Agents from a Team file."""
+    """Start the Team and its hosted Agents from a Team file.
+
+    Foreground `up` binds loopback HTTP, joins hosted Agents, and blocks
+    until interrupted. `--detach` starts a background process and
+    returns immediately. It does not wait until the Runtime is serving.
+    Run `agentconnect status` after it binds.
+
+    Examples:
+        ```bash
+        agentconnect up
+        agentconnect up --detach
+        ```
+    """
     root = Path.cwd()
     try:
         config_path, config = load_selected_team(file, start=root)
@@ -346,7 +368,16 @@ def down(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Stop the Team started by ``up`` for the selected Team file."""
+    """Stop the Team process this CLI started for the selected Team file.
+
+    Does not stop a Runtime started in Python or by another tool. The
+    saved pid must still be the process this CLI started.
+
+    Examples:
+        ```bash
+        agentconnect down
+        ```
+    """
     root = Path.cwd()
     try:
         config_path, _config = load_selected_team(file, start=root)
@@ -398,7 +429,17 @@ def status(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
-    """Show members, online state, Mailbox depths, and open Tickets."""
+    """Show members, online state, Mailbox depths, and open Tickets.
+
+    Talks to the running Runtime as the reserved `operator` Membership.
+    `--url` overrides `--file`, saved state, and discovery.
+
+    Examples:
+        ```bash
+        agentconnect status
+        agentconnect status --json
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             snapshot = client.status()
@@ -451,7 +492,17 @@ def token_issue(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Issue a join token for a network Agent."""
+    """Issue a join token for a network Agent.
+
+    Bind `--name`, `--did`, or both so a leaked token cannot be used by
+    a different Agent. Omit both for an invite that any proving Agent
+    can consume. Prints the token secret, then `expires_at`.
+
+    Examples:
+        ```bash
+        agentconnect token issue --name writer
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             issued = client.issue_token(
@@ -475,7 +526,16 @@ def token_revoke(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Revoke a join token and drop Sessions created from it."""
+    """Revoke a join token and drop Sessions created from it.
+
+    A later join with this token fails. Waiting sends from those
+    Sessions return unauthorized.
+
+    Examples:
+        ```bash
+        agentconnect token revoke TOKEN
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             client.revoke_token(token)
@@ -495,7 +555,16 @@ def find(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Search this Team's Directory."""
+    """Search this Team's Directory.
+
+    Prints ranked Addresses and summaries. The operator is excluded from
+    results. Omit `--limit` for every other member, at most 100.
+
+    Examples:
+        ```bash
+        agentconnect find "someone who can draft a summary"
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             result = client.find(query, limit=limit)
@@ -531,7 +600,17 @@ def ask(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Send reply-expected work and wait for the Ticket."""
+    """Send reply-expected work and wait for the Ticket.
+
+    Content that looks like JSON is parsed as JSON. `--deadline` is
+    seconds until the Ticket expires; omit it to use the Runtime work
+    lifetime. Prints the trace id, Ticket state, and response.
+
+    Examples:
+        ```bash
+        agentconnect ask writer "Draft two paragraphs"
+        ```
+    """
     content: Any = question
     stripped = question.strip()
     if stripped[:1] in "{[":
@@ -576,7 +655,16 @@ def trace_cmd(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Print the timeline for one causal operation."""
+    """Print the timeline for one causal operation.
+
+    Pass a `trace_id` from `ask` or a Message. The operator sees every
+    event on that trace.
+
+    Examples:
+        ```bash
+        agentconnect trace TRACE_ID
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             result = client.get_trace(trace_id)
@@ -621,7 +709,15 @@ def watch(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Print new Trace events until interrupted."""
+    """Print new Trace events until interrupted.
+
+    Streams operator Trace events from the running Runtime until Ctrl-C.
+
+    Examples:
+        ```bash
+        agentconnect watch
+        ```
+    """
     client = RuntimeClient(_resolve_url(url, file=file))
     try:
         for item in client.watch():
@@ -646,7 +742,16 @@ def doctor(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Check the Team file, keys, and whether the Runtime is reachable."""
+    """Check the Team file, keys, and whether the Runtime is reachable.
+
+    Does not start or stop the Team. `--url` overrides `--file`, saved
+    state, and discovery.
+
+    Examples:
+        ```bash
+        agentconnect doctor
+        ```
+    """
     doctor_cmds.doctor(url=url, file=file)
 
 

@@ -12,10 +12,13 @@ ancestor. An explicit path skips discovery and never falls back to
 another file. Relative `module:Name` imports resolve from the chosen
 file's directory.
 
+Examples:
+    ```python
     from agentconnect.config import load_team_config
 
     config = load_team_config()
     config.team
+    ```
 """
 
 from __future__ import annotations
@@ -142,14 +145,17 @@ def _mapping_from_file(path: Path) -> dict[str, Any]:
 
 
 def find_config_file(start: Optional[Path] = None) -> Optional[Path]:
-    """Return the nearest Team file from ``start``, or None.
+    """Return the nearest Team file from `start`, or None.
 
-    At each directory, a dedicated TOML file beats ``[tool.agentconnect]``
-    in ``pyproject.toml``. YAML is considered only after the walk finds
+    At each directory, a dedicated TOML file beats `[tool.agentconnect]`
+    in `pyproject.toml`. YAML is considered only after the walk finds
     no TOML Team file.
 
     Args:
         start: Directory to walk from. Defaults to the current directory.
+
+    Returns:
+        The chosen file path, or None when no Team file exists.
 
     Raises:
         ValueError: A candidate file exists but cannot be parsed.
@@ -177,10 +183,10 @@ def load_team_config(
     """Load and validate a Team file.
 
     Args:
-        path: Explicit file. ``.toml`` is parsed with ``tomllib``.
-            ``pyproject.toml`` requires ``[tool.agentconnect]``. ``.yaml``
+        path: Explicit file. `.toml` is parsed with `tomllib`.
+            `pyproject.toml` requires `[tool.agentconnect]`. `.yaml`
             files go through the compatibility shim.
-        start: Directory used when ``path`` is omitted.
+        start: Directory used when `path` is omitted.
 
     Returns:
         The validated Team configuration.
@@ -216,6 +222,10 @@ def load_selected_team(
 
     An explicit `path` must exist and be valid. This never chooses a
     different Team file.
+
+    Args:
+        path: Explicit file. Omit to discover from `start`.
+        start: Directory used when `path` is omitted.
 
     Returns:
         The resolved file path and its configuration.
@@ -256,7 +266,14 @@ def _toml_literal(value: object) -> str:
 
 
 def dump_team_toml(config: TeamConfig) -> str:
-    """Serialize ``config`` as a ``[tool.agentconnect]`` table."""
+    """Serialize `config` as a `[tool.agentconnect]` table.
+
+    Args:
+        config: Validated Team configuration.
+
+    Returns:
+        TOML text including the `[tool.agentconnect]` header.
+    """
     data: dict[str, Any] = config.model_dump(by_alias=True, exclude_none=True)
     lines = ["[tool.agentconnect]"]
     for key in ("team", "store", "embeddings", "host", "port", "require_join_auth"):
@@ -273,12 +290,24 @@ def dump_team_toml(config: TeamConfig) -> str:
 
 
 def render_example_toml() -> str:
-    """Return example TOML generated from `TeamConfig.example`."""
+    """Return example TOML generated from `TeamConfig.example`.
+
+    Returns:
+        Commented example `agentconnect.toml` text.
+    """
     return _EXAMPLE_HEADER + dump_team_toml(TeamConfig.example())
 
 
 def save_example_config(path: Optional[Path] = None) -> Path:
-    """Write the generated example TOML to ``path``."""
+    """Write the generated example TOML to `path`.
+
+    Args:
+        path: Destination file. Defaults to `agentconnect.toml` in the
+            current directory.
+
+    Returns:
+        The path written.
+    """
     target = path if path is not None else Path.cwd() / TOML_FILENAME
     target.write_text(render_example_toml(), encoding="utf-8")
     logger.info("Wrote Team file %s", target)
@@ -286,7 +315,15 @@ def save_example_config(path: Optional[Path] = None) -> Path:
 
 
 def validate_config_file(path: Path) -> bool:
-    """Return True when ``path`` is a valid Team file."""
+    """Return True when `path` is a valid Team file.
+
+    Args:
+        path: Team file to validate.
+
+    Returns:
+        True when the file loads as `TeamConfig`. False on parse or
+        validation errors (logged).
+    """
     try:
         load_team_config(path)
         return True

@@ -1,16 +1,30 @@
-"""Ready-made Agents on top of ``BaseAgent``.
+"""Optional ready-made Agents on top of `BaseAgent`.
 
-These helpers are optional. The product is ``BaseAgent`` plus a Team.
-``AIAgent`` needs ``pip install 'agentconnect[aiagent]'``. ``HumanAgent``
-needs ``pip install 'agentconnect[cli]'``. ``TelegramAIAgent`` needs
-``pip install 'agentconnect[telegram]'``.
+The product is `BaseAgent` plus a Team. This package is convenience:
+a LiteLLM loop, a stdin human, and a Telegram bot. None of these is
+required to join a Team.
 
-    from agentconnect.prebuilt import AIAgent, Tool
-    from agentconnect.team import Team
+`AIAgent` needs `pip install 'agentconnect[aiagent]'`. `HumanAgent`
+needs `pip install 'agentconnect[cli]'`. `TelegramAIAgent` needs
+`pip install 'agentconnect[telegram]'`. `Tool` is the same callable
+wrapper as `agentconnect.agent.tools.Tool`.
+
+Pass extra tools as annotated functions or explicit `Tool` objects.
+Team coordination tools (`find`, `ask`, `tell`, `get_result`,
+`get_history`, `get_profiles`) attach from the Session. `model` is a
+LiteLLM model id. Provider keys stay in the environment.
+
+Examples:
+    For a started Team, after `pip install 'agentconnect[aiagent]'`.
+    Close the Session with `leave` when finished:
+
+    ```python
+    from agentconnect.prebuilt import AIAgent
 
     agent = AIAgent(name="assistant", model="gpt-4o-mini")
-    team = await Team("content-squad").start()
     await agent.join(team)
+    await agent.leave()
+    ```
 """
 
 from __future__ import annotations

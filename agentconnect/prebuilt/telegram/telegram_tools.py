@@ -695,7 +695,7 @@ class TelegramTools:
         return {"success": True}
 
     def get_tools(self) -> List[Tool]:
-        """Return Telegram operations as :class:`~agentconnect.prebuilt.tools.Tool` values."""
+        """Return Telegram operations as `Tool` values."""
         return [
             Tool(
                 name="send_telegram_message",

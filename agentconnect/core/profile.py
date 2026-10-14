@@ -1,4 +1,9 @@
-"""Discovery Profile and Skill. Identity and addressing live on DirectoryEntry."""
+"""Discovery Profile and Skill.
+
+A Profile describes what an Agent can do. Identity, name, and Address
+(the Agent's `name` or `name@team` locator) live on `DirectoryEntry`,
+not here.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +22,25 @@ class Skill(SchemaModel):
 
     A Skill has no input or output schema. Callers send free-form content
     to the Agent; they do not invoke a typed signature.
+
+    Attributes:
+        name: Stable lowercase identifier, unique within the Profile. Not
+            an Address or a Runtime operation name.
+        description: What the Skill does.
+        examples: Short natural-language illustrations, at most 10.
+        tags: Lowercase labels for this Skill. They appear only on the
+            full Profile, not on the light Directory card.
+
+    Examples:
+        ```python
+        from agentconnect.core.profile import Skill
+
+        Skill(
+            name="drafting",
+            description="Turn notes into a short draft.",
+            examples=["Draft two paragraphs from these bullets."],
+        )
+        ```
     """
 
     name: str = Field(pattern=r"^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?$")
@@ -36,11 +60,36 @@ class Skill(SchemaModel):
 class AgentProfile(SchemaModel):
     """Discovery information for an Agent.
 
-    ``summary`` is the cheap Directory card line. ``description`` is the
-    longer explanation on the full Profile. Profile ``tags`` appear on
-    the light card; Skill ``tags`` appear only on the full Profile.
+    `summary` is the cheap Directory card line. `description` is the
+    longer explanation on the full Profile. Profile `tags` appear on
+    the light card; Skill `tags` appear only on the full Profile.
 
     Identity, name, Address, presence, and Session data do not belong here.
+
+    Attributes:
+        summary: Short line shown on a ranked Directory match.
+        skills: One to 50 Skills. Names must be unique in this list.
+        description: Longer explanation of suitable work and boundaries.
+            Present on the full Profile, not on the light `find` card.
+        tags: Lowercase labels for the Agent as a whole. Duplicate tags
+            are invalid.
+
+    Examples:
+        ```python
+        from agentconnect.core.profile import AgentProfile, Skill
+
+        AgentProfile(
+            summary="Writes short drafts from notes.",
+            skills=[
+                Skill(
+                    name="drafting",
+                    description="Turn notes into a short draft.",
+                )
+            ],
+            description="Hire for first drafts, not final copy-edits.",
+            tags=["writing"],
+        )
+        ```
     """
 
     summary: str = Field(min_length=1, max_length=200, pattern=r"\S")

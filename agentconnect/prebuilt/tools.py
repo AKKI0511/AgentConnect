@@ -1,9 +1,10 @@
 """Callable tools for the prebuilt model loop.
 
 Pass a plain annotated function and the schema is derived from the signature
-and docstring. Construct :class:`~agentconnect.agent.tools.Tool` when the
-schema is dynamic.
+and docstring. Construct `Tool` when the schema is dynamic.
 
+Examples:
+    ```python
     from agentconnect.prebuilt import AIAgent, Tool
 
     async def search_docs(query: str) -> str:
@@ -19,6 +20,7 @@ schema is dynamic.
         model="gpt-4o-mini",
         tools=[search_docs],
     )
+    ```
 """
 
 from agentconnect.agent.tools import Tool

@@ -1,17 +1,20 @@
-"""Team file models for ``[tool.agentconnect]`` and ``agentconnect.toml``.
+"""Team file models for `[tool.agentconnect]` and `agentconnect.toml`.
 
-Embedded ``Team("name").start()`` needs no file. This file describes a
-Team the CLI can start with ``agentconnect up``: store, embeddings,
+Embedded `Team("name").start()` needs no file. This file describes a
+Team the CLI can start with `agentconnect up`: store, embeddings,
 hosted Agents, and extra MCP tools. Secrets stay in the environment.
 
+The example file is generated from `TeamConfig.example` so the
+committed TOML cannot drift from these fields.
+
+Examples:
+    ```python
     from agentconnect.config import TeamConfig, load_team_config
 
     config = load_team_config()
     config.team
     config.agents[0].class_path
-
-The example file is generated from `TeamConfig.example` so the
-committed TOML cannot drift from these fields.
+    ```
 """
 
 from __future__ import annotations
@@ -59,7 +62,7 @@ class HostedAgentConfig(BaseModel):
     @field_validator("class_path")
     @classmethod
     def validate_class_path(cls, value: str) -> str:
-        """Require ``module:Name`` form."""
+        """Require `module:Name` form."""
         if _IMPORT_REF.fullmatch(value.strip()) is None:
             raise ValueError("class must be module:Name")
         return value.strip()
@@ -174,7 +177,7 @@ class TeamConfig(BaseModel):
     @field_validator("host")
     @classmethod
     def validate_host(cls, value: str) -> str:
-        """``up`` binds loopback only."""
+        """`up` binds loopback only."""
         host = value.strip()
         if host in {"localhost", "127.0.0.1", "::1"}:
             return host
@@ -209,7 +212,7 @@ class TeamConfig(BaseModel):
 
     @classmethod
     def example(cls) -> "TeamConfig":
-        """Canonical example used to generate ``agentconnect.example.toml``."""
+        """Canonical example used to generate `agentconnect.example.toml`."""
         return cls(
             team="content-squad",
             store="memory",

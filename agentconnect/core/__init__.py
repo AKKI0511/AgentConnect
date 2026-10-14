@@ -1,10 +1,39 @@
-"""Core nouns: the Python projection of the public schema, plus Address and identity.
+"""Public schema types: Message, Ticket, Profile, Address, and operation bodies.
 
-This package has no I/O and imports no sibling AgentConnect packages.
+This package is vocabulary only. It has no I/O and imports no other
+AgentConnect packages. Import each noun from the module that defines it
+(`agentconnect.core.message`, `agentconnect.core.ticket`,
+`agentconnect.core.profile`, …). Everyday Agent code can keep using the
+re-exports on `agentconnect` (`MailboxMessage`, `Ticket`, `AgentProfile`).
 
-Public names here are the schema vocabulary: Message, Ticket, Profile, Skill,
-Address, and the operation request and result types. Identity proofs and
-join JWTs live on ``AgentIdentity`` in ``agentconnect.core.identity``.
+`MailboxMessage` is what `handle` receives (a request or an event). A
+request always expects a reply and opens a `Ticket`. An event does not.
+Read completion from `ticket.state`: `open`, `completed`, `failed`,
+`expired`, or `declined`. A completed Ticket carries `response`; a
+failed or expired Ticket carries `error`.
+
+`AgentProfile` and `Skill` are discovery text. Identity and addressing
+live on `AgentIdentity` and `DirectoryEntry`, not on the Profile.
+`parse_schema` / `dump_public` convert between JSON and these models at
+a trust boundary.
+
+Examples:
+    Build a Profile and read a Ticket state:
+
+    ```python
+    from agentconnect.core.profile import AgentProfile, Skill
+    from agentconnect.core.ticket import Ticket
+
+    profile = AgentProfile(
+        summary="Writes short drafts from notes.",
+        skills=[Skill(name="drafting", description="Turn notes into a draft.")],
+    )
+
+    def content_if_done(ticket: Ticket) -> object | None:
+        if ticket.state == "completed":
+            return ticket.response.content
+        return None
+    ```
 """
 
 from agentconnect.core.address import (

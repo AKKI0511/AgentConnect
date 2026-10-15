@@ -37,7 +37,7 @@ from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.tools import Tool, ToolLike, _ensure_tool
 from agentconnect.core.identity import AgentIdentity
-from agentconnect.core.message import MailboxMessage
+from agentconnect.core.message import MailboxMessage, Message
 from agentconnect.core.profile import AgentProfile
 from agentconnect.prebuilt.loop import (
     DEFAULT_MAX_ROUNDS,
@@ -75,7 +75,7 @@ class AIAgent(BaseAgent):
         name: str,
         *,
         model: str,
-        profile: AgentProfile | Mapping[str, Any] | None = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         identity: Optional[AgentIdentity] = None,
         instructions: str = (
             "You are a helpful teammate. Use tools when they help you do the work."
@@ -130,12 +130,12 @@ class AIAgent(BaseAgent):
         self.model = str(model).strip()
         self.instructions = instructions
         self.max_tool_rounds = int(max_tool_rounds)
-        self.completion: dict[str, Any] = dict(completion or {})
+        self.completion: dict[str, object] = dict(completion or {})
         self.api_key = api_key
         self.include_team_tools = include_team_tools
         self.tools: list[Tool] = [_ensure_tool(item) for item in tools or ()]
         self._complete: CompletionFn = complete or _litellm_complete
-        self._chats: dict[str, list[dict[str, Any]]] = {}
+        self._chats: dict[str, list[dict[str, object]]] = {}
 
     async def handle(self, message: MailboxMessage, ctx: Context) -> str:
         """Answer one Delivery with the model loop.
@@ -162,8 +162,8 @@ class AIAgent(BaseAgent):
         self,
         text: str,
         *,
-        history: Optional[Sequence[Any]] = None,
-        current: Optional[Any] = None,
+        history: Optional[Sequence[Message | Mapping[str, object]]] = None,
+        current: Message | Mapping[str, object] | str | None = None,
         include_team_tools: Optional[bool] = None,
         self_address: Optional[str] = None,
     ) -> str:
@@ -199,7 +199,7 @@ class AIAgent(BaseAgent):
             self_address=self_address or self.address,
             instructions=self.instructions,
         )
-        kwargs: dict[str, Any] = dict(self.completion)
+        kwargs: dict[str, object] = dict(self.completion)
         if self.api_key:
             kwargs["api_key"] = self.api_key
         return await run_tool_loop(
@@ -262,7 +262,7 @@ class AIAgent(BaseAgent):
         return list(by_name.values())
 
 
-def _message_text(message: Any) -> str:
+def _message_text(message: object) -> str:
     if isinstance(message, str):
         return message
     content = getattr(message, "content", None)
@@ -271,7 +271,7 @@ def _message_text(message: Any) -> str:
     return _stringify(content)
 
 
-def _stringify(content: Any) -> str:
+def _stringify(content: object) -> str:
     if content is None:
         return ""
     if isinstance(content, str):
@@ -281,7 +281,7 @@ def _stringify(content: Any) -> str:
     return str(content)
 
 
-async def _litellm_complete(**kwargs: Any) -> Any:
+async def _litellm_complete(**kwargs: Any) -> object:
     try:
         import litellm
     except ImportError as exc:

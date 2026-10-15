@@ -12,6 +12,7 @@ import uuid
 from typing import Dict, List, Set, Tuple
 
 from qdrant_client import AsyncQdrantClient
+from qdrant_client.http import models as qdrant_models
 
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     Embeddings,
@@ -85,10 +86,9 @@ def string_to_uuid(string_id: str) -> str:
         A UUID version 4 compatible string derived from the hash of the input string
     """
     # Create an MD5 hash of the string (16 bytes)
-    hash_bytes = hashlib.md5(string_id.encode()).digest()
+    hash_bytes = bytearray(hashlib.md5(string_id.encode()).digest())
 
     # Set version bits for version 4 UUID (random)
-    hash_bytes = bytearray(hash_bytes)
     hash_bytes[6] = (hash_bytes[6] & 0x0F) | 0x40  # Version 4
     hash_bytes[8] = (hash_bytes[8] & 0x3F) | 0x80  # Variant RFC4122
 
@@ -98,7 +98,7 @@ def string_to_uuid(string_id: str) -> str:
 
 def _generate_points_for_registration(
     registration: AgentRegistration, embeddings_model: Embeddings
-) -> Tuple[List[any], Dict[str, AgentRegistration]]:
+) -> Tuple[List[qdrant_models.PointStruct], Dict[str, AgentRegistration]]:
     """
     Generates Qdrant PointStructs for an agent's profile, capabilities, and skills.
     Also returns a map of readable IDs to the registration object for these points.
@@ -360,7 +360,7 @@ def extract_capability_index(
     Returns:
         Dictionary mapping capability names to sets of agent IDs
     """
-    capability_index = {}
+    capability_index: Dict[str, Set[str]] = {}
 
     for agent_id, registration in agent_registrations.items():
         for capability in registration.capabilities:
@@ -374,7 +374,7 @@ def extract_capability_index(
     return capability_index
 
 
-async def main():
+async def main() -> None:
     #  Test usage
     from agentconnect.core.identity import AgentIdentity
     from agentconnect.core.profile import Skill
@@ -435,6 +435,8 @@ async def main():
     sync_client, async_client = await initialize_qdrant_clients(vs)
     collection_name = "test_indexing_collection"  # Using a distinct name for this test
     embeddings_model = create_embeddings(vs)
+    if async_client is None or embeddings_model is None:
+        raise RuntimeError("Indexing example dependencies could not initialize")
     agent_registrations = {"test_agent": registration}
     collection_initialized = await init_qdrant_collection(
         async_client=async_client,
@@ -466,7 +468,7 @@ async def main():
     print("===========[Generated Points]===========")
     print(f"Generated {len(points)} points:")  # More concise
     for p in points:
-        print(f"  ID: {p.id}, Type: {p.payload['doc_type']}")
+        print(f"  ID: {p.id}, Type: {(p.payload or {})['doc_type']}")
     print("===========[Generated Points]===========")
     print("===========[Capability to Agent Map from _generate_points]===========")
     print(

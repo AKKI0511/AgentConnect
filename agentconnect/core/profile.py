@@ -1,9 +1,4 @@
-"""Discovery Profile and Skill.
-
-A Profile describes what an Agent can do. Identity, name, and Address
-(the Agent's `name` or `name@team` locator) live on `DirectoryEntry`,
-not here.
-"""
+"""Profiles and Skills that help agents choose a teammate."""
 
 from __future__ import annotations
 
@@ -18,29 +13,15 @@ __all__ = ["Skill", "AgentProfile"]
 
 
 class Skill(SchemaModel):
-    """One thing an Agent claims it can do, described in natural language.
+    """One kind of work an agent claims it can do.
 
-    A Skill has no input or output schema. Callers send free-form content
-    to the Agent; they do not invoke a typed signature.
+    Describe suitable inputs and the help a caller can expect. A Skill describes
+    free-form work; it does not define a callable input or output schema.
 
     Attributes:
-        name: Stable lowercase identifier, unique within the Profile. Not
-            an Address or a Runtime operation name.
-        description: What the Skill does.
-        examples: Short natural-language illustrations, at most 10.
-        tags: Lowercase labels for this Skill. They appear only on the
-            full Profile, not on the light Directory card.
-
-    Examples:
-        ```python
-        from agentconnect.core.profile import Skill
-
-        Skill(
-            name="drafting",
-            description="Turn notes into a short draft.",
-            examples=["Draft two paragraphs from these bullets."],
-        )
-        ```
+        name: Stable identifier, unique within the Profile; not an Address.
+        examples: Natural-language illustrations of suitable requests.
+        tags: Labels visible on the full Profile, rather than the discovery card.
     """
 
     name: str = Field(pattern=r"^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?$")
@@ -58,35 +39,33 @@ class Skill(SchemaModel):
 
 
 class AgentProfile(SchemaModel):
-    """Discovery information for an Agent.
+    """Discovery information other agents use to choose work for this agent.
 
-    `summary` is the cheap Directory card line. `description` is the
-    longer explanation on the full Profile. Profile `tags` appear on
-    the light card; Skill `tags` appear only on the full Profile.
-
-    Identity, name, Address, presence, and Session data do not belong here.
+    The summary, Skill names and Profile tags appear on discovery matches.
+    The full Profile adds the description, Skill descriptions and examples.
+    Identity and Address belong to the Directory entry.
 
     Attributes:
-        summary: Short line shown on a ranked Directory match.
-        skills: One to 50 Skills. Names must be unique in this list.
-        description: Longer explanation of suitable work and boundaries.
-            Present on the full Profile, not on the light `find` card.
-        tags: Lowercase labels for the Agent as a whole. Duplicate tags
-            are invalid.
+        skills: Names must be unique within this Profile.
+        description: Suitable work and boundaries to consider before asking for help.
+        tags: Labels for the agent as a whole; repeated labels are invalid.
 
     Examples:
+        Describe a writer who can turn research into a release note:
+
         ```python
         from agentconnect.core.profile import AgentProfile, Skill
 
-        AgentProfile(
-            summary="Writes short drafts from notes.",
+        profile = AgentProfile(
+            summary="Writes release notes from engineering findings.",
             skills=[
                 Skill(
-                    name="drafting",
-                    description="Turn notes into a short draft.",
+                    name="release-notes",
+                    description="Turn changes and user impact into a release note.",
+                    examples=["Explain the faster search and who benefits from it."],
                 )
             ],
-            description="Hire for first drafts, not final copy-edits.",
+            description="Provide the findings and intended audience. Does not verify claims.",
             tags=["writing"],
         )
         ```

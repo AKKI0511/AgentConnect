@@ -19,7 +19,9 @@ Examples:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
+
+from agentconnect.core.base import JsonObject
 
 from agentconnect.transport.runtime import TransportError
 
@@ -44,7 +46,7 @@ class SessionError(Exception):
         code: str,
         message: str,
         *,
-        details: Optional[dict[str, Any]] = None,
+        details: Optional[JsonObject] = None,
         retryable: Optional[bool] = None,
     ) -> None:
         """Record the public error `code` and human-readable `message`.

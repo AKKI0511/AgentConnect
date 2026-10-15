@@ -12,7 +12,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import BinaryIO, Iterator, Optional
 
 from agentconnect.cli.process import inspect_process, process_created_token
 
@@ -44,7 +44,7 @@ def write_state(
     path = state_path(resolved)
     path.parent.mkdir(parents=True, exist_ok=True)
     token = created if created is not None else process_created_token(pid)
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "pid": int(pid),
         "url": url,
         "team": team,
@@ -80,7 +80,7 @@ def publish_state(
 
 
 def _require_replaceable(
-    existing: dict[str, Any],
+    existing: dict[str, object],
     *,
     pid: int,
     created: str,
@@ -110,7 +110,7 @@ def _require_replaceable(
     raise RuntimeError("cannot verify existing Team process identity")
 
 
-def read_state(config_path: Path) -> Optional[dict[str, Any]]:
+def read_state(config_path: Path) -> Optional[dict[str, object]]:
     """Return saved state for this Team file, or None when missing."""
     path = state_path(config_path)
     if not path.is_file():
@@ -180,7 +180,7 @@ def _state_lock(config_path: Path) -> Iterator[None]:
         fh.close()
 
 
-def _lock_file(fh: Any) -> None:
+def _lock_file(fh: BinaryIO) -> None:
     deadline = time.monotonic() + _LOCK_WAIT_SECONDS
     if fh.seek(0, os.SEEK_END) == 0:
         fh.write(b"\0")
@@ -203,7 +203,7 @@ def _lock_file(fh: Any) -> None:
             time.sleep(0.05)
 
 
-def _unlock_file(fh: Any) -> None:
+def _unlock_file(fh: BinaryIO) -> None:
     if sys.platform == "win32":
         import msvcrt
 

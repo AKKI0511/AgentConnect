@@ -114,7 +114,7 @@ Default: `None`.
 ### `settings_customise_sources`
 
 ```python
-settings_customise_sources(settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings)
+settings_customise_sources(settings_cls: type[BaseSettings], init_settings: PydanticBaseSettingsSource, env_settings: PydanticBaseSettingsSource, dotenv_settings: PydanticBaseSettingsSource, file_secret_settings: PydanticBaseSettingsSource) -> tuple[PydanticBaseSettingsSource, ...]
 ```
 
 Use a lenient env source to avoid hard JSON parsing for complex fields.

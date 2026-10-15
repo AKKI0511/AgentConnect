@@ -5,8 +5,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from datetime import timedelta
-from typing import Any, Callable, Mapping, NoReturn, Optional, Sequence, Union
+from datetime import datetime, timedelta
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Mapping,
+    NoReturn,
+    Optional,
+    Sequence,
+    TypedDict,
+    Union,
+)
+from types import TracebackType
+from contextlib import AbstractAsyncContextManager
 
 from pydantic import ValidationError
 
@@ -26,11 +38,16 @@ from agentconnect.core.address import (
     parse_team_name,
     resolve_address,
 )
-from agentconnect.core.base import dump_public, validation_message
+from agentconnect.core.base import JsonObject, dump_public, validation_message
 from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.operations import (
+    ReplyFailureRequest,
+    ReplySuccessRequest,
+    ReplyRequest,
+    SendRequest,
+    JoinRequest,
     CompleteResult,
     HeartbeatResult,
     HistoryResult,
@@ -52,7 +69,7 @@ from agentconnect.core.operations import (
     parse_send_request,
     parse_send_result,
 )
-from agentconnect.core.primitives import DeliveryHistoryForm
+from agentconnect.core.primitives import DeliveryHistoryForm, PersistenceMode
 from agentconnect.core.profile import AgentProfile
 from agentconnect.core.spec import SPEC_VERSION
 from agentconnect.core.ticket import Ticket, parse_ticket
@@ -119,16 +136,26 @@ from agentconnect.team.transitions.send import (
     load_replay,
 )
 
+if TYPE_CHECKING:
+    from mcp.server import Server
+    from uvicorn import Server as UvicornServer
+
+
+class _HeldWait(TypedDict):
+    acquired: bool
+    name: str
+
+
 logger = logging.getLogger(__name__)
 
 _StoreArg = Union[Store, str, None]
 
 
-def _fail(code: str, message: str, **kwargs: Any) -> NoReturn:
-    raise TeamError(code, message, **kwargs)
+def _fail(code: str, message: str) -> NoReturn:
+    raise TeamError(code, message)
 
 
-def _is_principal(member: Mapping[str, Any] | None) -> bool:
+def _is_principal(member: Mapping[str, object] | None) -> bool:
     """Return True when ``member`` may act but must not be hired."""
     if not isinstance(member, Mapping):
         return False
@@ -137,7 +164,7 @@ def _is_principal(member: Mapping[str, Any] | None) -> bool:
     return member.get("name") == OPERATOR_NAME
 
 
-def _membership_id(record: Mapping[str, Any], field: str = "membership_id") -> str:
+def _membership_id(record: Mapping[str, object], field: str = "membership_id") -> str:
     """Return a required Membership identity field from ``record``."""
     value = record.get(field)
     if not isinstance(value, str) or not value:
@@ -145,7 +172,7 @@ def _membership_id(record: Mapping[str, Any], field: str = "membership_id") -> s
     return value
 
 
-def _session_did(session: Mapping[str, Any]) -> str:
+def _session_did(session: Mapping[str, object]) -> str:
     """Return the DID stamped on this Session at join."""
     value = session.get("agent_did")
     if not isinstance(value, str) or not value:
@@ -193,7 +220,7 @@ class Team:
         join_challenge_ttl_seconds: float = DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
         join_token_ttl_seconds: float = DEFAULT_JOIN_TOKEN_TTL_SECONDS,
         embeddings: EmbeddingsArg = "auto",
-        tools: Sequence[Callable[..., Any]] | None = None,
+        tools: Sequence[Callable[..., object]] | None = None,
     ) -> None:
         """Create a stopped Team.
 
@@ -308,27 +335,27 @@ class Team:
             seen.add(name)
         self._extra_tools = extras
         self._operator_token: Optional[str] = None
-        self._mcp: Any = None
-        self._mcp_session_cm: Any = None
+        self._mcp: Server[dict[str, object]] | None = None
+        self._mcp_session_cm: AbstractAsyncContextManager[None] | None = None
         self._directory: Optional[_Directory] = None
         self._identity: Optional[AgentIdentity] = None
         self._keys = KeyedLock()
         self._waiters: dict[str, list[asyncio.Event]] = {}
         self._session_wake: dict[str, list[asyncio.Event]] = {}
         self._work_waiters: dict[str, list[asyncio.Event]] = {}
-        self._sse_subscribers: dict[str, list[asyncio.Queue]] = {}
-        self._trace_subscribers: list[tuple[str, asyncio.Queue]] = []
+        self._sse_subscribers: dict[str, list[asyncio.Queue[JsonObject | None]]] = {}
+        self._trace_subscribers: list[tuple[str, asyncio.Queue[JsonObject | None]]] = []
         self._session_tokens_by_member: dict[str, set[str]] = {}
-        self._sweep_task: Optional[asyncio.Task] = None
-        self._http_server: Any = None
-        self._http_task: Optional[asyncio.Task] = None
+        self._sweep_task: Optional[asyncio.Task[None]] = None
+        self._http_server: UvicornServer | None = None
+        self._http_task: Optional[asyncio.Task[None]] = None
         self._http_url: Optional[str] = None
         self._http_port: Optional[int] = None
         self._started = False
-        self._last_now = None
+        self._last_now: datetime | None = None
 
     @property
-    def persistence(self) -> str:
+    def persistence(self) -> PersistenceMode:
         """`volatile` for the memory store, or `durable` for Redis.
 
         Before `start`, this reports the built-in store selection. After
@@ -467,7 +494,12 @@ class Team:
         """Start the Team and return it."""
         return await self.start()
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """Stop the Team, including a listener from `serve`."""
         await self.stop()
 
@@ -530,18 +562,20 @@ class Team:
                 if not waiters:
                     self._work_waiters.pop(name, None)
 
-    async def _subscribe_events(self, session_token: str) -> asyncio.Queue:
+    async def _subscribe_events(
+        self, session_token: str
+    ) -> asyncio.Queue[JsonObject | None]:
         """Attach an SSE queue to this Session. The caller must unsubscribe."""
         session = await self._require_session(session_token)
         self._session_tokens_by_member.setdefault(
             session["membership_name"], set()
         ).add(session_token)
-        queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+        queue: asyncio.Queue[JsonObject | None] = asyncio.Queue(maxsize=32)
         self._sse_subscribers.setdefault(session_token, []).append(queue)
         return queue
 
     async def _unsubscribe_events(
-        self, session_token: str, queue: asyncio.Queue
+        self, session_token: str, queue: asyncio.Queue[JsonObject | None]
     ) -> None:
         """Detach an SSE queue previously returned by ``_subscribe_events``."""
         queues = self._sse_subscribers.get(session_token)
@@ -707,7 +741,6 @@ class Team:
             lifespan="on",
         )
         server = uvicorn.Server(config)
-        server.install_signal_handlers = False
         self._http_server = server
         loop = asyncio.get_running_loop()
         self._http_task = loop.create_task(server.serve())
@@ -783,7 +816,7 @@ class Team:
             return RedisStore(store, prefix=f"ac:{self.name}")
         raise ValueError("store must be 'memory', a Redis URL, or a Store")
 
-    def _now_pair(self):
+    def _now_pair(self) -> tuple[datetime, str]:
         now = utc_now()
         if self._last_now is not None and now <= self._last_now:
             now = self._last_now + timedelta(microseconds=1)
@@ -835,7 +868,7 @@ class Team:
                 restored[name] = live
         self._session_tokens_by_member = restored
 
-    async def _member_is_online(self, name: str, now) -> bool:
+    async def _member_is_online(self, name: str, now: datetime) -> bool:
         """Return True when stored Sessions for ``name`` include an unexpired one."""
         store = self._ensure_started()
         for token in await store.set_members(self._member_sessions_key(name)):
@@ -848,7 +881,7 @@ class Team:
 
     async def _trim_thread(self, thread_id: str) -> None:
         store = self._ensure_started()
-        from agentconnect.team.store.ops import Cas
+        from agentconnect.team.store.ops import Cas, StoreOp
 
         while True:
             record = await store.get_record(threads_mod.thread_key(thread_id))
@@ -862,7 +895,9 @@ class Team:
             if not dropped:
                 return
             thread["message_ids"] = kept
-            ops = [Cas(threads_mod.thread_key(thread_id), record.version, thread)]
+            ops: list[StoreOp] = [
+                Cas(threads_mod.thread_key(thread_id), record.version, thread)
+            ]
             body_ops, freed = await retention_mod.release_body_deletes(
                 store,
                 dropped,
@@ -887,7 +922,12 @@ class Team:
 
     async def _get_member(self, name: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
-        return await store.get(f"member:{name}")
+        record = await store.get(f"member:{name}")
+        if record is None:
+            return None
+        if not isinstance(record, dict):
+            _fail("internal", "Stored Membership must be an object")
+        return record
 
     async def _get_member_by_did(self, agent_did: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
@@ -907,6 +947,8 @@ class Team:
         record = await store.get(f"session:{token}")
         if record is None:
             return None
+        if not isinstance(record, dict):
+            _fail("internal", "Stored Session must be an object")
         return record
 
     async def _save_session(self, session: dict[str, Any]) -> None:
@@ -938,7 +980,7 @@ class Team:
                 queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
-        remaining: list[tuple[str, asyncio.Queue]] = []
+        remaining: list[tuple[str, asyncio.Queue[JsonObject | None]]] = []
         for queued_token, queue in self._trace_subscribers:
             if queued_token == token:
                 try:
@@ -1043,7 +1085,7 @@ class Team:
             team_name=self.name,
             agent_did=member["agent_did"],
             instance_id=session["instance_id"],
-            persistence=self.persistence,  # type: ignore[arg-type]
+            persistence=self.persistence,
             limits=self.limits,
             spec_version=SPEC_VERSION,
         )
@@ -1052,7 +1094,7 @@ class Team:
         self,
         name: str | None = None,
         agent_did: str | None = None,
-        profile: Mapping[str, Any] | None = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         *,
         spec_version: str = SPEC_VERSION,
         instance_id: str | None = None,
@@ -1060,7 +1102,7 @@ class Team:
         join_token: str | None = None,
         identity_proof: str | None = None,
         delivery_history: DeliveryHistoryForm | None = None,
-        request: Mapping[str, Any] | None = None,
+        request: JoinRequest | Mapping[str, object] | None = None,
     ) -> JoinResult:
         """Create or reconnect a Membership and open a Session.
 
@@ -1083,7 +1125,7 @@ class Team:
             max_in_flight: Simultaneous Deliveries per Session, from 1 to 100.
             join_token: Credential from `issue_join_token`.
             identity_proof: EdDSA JWT over a join challenge.
-            request: `JoinRequest` mapping supplying the join arguments.
+            request: `JoinRequest` or raw mapping supplying the join arguments.
 
         Raises:
             TeamError: Invalid input (`invalid_request`), different contract
@@ -1092,7 +1134,7 @@ class Team:
                 instances (`busy`), or stopped Team (`unavailable`).
         """
         if request is not None:
-            if not isinstance(request, Mapping):
+            if not isinstance(request, (JoinRequest, Mapping)):
                 _fail("invalid_request", "join body must be an object")
             version = request.get("spec_version")
             if isinstance(version, str) and version != SPEC_VERSION:
@@ -1105,7 +1147,7 @@ class Team:
                 _fail("invalid_request", str(exc))
             name = parsed.name
             agent_did = parsed.agent_did
-            profile = parsed.profile.to_public_dict()
+            profile = parsed.profile
             spec_version = parsed.spec_version
             instance_id = parsed.instance_id
             if parsed.max_in_flight is not None:
@@ -1151,7 +1193,7 @@ class Team:
         *,
         name: str | None,
         agent_did: str | None,
-        profile: Mapping[str, Any] | None,
+        profile: AgentProfile | Mapping[str, object] | None,
         spec_version: str,
         instance_id: str | None,
         max_in_flight: int,
@@ -1217,7 +1259,7 @@ class Team:
         if by_name is None and by_did is None:
             created = True
             await mailbox_mod.drop_mailbox(store, f"{canonical_name}@{self.name}")
-            member = {
+            member: dict[str, Any] = {
                 "membership_id": new_uuid(),
                 "name": canonical_name,
                 "address": f"{canonical_name}@{self.name}",
@@ -1630,7 +1672,9 @@ class Team:
 
     # Session transport. HTTP, MCP, and in-process Session call these by name.
 
-    async def send(self, session_token: str, request: Mapping[str, Any]) -> SendResult:
+    async def send(
+        self, session_token: str, request: SendRequest | Mapping[str, object]
+    ) -> SendResult:
         """Accept one request or event for one recipient in this Team.
 
         Agent code uses `BaseAgent.ask` or `BaseAgent.tell`.
@@ -1698,7 +1742,7 @@ class Team:
         waiter: asyncio.Event | None = None
         ticket_id: str | None = None
         deadline_dt = None
-        hold = {"acquired": False, "name": ""}
+        hold: _HeldWait = {"acquired": False, "name": ""}
         try:
             async with self._keys.acquire(f"session:{session_token}"):
                 result, wait_for = await self._send_locked(session_token, request, hold)
@@ -1733,9 +1777,9 @@ class Team:
     async def _send_locked(
         self,
         session_token: str,
-        request: Mapping[str, Any],
-        hold: dict[str, Any],
-    ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
+        request: Mapping[str, object],
+        hold: _HeldWait,
+    ) -> tuple[dict[str, Any], Optional[tuple[str, datetime]]]:
         session = await self._require_session(session_token)
         if not isinstance(request, Mapping):
             _fail("invalid_request", "send body must be an object")
@@ -1962,6 +2006,7 @@ class Team:
 
         ticket = None
         if deadline_dt is not None:
+            assert isinstance(deadline_raw, str)
             ticket = tickets_mod.new_open_ticket(
                 ticket_id=message_id,
                 requester=sender,
@@ -2052,10 +2097,10 @@ class Team:
         result: dict[str, Any],
         *,
         message_id: str,
-        collect: Any,
+        collect: object,
         membership_id: str,
-        hold: dict[str, Any],
-    ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
+        hold: _HeldWait,
+    ) -> tuple[dict[str, Any], Optional[tuple[str, datetime]]]:
         """Return a stored send result, holding wait only when a slot is free."""
         if result.get("status") == "ticketed":
             current = await self._expire_ticket_if_due(message_id)
@@ -2073,9 +2118,9 @@ class Team:
 
     async def _hold_wait_slot(
         self,
-        collect: Any,
+        collect: object,
         membership_id: str,
-        hold: dict[str, Any],
+        hold: _HeldWait,
         *,
         required: bool,
     ) -> bool:
@@ -2093,7 +2138,11 @@ class Team:
         return False
 
     async def _wait_until_terminal(
-        self, session_token: str, ticket_id: str, deadline_dt, event: asyncio.Event
+        self,
+        session_token: str,
+        ticket_id: str,
+        deadline_dt: datetime,
+        event: asyncio.Event,
     ) -> dict[str, Any]:
         hold_until = utc_now() + timedelta(seconds=self.wait_hold_seconds)
         while True:
@@ -2298,7 +2347,7 @@ class Team:
                 _fail("lease_expired", "Delivery lease is no longer active")
             return RenewResult(lease_id=lease_id, lease_expires_at=expires_at)
 
-    async def _lease_still_active(self, lease_id: str, now) -> bool:
+    async def _lease_still_active(self, lease_id: str, now: datetime) -> bool:
         store = self._ensure_started()
         record = await mailbox_mod.get_lease(store, lease_id)
         if record is None:
@@ -2461,7 +2510,7 @@ class Team:
             )
 
     async def reply(
-        self, session_token: str, request: Mapping[str, Any]
+        self, session_token: str, request: ReplyRequest | Mapping[str, object]
     ) -> ReplyResult:
         """Finish a reply-expected Delivery with content or an error.
 
@@ -2490,9 +2539,14 @@ class Team:
                 longer active (`lease_expired`), or the Ticket is already
                 terminal (`ticket_closed`).
         """
-        if not isinstance(request, Mapping):
+        if not isinstance(request, (ReplySuccessRequest, ReplyFailureRequest, Mapping)):
             _fail("invalid_request", "reply body must be an object")
-        if json_size(dict(request)) > self.max_message_bytes:
+        size_body = (
+            request.to_public_dict()
+            if isinstance(request, (ReplySuccessRequest, ReplyFailureRequest))
+            else dict(request)
+        )
+        if json_size(size_body) > self.max_message_bytes:
             _fail("payload_too_large", "reply body exceeds max_message_bytes")
         try:
             parsed_reply = parse_reply_request(request)
@@ -2684,7 +2738,7 @@ class Team:
                 projection_mod.public_ticket_result(accepted.result)
             )
 
-    def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
+    def _validate_error_object(self, error: Mapping[str, object]) -> JsonObject:
         try:
             return ErrorObject.model_validate(error).to_public_dict()
         except ValidationError as exc:
@@ -2992,15 +3046,17 @@ class Team:
             projection_mod.public_trace_result({"trace_id": trace_id, "events": events})
         )
 
-    async def _subscribe_trace_events(self, session_token: str) -> asyncio.Queue:
+    async def _subscribe_trace_events(
+        self, session_token: str
+    ) -> asyncio.Queue[JsonObject | None]:
         """Attach a watch queue for new Trace events. Operator only."""
         await self._require_operator(session_token)
-        queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+        queue: asyncio.Queue[JsonObject | None] = asyncio.Queue(maxsize=64)
         self._trace_subscribers.append((session_token, queue))
         return queue
 
     async def _unsubscribe_trace_events(
-        self, session_token: str, queue: asyncio.Queue
+        self, session_token: str, queue: asyncio.Queue[JsonObject | None]
     ) -> None:
         """Detach a queue previously returned by ``_subscribe_trace_events``."""
         self._trace_subscribers = [
@@ -3177,7 +3233,7 @@ def _is_loopback(host: str) -> bool:
     return True
 
 
-def _bound_socket(server: Any) -> tuple[str, int]:
+def _bound_socket(server: UvicornServer) -> tuple[str, int]:
     """Return (host, port) for a started uvicorn Server."""
     servers = getattr(server, "servers", None) or []
     for http_server in servers:

@@ -6,7 +6,9 @@ of Telegram messages through the AgentConnect framework.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, TypedDict
+
+from agentconnect.core.base import JsonObject
 
 from aiogram import types
 
@@ -15,6 +17,14 @@ from agentconnect.prebuilt.telegram._utils.message_utils import (
     remove_bot_mention_from_text,
 )
 from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
+
+
+class _TelegramPayload(TypedDict):
+    content: str
+    chat_id: int
+    reply_to_message_id: int | None
+    metadata: JsonObject
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +40,7 @@ class TelegramMessageProcessor:
 
     def __init__(
         self, agent_id: str, identity: AgentIdentity, bot_manager: TelegramBotManager
-    ):
+    ) -> None:
         """
         Initialize the message processor.
 
@@ -43,7 +53,9 @@ class TelegramMessageProcessor:
         self.identity = identity
         self.bot_manager = bot_manager
 
-    async def process_group_mention(self, message: types.Message):
+    async def process_group_mention(
+        self, message: types.Message
+    ) -> _TelegramPayload | None:
         """
         Process a group mention.
 
@@ -74,8 +86,11 @@ class TelegramMessageProcessor:
         if not content:
             content = "Hello"
 
+        # The handler requires a sender, as do the fields read below.
+        assert message.from_user is not None
+
         # Create message metadata
-        metadata = {
+        metadata: JsonObject = {
             "telegram_user_id": str(message.from_user.id),
             "telegram_chat_id": str(message.chat.id),
             "is_telegram_message": True,
@@ -100,7 +115,9 @@ class TelegramMessageProcessor:
         # Process the message and return the AgentConnect message
         return self._payload(content, metadata)
 
-    async def process_media_message(self, message: types.Message, media_type: str):
+    async def process_media_message(
+        self, message: types.Message, media_type: str
+    ) -> _TelegramPayload | None:
         """
         Process a media message.
 
@@ -122,7 +139,7 @@ class TelegramMessageProcessor:
 
         # Create message content based on media type
         content_text = ""
-        metadata = {
+        metadata: JsonObject = {
             "telegram_user_id": str(message.from_user.id),
             "telegram_chat_id": str(message.chat.id),
             "is_telegram_message": True,
@@ -135,6 +152,7 @@ class TelegramMessageProcessor:
 
         # Add information based on media type
         if media_type == "photo":
+            assert message.photo is not None
             # Get the highest quality photo (last in array)
             photo = message.photo[-1]
             file_id = photo.file_id
@@ -147,6 +165,7 @@ class TelegramMessageProcessor:
             content_text += f". You can use the file_id: {file_id} in your tools to process it further.]"
 
         elif media_type == "document":
+            assert message.document is not None
             file_id = message.document.file_id
             metadata["file_id"] = file_id
             metadata["file_size"] = message.document.file_size
@@ -161,6 +180,7 @@ class TelegramMessageProcessor:
             content_text += f". You can use the file_id: {file_id} in your tools to process it further.]"
 
         elif media_type == "voice":
+            assert message.voice is not None
             file_id = message.voice.file_id
             metadata["file_id"] = file_id
             metadata["duration"] = message.voice.duration
@@ -171,6 +191,7 @@ class TelegramMessageProcessor:
             content_text += f"You can use the file_id: {file_id} in your tools to process it further.]"
 
         elif media_type == "audio":
+            assert message.audio is not None
             file_id = message.audio.file_id
             metadata["file_id"] = file_id
             metadata["duration"] = message.audio.duration
@@ -185,11 +206,13 @@ class TelegramMessageProcessor:
             content_text += f". You can use the file_id: {file_id} in your tools to process it further.]"
 
         elif media_type == "location":
+            assert message.location is not None
             metadata["latitude"] = message.location.latitude
             metadata["longitude"] = message.location.longitude
             content_text = f"[The user shared a location at latitude: {message.location.latitude}, longitude: {message.location.longitude}]"
 
         elif media_type == "video":
+            assert message.video is not None
             file_id = message.video.file_id
             metadata["file_id"] = file_id
             metadata["duration"] = message.video.duration
@@ -203,6 +226,7 @@ class TelegramMessageProcessor:
             content_text += f". You can use the file_id: {file_id} in your tools to process it further.]"
 
         elif media_type == "sticker":
+            assert message.sticker is not None
             file_id = message.sticker.file_id
             metadata["file_id"] = file_id
             metadata["emoji"] = message.sticker.emoji
@@ -225,7 +249,9 @@ class TelegramMessageProcessor:
 
         return self._payload(content_text, metadata)
 
-    async def process_text_message(self, message: types.Message):
+    async def process_text_message(
+        self, message: types.Message
+    ) -> _TelegramPayload | None:
         """
         Process a text message.
 
@@ -250,7 +276,7 @@ class TelegramMessageProcessor:
 
         # Create message content and metadata
         content = message.text or ""
-        metadata = {
+        metadata: JsonObject = {
             "telegram_user_id": str(message.from_user.id),
             "telegram_chat_id": str(message.chat.id),
             "is_telegram_message": True,
@@ -290,7 +316,7 @@ class TelegramMessageProcessor:
 
         return self._payload(content, metadata)
 
-    def _payload(self, content: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _payload(self, content: str, metadata: Dict[str, Any]) -> _TelegramPayload:
         """Return extracted Telegram content for the model loop."""
         chat_raw = metadata.get("telegram_chat_id")
         reply_to = metadata.get("reply_to_message_id") or metadata.get(

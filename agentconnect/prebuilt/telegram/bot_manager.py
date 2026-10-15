@@ -7,7 +7,9 @@ providing a clean interface for the agent to interact with the bot.
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Callable, Optional, Set
+from collections.abc import Awaitable
+from agentconnect.core.base import JsonObject
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
@@ -31,7 +33,9 @@ class TelegramBotManager:
     and provides methods for interacting with the bot.
     """
 
-    def __init__(self, token: str, groups_file: str, agent_id: Optional[str] = None):
+    def __init__(
+        self, token: str, groups_file: str, agent_id: Optional[str] = None
+    ) -> None:
         """
         Initialize the bot manager.
 
@@ -49,10 +53,10 @@ class TelegramBotManager:
         self.dp: Optional[Dispatcher] = None
         self.me: Optional[types.User] = None
         self.telegram_tools: Optional[TelegramTools] = None
-        self.telegram_polling_task: Optional[asyncio.Task] = None
+        self.telegram_polling_task: Optional[asyncio.Task[None]] = None
 
         # Message processing tracking
-        self.processing_messages: Dict[int, int] = {}
+        self.processing_messages: dict[int, int] = {}
 
     def initialize_bot(self) -> bool:
         """
@@ -115,7 +119,9 @@ class TelegramBotManager:
             )
             return False
 
-    def register_shutdown_handler(self, callback: Callable) -> None:
+    def register_shutdown_handler(
+        self, callback: Callable[..., Awaitable[None]]
+    ) -> None:
         """
         Register a shutdown handler with the dispatcher.
 
@@ -196,7 +202,7 @@ class TelegramBotManager:
 
     async def send_message(
         self, chat_id: int, text: str, reply_to_message_id: Optional[int] = None
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Send a message to a Telegram chat.
 

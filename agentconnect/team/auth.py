@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from datetime import timedelta
-from typing import Any, Mapping, NoReturn, NotRequired, Optional, TypedDict
+from datetime import datetime, timedelta
+from typing import Mapping, NoReturn, NotRequired, Optional, TypedDict
 
 import agentconnect.team.expiry as expiry_mod
+from agentconnect.core.base import JsonObject
+from agentconnect.core.operations import JoinChallenge
 from agentconnect.core.identity import (
     AgentIdentity,
     issue_membership_attestation,
@@ -69,7 +71,7 @@ class JoinToken(TypedDict):
 class JoinCredentials:
     """Verified join credentials that have not yet been consumed."""
 
-    token_record: Optional[dict[str, Any]] = None
+    token_record: Optional[dict[str, object]] = None
     token_version: Optional[int] = None
     challenge_nonce: Optional[str] = None
     challenge_version: Optional[int] = None
@@ -80,7 +82,7 @@ def join_unauthorized() -> NoReturn:
     raise TeamError("unauthorized", JOIN_UNAUTH_MESSAGE)
 
 
-def _as_optional_str(value: Any) -> Optional[str]:
+def _as_optional_str(value: object) -> Optional[str]:
     if value is None:
         return None
     if isinstance(value, str) and value.strip():
@@ -94,7 +96,7 @@ async def create_join_challenge(
     *,
     ttl_seconds: float,
     max_outstanding: int,
-    now=None,
+    now: datetime | None = None,
 ) -> dict[str, str]:
     """Mint a one-time join challenge and persist it.
 
@@ -136,7 +138,7 @@ async def create_join_challenge(
         raise TeamError("internal", "join challenge failed")
 
 
-async def load_challenge(store: Store, nonce: str) -> Optional[dict[str, Any]]:
+async def load_challenge(store: Store, nonce: str) -> Optional[dict[str, object]]:
     """Return the stored challenge for ``nonce``, or None."""
     if not isinstance(nonce, str) or not nonce:
         return None
@@ -159,16 +161,17 @@ async def issue_join_token(
     name: Optional[str] = None,
     ttl_seconds: float,
     single_use: bool = False,
-    now=None,
+    now: datetime | None = None,
 ) -> JoinToken:
     """Issue an opaque join token scoped to this Team."""
     instant = now or utc_now()
     token = secrets.token_urlsafe(32)
     expires = instant + timedelta(seconds=float(ttl_seconds))
-    record: dict[str, Any] = {
+    expires_at = format_timestamp(expires)
+    record: dict[str, object] = {
         "token": token,
         "team": team_name,
-        "expires_at": format_timestamp(expires),
+        "expires_at": expires_at,
         "single_use": bool(single_use),
         "used": False,
         "revoked": False,
@@ -179,12 +182,10 @@ async def issue_join_token(
         record["name"] = name
     await store.put(f"{TOKEN_PREFIX}{token}", record)
     await store.set_add(TOKENS_SET, token)
-    await expiry_mod.schedule(
-        store, expiry_mod.JOIN_TOKENS, token, record["expires_at"]
-    )
+    await expiry_mod.schedule(store, expiry_mod.JOIN_TOKENS, token, expires_at)
     issued: JoinToken = {
         "token": token,
-        "expires_at": record["expires_at"],
+        "expires_at": expires_at,
         "single_use": bool(single_use),
     }
     if agent_did:
@@ -194,7 +195,7 @@ async def issue_join_token(
     return issued
 
 
-async def load_join_token(store: Store, token: str) -> Optional[dict[str, Any]]:
+async def load_join_token(store: Store, token: str) -> Optional[dict[str, object]]:
     """Return the stored join-token record, or None."""
     if not isinstance(token, str) or not token:
         return None
@@ -204,7 +205,7 @@ async def load_join_token(store: Store, token: str) -> Optional[dict[str, Any]]:
 
 async def revoke_join_token_record(
     store: Store, token: str
-) -> Optional[dict[str, Any]]:
+) -> Optional[dict[str, object]]:
     """Mark ``token`` revoked. Returns the record if it existed."""
     record = await load_join_token(store, token)
     if record is None:
@@ -237,7 +238,9 @@ async def tokens_bound_to_member(
     return found
 
 
-def _token_unexpired(record: Mapping[str, Any], *, now=None) -> bool:
+def _token_unexpired(
+    record: Mapping[str, object], *, now: datetime | None = None
+) -> bool:
     instant = now or utc_now()
     try:
         expires = parse_timestamp(str(record["expires_at"]))
@@ -247,7 +250,11 @@ def _token_unexpired(record: Mapping[str, Any], *, now=None) -> bool:
 
 
 def token_allows_join(
-    record: Mapping[str, Any], *, agent_did: str, name: str, now=None
+    record: Mapping[str, object],
+    *,
+    agent_did: str,
+    name: str,
+    now: datetime | None = None,
 ) -> bool:
     """Return True when this token may admit or reconnect this join."""
     if record.get("revoked"):
@@ -264,7 +271,9 @@ def token_allows_join(
     return True
 
 
-def token_matches_join(record: Mapping[str, Any], *, agent_did: str, name: str) -> bool:
+def token_matches_join(
+    record: Mapping[str, object], *, agent_did: str, name: str
+) -> bool:
     """Return True when bound DID/name (if any) match this join."""
     bound_did = record.get("agent_did")
     bound_name = record.get("name")
@@ -285,7 +294,7 @@ def consume_challenge_ops(nonce: str, version: int) -> list[StoreOp]:
 
 
 def token_join_ops(
-    record: Mapping[str, Any],
+    record: Mapping[str, object],
     version: int,
     *,
     name: str,
@@ -315,7 +324,7 @@ async def inspect_join_credentials(
     join_token: Optional[str],
     identity_proof: Optional[str],
     require_auth: bool,
-    now=None,
+    now: datetime | None = None,
 ) -> JoinCredentials:
     """Verify join credentials without consuming them.
 
@@ -342,6 +351,7 @@ async def inspect_join_credentials(
         ):
             join_unauthorized()
         creds.token_record = dict(token_record)
+        assert token_row is not None
         creds.token_version = token_row.version
 
     if proof_value:
@@ -368,12 +378,13 @@ async def inspect_join_credentials(
             verify_identity_proof(
                 proof_value,
                 agent_did=agent_did,
-                challenge=challenge,
+                challenge=JoinChallenge.model_validate(challenge),
                 now=instant,
             )
         except ValueError:
             join_unauthorized()
         creds.challenge_nonce = nonce
+        assert challenge_row is not None
         creds.challenge_version = challenge_row.version
     elif require_auth:
         join_unauthorized()
@@ -381,7 +392,7 @@ async def inspect_join_credentials(
     return creds
 
 
-def split_proof_nonce(token: str) -> dict[str, Any]:
+def split_proof_nonce(token: str) -> JsonObject:
     """Read unverified JWT payload so the challenge can be loaded."""
     from agentconnect.core.identity import split_jwt
 
@@ -396,7 +407,7 @@ def mint_member_attestation(
     name: str,
     address: str,
     team_name: str,
-    now=None,
+    now: datetime | None = None,
 ) -> Optional[str]:
     """Mint a membership attestation, or None when the DID is not Ed25519."""
     try:
@@ -412,7 +423,7 @@ def mint_member_attestation(
         return None
 
 
-async def sweep_join_state(store: Store, now=None) -> None:
+async def sweep_join_state(store: Store, now: datetime | None = None) -> None:
     """Drop expired challenges and expired join tokens from the due indexes."""
     instant = now or utc_now()
     for nonce in await expiry_mod.due(store, expiry_mod.JOIN_CHALLENGES, instant):

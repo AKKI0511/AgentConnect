@@ -42,6 +42,20 @@ jobs:
           npm --prefix spec/schema ci
           npm --prefix spec/schema run check
 
+  types:
+    name: Framework types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+      - name: Strict framework and runtime conformance
+        run: uv run --locked --all-extras mypy
+
   tests:
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
@@ -119,7 +133,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [checks, tests, windows-imports, package]
+    needs: [checks, types, tests, windows-imports, package]
     runs-on: ubuntu-latest
     steps:
-      - run: test "${{ join(needs.*.result, ',') }}" = "success,success,success,success"
+      - run: test "${{ join(needs.*.result, ',') }}" = "success,success,success,success,success"

@@ -71,7 +71,7 @@ write or disguising an unknown outcome as a conflict.
 ### `persistence`
 
 ```python
-persistence: str
+persistence: PersistenceMode
 ```
 
 `volatile` for process memory, or `durable` for persistent storage.
@@ -107,7 +107,7 @@ Release backend resources.
 ### `get`
 
 ```python
-get(key: str) -> Any | None
+get(key: str) -> Any
 ```
 
 Return a copy of the stored value, or None when the key is missing.
@@ -119,7 +119,7 @@ Return a copy of the stored value, or None when the key is missing.
 ### `get_many`
 
 ```python
-get_many(keys: Sequence[str]) -> list[Any | None]
+get_many(keys: Sequence[str]) -> list[Any]
 ```
 
 Return copied values in input order; missing keys are None.
@@ -146,7 +146,7 @@ Return a copied value and its version, or None when the key is missing.
 ### `put`
 
 ```python
-put(key: str, value: Any) -> None
+put(key: str, value: object) -> None
 ```
 
 Write a copy of `value`, starting at version 1 or incrementing it.
@@ -158,7 +158,7 @@ Write a copy of `value`, starting at version 1 or incrementing it.
 ### `insert`
 
 ```python
-insert(key: str, value: Any) -> bool
+insert(key: str, value: object) -> bool
 ```
 
 Atomically insert a copy at version 1 if the key is absent.
@@ -172,7 +172,7 @@ Return True if inserted, or False with the existing value unchanged.
 ### `compare_and_set`
 
 ```python
-compare_and_set(key: str, version: int, value: Any) -> bool
+compare_and_set(key: str, version: int, value: object) -> bool
 ```
 
 Atomically replace `key` when its stored version equals `version`.

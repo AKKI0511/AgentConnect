@@ -29,7 +29,7 @@ Examples:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .ai_agent import AIAgent, CompletionOptions
 from .loop import CompletionFn
@@ -49,7 +49,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     if name == "HumanAgent":
         try:
             from .human_agent import HumanAgent

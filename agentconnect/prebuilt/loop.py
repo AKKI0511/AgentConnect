@@ -29,6 +29,8 @@ import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional, Protocol
 
+from agentconnect.core.message import Message
+
 from agentconnect.agent.tools import ToolLike, _call_tool, _ensure_tool
 
 logger = logging.getLogger(__name__)
@@ -60,17 +62,17 @@ class CompletionFn(Protocol):
     and others) are forwarded unchanged.
     """
 
-    async def __call__(self, **kwargs: Any) -> Any: ...
+    async def __call__(self, **kwargs: Any) -> object: ...
 
 
 async def run_tool_loop(
     *,
     complete: CompletionFn,
     model: str,
-    messages: Sequence[Mapping[str, Any]],
+    messages: Sequence[Mapping[str, object]],
     tools: Sequence[ToolLike] | None = None,
     max_rounds: int = DEFAULT_MAX_ROUNDS,
-    **complete_kwargs: Any,
+    **complete_kwargs: object,
 ) -> str:
     """Call `complete` until the model returns text or raise on exhaustion.
 
@@ -106,12 +108,12 @@ async def run_tool_loop(
     """
     if max_rounds < 1:
         raise ValueError("max_rounds must be at least 1")
-    history: list[dict[str, Any]] = [dict(item) for item in messages]
+    history: list[dict[str, object]] = [dict(item) for item in messages]
     resolved = [_ensure_tool(item) for item in tools or ()]
     by_name = {tool.name: tool for tool in resolved}
     schemas = [tool.openai_schema() for tool in by_name.values()]
     for round_index in range(max_rounds):
-        kwargs: dict[str, Any] = {
+        kwargs: dict[str, object] = {
             "model": model,
             "messages": history,
             **complete_kwargs,
@@ -150,12 +152,12 @@ async def run_tool_loop(
 
 
 def messages_from_thread(
-    history: Sequence[Any],
-    current: Any,
+    history: Sequence[Message | Mapping[str, object]],
+    current: Message | Mapping[str, object] | str,
     *,
     self_address: Optional[str] = None,
     instructions: Optional[str] = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Build a chat history from Runtime Messages (`ctx.history` plus this turn).
 
     Args:
@@ -174,14 +176,14 @@ def messages_from_thread(
         )
         ```
     """
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, object]] = []
     if instructions:
         out.append({"role": "system", "content": instructions})
     for item in history:
         out.append(_history_item(item, self_address=self_address))
     if isinstance(current, str):
         out.append({"role": "user", "content": current})
-    elif "role" in current:
+    elif isinstance(current, Mapping) and "role" in current:
         out.append(dict(current))
     else:
         out.append(_history_item(current, self_address=self_address, as_user=True))
@@ -189,11 +191,11 @@ def messages_from_thread(
 
 
 def _history_item(
-    item: Any,
+    item: object,
     *,
     self_address: Optional[str],
     as_user: bool = False,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     if isinstance(item, Mapping) and "role" in item and "content" in item:
         if "sender" not in item:
             return {"role": str(item["role"]), "content": _content_text(item)}
@@ -206,7 +208,7 @@ def _history_item(
     return {"role": role, "content": _content_text(item)}
 
 
-def _choice_message(response: Any) -> Any:
+def _choice_message(response: object) -> object:
     if isinstance(response, Mapping):
         choices = response.get("choices") or []
         if not choices:
@@ -221,7 +223,7 @@ def _choice_message(response: Any) -> Any:
     return getattr(choices[0], "message", None) or {}
 
 
-def _content_text(message: Any) -> str:
+def _content_text(message: object) -> str:
     if message is None:
         return ""
     if isinstance(message, str):
@@ -233,7 +235,7 @@ def _content_text(message: Any) -> str:
     return _stringify_content(getattr(message, "content", None))
 
 
-def _stringify_content(content: Any) -> str:
+def _stringify_content(content: object) -> str:
     if content is None:
         return ""
     if isinstance(content, str):
@@ -255,7 +257,7 @@ def _stringify_content(content: Any) -> str:
     return str(content)
 
 
-def _tool_calls(message: Any) -> list[Any]:
+def _tool_calls(message: object) -> list[object]:
     if isinstance(message, Mapping):
         calls = message.get("tool_calls") or []
     else:
@@ -263,7 +265,7 @@ def _tool_calls(message: Any) -> list[Any]:
     return list(calls)
 
 
-def _unpack_call(call: Any) -> tuple[str, str, str]:
+def _unpack_call(call: object) -> tuple[str, str, str]:
     if isinstance(call, Mapping):
         call_id = str(call.get("id") or "")
         function = call.get("function") or {}
@@ -287,8 +289,8 @@ def _unpack_call(call: Any) -> tuple[str, str, str]:
     return call_id, name, arguments
 
 
-def _assistant_with_calls(text: str, calls: Sequence[Any]) -> dict[str, Any]:
-    serialized: list[dict[str, Any]] = []
+def _assistant_with_calls(text: str, calls: Sequence[object]) -> dict[str, object]:
+    serialized: list[dict[str, object]] = []
     for call in calls:
         call_id, name, arguments = _unpack_call(call)
         serialized.append(
@@ -298,7 +300,7 @@ def _assistant_with_calls(text: str, calls: Sequence[Any]) -> dict[str, Any]:
                 "function": {"name": name, "arguments": arguments},
             }
         )
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "role": "assistant",
         "content": text or None,
         "tool_calls": serialized,

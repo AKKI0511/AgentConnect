@@ -3,10 +3,15 @@ Configuration for the standalone servers.
 """
 
 import json
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    SettingsConfigDict,
+    PydanticBaseSettingsSource,
+)
 from pydantic_settings.sources.providers.env import (
     EnvSettingsSource as PydanticEnvSettingsSource,
 )
@@ -66,12 +71,12 @@ class RegistryAPISettings(BaseSettings):
 
     @staticmethod
     def settings_customise_sources(
-        settings_cls,
-        init_settings,
-        env_settings,
-        dotenv_settings,
-        file_secret_settings,
-    ):
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Use a lenient env source to avoid hard JSON parsing for complex fields.
 
         This ensures values like "a,b" for list fields don't raise during env parsing
@@ -81,7 +86,9 @@ class RegistryAPISettings(BaseSettings):
         class LenientEnvSettingsSource(PydanticEnvSettingsSource):
             """Lenient environment settings source to bypass JSON decoding for allowed_origins."""
 
-            def decode_complex_value(self, field_name, field, value):  # type: ignore[override]
+            def decode_complex_value(
+                self, field_name: str, field: FieldInfo, value: object
+            ) -> object:
                 """Lenient environment settings source to bypass JSON decoding for allowed_origins."""
                 try:
                     return super().decode_complex_value(field_name, field, value)
@@ -111,7 +118,7 @@ class RegistryAPISettings(BaseSettings):
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
-    def parse_allowed_origins(cls, v: Any) -> List[str]:
+    def parse_allowed_origins(cls, v: object) -> object:
         """Support JSON or comma-separated strings for allowed_origins."""
         if v is None:
             return v

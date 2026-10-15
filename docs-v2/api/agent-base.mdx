@@ -16,7 +16,7 @@ Create an agent, join a Team, and handle deliveries.
 ## `BaseAgent`
 
 ```python
-BaseAgent(name: str, *, profile: AgentProfile | Mapping[str, Any] | None = None, identity: Optional[AgentIdentity] = None, identity_path: Optional[str | Path] = None, instance_id: Optional[str] = None, max_in_flight: int = 1, delivery_history: DeliveryHistoryForm = 'bodies', join_token: Optional[str] = None)
+BaseAgent(name: str, *, profile: AgentProfile | Mapping[str, object] | None = None, identity: Optional[AgentIdentity] = None, identity_path: Optional[str | Path] = None, instance_id: Optional[str] = None, max_in_flight: int = 1, delivery_history: DeliveryHistoryForm = 'bodies', join_token: Optional[str] = None)
 ```
 
 Connect an independent agent to a Team and handle incoming work.
@@ -31,7 +31,7 @@ Create an Agent that has not joined a Team.
 
 * `name` (`str`): Agent name, unique in the Team.
 
-* `profile` (`AgentProfile | Mapping[str, Any] | None`): [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile), or a mapping with the same fields.
+* `profile` (`AgentProfile | Mapping[str, object] | None`): [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile), or a mapping with the same fields.
   When omitted, a class attribute named `profile` is used.
   When both are omitted, join publishes a generic summary
   and a skill named `generic`.
@@ -179,7 +179,7 @@ True while this copy has a live Session.
 ### `join`
 
 ```python
-join(team_or_url: Any, *, join_token: Optional[str] = None) -> 'BaseAgent'
+join(team_or_url: RuntimeOperations | str, *, join_token: Optional[str] = None) -> 'BaseAgent'
 ```
 
 Join a started Team, or a URL that Team is serving.
@@ -200,7 +200,7 @@ for a token you want to hand out.
 
 **Parameters:**
 
-* `team_or_url` (`Any`): A started [`Team`](/api/team-runtime#agentconnect-team-runtime-team) in this process, or a Runtime
+* `team_or_url` (`RuntimeOperations | str`): A started [`Team`](/api/team-runtime#agentconnect-team-runtime-team) in this process, or a Runtime
   origin such as `http://127.0.0.1:9000`.
 
 * `join_token` (`Optional[str]`): Token for this join. Replaces the constructor
@@ -240,7 +240,7 @@ Ticket. `leave` does not remove the Membership. Use
 ### `ask`
 
 ```python
-ask(recipient: str, content: Any, *, deadline_seconds: Optional[float] = None, collect: CollectMode = 'wait', thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, Any]] = None) -> Ticket
+ask(recipient: str, content: JsonValue, *, deadline_seconds: Optional[float] = None, collect: CollectMode = 'wait', thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> Ticket
 ```
 
 Send a request and return a [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
@@ -257,7 +257,7 @@ has `error`. A `declined` Ticket has no reply body.
 * `recipient` (`str`): Local name or same-Team Address, such as `writer`
   or `writer@content-squad`.
 
-* `content` (`Any`): The work, as text or JSON.
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The work, as text or JSON.
 
 * `deadline_seconds` (`Optional[float]`): Work cutoff in seconds. This does not change
   how long `collect="wait"` waits. Omit it outside `handle`
@@ -279,7 +279,7 @@ has `error`. A `declined` Ticket has no reply body.
   `handle` to send with no parent. Inside `handle`, the
   omitted value is the current Message id.
 
-* `metadata` (`Optional[Mapping[str, Any]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -313,7 +313,7 @@ if ticket.state == "completed":
 ### `tell`
 
 ```python
-tell(recipient: str, content: Any, *, thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, Any]] = None) -> AcceptedSendResult
+tell(recipient: str, content: JsonValue, *, thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> AcceptedSendResult
 ```
 
 Send a notice. No Ticket is created.
@@ -331,7 +331,7 @@ Message id.
 
 * `recipient` (`str`): Local name or same-Team Address.
 
-* `content` (`Any`): The notice, as text or JSON.
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The notice, as text or JSON.
 
 * `thread_id` (`Optional[str]`): Thread to continue with a current participant.
   Omit it outside `handle` for an unthreaded notice. Inside
@@ -341,7 +341,7 @@ Message id.
   `handle` to send with no parent. Inside `handle`, the
   omitted value is the current Message id.
 
-* `metadata` (`Optional[Mapping[str, Any]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -534,7 +534,7 @@ documents extra [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) callabl
 ### `handle`
 
 ```python
-handle(message: MailboxMessage, ctx: Context) -> JsonValue | None
+handle(message: MailboxMessage, ctx: Context) -> object
 ```
 
 Handle one Delivery. Override this.
@@ -565,4 +565,4 @@ A handler finishes the Delivery in one of four ways:
 
 **Returns:**
 
-* (`JsonValue | None`): A reply body, or `None` to decline a request or finish an event.
+* (`object`): A reply body, or `None` to decline a request or finish an event.

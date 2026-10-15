@@ -1,25 +1,28 @@
-"""Session transports: how an Agent talks to its Team Runtime.
+"""Connect an Agent to its Team in process or over HTTP.
 
-A Session is a set of operations (join, lease, reply, heartbeat), not a
-wire format. `InProcessTransport` is used when `BaseAgent.join` receives
-a started `Team`. `HttpRuntimeTransport` is used when it receives a URL.
-Agent code does not change between them.
+`BaseAgent.join` selects the transport from a started Team or a Runtime URL.
+Most callers need no transport construction. A Session is an authenticated
+connection to the Team; its Membership and accepted work can outlive it.
 
-`RuntimeTransport` is the protocol a custom transport implements.
-`TransportError` is a failed Runtime operation; branch on `code`.
-
-Tickets are stored on the Team. A dropped connection does not cancel
-accepted work. Rejoin with the same `instance_id` and collect with
-`get_result`.
+Transport authors implement `RuntimeTransport`. Losing a connection does not
+cancel accepted work. To collect retained Tickets after Session replacement,
+rejoin the same Membership with its original identity and valid admission
+credentials; reuse `instance_id` when replacing the same running Instance.
+Collection remains subject to retention and access rights.
 """
 
 from agentconnect.transport.agent_http import HttpRuntimeTransport
 from agentconnect.transport.inprocess import InProcessTransport
-from agentconnect.transport.runtime import RuntimeTransport, TransportError
+from agentconnect.transport.runtime import (
+    RuntimeOperations,
+    RuntimeTransport,
+    TransportError,
+)
 
 __all__ = [
     "HttpRuntimeTransport",
     "InProcessTransport",
+    "RuntimeOperations",
     "RuntimeTransport",
     "TransportError",
 ]

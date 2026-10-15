@@ -10,7 +10,9 @@ import asyncio
 import logging
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Set
+from typing import List, Optional, Set, TypedDict
+from agentconnect.core.base import JsonObject, JsonValue
+from pydantic.json_schema import JsonSchemaValue
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
@@ -211,7 +213,7 @@ class PublishAnnouncementOutput(BaseModel):
     sent_to_groups: List[int] = Field(
         description="List of group IDs the announcement was sent to"
     )
-    failed_groups: List[Dict[str, Any]] = Field(
+    failed_groups: List[JsonObject] = Field(
         description="List of groups and errors where sending failed"
     )
 
@@ -225,7 +227,7 @@ class ListGroupsInput(BaseModel):
 class ListGroupsOutput(BaseModel):
     """Output schema for listing registered groups."""
 
-    groups: List[Dict[str, Any]] = Field(
+    groups: List[JsonObject] = Field(
         description="List of registered groups with their IDs"
     )
     total: int = Field(description="Total number of registered groups")
@@ -264,6 +266,13 @@ class EditMessageOutput(BaseModel):
 # Telegram Tools class
 
 
+class _Announcement(TypedDict):
+    id: str
+    text: str
+    photo_url: str | None
+    created_at: float
+
+
 class TelegramTools:
     """
     Contains tools for interacting with Telegram through the AgentConnect framework.
@@ -272,7 +281,7 @@ class TelegramTools:
     and interacting with Telegram users and groups.
     """
 
-    def __init__(self, bot: Bot, group_ids: Set[int], groups_file: str):
+    def __init__(self, bot: Bot, group_ids: Set[int], groups_file: str) -> None:
         """
         Initialize Telegram tools.
 
@@ -284,7 +293,7 @@ class TelegramTools:
         self.bot = bot
         self.group_ids = group_ids
         self.groups_file = groups_file
-        self.announcements: Dict[str, Dict[str, Any]] = {}
+        self.announcements: dict[str, _Announcement] = {}
         self.announcement_counter = 0
         self.download_dir = "downloads"
 
@@ -314,7 +323,7 @@ class TelegramTools:
         text: str,
         reply_to_message_id: Optional[int] = None,
         parse_mode: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Send a text message to a Telegram chat.
 
@@ -359,7 +368,7 @@ class TelegramTools:
         photo_url: str,
         caption: Optional[str] = None,
         reply_to_message_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Send a photo to a Telegram chat.
 
@@ -375,7 +384,7 @@ class TelegramTools:
         try:
             # Determine if photo_url is a URL, file path, or file_id
             if photo_url.startswith(("http://", "https://")):
-                photo = URLInputFile(photo_url)
+                photo: URLInputFile | FSInputFile | str = URLInputFile(photo_url)
             elif os.path.exists(photo_url):
                 photo = FSInputFile(photo_url)
             else:
@@ -399,7 +408,7 @@ class TelegramTools:
         document_url: str,
         caption: Optional[str] = None,
         reply_to_message_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Send a document to a Telegram chat.
 
@@ -415,7 +424,7 @@ class TelegramTools:
         try:
             # Determine if document_url is a URL, file path, or file_id
             if document_url.startswith(("http://", "https://")):
-                document = URLInputFile(document_url)
+                document: URLInputFile | FSInputFile | str = URLInputFile(document_url)
             elif os.path.exists(document_url):
                 document = FSInputFile(document_url)
             else:
@@ -439,7 +448,7 @@ class TelegramTools:
         latitude: float,
         longitude: float,
         reply_to_message_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Send a location to a Telegram chat.
 
@@ -470,7 +479,7 @@ class TelegramTools:
         voice_url: str,
         caption: Optional[str] = None,
         reply_to_message_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Send a voice message to a Telegram chat.
 
@@ -486,7 +495,7 @@ class TelegramTools:
         try:
             # Determine if voice_url is a URL, file path, or file_id
             if voice_url.startswith(("http://", "https://")):
-                voice = URLInputFile(voice_url)
+                voice: URLInputFile | FSInputFile | str = URLInputFile(voice_url)
             elif os.path.exists(voice_url):
                 voice = FSInputFile(voice_url)
             else:
@@ -504,7 +513,7 @@ class TelegramTools:
             logger.error("Error sending voice to chat_id=%s", chat_id, exc_info=True)
             return {"success": False, "error": "send_voice_failed"}
 
-    async def download_file(self, file_id: str) -> Dict[str, Any]:
+    async def download_file(self, file_id: str) -> JsonObject:
         """
         Download a file from Telegram.
 
@@ -526,6 +535,8 @@ class TelegramTools:
             local_path = os.path.join(self.download_dir, unique_filename)
 
             # Download the file
+            if file_info.file_path is None:
+                raise ValueError("Telegram returned no file path")
             await self.bot.download_file(file_info.file_path, local_path)
 
             return {
@@ -544,7 +555,7 @@ class TelegramTools:
 
     async def edit_message(
         self, chat_id: int, message_id: int, text: str
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Edit an existing message.
 
@@ -565,9 +576,7 @@ class TelegramTools:
             logger.error("Error editing message in chat_id=%s", chat_id, exc_info=True)
             return {"success": False, "error": "edit_failed"}
 
-    async def create_announcement(
-        self, text: str, photo_url: str = ""
-    ) -> Dict[str, Any]:
+    async def create_announcement(self, text: str, photo_url: str = "") -> JsonObject:
         """
         Create a new announcement.
 
@@ -583,7 +592,7 @@ class TelegramTools:
         # Only include photo_url in the announcement if it's not empty
         photo_url_value = photo_url if photo_url else None
 
-        announcement = {
+        announcement: _Announcement = {
             "id": announcement_id,
             "text": text,
             "photo_url": photo_url_value,
@@ -599,8 +608,8 @@ class TelegramTools:
         }
 
     async def publish_announcement(
-        self, announcement_id: str, groups: List[int] = None
-    ) -> Dict[str, Any]:
+        self, announcement_id: str, groups: Optional[List[int]] = None
+    ) -> JsonObject:
         """
         Publish an announcement to groups.
 
@@ -630,15 +639,16 @@ class TelegramTools:
                 "failed_groups": [],
             }
 
-        sent_to_groups = []
-        failed_groups = []
+        sent_to_groups: list[JsonValue] = []
+        failed_groups: list[JsonValue] = []
 
         for group_id in target_groups:
             try:
-                if announcement.get("photo_url"):
+                photo_url = announcement.get("photo_url")
+                if photo_url:
                     await self.bot.send_photo(
                         chat_id=group_id,
-                        photo=announcement["photo_url"],
+                        photo=photo_url,
                         caption=announcement["text"],
                     )
                 else:
@@ -660,7 +670,7 @@ class TelegramTools:
             "failed_groups": failed_groups,
         }
 
-    async def list_groups(self, limit: int = 10) -> Dict[str, Any]:
+    async def list_groups(self, limit: int = 10) -> JsonObject:
         """
         List registered groups.
 
@@ -670,11 +680,13 @@ class TelegramTools:
         Returns:
             Dict with list of groups and total count
         """
-        groups = [{"group_id": gid} for gid in self.group_ids][:limit]
+        groups: list[JsonValue] = []
+        for gid in list(self.group_ids)[:limit]:
+            groups.append({"group_id": gid})
 
         return {"groups": groups, "total": len(self.group_ids)}
 
-    async def delete_announcement(self, announcement_id: str) -> Dict[str, Any]:
+    async def delete_announcement(self, announcement_id: str) -> JsonObject:
         """
         Delete a draft announcement.
 
@@ -758,7 +770,7 @@ class TelegramTools:
         ]
 
 
-def _tool_parameters(model: type[BaseModel]) -> dict[str, Any]:
+def _tool_parameters(model: type[BaseModel]) -> JsonSchemaValue:
     """JSON Schema for a tool, without Pydantic ``$defs`` or title."""
     schema = model.model_json_schema()
     for key in ("$defs", "definitions", "title"):

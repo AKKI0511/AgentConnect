@@ -6,18 +6,24 @@ import inspect
 import json
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Optional, Union, get_type_hints
+from typing import Any, Optional, Union, get_type_hints, overload
 
-from pydantic import ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic.json_schema import JsonSchemaValue
 from typing_extensions import Annotated
 
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import Session
-from agentconnect.core.base import dump_public, parse_schema, public_json_schema
+from agentconnect.core.base import (
+    JsonObject,
+    JsonValue,
+    dump_public,
+    parse_schema,
+    public_json_schema,
+)
 from agentconnect.core.directory import (
-    DirectoryEntry,
     GetProfilesRequest,
     GetProfilesResult,
     ProfileFound,
@@ -25,7 +31,6 @@ from agentconnect.core.directory import (
 )
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.operations import (
-    AcceptedSendResult,
     history_view,
     tell_view,
 )
@@ -33,7 +38,7 @@ from agentconnect.core.primitives import CollectMode
 from agentconnect.core.team_tools import TEAM_TOOL_SPECS
 from agentconnect.core.ticket import ticket_view
 
-ToolHandler = Callable[..., Union[Any, Awaitable[Any]]]
+ToolHandler = Callable[..., object]
 ToolLike = Union["Tool", ToolHandler]
 
 _ITEM_ERROR_CODES = frozenset({"not_found", "forbidden", "address_outside_team"})
@@ -63,9 +68,9 @@ class Tool:
 
     name: str
     description: str
-    parameters: dict[str, Any]
+    parameters: JsonSchemaValue
     handler: ToolHandler
-    params_model: Any = None
+    params_model: type[BaseModel] | None = None
 
     @classmethod
     def from_callable(
@@ -98,6 +103,8 @@ class Tool:
                 `Any`).
         """
         tool_name = name or getattr(fn, "__name__", "tool")
+        if not isinstance(tool_name, str):
+            raise ValueError("tool name must be a string")
         doc = inspect.getdoc(fn) or ""
         tool_description = (
             description if description is not None else _description_from_doc(doc)
@@ -111,7 +118,7 @@ class Tool:
             params_model=params_model,
         )
 
-    def openai_schema(self) -> dict[str, Any]:
+    def openai_schema(self) -> dict[str, object]:
         """Return the OpenAI function-tool descriptor for this tool.
 
         Returns:
@@ -136,7 +143,7 @@ def _ensure_tool(value: ToolLike) -> Tool:
     raise TypeError("tool must be a Tool or a callable")
 
 
-async def _call_tool(tool: Tool, arguments: Mapping[str, Any] | str) -> str:
+async def _call_tool(tool: Tool, arguments: Mapping[str, object] | str) -> str:
     """Call ``tool.handler`` once with the advertised names as keywords.
 
     A callable registered from annotations is validated with its Pydantic
@@ -172,7 +179,7 @@ class TeamTools(Sequence[Tool]):
                 Handlers fail until that connection exists.
         """
         self._session_getter = session_getter
-        handlers = {
+        handlers: dict[str, ToolHandler] = {
             "find": self._find,
             "ask": self._ask,
             "tell": self._tell,
@@ -197,7 +204,13 @@ class TeamTools(Sequence[Tool]):
         """Return how many Session-bound tools this sequence holds."""
         return len(self._items)
 
-    def __getitem__(self, index: int) -> Tool:  # type: ignore[override]
+    @overload
+    def __getitem__(self, index: int) -> Tool: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[Tool, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> Tool | tuple[Tool, ...]:
         """Return the `Tool` at `index` in catalog order."""
         return self._items[index]
 
@@ -210,7 +223,7 @@ class TeamTools(Sequence[Tool]):
         query: str,
         *,
         limit: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Search this Team's Directory, excluding this Agent.
 
         Light cards include Address, summary, Skill names, and Profile
@@ -233,15 +246,15 @@ class TeamTools(Sequence[Tool]):
     async def _ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
         idempotency_key: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Send a reply-expected request and return TicketView JSON.
 
         `collect="wait"` (default) holds until the Ticket is terminal or
@@ -358,13 +371,13 @@ class TeamTools(Sequence[Tool]):
     async def _tell(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
         idempotency_key: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Send an event. No Ticket is created.
 
         Acceptance means the Runtime queued the event, not that the
@@ -420,11 +433,9 @@ class TeamTools(Sequence[Tool]):
                     retryable=exc.retryable,
                 ) from exc
             raise
-        if not isinstance(result, AcceptedSendResult):
-            raise SessionError("internal", "tell did not return an accepted event")
         return dump_public(tell_view(result))
 
-    async def _get_result(self, ticket_id: str) -> dict[str, Any]:
+    async def _get_result(self, ticket_id: str) -> JsonObject:
         """Return the current TicketView this Membership opened.
 
         Repeatable. Does not consume the result. If `state` is `open`,
@@ -449,7 +460,7 @@ class TeamTools(Sequence[Tool]):
         *,
         before: Optional[str] = None,
         limit: int = 50,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Return one page of retained Thread history as JSON.
 
         The newest page is first; turns inside a page are oldest to
@@ -477,7 +488,7 @@ class TeamTools(Sequence[Tool]):
             )
         )
 
-    async def _get_profiles(self, addresses: list[str]) -> dict[str, Any]:
+    async def _get_profiles(self, addresses: list[str]) -> JsonObject:
         """Return selected teammate Profiles by Address.
 
         Duplicate Addresses are read once. A missing member appears as a
@@ -503,8 +514,6 @@ class TeamTools(Sequence[Tool]):
         for requested in parsed.unique_requested():
             try:
                 entry = await session.get_entry(requested)
-                if not isinstance(entry, DirectoryEntry):
-                    entry = DirectoryEntry.model_validate(entry)
                 items.append(
                     ProfileFound(
                         status="ok",
@@ -517,7 +526,7 @@ class TeamTools(Sequence[Tool]):
                     raise
                 if exc.code not in _ITEM_ERROR_CODES:
                     raise
-                payload: dict[str, Any] = {
+                payload: JsonObject = {
                     "code": exc.code,
                     "message": exc.message,
                 }
@@ -561,12 +570,12 @@ async def _recover_keyed_ask(
         raise
     thread = supplied_thread or ticket.thread_id
     deadline = ticket.deadline
-    if not isinstance(thread, str) or not isinstance(deadline, str):
+    if thread is None:
         return None
     return thread, deadline
 
 
-def _parse_arguments(arguments: Mapping[str, Any] | str) -> dict[str, Any]:
+def _parse_arguments(arguments: Mapping[str, object] | str) -> dict[str, object]:
     if isinstance(arguments, Mapping):
         return dict(arguments)
     raw = arguments.strip() if arguments else ""
@@ -578,7 +587,7 @@ def _parse_arguments(arguments: Mapping[str, Any] | str) -> dict[str, Any]:
     return parsed
 
 
-def _stringify(result: Any) -> str:
+def _stringify(result: object) -> str:
     if result is None:
         return "null"
     if isinstance(result, str):
@@ -660,7 +669,7 @@ def _parse_args_section(doc: str) -> dict[str, str]:
 
 def _parameters_from_callable(
     fn: ToolHandler, doc: str
-) -> tuple[dict[str, Any], type[Any]]:
+) -> tuple[JsonSchemaValue, type[BaseModel]]:
     try:
         sig = inspect.signature(fn)
     except (TypeError, ValueError) as exc:
@@ -701,21 +710,23 @@ def _parameters_from_callable(
         else:
             fields[name] = (annotation, param.default)
     config = ConfigDict(extra="forbid")
+    params_model: type[BaseModel]
     if not fields:
-        model = create_model(f"{_model_name(fn)}_Params", __config__=config)
         return {
             "type": "object",
             "properties": {},
             "additionalProperties": False,
-        }, model
+        }, create_model(f"{_model_name(fn)}_Params", __config__=config)
     try:
-        model = create_model(f"{_model_name(fn)}_Params", __config__=config, **fields)
-        schema = model.model_json_schema()
+        params_model = create_model(
+            f"{_model_name(fn)}_Params", __config__=config, **fields
+        )
+        schema = params_model.model_json_schema()
     except Exception as exc:
         raise ValueError(
             f"cannot build a schema for {getattr(fn, '__name__', 'tool')}: {exc}"
         ) from exc
-    return _parameters_schema(schema), model
+    return _parameters_schema(schema), params_model
 
 
 def _model_name(fn: ToolHandler) -> str:
@@ -725,7 +736,7 @@ def _model_name(fn: ToolHandler) -> str:
     return "tool"
 
 
-def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
+def _parameters_schema(schema: JsonSchemaValue) -> dict[str, object]:
     """Keep constraints and ``$ref`` targets. Do not inline references."""
     defs = dict(schema.get("$defs") or schema.get("definitions") or {})
     _require_resolvable_refs(schema, defs)
@@ -733,7 +744,7 @@ def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
         key: _strip_titles(value)
         for key, value in dict(schema.get("properties") or {}).items()
     }
-    out: dict[str, Any] = {
+    out: JsonSchemaValue = {
         "type": "object",
         "properties": properties,
         "additionalProperties": False,
@@ -746,7 +757,7 @@ def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _require_resolvable_refs(node: Any, defs: Mapping[str, Any]) -> None:
+def _require_resolvable_refs(node: object, defs: Mapping[str, object]) -> None:
     if isinstance(node, dict):
         ref = node.get("$ref")
         if isinstance(ref, str):
@@ -762,7 +773,7 @@ def _require_resolvable_refs(node: Any, defs: Mapping[str, Any]) -> None:
             _require_resolvable_refs(item, defs)
 
 
-def _strip_titles(node: Any) -> Any:
+def _strip_titles(node: object) -> object:
     if isinstance(node, dict):
         return {
             key: _strip_titles(value) for key, value in node.items() if key != "title"

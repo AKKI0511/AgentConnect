@@ -5,7 +5,7 @@ This module contains helper functions for working with Telegram messages,
 including checking for mentions, extracting content, and managing conversation IDs.
 """
 
-from typing import Any, Dict
+from agentconnect.core.base import JsonObject
 
 from aiogram import types
 from aiogram.types import User
@@ -33,7 +33,7 @@ def has_mention_entity(message: types.Message, bot_user: User) -> bool:
             message.text or ""
         ):
             try:
-                mention_text = message.text[
+                mention_text = (message.text or "")[
                     entity.offset : entity.offset + entity.length
                 ]
                 if mention_text.lower() == f"@{bot_user.username.lower()}":
@@ -113,7 +113,7 @@ def remove_bot_mention_from_text(text: str, bot_username: str) -> str:
     return text.replace(mention, "").strip()
 
 
-def get_telegram_conversation_id(metadata: Dict[str, Any]) -> str:
+def get_telegram_conversation_id(metadata: JsonObject) -> str:
     """
     Generate a unique conversation ID for Telegram conversations based on context.
 

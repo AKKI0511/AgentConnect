@@ -7,7 +7,7 @@ import os
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional, Protocol, TypeGuard, runtime_checkable
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
@@ -19,10 +19,26 @@ from agentconnect.core.base import JsonValue
 from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.message import MailboxMessage
-from agentconnect.core.operations import AcceptedSendResult, HistoryResult
+from agentconnect.core.operations import (
+    AcceptedSendResult,
+    HistoryResult,
+    JoinTokenIssued,
+)
+from agentconnect.transport.runtime import RuntimeOperations
 from agentconnect.core.primitives import CollectMode, DeliveryHistoryForm
 from agentconnect.core.profile import AgentProfile
 from agentconnect.core.ticket import Ticket
+
+
+@runtime_checkable
+class _EmbeddedAdmission(RuntimeOperations, Protocol):
+    @property
+    def require_join_auth(self) -> bool: ...
+
+    async def issue_join_token(
+        self, *, name: str | None = None, agent_did: str | None = None
+    ) -> JoinTokenIssued: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +81,7 @@ class BaseAgent:
         self,
         name: str,
         *,
-        profile: AgentProfile | Mapping[str, Any] | None = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         identity: Optional[AgentIdentity] = None,
         identity_path: Optional[str | Path] = None,
         instance_id: Optional[str] = None,
@@ -169,7 +185,7 @@ class BaseAgent:
         return self._session is not None and self._session.connected
 
     async def join(
-        self, team_or_url: Any, *, join_token: Optional[str] = None
+        self, team_or_url: RuntimeOperations | str, *, join_token: Optional[str] = None
     ) -> "BaseAgent":
         """Join a started Team, or a URL that Team is serving.
 
@@ -209,7 +225,7 @@ class BaseAgent:
             if self._issued_team_id != id(team_or_url):
                 self.join_token = None
                 self._issued_team_id = None
-                if getattr(team_or_url, "require_join_auth", False):
+                if team_or_url.require_join_auth:
                     issued = await team_or_url.issue_join_token(
                         name=self.name,
                         agent_did=self.agent_did,
@@ -226,7 +242,7 @@ class BaseAgent:
             team_or_url,
             instance_id=self.instance_id,
             agent_did=self.agent_did,
-            profile=self.profile.to_public_dict(),
+            profile=self.profile,
             max_in_flight=self.max_in_flight,
             delivery_history=self.delivery_history,
         )
@@ -250,13 +266,13 @@ class BaseAgent:
     async def ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
     ) -> Ticket:
         """Send a request and return a `Ticket`.
 
@@ -324,11 +340,11 @@ class BaseAgent:
     async def tell(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
     ) -> AcceptedSendResult:
         """Send a notice. No Ticket is created.
 
@@ -499,7 +515,7 @@ class BaseAgent:
         """
         return TeamTools(self._require_session)
 
-    async def handle(self, message: MailboxMessage, ctx: Context) -> JsonValue | None:
+    async def handle(self, message: MailboxMessage, ctx: Context) -> object:
         """Handle one Delivery. Override this.
 
         `message` is the delivered request or event. `ctx` is the
@@ -535,14 +551,12 @@ class BaseAgent:
         return self._session
 
 
-def _in_process_team(target: Any) -> bool:
-    """True when `target` is a Team object, not a Runtime URL."""
-    return not isinstance(target, str) and callable(
-        getattr(target, "issue_join_token", None)
-    )
+def _in_process_team(target: RuntimeOperations | str) -> TypeGuard[_EmbeddedAdmission]:
+    """Recognize the optional embedded admission capability."""
+    return isinstance(target, _EmbeddedAdmission)
 
 
-def _class_profile(cls: type) -> AgentProfile | Mapping[str, Any] | None:
+def _class_profile(cls: type[BaseAgent]) -> AgentProfile | Mapping[str, object] | None:
     """Return a Profile declared on the Agent class, if any."""
     for klass in cls.__mro__:
         if "profile" not in klass.__dict__:
@@ -554,7 +568,7 @@ def _class_profile(cls: type) -> AgentProfile | Mapping[str, Any] | None:
 
 
 def _discovery_profile(
-    profile: AgentProfile | Mapping[str, Any] | None, name: str
+    profile: AgentProfile | Mapping[str, object] | None, name: str
 ) -> AgentProfile:
     """Return the discovery Profile the Runtime accepts on join."""
     fallback = {

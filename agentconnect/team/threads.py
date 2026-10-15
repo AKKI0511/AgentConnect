@@ -27,7 +27,7 @@ def thread_key(thread_id: str) -> str:
     return f"{THREAD_KEY_PREFIX}{thread_id}"
 
 
-def _sort_key(message: dict[str, Any]) -> tuple:
+def _sort_key(message: dict[str, Any]) -> tuple[int]:
     return (int(message["seq"]),)
 
 
@@ -42,6 +42,8 @@ async def load_thread(store: Store, thread_id: str) -> Optional[dict[str, Any]]:
     record = await store.get(thread_key(thread_id))
     if record is None:
         return None
+    if not isinstance(record, dict):
+        raise TypeError("stored Thread must be an object")
     return record
 
 
@@ -84,7 +86,7 @@ def allocate_seq(thread: dict[str, Any], message: dict[str, Any]) -> int:
         if seq is not None:
             return int(seq)
         listed = thread["message_ids"]
-        return listed.index(message["id"]) + 1
+        return list(listed).index(message["id"]) + 1
     seq = int(thread.get("next_seq") or (len(thread["message_ids"]) + 1))
     message["seq"] = seq
     thread["next_seq"] = seq + 1

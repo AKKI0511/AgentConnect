@@ -29,6 +29,11 @@ from tests.support.runtime import message_id, platform_report, start_team
 from tests.support.stores import open_store
 from tests.team.conftest import deadline, join_member
 
+from agentconnect.core.operations import (
+    ReplySuccessRequest,
+    RequestSendRequest,
+    TicketedSendResult,
+)
 from agentconnect.team import Team
 from agentconnect.team.store.base import Store
 from agentconnect.team.store.redis import RedisStore
@@ -130,28 +135,17 @@ async def _http_transport(origin: str) -> HttpRuntimeTransport:
     return transport
 
 
-def _message_id_of(delivery: Any) -> str | None:
-    message = delivery.get("message") if hasattr(delivery, "get") else None
-    if message is None:
-        return None
-    if isinstance(message, dict):
-        raw = message.get("id")
-        return str(raw) if raw else None
-    raw = getattr(message, "id", None)
-    return str(raw) if raw else None
-
-
 async def _reply_completed(
     worker_ops: RuntimeTransport, worker_token: str, lease_id: str
 ) -> None:
     await worker_ops.reply(
         worker_token,
-        {
-            "id": message_id(),
-            "lease_id": lease_id,
-            "outcome": "completed",
-            "content": REPLY,
-        },
+        ReplySuccessRequest(
+            id=message_id(),
+            lease_id=lease_id,
+            outcome="completed",
+            content=REPLY,
+        ),
     )
 
 
@@ -162,11 +156,11 @@ async def _drain(worker_ops: RuntimeTransport, worker_token: str) -> None:
             leased = await worker_ops.lease(worker_token, 1)
         except Exception:
             return
-        items = leased.get("deliveries") or []
+        items = leased.deliveries
         if not items:
             return
         try:
-            await _reply_completed(worker_ops, worker_token, items[0]["lease_id"])
+            await _reply_completed(worker_ops, worker_token, items[0].lease_id)
         except Exception:
             return
 
@@ -180,36 +174,38 @@ async def _round_trip(
 ) -> None:
     sent = await caller_ops.send(
         caller_token,
-        {
-            "id": message_id(),
-            "recipient": worker_name,
-            "kind": "request",
-            "content": PAYLOAD,
-            "collect": "ticket",
-            "deadline": deadline(60),
-        },
+        RequestSendRequest(
+            id=message_id(),
+            recipient=worker_name,
+            kind="request",
+            content=PAYLOAD,
+            collect="ticket",
+            deadline=deadline(60),
+        ),
     )
-    ticket_id = sent["message"]["id"]
+    if not isinstance(sent, TicketedSendResult):
+        raise RuntimeError("request did not return a Ticket")
+    ticket_id = sent.ticket.id
     delivery = None
     for _ in range(EXCHANGE_LEASE_RETRIES):
         leased = await worker_ops.lease(worker_token, 1)
-        items = leased.get("deliveries") or []
+        items = leased.deliveries
         if not items:
             await asyncio.sleep(0.002)
             continue
         item = items[0]
-        if _message_id_of(item) not in {None, ticket_id}:
-            await _reply_completed(worker_ops, worker_token, item["lease_id"])
+        if item.message.id != ticket_id:
+            await _reply_completed(worker_ops, worker_token, item.lease_id)
             continue
         delivery = item
         break
     if delivery is None:
         raise TimeoutError("lease returned no work")
-    await _reply_completed(worker_ops, worker_token, delivery["lease_id"])
+    await _reply_completed(worker_ops, worker_token, delivery.lease_id)
     ticket = await caller_ops.get_result(caller_token, ticket_id)
-    if ticket.get("state") != "completed":
-        raise RuntimeError(f"ticket state {ticket.get('state')!r}")
-    if ticket.get("response", {}).get("content") != REPLY:
+    if ticket.state != "completed":
+        raise RuntimeError(f"ticket state {ticket.state!r}")
+    if ticket.content != REPLY:
         raise RuntimeError("reply content mismatch")
 
 

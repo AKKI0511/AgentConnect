@@ -9,9 +9,9 @@ from typing import Dict, List
 
 from agentconnect.index.registry.registration import (
     AgentRegistration,
-    Capability,
-    Skill,
 )
+from agentconnect.core.profile import Skill
+from agentconnect.index.types import Capability
 from agentconnect.index.registry.search.schemas import AgentSearchResultItem
 
 
@@ -77,7 +77,7 @@ def populate_search_result_item(
         item_data["payment_address"] = registration.payment_address
 
     if output_detail_level == "minimal":
-        return AgentSearchResultItem(**item_data)
+        return AgentSearchResultItem.model_validate(item_data)
 
     # Summary level fields
     if registration.summary:
@@ -86,7 +86,7 @@ def populate_search_result_item(
         item_data["tags"] = registration.tags
 
     if output_detail_level == "summary":
-        return AgentSearchResultItem(**item_data)
+        return AgentSearchResultItem.model_validate(item_data)
 
     # Capabilities level fields
     if registration.capabilities:
@@ -97,7 +97,7 @@ def populate_search_result_item(
         item_data["skills"] = format_skills_for_output(registration.skills)
 
     if output_detail_level == "capabilities":
-        return AgentSearchResultItem(**item_data)
+        return AgentSearchResultItem.model_validate(item_data)
 
     # Full level fields (all remaining defined in AgentSearchResultItem)
     if registration.description:
@@ -117,4 +117,4 @@ def populate_search_result_item(
     if registration.default_output_modes:
         item_data["default_output_modes"] = registration.default_output_modes
 
-    return AgentSearchResultItem(**item_data)
+    return AgentSearchResultItem.model_validate(item_data)

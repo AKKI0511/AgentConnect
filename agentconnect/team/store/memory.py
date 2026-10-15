@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import bisect
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
+
+from agentconnect.core.primitives import PersistenceMode
 
 from agentconnect.team.store.apply import Overlay, apply_ops
 from agentconnect.team.store.base import Store, StoreRecord
-from agentconnect.team.store.ops import ApplyResult, StoreOp
+from agentconnect.team.store.ops import _integer_document, ApplyResult, StoreOp
 
 
 class _SortedIndex:
@@ -97,12 +99,12 @@ class MemoryStore(Store):
     TTL hints are ignored.
     """
 
-    persistence = "volatile"
+    persistence: PersistenceMode = "volatile"
     """State lasts only within this process."""
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
-        self._docs: dict[str, tuple[Any, int]] = {}
+        self._docs: dict[str, tuple[object, int]] = {}
         self._sets: dict[str, set[str]] = {}
         self._indexes: dict[str, _SortedIndex] = {}
 
@@ -114,7 +116,7 @@ class MemoryStore(Store):
         """No-op. Memory is not wiped on close."""
         return None
 
-    async def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> object:
         """Return a copy of the stored value, or None when the key is missing."""
         async with self._lock:
             record = self._docs.get(key)
@@ -123,7 +125,7 @@ class MemoryStore(Store):
             return None
         return _clone(snapshot)
 
-    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+    async def get_many(self, keys: Sequence[str]) -> list[object]:
         """Return copied values for `keys` in the same order.
 
         Missing keys are None. The read captures all values together;
@@ -134,7 +136,7 @@ class MemoryStore(Store):
                 None if (record := self._docs.get(key)) is None else record[0]
                 for key in keys
             ]
-        out: list[Any | None] = []
+        out: list[object] = []
         large = len(snapshots) >= 16
         for index, value in enumerate(snapshots):
             out.append(None if value is None else _clone(value))
@@ -214,22 +216,22 @@ class MemoryStore(Store):
             for member, score in scores.items():
                 index.add(member, score)
         for key, members in overlay.index_rem.items():
-            index = self._indexes.get(key)
-            if index is None:
+            removed_index = self._indexes.get(key)
+            if removed_index is None:
                 continue
             for member in members:
-                index.remove(member)
-            if not index:
+                removed_index.remove(member)
+            if not removed_index:
                 self._indexes.pop(key, None)
 
-    async def put(self, key: str, value: Any) -> None:
+    async def put(self, key: str, value: object) -> None:
         """Write a copied value at `key`, bumping the version."""
         async with self._lock:
             previous = self._docs.get(key)
             version = 1 if previous is None else previous[1] + 1
             self._docs[key] = (_clone(value), version)
 
-    async def insert(self, key: str, value: Any) -> bool:
+    async def insert(self, key: str, value: object) -> bool:
         """Write `value` only if `key` is absent. True when inserted."""
         async with self._lock:
             if key in self._docs:
@@ -237,7 +239,7 @@ class MemoryStore(Store):
             self._docs[key] = (_clone(value), 1)
             return True
 
-    async def compare_and_set(self, key: str, version: int, value: Any) -> bool:
+    async def compare_and_set(self, key: str, version: int, value: object) -> bool:
         """Replace `key` when the stored version matches."""
         async with self._lock:
             record = self._docs.get(key)
@@ -343,7 +345,7 @@ class MemoryStore(Store):
         del ttl_seconds
         async with self._lock:
             record = self._docs.get(key)
-            current = 0 if record is None else int(record[0] or 0)
+            current = 0 if record is None else _integer_document(record[0] or 0)
             if current >= limit:
                 return False
             version = 1 if record is None else record[1] + 1
@@ -360,7 +362,7 @@ class MemoryStore(Store):
         del ttl_seconds
         async with self._lock:
             record = self._docs.get(key)
-            current = 0 if record is None else int(record[0] or 0)
+            current = 0 if record is None else _integer_document(record[0] or 0)
             nxt = max(0, current - 1)
             if record is None and nxt == 0:
                 return 0
@@ -380,7 +382,7 @@ class MemoryStore(Store):
             self._indexes.clear()
 
 
-def _is_numeric_vector(value: list) -> bool:
+def _is_numeric_vector(value: list[object]) -> bool:
     """True when every item is an int or float, never a bool or nested value."""
     for item in value:
         kind = type(item)
@@ -389,7 +391,7 @@ def _is_numeric_vector(value: list) -> bool:
     return True
 
 
-def _clone(value: Any) -> Any:
+def _clone(value: object) -> object:
     if isinstance(value, dict):
         return {key: _clone(item) for key, item in value.items()}
     if isinstance(value, list):

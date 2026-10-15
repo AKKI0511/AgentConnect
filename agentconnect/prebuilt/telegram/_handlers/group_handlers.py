@@ -5,11 +5,12 @@ This module contains handlers for Telegram group messages, including
 handlers for bot mentions and group management.
 """
 
-from typing import Callable, Dict
-
 from aiogram import Dispatcher, F, types
 
-from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import (
+    BaseHandler,
+    _HandlerCallbacks,
+)
 
 
 class GroupHandler(BaseHandler):
@@ -20,7 +21,7 @@ class GroupHandler(BaseHandler):
     handlers for bot mentions and group management.
     """
 
-    async def register(self, dp: Dispatcher, callback_map: Dict[str, Callable]) -> None:
+    async def register(self, dp: Dispatcher, callback_map: _HandlerCallbacks) -> None:
         """
         Register group message handlers with the Telegram dispatcher.
 
@@ -31,7 +32,7 @@ class GroupHandler(BaseHandler):
 
         # Group-specific handlers
         @dp.message(F.chat.type.in_({"group", "supergroup"}))
-        async def handle_group_message(message: types.Message):
+        async def handle_group_message(message: types.Message) -> None:
             """Handle messages in group chats."""
             # Extract the bot user from callbacks
             bot_user = callback_map["get_bot_user"]()
@@ -56,12 +57,12 @@ class GroupHandler(BaseHandler):
 
         # View Groups button in private chats
         @dp.message(F.text == "📜 View Groups", F.chat.type == "private")
-        async def handle_view_groups(message: types.Message):
+        async def handle_view_groups(message: types.Message) -> None:
             """Handle the View Groups button in private chats."""
             await callback_map["handle_view_groups"](message)
 
         # New Announcement button in private chats
         @dp.message(F.text == "➕ New Announcement", F.chat.type == "private")
-        async def handle_new_announcement(message: types.Message):
+        async def handle_new_announcement(message: types.Message) -> None:
             """Handle the New Announcement button in private chats."""
             await callback_map["handle_message"](message)

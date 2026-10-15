@@ -1,39 +1,13 @@
-"""Public schema types: Message, Ticket, Profile, Address, and operation bodies.
+"""Create discovery Profiles and read the Messages and results your agents exchange.
 
-This package is vocabulary only. It has no I/O and imports no other
-AgentConnect packages. Import each noun from the module that defines it
-(`agentconnect.core.message`, `agentconnect.core.ticket`,
-`agentconnect.core.profile`, …). Everyday Agent code can keep using the
-re-exports on `agentconnect` (`MailboxMessage`, `Ticket`, `AgentProfile`).
+`BaseAgent` returns these models and passes request or event Messages to
+handlers. Use `AgentProfile` and `Skill` to describe suitable work; read a
+Ticket's `state` before using its result. Advanced clients use the operation
+models and parsers to work with Runtime JSON.
 
-`MailboxMessage` is what `handle` receives (a request or an event). A
-request always expects a reply and opens a `Ticket`. An event does not.
-Read completion from `ticket.state`: `open`, `completed`, `failed`,
-`expired`, or `declined`. A completed Ticket carries `response`; a
-failed or expired Ticket carries `error`.
-
-`AgentProfile` and `Skill` are discovery text. Identity and addressing
-live on `AgentIdentity` and `DirectoryEntry`, not on the Profile.
-`parse_schema` / `dump_public` convert between JSON and these models at
-a trust boundary.
-
-Examples:
-    Build a Profile and read a Ticket state:
-
-    ```python
-    from agentconnect.core.profile import AgentProfile, Skill
-    from agentconnect.core.ticket import Ticket
-
-    profile = AgentProfile(
-        summary="Writes short drafts from notes.",
-        skills=[Skill(name="drafting", description="Turn notes into a draft.")],
-    )
-
-    def content_if_done(ticket: Ticket) -> object | None:
-        if ticket.state == "completed":
-            return ticket.response.content
-        return None
-    ```
+The models reject undeclared fields and cannot be reassigned. Use
+`dump_public` to serialize them: omitted optional fields stay absent,
+while required content may be JSON null.
 """
 
 from agentconnect.core.address import (
@@ -65,8 +39,6 @@ from agentconnect.core.directory import (
     ProfileFound,
     ProfileItem,
     ProfileMiss,
-    ProfileView,
-    profile_view,
 )
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
 from agentconnect.core.identity import AgentIdentity
@@ -203,7 +175,6 @@ __all__ = [
     "public_result_schema",
     "DirectoryEntry",
     "DirectoryMatch",
-    "ProfileView",
     "ProfileFound",
     "ProfileMiss",
     "ProfileItem",
@@ -285,7 +256,6 @@ __all__ = [
     "parse_send_request",
     "parse_send_result",
     "history_view",
-    "profile_view",
     "tell_view",
     "Address",
     "AgentDid",

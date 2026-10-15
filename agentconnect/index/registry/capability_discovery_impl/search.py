@@ -9,6 +9,7 @@ import logging
 from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from qdrant_client import AsyncQdrantClient
+from qdrant_client.http import models as qdrant_models
 
 from agentconnect.index.registry.capability_discovery_impl.embedding_utils import (
     Embeddings,
@@ -65,7 +66,7 @@ async def find_by_capability_name(
         try:
             # If we have Qdrant initialized, do semantic search instead
             semantic_results = await qdrant_search_func(
-                capability_name, agent_registrations, limit, similarity_threshold
+                capability_name, agent_registrations, limit, similarity_threshold, None
             )
 
             # Return all results from semantic search without filtering
@@ -115,10 +116,8 @@ async def search_with_qdrant(
         # Note: These Qdrant filters perform *exact* matches on metadata fields.
         # Semantic relevance between the overall query (capability_description)
         # and agent content is handled by the vector similarity search itself.
-        filter_conditions = []
+        filter_conditions: list[qdrant_models.Condition] = []
         if filters:
-            from qdrant_client.http import models as qdrant_models
-
             for key, values in filters.items():
                 if not values:  # Skip if no values are provided for a filter key
                     continue
@@ -190,14 +189,14 @@ async def search_with_qdrant(
 
         for scored_point in search_result.points:
             # Get agent_id from payload
-            agent_id = scored_point.payload.get("agent_id")
+            agent_id = (scored_point.payload or {}).get("agent_id")
 
             # Skip duplicate agents - we want one result per agent
             if agent_id in seen_agent_ids:
                 continue
 
             # Get the registration from our map or from the provided agent_registrations
-            doc_id = scored_point.payload.get("doc_id")
+            doc_id = (scored_point.payload or {}).get("doc_id")
             registration = None
 
             if doc_id in capability_to_agent_map:

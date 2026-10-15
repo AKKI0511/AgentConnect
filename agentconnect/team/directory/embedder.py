@@ -24,13 +24,29 @@ import hashlib
 import inspect
 import logging
 import math
-from operator import mul
 import os
 import re
 import threading
 import weakref
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Awaitable, Callable, Protocol, Sequence, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    ParamSpec,
+    Protocol,
+    Sequence,
+    TypeGuard,
+    TypeVar,
+    Union,
+)
+from functools import partial
+
+if TYPE_CHECKING:
+    from httpx import AsyncClient
+    from fastembed import TextEmbedding
+    from tiktoken import Encoding
 
 from agentconnect.team.directory.tokens import (
     OPENAI_INPUT_TOKENS,
@@ -42,6 +58,9 @@ from agentconnect.team.directory.tokens import (
     split_token_windows,
     token_windows,
 )
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +82,7 @@ _OPENAI_BATCH = 128
 _HASHED_BATCH = 8
 
 EmbedFn = Callable[
-    [Sequence[str]],
+    [list[str]],
     Union[Sequence[Sequence[float]], Awaitable[Sequence[Sequence[float]]]],
 ]
 """A callable returning one finite, nonempty vector per input, in input order.
@@ -92,13 +111,15 @@ class _OwnedPool:
         self.peak_pending = 0
         weakref.finalize(self, pool.shutdown, wait=False, cancel_futures=True)
 
-    async def run(self, fn: Callable[..., Any], *args: Any) -> Any:
+    async def run(
+        self, fn: Callable[_P, _T], *args: _P.args, **kwargs: _P.kwargs
+    ) -> _T:
         self.pending += 1
         if self.pending > self.peak_pending:
             self.peak_pending = self.pending
         loop = asyncio.get_running_loop()
         try:
-            return await loop.run_in_executor(self._pool, fn, *args)
+            return await loop.run_in_executor(self._pool, partial(fn, *args, **kwargs))
         finally:
             self.pending -= 1
 
@@ -114,8 +135,16 @@ class Embedder(Protocol):
     searches; handle any resources your implementation owns.
     """
 
-    name: str
-    """Stable backend/model name identifying the embedding space."""
+    if TYPE_CHECKING:
+
+        @property
+        def name(self) -> str:
+            """Stable backend/model name identifying the embedding space."""
+    else:
+        # Read capability for typing; retain a plain runtime declaration so
+        # existing explicit subclasses can initialize their own name field.
+        name: str
+        """Stable backend/model name identifying the embedding space."""
     input_char_limit: int | None
     """Maximum characters per input, or None for no character bound."""
     max_batch: int
@@ -125,9 +154,7 @@ class Embedder(Protocol):
         """Return normalized vectors in input order; zero vectors stay zero."""
 
 
-def _as_unit_vector(
-    vector: Sequence[float], *, expected_dim: int | None = None
-) -> list[float]:
+def _as_unit_vector(vector: object, *, expected_dim: int | None = None) -> list[float]:
     """Return `vector` as a finite unit vector, or raise `ValueError`.
 
     Args:
@@ -163,7 +190,7 @@ def _as_unit_vector(
 
 def _normalize_rows(
     rows: Sequence[Sequence[float]],
-    texts: Sequence[str],
+    texts: Sequence[object],
     *,
     expected_dim: int | None = None,
 ) -> list[list[float]]:
@@ -216,7 +243,7 @@ def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
     """
     if len(left) != len(right):
         raise ValueError("vectors must have the same dimension")
-    return sum(map(mul, left, right))
+    return sum(a * b for a, b in zip(left, right, strict=True))
 
 
 def _mean_pool(vectors: Sequence[Sequence[float]]) -> list[float]:
@@ -263,7 +290,7 @@ def _char_windows(text: str, limit: int) -> list[str]:
     return [stripped[index : index + limit] for index in range(0, len(stripped), limit)]
 
 
-def _input_char_limit(embedder: Any) -> int | None:
+def _input_char_limit(embedder: object) -> int | None:
     """Character budget for one backend input, or `None` when unbounded.
 
     Args:
@@ -275,7 +302,7 @@ def _input_char_limit(embedder: Any) -> int | None:
     return max(1, int(value))
 
 
-def _max_batch(embedder: Any) -> int:
+def _max_batch(embedder: object) -> int:
     """Maximum texts one `embed` call should receive.
 
     Args:
@@ -365,7 +392,9 @@ class _CallableEmbedder:
         if not payload:
             return []
         if _is_coroutine_callable(self._fn):
-            raw: Any = self._fn(payload)
+            raw: Sequence[Sequence[float]] | Awaitable[Sequence[Sequence[float]]] = (
+                self._fn(payload)
+            )
         else:
             raw = await self._pool().run(self._fn, payload)
         if inspect.isawaitable(raw):
@@ -395,9 +424,9 @@ class OpenAIEmbedder:
         self._encoding = encoding_for_hosted_model(model)
         self.name: str = f"openai:{model}"
         """Backend and model name for this embedding space."""
-        self._client: Any = None
+        self._client: AsyncClient | None = None
 
-    def _client_obj(self) -> Any:
+    def _client_obj(self) -> AsyncClient:
         if self._client is None:
             import httpx
 
@@ -434,7 +463,7 @@ class OpenAIEmbedder:
         key = os.environ.get("OPENAI_API_KEY") or os.environ.get("AZURE_OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY is not set")
-        body: dict[str, Any] = {"model": self._model, "input": windows}
+        body: dict[str, object] = {"model": self._model, "input": windows}
         expected_dim: int | None = None
         if self._model.startswith("text-embedding-3"):
             body["dimensions"] = _HASHED_DIM
@@ -530,7 +559,7 @@ class FastEmbedEmbedder:
         self._model_name = model
         self.name: str = f"fastembed:{model}"
         """Backend and model name for this embedding space."""
-        self._model: Any = None
+        self._model: TextEmbedding | None = None
         self._thread_lock = threading.Lock()
         self._work = _OwnedPool(label="ac-embed-fe")
 
@@ -633,6 +662,13 @@ class _AutoEmbedder:
         return await inner.embed(texts)
 
 
+def _has_embed_method(value: EmbeddingsArg) -> TypeGuard[Embedder]:
+    # Match the existing structural extension boundary, including callable backends.
+    return getattr(value, "embed", None) is not None and not isinstance(
+        value, (bytes, bytearray)
+    )
+
+
 def _resolve_embedder(spec: EmbeddingsArg) -> Embedder:
     """Turn a Team `embeddings=` value into an `Embedder`.
 
@@ -657,9 +693,8 @@ def _resolve_embedder(spec: EmbeddingsArg) -> Embedder:
     """
     if isinstance(spec, str):
         return _from_string(spec)
-    embed = getattr(spec, "embed", None)
-    if embed is not None and not isinstance(spec, (bytes, bytearray)):
-        return spec  # type: ignore[return-value]
+    if _has_embed_method(spec):
+        return spec
     if callable(spec):
         return _CallableEmbedder(spec)
     raise TypeError("embeddings must be a spec string, a callable, or an Embedder")
@@ -724,7 +759,7 @@ def _is_coroutine_callable(fn: EmbedFn) -> bool:
 async def _embed_token_bounded(
     texts: list[str],
     *,
-    encoding: Any,
+    encoding: Encoding,
     per_input_tokens: int,
     request_tokens: int,
     batch: int,
@@ -747,7 +782,7 @@ async def _embed_token_bounded(
     return pooled
 
 
-def _fastembed_tokenizer(model: Any) -> Any:
+def _fastembed_tokenizer(model: object) -> Any:
     for candidate in (
         model,
         getattr(model, "model", None),

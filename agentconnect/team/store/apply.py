@@ -8,7 +8,8 @@ document keys the batch touches. Sets and indexes record deltas.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
+from collections.abc import Iterator
 
 from agentconnect.team.store.base import StoreRecord
 from agentconnect.team.store.ops import (
@@ -33,7 +34,12 @@ from agentconnect.team.store.ops import (
     _clone_value,
 )
 
-_MISSING = object()
+
+class _Missing:
+    pass
+
+
+_MISSING = _Missing()
 
 
 @dataclass
@@ -43,7 +49,7 @@ class Overlay:
     get_doc: Callable[[str], Optional[StoreRecord]]
     get_index_score: Callable[[str, str], Optional[float]]
     get_index_card: Callable[[str], int]
-    docs: dict[str, Any] = field(default_factory=dict)
+    docs: dict[str, StoreRecord | _Missing] = field(default_factory=dict)
     wiped: set[str] = field(default_factory=set)
     set_add: dict[str, set[str]] = field(default_factory=dict)
     set_rem: dict[str, set[str]] = field(default_factory=dict)
@@ -56,19 +62,19 @@ class Overlay:
         """Return the current document at ``key``, caching the first read."""
         if key in self.docs:
             value = self.docs[key]
-            return None if value is _MISSING else value
+            return None if isinstance(value, _Missing) else value
         record = self.get_doc(key)
         self.docs[key] = _MISSING if record is None else record
         return record
 
-    def write_doc(self, key: str, value: Any, version: int) -> None:
+    def write_doc(self, key: str, value: object, version: int) -> None:
         """Replace the overlay document at ``key``."""
         self.docs[key] = StoreRecord(value=_clone_value(value), version=int(version))
 
-    def iter_docs(self):
+    def iter_docs(self) -> Iterator[tuple[str, StoreRecord | None]]:
         """Yield ``(key, record_or_none)`` for documents touched by the batch."""
         for key, value in self.docs.items():
-            yield key, None if value is _MISSING else value
+            yield key, None if isinstance(value, _Missing) else value
 
     def wipe(self, key: str) -> None:
         """Delete the document, set, and index stored at ``key``."""

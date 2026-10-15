@@ -52,7 +52,7 @@ To let a model initiate collaboration, separately attach `team_tools`
 to its harness or connect the harness through MCP.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 # Only the version is imported by default; names below load on attribute access.
 __all__ = [
@@ -77,6 +77,7 @@ import logging
 logging.getLogger("agentconnect").addHandler(logging.NullHandler())
 
 if TYPE_CHECKING:
+    __version__: str
     from agentconnect.agent.base import BaseAgent
     from agentconnect.agent.context import Context
     from agentconnect.agent.errors import SessionError
@@ -104,7 +105,7 @@ _LAZY_EXPORTS = {
 _version: str | None = None
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     """Load Team and Agent types without importing the whole package tree."""
     global _version
     if name == "__version__":

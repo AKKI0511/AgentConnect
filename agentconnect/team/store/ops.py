@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Optional, SupportsInt, SupportsIndex, Union
 
 REASON_EXISTS = "exists"
 REASON_CAS = "cas"
@@ -34,7 +34,7 @@ class Insert:
 
     key: str
     """Document key."""
-    value: Any
+    value: object
     """JSON-compatible document."""
 
 
@@ -50,7 +50,7 @@ class Cas:
     """Document key."""
     version: int
     """Expected current version."""
-    value: Any
+    value: object
     """JSON-compatible document to store."""
 
 
@@ -60,7 +60,7 @@ class Put:
 
     key: str
     """Document key."""
-    value: Any
+    value: object
     """JSON-compatible document."""
 
 
@@ -194,7 +194,7 @@ StoreOp = Union[
 ]
 
 
-def _clone_value(value: Any) -> Any:
+def _clone_value(value: object) -> object:
     """Return a deep copy of a JSON-compatible value.
 
     Args:
@@ -208,3 +208,10 @@ def _clone_value(value: Any) -> Any:
     if isinstance(value, list):
         return [_clone_value(item) for item in value]
     return value
+
+
+def _integer_document(value: object) -> int:
+    # Integer counters retain int() semantics at the generic document boundary.
+    if isinstance(value, (str, bytes, bytearray, SupportsInt, SupportsIndex)):
+        return int(value)
+    raise TypeError("integer document must support int conversion")

@@ -5,9 +5,22 @@ This module defines the base handler interface that all Telegram message handler
 """
 
 import abc
-from typing import Callable, Dict
+from collections.abc import Awaitable, Callable
+from typing import TypedDict
 
-from aiogram import Dispatcher
+from aiogram import Dispatcher, types
+
+
+class _HandlerCallbacks(TypedDict):
+    handle_start: Callable[[types.Message], Awaitable[None]]
+    handle_help: Callable[[types.Message], Awaitable[None]]
+    handle_about: Callable[[types.Message], Awaitable[None]]
+    handle_view_groups: Callable[[types.Message], Awaitable[None]]
+    handle_group_mention: Callable[[types.Message], Awaitable[None]]
+    handle_media_message: Callable[[types.Message, str], Awaitable[None]]
+    handle_message: Callable[[types.Message], Awaitable[None]]
+    get_help_text: Callable[[], str]
+    get_bot_user: Callable[[], types.User | None]
 
 
 class BaseHandler(abc.ABC):
@@ -19,7 +32,7 @@ class BaseHandler(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def register(self, dp: Dispatcher, callback_map: Dict[str, Callable]) -> None:
+    async def register(self, dp: Dispatcher, callback_map: _HandlerCallbacks) -> None:
         """
         Register the handler with the Telegram dispatcher.
 

@@ -1,4 +1,4 @@
-"""Public ErrorObject and deadline-exceeded failure."""
+"""Failure data returned by Runtime operations and request results."""
 
 from __future__ import annotations
 
@@ -13,17 +13,17 @@ __all__ = ["ErrorCode", "ErrorObject", "DeadlineExceededError"]
 
 
 class ErrorObject(SchemaModel):
-    """Public failure data shared by Runtime errors and handler failures.
+    """Failure information safe to reveal to a caller.
 
-    `code` is a well-known `ErrorCode`. An Agent application failure
-    code belongs in `details` of a `handler_failed` error.
+    A failed or expired Ticket carries this data; a rejected SDK operation
+    raises an exception carrying a public code. Application-specific failure
+    codes belong in `details` of a `handler_failed` error.
 
     Attributes:
-        code: Closed public error code.
-        message: Safe human-readable explanation.
-        details: Optional structured data safe to reveal to the requester.
-        retryable: Whether repeating the failed action may succeed
-            without changing input. Omit when unknown.
+        message: Explanation safe to show the requester.
+        details: Structured data safe to reveal to the requester.
+        retryable: Whether the same action may succeed without changing input;
+            omission means the Runtime has not supplied retry advice.
     """
 
     code: ErrorCode
@@ -33,11 +33,6 @@ class ErrorObject(SchemaModel):
 
 
 class DeadlineExceededError(ErrorObject):
-    """Error stored by an expired Ticket.
-
-    A Ticket is the requester's record for one request. When its
-    deadline passes before an accepted reply, the Ticket is `expired`
-    and carries this object. `code` is always `deadline_exceeded`.
-    """
+    """Failure stored when an open Ticket reaches its work deadline."""
 
     code: Literal["deadline_exceeded"]

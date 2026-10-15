@@ -33,7 +33,7 @@ except SessionError as exc:
 ## `SessionError`
 
 ```python
-SessionError(code: str, message: str, *, details: Optional[dict[str, Any]] = None, retryable: Optional[bool] = None)
+SessionError(code: str, message: str, *, details: Optional[JsonObject] = None, retryable: Optional[bool] = None)
 ```
 
 A Session or handler-facing Runtime operation failed.
@@ -61,7 +61,7 @@ Record the public error `code` and human-readable `message`.
 
 * `message` (`str`): Human-readable explanation.
 
-* `details` (`Optional[dict[str, Any]]`): Optional JSON object with more data.
+* `details` (`Optional[JsonObject]`): Optional JSON object with more data.
 
 * `retryable` (`Optional[bool]`): Whether the caller may retry the same operation.
 

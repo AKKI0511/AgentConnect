@@ -39,7 +39,7 @@ team = Team("content-squad", embeddings=encoder.embed)
 ## `EmbedFn`
 
 ```python
-EmbedFn = Callable[[Sequence[str]], Union[Sequence[Sequence[float]], Awaitable[Sequence[Sequence[float]]]]]
+EmbedFn = Callable[[list[str]], Union[Sequence[Sequence[float]], Awaitable[Sequence[Sequence[float]]]]]
 ```
 
 A callable returning one finite, nonempty vector per input, in input order.
@@ -71,6 +71,8 @@ empty input. The Team may call the backend from concurrent joins or
 searches; handle any resources your implementation owns.
 
 <a id="agentconnect-team-directory-embedder-embedder-name"></a>
+
+`property`
 
 ### `name`
 

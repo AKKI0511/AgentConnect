@@ -10,10 +10,10 @@ from mcp.shared.exceptions import MCPError
 from tests.team.conftest import make_did, profile
 
 from agentconnect.agent import BaseAgent
-from agentconnect.mcp.actions import resolve_session
 from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.mcp.server import create_team_mcp
 from agentconnect.team import Team, TeamError
+from agentconnect.team.session_auth import session_token_for_request
 from mcp import Client
 
 
@@ -442,28 +442,32 @@ async def test_runtime_error_is_tool_error():
 async def test_missing_auth_is_operator_and_bad_bearer_is_not():
     team = await Team("content-squad").start()
     try:
-        token = await resolve_session(team, None, in_process=True)
+        token = await session_token_for_request(team, None, in_process=True)
         address = await team._caller_address(token)
         assert address.startswith("operator@")
 
         with pytest.raises(TeamError) as exc:
-            await resolve_session(team, None, in_process=False)
+            await session_token_for_request(team, None, in_process=False)
         assert exc.value.code == "unauthorized"
 
         with pytest.raises(TeamError) as exc:
-            await resolve_session(team, {"Authorization": "Bearer not-a-session"})
+            await session_token_for_request(
+                team, {"Authorization": "Bearer not-a-session"}
+            )
         assert exc.value.code == "unauthorized"
 
         with pytest.raises(TeamError) as exc:
-            await resolve_session(team, {"Authorization": "not-bearer"})
+            await session_token_for_request(team, {"Authorization": "not-bearer"})
         assert exc.value.code == "unauthorized"
 
         with pytest.raises(TeamError) as exc:
-            await resolve_session(team, {"Authorization": ""}, in_process=True)
+            await session_token_for_request(
+                team, {"Authorization": ""}, in_process=True
+            )
         assert exc.value.code == "unauthorized"
 
         with pytest.raises(TeamError) as exc:
-            await resolve_session(
+            await session_token_for_request(
                 team,
                 {"X-Forwarded-For": "203.0.113.10"},
                 in_process=False,
@@ -472,7 +476,7 @@ async def test_missing_auth_is_operator_and_bad_bearer_is_not():
         assert exc.value.code == "unauthorized"
 
         with pytest.raises(TeamError) as exc:
-            await resolve_session(
+            await session_token_for_request(
                 team,
                 {"X-Forwarded-For": ""},
                 in_process=False,

@@ -8,7 +8,7 @@ The first accepted reply wins; a later distinct reply increments
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import agentconnect.team.expiry as expiry_mod
@@ -136,7 +136,7 @@ def observe_late_reply(ticket: dict[str, Any], now_ts: str) -> dict[str, Any]:
     return ticket
 
 
-def deadline_passed(ticket: dict[str, Any], now) -> bool:
+def deadline_passed(ticket: dict[str, Any], now: datetime) -> bool:
     """Return True when the Ticket deadline is at or before ``now``."""
     return parse_timestamp(ticket["deadline"]) <= now
 
@@ -263,6 +263,8 @@ async def load_ticket(store: Store, ticket_id: str) -> Optional[dict[str, Any]]:
     record = await store.get(ticket_key(ticket_id))
     if record is None:
         return None
+    if not isinstance(record, dict):
+        raise ValueError("stored record must be an object")
     return record
 
 

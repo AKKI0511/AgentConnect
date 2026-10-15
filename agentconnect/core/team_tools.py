@@ -8,7 +8,7 @@ them without a behavior change or demonstrated confusion.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from agentconnect.core.base import SchemaModel
 
 from agentconnect.core.directory import (
     FindRequest,
@@ -90,8 +90,8 @@ class TeamToolSpec:
     name: str
     title: str
     description: str
-    input_model: type[Any]
-    output_model: Any
+    input_model: type[SchemaModel]
+    output_model: object
 
 
 TEAM_TOOL_SPECS: tuple[TeamToolSpec, ...] = (

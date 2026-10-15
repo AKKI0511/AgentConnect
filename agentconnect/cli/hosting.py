@@ -6,7 +6,7 @@ import importlib
 import inspect
 import sys
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
 
 from agentconnect.agent.base import BaseAgent
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
@@ -25,7 +25,7 @@ def ensure_import_path(directory: Path) -> None:
     sys.path.insert(0, resolved)
 
 
-def import_symbol(ref: str) -> Any:
+def import_symbol(ref: str) -> object:
     """Import ``module:attr`` and return the attribute.
 
     Writer = import_symbol("agents.writer:Writer")
@@ -97,10 +97,13 @@ def _is_control_flow(exc: BaseException) -> bool:
 
 def team_from_config(config: TeamConfig) -> Team:
     """Build an unstarted Team from a Team file."""
-    extras: list[Any] = []
+    extras: list[Callable[..., object]] = []
     for ref in config.tools:
         try:
-            extras.append(import_symbol(ref))
+            symbol = import_symbol(ref)
+            if not callable(symbol):
+                raise ValueError(f"{ref} is not callable")
+            extras.append(symbol)
         except Exception as exc:
             raise ValueError(f"could not import extra tool {ref}: {exc}") from exc
     return Team(
@@ -112,10 +115,9 @@ def team_from_config(config: TeamConfig) -> Team:
     )
 
 
-async def join_hosted_agent(team: Team, agent: Any) -> None:
-    """Join ``agent`` to ``team``, issuing a token when the Team requires auth."""
-    if team.require_join_auth:
-        issued = await team.issue_join_token(name=agent.name, agent_did=agent.agent_did)
-        await agent.join(team, join_token=issued["token"])
-        return
+async def join_hosted_agent(team: Team, agent: BaseAgent) -> None:
+    """Join ``agent`` to this process's ``team``.
+
+    An authenticated Team provisions the join token inside ``BaseAgent.join``.
+    """
     await agent.join(team)

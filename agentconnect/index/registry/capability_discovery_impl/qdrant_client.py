@@ -41,11 +41,9 @@ async def initialize_qdrant_clients(
 
         if config is None:
             config = VectorSearchSettings()
-        connection_config = config.get_connection_config()
-
-        timeout = connection_config.get("timeout", 30)
-        prefer_grpc = connection_config.get("prefer_grpc", False)
-        grpc_port = connection_config.get("grpc_port", None)
+        timeout = config.advanced.timeout
+        prefer_grpc = config.advanced.prefer_grpc
+        grpc_port = config.advanced.grpc_port or 6334
 
         # Deployment details
         deployment = config.deployment
@@ -54,15 +52,12 @@ async def initialize_qdrant_clients(
         remote_url = None
         remote_api_key = None
 
-        if mode == "local_file":
+        if deployment.type == "local_file":
             local_path = deployment.path
-        elif mode == "remote":
+        elif deployment.type == "remote":
             remote_url = deployment.url
             # Unwrap SecretStr safely for use with the client
-            api_key_value = deployment.api_key
-            if hasattr(api_key_value, "get_secret_value"):
-                api_key_value = api_key_value.get_secret_value()
-            remote_api_key = api_key_value
+            remote_api_key = deployment.api_key.get_secret_value()
 
         # Create synchronous client
         sync_client = None
@@ -139,7 +134,12 @@ async def init_qdrant_collection(
         if collection_exists:
             try:
                 collection_info = await async_client.get_collection(collection_name)
-                existing_vector_size = collection_info.config.params.vectors.size
+                from qdrant_client.http.models import VectorParams
+
+                vectors = collection_info.config.params.vectors
+                if not isinstance(vectors, VectorParams):
+                    raise ValueError("expected an unnamed vector configuration")
+                existing_vector_size = vectors.size
 
                 if existing_vector_size != expected_vector_size:
                     logger.warning(
@@ -279,6 +279,7 @@ async def init_qdrant_collection(
     except Exception:
         logger.error("Failed to initialize Qdrant collection", exc_info=True)
         return False
+    return False
 
 
 async def delete_points_by_agent_id(
@@ -328,7 +329,9 @@ async def delete_points_by_agent_id(
         # Delete the points from Qdrant
         await async_client.delete(
             collection_name=collection_name,
-            points_selector=qdrant_models.PointIdsList(points=point_ids),
+            points_selector=qdrant_models.PointIdsList(
+                points=[point_id for point_id in point_ids]
+            ),
         )
 
         return point_ids

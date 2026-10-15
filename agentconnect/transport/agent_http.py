@@ -1,28 +1,52 @@
-"""HTTP client for agent-to-team Runtime operations.
-
-POST for every operation except Ticket and history reads. SSE on
-`GET /session/events` is a work hint, not a correctness channel.
-
-This binding is the agent Session over HTTP. Everyday Agent code uses
-`BaseAgent`, which calls these operations through a Session.
-
-Ordinary operations use the configured finite timeout, including
-Ticket reads and heartbeat. A `collect=wait` send may use a longer
-finite timeout that covers `wait_hold_seconds`. The SSE work hint
-stays open until the Session ends. Timeouts are `unavailable` and
-do not claim the Runtime rejected the work. A lost send response
-retries the same body.
-"""
+"""HTTP operations and optional SSE work hints for an Agent Session."""
 
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Mapping
+from collections.abc import Callable, Mapping
+from typing import AsyncIterator, TypeVar
+
+from agentconnect.core.base import JsonObject, JsonValue, dump_public, parse_schema
+from agentconnect.core.directory import DirectoryEntry, FindResult
+from agentconnect.core.operations import (
+    CompleteResult,
+    HeartbeatResult,
+    HistoryResult,
+    JoinChallenge,
+    JoinRequest,
+    JoinResult,
+    LeaseResult,
+    RenewResult,
+    ReplyRequest,
+    ReplyResult,
+    RuntimeEvent,
+    SendRequest,
+    SendResult,
+    parse_history_result,
+    parse_join_result,
+    parse_lease_result,
+    parse_send_result,
+)
+from agentconnect.core.ticket import Ticket, parse_ticket
+from agentconnect.core.primitives import Address, SessionToken, Uuid
 from urllib.parse import quote
 
 import httpx
+from pydantic import TypeAdapter
 
 from agentconnect.transport.runtime import TransportError
+
+_Result = TypeVar("_Result")
+_ERROR_JSON: TypeAdapter[JsonObject] = TypeAdapter(JsonObject)
+
+
+def _parse_result(parser: Callable[[object], _Result], data: object) -> _Result:
+    """Validate external Runtime output through the transport error boundary."""
+    try:
+        return parser(data)
+    except ValueError as exc:
+        raise TransportError("internal", "Runtime returned an invalid result") from exc
+
 
 AGENTCONNECT_V1 = "/agentconnect/v1"
 
@@ -72,18 +96,26 @@ def normalize_runtime_url(url: str) -> str:
 
 
 class HttpRuntimeTransport:
-    """Runtime operations over HTTP POST and an optional SSE event stream.
+    """Use RuntimeTransport operations against a served Team over HTTP.
 
-    Session transport. Everyday Agent code uses `BaseAgent.join` with a
-    URL rather than constructing this class.
+    Owns an HTTP client that must be closed. Session tokens are sent as Bearer
+    credentials after admission; constructing the transport does not join.
+    Runtime error bodies retain their public codes and details. Network failures
+    become `unavailable`, and cancellation propagates.
+
+    See `RuntimeTransport` for result shapes and operation authority.
     """
 
     def __init__(self, url: str, *, timeout: float = 30.0) -> None:
-        """Connect to a Runtime origin. `url` may omit `/agentconnect/v1`.
+        """Prepare connectivity to the Runtime origin or its `/agentconnect/v1` URL.
 
         Args:
-            url: Runtime origin such as `http://127.0.0.1:9000`.
-            timeout: Ordinary operation timeout in seconds. Defaults to 30.
+            timeout: Finite ordinary request timeout in seconds. Connection setup
+                waits at most five seconds, or this shorter bound. Sends may wait
+                longer to cover the Runtime's collection hold.
+
+        Raises:
+            ValueError: The URL is empty.
         """
         self._base = normalize_runtime_url(url)
         self._timeout = timeout
@@ -93,79 +125,79 @@ class HttpRuntimeTransport:
         )
 
     def configure_wait_hold(self, wait_hold_seconds: float) -> None:
-        """Keep the send timeout finite and above the Runtime wait hold.
+        """Set the Runtime wait hold reported at join.
 
-        Args:
-            wait_hold_seconds: Runtime `wait_hold_seconds` from `join`.
+        Subsequent send timeouts use the greater of the ordinary timeout and this
+        hold plus five seconds. This changes waiting, rather than a work deadline.
         """
         self._wait_hold_seconds = max(0.0, float(wait_hold_seconds))
 
     def _send_timeout(self) -> float:
         return max(self._timeout, self._wait_hold_seconds + 5.0)
 
-    async def join_challenge(self) -> dict[str, Any]:
-        """GET `/join/challenge`. Return a short-lived identity-proof challenge."""
-        return await self._request("GET", "/join/challenge", auth=None)
+    async def join_challenge(self) -> JoinChallenge:
+        """Fetch a fresh identity-proof challenge over HTTP without Session authentication."""
+        return _parse_result(
+            lambda data: parse_schema(JoinChallenge, data),
+            await self._request("GET", "/join/challenge", auth=None),
+        )
 
-    async def join(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        """POST `/join`. Create or reconnect a Membership and open a Session.
+    async def join(self, request: JoinRequest) -> JoinResult:
+        """Open a Session over HTTP with admission credentials in the JoinRequest body."""
+        return _parse_result(
+            parse_join_result,
+            await self._request("POST", "/join", json=dump_public(request), auth=None),
+        )
 
-        Args:
-            request: Join body (`name`, `agent_did`, `profile`, …).
-        """
-        return await self._request("POST", "/join", json=dict(request), auth=None)
-
-    async def disconnect(self, session_token: str) -> None:
-        """POST `/session/disconnect`. Close this Session. Membership is retained.
-
-        Args:
-            session_token: Live Session token from `join`.
-        """
+    async def disconnect(self, session_token: SessionToken) -> None:
+        """End the Session over HTTP; its Membership and accepted work remain."""
         await self._request(
             "POST", "/session/disconnect", auth=session_token, expect_json=False
         )
 
-    async def heartbeat(self, session_token: str) -> dict[str, Any]:
-        """POST `/session/heartbeat`. Prove the Client still holds its Session.
-
-        Args:
-            session_token: Live Session token from `join`.
-        """
-        return await self._request("POST", "/session/heartbeat", auth=session_token)
+    async def heartbeat(self, session_token: SessionToken) -> HeartbeatResult:
+        """Renew Session expiry over HTTP; ordinary authenticated calls do not renew it."""
+        return _parse_result(
+            lambda data: parse_schema(HeartbeatResult, data),
+            await self._request("POST", "/session/heartbeat", auth=session_token),
+        )
 
     async def send(
-        self, session_token: str, request: Mapping[str, Any]
-    ) -> dict[str, Any]:
-        """POST `/messages`. Accept one request or event for one recipient.
+        self, session_token: SessionToken, request: SendRequest
+    ) -> SendResult:
+        """Submit work over HTTP and retry once on timeout with the identical body.
 
-        Session transport. Agent code uses `BaseAgent.ask`. A dropped wait
-        connection retries the same body so the Runtime returns the stored
-        `SendResult`. This method does not invent a Message.
-
-        Args:
-            session_token: Live Session token from `join`.
-            request: Send body (`id`, `recipient`, `kind`, `content`, …).
+        The send timeout covers the negotiated Runtime wait hold. If both attempts
+        time out, raises `TransportError` with `unavailable`; the Message may already
+        be accepted. Keep its id to recover the result rather than submitting new work.
+        Other connection failures are surfaced without this timeout retry.
         """
-        body = dict(request)
+        body = dump_public(request)
         timeout = self._send_timeout()
         try:
-            return await self._request(
-                "POST",
-                "/messages",
-                json=body,
-                auth=session_token,
-                timeout=timeout,
-            )
-        except (httpx.TimeoutException, TransportError) as exc:
-            if not _is_timeout_failure(exc):
-                raise
-            try:
-                return await self._request(
+            return _parse_result(
+                parse_send_result,
+                await self._request(
                     "POST",
                     "/messages",
                     json=body,
                     auth=session_token,
                     timeout=timeout,
+                ),
+            )
+        except (httpx.TimeoutException, TransportError) as exc:
+            if not _is_timeout_failure(exc):
+                raise
+            try:
+                return _parse_result(
+                    parse_send_result,
+                    await self._request(
+                        "POST",
+                        "/messages",
+                        json=body,
+                        auth=session_token,
+                        timeout=timeout,
+                    ),
                 )
             except (httpx.TimeoutException, TransportError) as retry_exc:
                 if _is_timeout_failure(retry_exc):
@@ -176,142 +208,131 @@ class HttpRuntimeTransport:
                     ) from retry_exc
                 raise
 
-    async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
-        """POST `/mailbox/lease`. Pull available work from the Membership Mailbox.
-
-        Args:
-            session_token: Live Session token from `join`.
-            max_items: How many Deliveries to take, 1 to 100.
-        """
-        return await self._request(
-            "POST",
-            "/mailbox/lease",
-            json={"max_items": max_items},
-            auth=session_token,
+    async def lease(
+        self, session_token: SessionToken, max_items: int = 1
+    ) -> LeaseResult:
+        """Fetch available Delivery attempts over HTTP within Session capacity."""
+        return _parse_result(
+            parse_lease_result,
+            await self._request(
+                "POST",
+                "/mailbox/lease",
+                json={"max_items": max_items},
+                auth=session_token,
+            ),
         )
 
-    async def renew(self, session_token: str, lease_id: str) -> dict[str, Any]:
-        """POST `/deliveries/renew`. Extend one active Delivery lease.
-
-        Args:
-            session_token: Live Session token from `join`.
-            lease_id: `lease_id` from a Delivery this Session holds.
-        """
-        return await self._request(
-            "POST",
-            "/deliveries/renew",
-            json={"lease_id": lease_id},
-            auth=session_token,
+    async def renew(self, session_token: SessionToken, lease_id: Uuid) -> RenewResult:
+        """Renew an active attempt owned by the Session."""
+        return _parse_result(
+            lambda data: parse_schema(RenewResult, data),
+            await self._request(
+                "POST",
+                "/deliveries/renew",
+                json={"lease_id": lease_id},
+                auth=session_token,
+            ),
         )
 
-    async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
-        """POST `/deliveries/complete`. Finish a Delivery without a response Message.
-
-        Args:
-            session_token: Live Session token from `join`.
-            lease_id: `lease_id` from a Delivery this Session holds.
-        """
-        return await self._request(
-            "POST",
-            "/deliveries/complete",
-            json={"lease_id": lease_id},
-            auth=session_token,
+    async def complete(
+        self, session_token: SessionToken, lease_id: Uuid
+    ) -> CompleteResult:
+        """Complete an event or decline a request under an active Session-owned lease."""
+        return _parse_result(
+            lambda data: parse_schema(CompleteResult, data),
+            await self._request(
+                "POST",
+                "/deliveries/complete",
+                json={"lease_id": lease_id},
+                auth=session_token,
+            ),
         )
 
     async def reply(
-        self, session_token: str, request: Mapping[str, Any]
-    ) -> dict[str, Any]:
-        """POST `/deliveries/reply`. Finish a reply-expected Delivery.
-
-        Args:
-            session_token: Live Session token from `join`.
-            request: Reply body (`id`, `lease_id`, `outcome`, …).
-        """
-        return await self._request(
-            "POST", "/deliveries/reply", json=dict(request), auth=session_token
+        self, session_token: SessionToken, request: ReplyRequest
+    ) -> ReplyResult:
+        """Submit a successful or failed reply under an active Session-owned request lease."""
+        return _parse_result(
+            lambda data: parse_schema(ReplyResult, data),
+            await self._request(
+                "POST",
+                "/deliveries/reply",
+                json=dump_public(request),
+                auth=session_token,
+            ),
         )
 
-    async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """GET `/tickets/{ticket_id}`. Return the current Ticket owned by the caller.
-
-        Args:
-            session_token: Live Session token from `join`.
-            ticket_id: Ticket id from a request this Membership sent.
-        """
-        return await self._request(
-            "GET", f"/tickets/{quote(ticket_id, safe='')}", auth=session_token
+    async def get_result(self, session_token: SessionToken, ticket_id: Uuid) -> Ticket:
+        """Fetch retained wire Ticket data over HTTP under its owning Membership."""
+        return _parse_result(
+            parse_ticket,
+            await self._request(
+                "GET", f"/tickets/{quote(ticket_id, safe='')}", auth=session_token
+            ),
         )
 
     async def get_history(
         self,
-        session_token: str,
-        thread_id: str,
+        session_token: SessionToken,
+        thread_id: Uuid,
         *,
-        before: str | None = None,
+        before: Uuid | None = None,
         limit: int = 50,
-    ) -> dict[str, Any]:
-        """GET `/threads/{thread_id}/history`. Return one page of retained Thread history.
-
-        Args:
-            session_token: Live Session token from `join`.
-            thread_id: Thread id from a Message or Ticket.
-            before: Return Messages older than this id. Omit for the
-                newest page.
-            limit: Page size from 1 to 200. Defaults to 50.
-        """
-        params: dict[str, Any] = {"limit": limit}
+    ) -> HistoryResult:
+        """Fetch a retained history page over HTTP for a Thread the caller participates in."""
+        params: dict[str, str | int] = {"limit": limit}
         if before is not None:
             params["before"] = before
-        return await self._request(
-            "GET",
-            f"/threads/{quote(thread_id, safe='')}/history",
-            params=params,
-            auth=session_token,
+        return _parse_result(
+            parse_history_result,
+            await self._request(
+                "GET",
+                f"/threads/{quote(thread_id, safe='')}/history",
+                params=params,
+                auth=session_token,
+            ),
         )
 
     async def find(
         self,
-        session_token: str,
+        session_token: SessionToken,
         query: str,
         *,
         limit: int | None = None,
-    ) -> dict[str, Any]:
-        """POST `/directory/find`. Search this Team's Directory.
-
-        Args:
-            session_token: Live Session token from `join`.
-            query: Natural-language need.
-            limit: Maximum matches from 1 to 100. Omit for every other
-                member, at most 100.
-        """
-        body: dict[str, Any] = {"query": query}
+    ) -> FindResult:
+        """Fetch ranked Directory candidates over HTTP."""
+        body: JsonObject = {"query": query}
         if limit is not None:
             body["limit"] = limit
-        return await self._request(
-            "POST",
-            "/directory/find",
-            json=body,
-            auth=session_token,
+        return _parse_result(
+            lambda data: parse_schema(FindResult, data),
+            await self._request(
+                "POST",
+                "/directory/find",
+                json=body,
+                auth=session_token,
+            ),
         )
 
-    async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
-        """GET `/directory/members/{address}`. Return one Directory entry.
-
-        Args:
-            session_token: Live Session token from `join`.
-            address: Agent name or qualified Address in this Team.
-        """
-        return await self._request(
-            "GET",
-            f"/directory/members/{quote(address, safe='')}",
-            auth=session_token,
+    async def get_profile(
+        self, session_token: SessionToken, address: Address
+    ) -> DirectoryEntry:
+        """Fetch a full Directory entry over HTTP for a same-Team Address."""
+        return _parse_result(
+            lambda data: parse_schema(DirectoryEntry, data),
+            await self._request(
+                "GET",
+                f"/directory/members/{quote(address, safe='')}",
+                auth=session_token,
+            ),
         )
 
-    async def events(self, session_token: str) -> AsyncIterator[dict[str, Any]]:
-        """GET `/session/events`. Yield work hints, not a correctness channel.
+    async def events(self, session_token: SessionToken) -> AsyncIterator[RuntimeEvent]:
+        """Read SSE work hints with no finite stream timeout.
 
-        Args:
-            session_token: Live Session token from `join`.
+        Connection errors become `unavailable`. Cancelling or closing the iterator
+        releases the stream; this method does not reconnect it. Unknown event types
+        are yielded for the client to ignore.
         """
         url = self._base + "/session/events"
         headers = {
@@ -338,12 +359,15 @@ class HttpRuntimeTransport:
                         if data_lines:
                             raw = "\n".join(data_lines)
                             try:
-                                data = json.loads(raw) if raw else {}
+                                data: object = json.loads(raw) if raw else {}
                             except json.JSONDecodeError:
                                 data = {}
                             if not isinstance(data, dict):
                                 data = {}
-                            yield {"type": event_type, "data": data}
+                            yield _parse_result(
+                                lambda raw: parse_schema(RuntimeEvent, raw),
+                                {"type": event_type, "data": data},
+                            )
                         event_type = "message"
                         data_lines = []
         except httpx.RequestError as exc:
@@ -352,7 +376,7 @@ class HttpRuntimeTransport:
             ) from exc
 
     async def close(self) -> None:
-        """Close the HTTP client. Does not disconnect the Session."""
+        """Close the owned HTTP client; disconnect the Session separately."""
         await self._client.aclose()
 
     async def _request(
@@ -360,27 +384,36 @@ class HttpRuntimeTransport:
         method: str,
         path: str,
         *,
-        json: Mapping[str, Any] | None = None,
-        params: Mapping[str, Any] | None = None,
+        json: Mapping[str, JsonValue] | None = None,
+        params: Mapping[str, str | int] | None = None,
         auth: str | None = "",
         expect_json: bool = True,
         timeout: float | None = None,
-    ) -> Any:
+    ) -> object:
         headers = {"Accept": "application/json"}
         if auth:
             headers["Authorization"] = f"Bearer {auth}"
         if json is not None:
             headers["Content-Type"] = "application/json"
         url = self._base + path
-        request_kwargs: dict[str, Any] = {
-            "headers": headers,
-            "json": None if json is None else dict(json),
-            "params": None if params is None else dict(params),
-        }
-        if timeout is not None:
-            request_kwargs["timeout"] = timeout
         try:
-            response = await self._client.request(method, url, **request_kwargs)
+            if timeout is None:
+                response = await self._client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=None if json is None else dict(json),
+                    params=params,
+                )
+            else:
+                response = await self._client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=None if json is None else dict(json),
+                    params=params,
+                    timeout=timeout,
+                )
         except httpx.TimeoutException as exc:
             raise TransportError(
                 "unavailable",
@@ -398,7 +431,7 @@ class HttpRuntimeTransport:
         if not expect_json:
             return None
         try:
-            payload = response.json()
+            payload: object = response.json()
         except ValueError as exc:
             raise TransportError("internal", "Runtime returned invalid JSON") from exc
         if not isinstance(payload, dict):
@@ -407,13 +440,13 @@ class HttpRuntimeTransport:
 
     @staticmethod
     def _error_from_response(status_code: int, raw: bytes) -> TransportError:
-        body: Any = None
+        body: object = None
         try:
             body = json.loads(raw.decode("utf-8") or "null")
         except (UnicodeDecodeError, json.JSONDecodeError):
             body = None
         if isinstance(body, dict) and body.get("code"):
-            error = TransportError.from_error_object(body)
+            error = TransportError.from_error_object(_ERROR_JSON.validate_python(body))
             if error.retryable is None:
                 error.retryable = status_code in _RETRYABLE_STATUS
             return error

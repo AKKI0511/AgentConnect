@@ -5,11 +5,29 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-from typing import Any, Optional, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    Optional,
+    ParamSpec,
+    Sequence,
+    TypeVar,
+)
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+    from redis.commands.core import AsyncScript
+
+from agentconnect.core.primitives import PersistenceMode
 
 from agentconnect.team.store.apply import Overlay, apply_ops, watch_keys
 from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.ops import ApplyResult, IndexAddIfCardBelow, StoreOp
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 _CAS_LUA = """
 local cur = redis.call('GET', KEYS[1])
@@ -96,7 +114,9 @@ def _is_disconnect(exc: BaseException | None) -> bool:
     return isinstance(exc, (ConnectionError, TimeoutError))
 
 
-def _retry_read(method):
+def _retry_read(
+    method: Callable[_P, Coroutine[object, object, _R]],
+) -> Callable[_P, Coroutine[object, object, _R]]:
     """Retry reads only; a lost write reply leaves its outcome unknown.
 
     redis-py reconnects the failed connection. Keep the shared pool open so
@@ -104,14 +124,15 @@ def _retry_read(method):
     """
 
     @functools.wraps(method)
-    async def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
+    async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _R:
         for attempt in range(8):
             try:
-                return await method(self, *args, **kwargs)
+                return await method(*args, **kwargs)
             except Exception as exc:
                 if attempt == 7 or not _is_disconnect(exc):
                     raise
                 await asyncio.sleep(min(0.05 * (2**attempt), 0.5))
+        raise AssertionError("retry loop exhausted without returning or raising")
 
     return wrapped
 
@@ -130,7 +151,7 @@ class RedisStore(Store):
     Install `agentconnect[redis]` before opening this backend.
     """
 
-    persistence = "durable"
+    persistence: PersistenceMode = "durable"
     """State survives a Runtime restart while Redis retains its data."""
 
     def __init__(self, url: str, *, prefix: str = "ac") -> None:
@@ -146,12 +167,12 @@ class RedisStore(Store):
             raise ValueError("Redis store requires a URL")
         self._url = url
         self._prefix = prefix.rstrip(":")
-        self._redis: Any = None
-        self._cas = None
-        self._put = None
-        self._index_add_if_below = None
-        self._incr_if_below = None
-        self._decr_floor = None
+        self._redis: Redis | None = None
+        self._cas: AsyncScript | None = None
+        self._put: AsyncScript | None = None
+        self._index_add_if_below: AsyncScript | None = None
+        self._incr_if_below: AsyncScript | None = None
+        self._decr_floor: AsyncScript | None = None
 
     def _key(self, key: str) -> str:
         return f"{self._prefix}:{key}"
@@ -170,7 +191,7 @@ class RedisStore(Store):
         """
         await self._client()
 
-    async def _client(self):
+    async def _client(self) -> Redis:
         if self._redis is not None:
             return self._redis
         try:
@@ -216,7 +237,7 @@ class RedisStore(Store):
         client = await self._client()
         await client.ping()
 
-    async def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> object:
         """Return the stored JSON value, or None when the key is missing."""
         record = await self.get_record(key)
         if record is None:
@@ -224,7 +245,7 @@ class RedisStore(Store):
         return record.value
 
     @_retry_read
-    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+    async def get_many(self, keys: Sequence[str]) -> list[object]:
         """Return values for `keys` in the same order. Missing keys are None.
 
         Each result is independent of caller mutation. Large reads may
@@ -235,9 +256,9 @@ class RedisStore(Store):
         client = await self._client()
         physical = [self._key(key) for key in keys]
         batch = 128
-        out: list[Any | None] = []
+        out: list[object] = []
         loop = asyncio.get_running_loop()
-        pending: asyncio.Task[Any] | None = None
+        pending: asyncio.Future[list[str | None]] | None = None
         try:
             for start in range(0, len(physical), batch):
                 if pending is None:
@@ -248,7 +269,7 @@ class RedisStore(Store):
                 nxt = start + batch
                 if nxt < len(physical):
                     await asyncio.sleep(0)
-                    pending = asyncio.create_task(
+                    pending = asyncio.ensure_future(
                         client.mget(physical[nxt : nxt + batch])
                     )
                 if len(raws) >= 16:
@@ -314,9 +335,9 @@ class RedisStore(Store):
                 )
                 result = apply_ops(batch, overlay)
                 if not result.ok:
-                    await pipe.unwatch()
+                    await pipe.unwatch()  # type: ignore[no-untyped-call]  # redis-py omits this async pipeline annotation.
                     return result
-                pipe.multi()
+                pipe.multi()  # type: ignore[no-untyped-call]  # redis-py omits this synchronous pipeline annotation.
                 self._emit_overlay(pipe, overlay)
                 await pipe.execute()
                 return ApplyResult(ok=True)
@@ -329,7 +350,7 @@ class RedisStore(Store):
                 last_cas = ApplyResult(ok=False, reason="cas")
                 continue
             finally:
-                await pipe.reset()
+                await pipe.reset()  # type: ignore[no-untyped-call]  # redis-py omits this async pipeline annotation.
         return last_cas
 
     async def _snapshot_watched(
@@ -357,7 +378,7 @@ class RedisStore(Store):
 
         cards: dict[str, int] = {}
         scores: dict[tuple[str, str], float | None] = {}
-        commands: list[tuple[Any, ...]] = []
+        commands: list[tuple[str, ...]] = []
         card_order = list(index_keys)
         for key in card_order:
             commands.append(("ZCARD", self._index_key(key)))
@@ -413,32 +434,34 @@ class RedisStore(Store):
         for key, ttl in overlay.expire.items():
             pipe.expire(self._key(key), ttl)
 
-    async def put(self, key: str, value: Any) -> None:
+    async def put(self, key: str, value: object) -> None:
         """Write a JSON value at `key`, bumping the version."""
         client = await self._client()
         script = self._put
         if script is None:
             await self._client()
             script = self._put
+        assert script is not None
         await script(
             keys=[self._key(key)],
             args=[_dumps(value)],
             client=client,
         )
 
-    async def insert(self, key: str, value: Any) -> bool:
+    async def insert(self, key: str, value: object) -> bool:
         """Write `value` only if `key` is absent. True when inserted."""
         client = await self._client()
         result = await client.set(self._key(key), _wrap(value, 1), nx=True)
         return bool(result)
 
-    async def compare_and_set(self, key: str, version: int, value: Any) -> bool:
+    async def compare_and_set(self, key: str, version: int, value: object) -> bool:
         """Replace `key` when the stored version matches."""
         client = await self._client()
         script = self._cas
         if script is None:
             await self._client()
             script = self._cas
+        assert script is not None
         result = await script(
             keys=[self._key(key)],
             args=[str(version), _wrap(value, version + 1)],
@@ -455,25 +478,25 @@ class RedisStore(Store):
     async def set_add(self, key: str, member: str) -> None:
         """Add `member` to the Redis set at `key`."""
         client = await self._client()
-        await client.sadd(self._set_key(key), member)
+        await client.sadd(self._set_key(key), member)  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
 
     async def set_remove(self, key: str, member: str) -> None:
         """Remove `member` from the Redis set at `key`."""
         client = await self._client()
-        await client.srem(self._set_key(key), member)
+        await client.srem(self._set_key(key), member)  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
 
     @_retry_read
     async def set_members(self, key: str) -> list[str]:
         """Return the sorted members of the Redis set at `key`."""
         client = await self._client()
-        members = await client.smembers(self._set_key(key))
+        members = await client.smembers(self._set_key(key))  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
         return sorted(str(item) for item in members)
 
     @_retry_read
     async def set_is_member(self, key: str, member: str) -> bool:
         """Return True when `member` is in the Redis set at `key`."""
         client = await self._client()
-        return bool(await client.sismember(self._set_key(key), member))
+        return bool(await client.sismember(self._set_key(key), member))  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
 
     async def index_add(self, key: str, score: float, member: str) -> None:
         """Add or update `member` in the Redis sorted set at `key`."""
@@ -496,15 +519,12 @@ class RedisStore(Store):
     ) -> list[str]:
         """Return members with scores in `[min_score, max_score]`, lowest first."""
         client = await self._client()
-        kwargs: dict[str, Any] = {}
-        if limit is not None:
-            kwargs["start"] = 0
-            kwargs["num"] = max(0, int(limit))
         members = await client.zrangebyscore(
             self._index_key(key),
             min_score,
             max_score,
-            **kwargs,
+            start=0 if limit is not None else None,
+            num=max(0, int(limit)) if limit is not None else None,
         )
         return [str(item) for item in members]
 
@@ -523,6 +543,7 @@ class RedisStore(Store):
         if script is None:
             await self._client()
             script = self._index_add_if_below
+        assert script is not None
         result = await script(
             keys=[self._index_key(key)],
             args=[str(max_card), str(float(score)), member],
@@ -543,6 +564,7 @@ class RedisStore(Store):
         if script is None:
             await self._client()
             script = self._incr_if_below
+        assert script is not None
         ttl = 0 if ttl_seconds is None else max(1, int(ttl_seconds))
         result = await script(
             keys=[self._key(key)],
@@ -563,6 +585,7 @@ class RedisStore(Store):
         if script is None:
             await self._client()
             script = self._decr_floor
+        assert script is not None
         ttl = 0 if ttl_seconds is None else max(1, int(ttl_seconds))
         result = await script(
             keys=[self._key(key)],
@@ -585,11 +608,11 @@ class RedisStore(Store):
             await client.delete(*batch)
 
 
-def _dumps(value: Any) -> str:
+def _dumps(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def _wrap(value: Any, version: int) -> str:
+def _wrap(value: object, version: int) -> str:
     return json.dumps(
         {"v": int(version), "d": value},
         ensure_ascii=False,
@@ -604,8 +627,8 @@ def _unwrap(raw: str) -> StoreRecord:
     return StoreRecord(value=payload, version=1)
 
 
-def _decode_mget(raws: Sequence[Any]) -> list[Any | None]:
-    out: list[Any | None] = []
+def _decode_mget(raws: Sequence[str | None]) -> list[object]:
+    out: list[object] = []
     for raw in raws:
         if raw is None:
             out.append(None)

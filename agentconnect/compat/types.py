@@ -7,7 +7,11 @@ does not restore removed enumerations such as ``ModelProvider``.
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agentconnect.core.identity import AgentIdentity as AgentIdentity
+    from agentconnect.core.identity import VerificationStatus as VerificationStatus
 
 from agentconnect.core.kinds import MessageKind
 from agentconnect.core.primitives import (
@@ -37,7 +41,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     """Load identity types without importing cryptography at module import."""
     target = _LAZY_EXPORTS.get(name)
     if target is None:

@@ -4,12 +4,13 @@ Command message handlers for the Telegram agent.
 This module contains handlers for Telegram command messages, like /start and /help.
 """
 
-from typing import Callable, Dict
-
 from aiogram import Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 
-from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import (
+    BaseHandler,
+    _HandlerCallbacks,
+)
 from agentconnect.prebuilt.telegram.keyboards import (
     GROUP_CHAT_KEYBOARD,
     PRIVATE_CHAT_KEYBOARD,
@@ -24,7 +25,7 @@ class CommandHandler(BaseHandler):
     as well as the Help and About buttons.
     """
 
-    async def register(self, dp: Dispatcher, callback_map: Dict[str, Callable]) -> None:
+    async def register(self, dp: Dispatcher, callback_map: _HandlerCallbacks) -> None:
         """
         Register command handlers with the Telegram dispatcher.
 
@@ -35,17 +36,17 @@ class CommandHandler(BaseHandler):
 
         # Command handlers
         @dp.message(CommandStart())
-        async def handle_start(message: types.Message):
+        async def handle_start(message: types.Message) -> None:
             """Handler for the /start command."""
             await callback_map["handle_start"](message)
 
         @dp.message(Command(commands=["help"]))
-        async def handle_help(message: types.Message):
+        async def handle_help(message: types.Message) -> None:
             """Handler for the /help command."""
             await callback_map["handle_help"](message)
 
         @dp.message(F.text == "💡 Help")
-        async def handle_help_button(message: types.Message):
+        async def handle_help_button(message: types.Message) -> None:
             """Handle the Help button."""
             help_text = callback_map["get_help_text"]()
             # Choose the appropriate keyboard based on chat type
@@ -57,6 +58,6 @@ class CommandHandler(BaseHandler):
             await message.answer(help_text, reply_markup=keyboard)
 
         @dp.message(F.text == "🤖 About")
-        async def handle_about(message: types.Message):
+        async def handle_about(message: types.Message) -> None:
             """Handle the About button."""
             await callback_map["handle_about"](message)

@@ -41,9 +41,9 @@ class AgentRegistry:
     def __init__(
         self,
         vector_search_config: Optional[
-            Union[VectorSearchSettings, Dict[str, Any]]
+            Union[VectorSearchSettings, dict[str, object]]
         ] = None,
-    ):
+    ) -> None:
         """
         Initialize the agent registry.
 
@@ -120,7 +120,7 @@ class AgentRegistry:
             # Signal that core initialization is complete (or failed)
             self._initialized_event.set()
 
-    async def ensure_initialized(self):
+    async def ensure_initialized(self) -> None:
         """Wait until the core registry initialization is complete."""
         await self._initialized_event.wait()
 
@@ -442,7 +442,7 @@ class AgentRegistry:
         return verified
 
     async def update_registration(
-        self, agent_id: str, updates: Dict
+        self, agent_id: str, updates: Dict[str, Any]
     ) -> Optional[AgentRegistration]:
         """
         Update agent registration details.

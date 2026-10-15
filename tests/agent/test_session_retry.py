@@ -66,9 +66,9 @@ async def test_call_retries_send_on_current_transport():
 
     session._reconnect = _reconnect
     result = await session._call(
-        "send",
-        "tok-1",
-        {"id": "15c44926-4c2a-4a01-a13b-95152da9a859", "content": "ping"},
+        lambda token: session._transport.send(
+            token, {"id": "15c44926-4c2a-4a01-a13b-95152da9a859", "content": "ping"}
+        )
     )
     assert first.sends == 1
     assert first.closed
@@ -96,7 +96,7 @@ async def test_call_does_not_reconnect_on_busy():
 
     session._reconnect = _reconnect
     with pytest.raises(SessionError) as exc:
-        await session._call("send", "tok-1", {"id": "x"})
+        await session._call(lambda token: session._transport.send(token, {"id": "x"}))
     assert exc.value.code == "busy"
     assert reconnected is False
 
@@ -126,9 +126,9 @@ async def test_foreground_recovery_returns_when_reconnect_is_stuck():
     t0 = time.monotonic()
     with pytest.raises(SessionError) as exc:
         await session._call(
-            "send",
-            "tok-1",
-            {"id": "15c44926-4c2a-4a01-a13b-95152da9a859", "content": "ping"},
+            lambda token: session._transport.send(
+                token, {"id": "15c44926-4c2a-4a01-a13b-95152da9a859", "content": "ping"}
+            )
         )
     elapsed = time.monotonic() - t0
     assert exc.value.code == "unavailable"
@@ -165,7 +165,7 @@ async def test_foreground_recovery_timeout_leaves_background_reconnect():
     await holding.wait()
     t0 = time.monotonic()
     with pytest.raises(SessionError) as exc:
-        await session._call("send", "tok-1", {"id": "x"})
+        await session._call(lambda token: session._transport.send(token, {"id": "x"}))
     elapsed = time.monotonic() - t0
     assert exc.value.code == "unavailable"
     assert elapsed < 1.0
@@ -210,7 +210,7 @@ async def test_call_retries_original_send_identity_after_lost_response():
         session._connected = True
 
     session._reconnect = _reconnect
-    result = await session._call("send", "tok-1", original)
+    result = await session._call(lambda token: session._transport.send(token, original))
     assert bodies == [original, original]
     assert result["message"]["id"] == original["id"]
     assert second.sends == 1

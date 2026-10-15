@@ -22,12 +22,15 @@ Examples:
     ```
 """
 
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agentconnect.index.client import RegistryAPIClient
 
 __all__ = ["RegistryAPIClient"]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     if name == "RegistryAPIClient":
         from agentconnect.index.client import RegistryAPIClient
 

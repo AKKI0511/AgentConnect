@@ -1,24 +1,9 @@
-"""Agent identity, `did:key`, join proofs, and membership attestations.
+"""Agent-owned keys, join proofs and Team-signed membership statements.
 
-Every Agent has an Ed25519 key pair and a `did:key` derived from the
-public key. The private key stays with the Client. The Runtime stores
-the DID and verifies join proofs against it.
-
-`challenge` is a `JoinChallenge` from the Runtime. The proof is an
-EdDSA JWT. A membership attestation is a separate JWT signed by the Team
-key. This Runtime mints that token at join and does not verify inbound
-attestations.
-
-Examples:
-    Mint a key. `challenge` is a `JoinChallenge` from
-    `Team.join_challenge`:
-
-    ```python
-    from agentconnect.core.identity import AgentIdentity, issue_identity_proof
-
-    identity = AgentIdentity.create_key_based()
-    proof = issue_identity_proof(identity, challenge)
-    ```
+Persist the Agent's key when you need to reconnect to its retained Membership.
+A join proof shows key control for a fresh Runtime challenge. A membership
+attestation is a separate statement signed by the Team; it does not grant
+admission or Session authority. The Runtime does not accept inbound attestations.
 """
 
 from __future__ import annotations
@@ -29,7 +14,11 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Dict, Mapping, Optional, TypedDict
+from typing import Any, Mapping, Optional, TypedDict
+
+from agentconnect.core.base import JsonObject, JsonValue
+from agentconnect.core.operations import JoinChallenge
+from agentconnect.core.primitives import AgentDid
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -42,8 +31,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 _ED25519_MULTICODEC = b"\xed\x01"
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _DID_KEY = re.compile(r"^did:key:z[1-9A-HJ-NP-Za-km-z]+$")
-_NONCE = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
-_AUDIENCE = re.compile(r"^agentconnect:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _IDENTITY_PROOF_CLAIMS = frozenset({"iss", "aud", "nonce", "iat", "exp"})
 _ATTESTATION_TYP = "ac-membership+jwt"
 IDENTITY_PROOF_IAT_SKEW_SECONDS = 60
@@ -67,20 +54,18 @@ class VerificationStatus(str, Enum):
 
 
 class MembershipAttestationClaims(TypedDict):
-    """Decoded membership attestation. The Team signed this statement.
+    """Membership claims from a verified Team-signed statement.
 
-    A third party can later verify the JWT with the Team's public key. The
-    current Runtime mints the token at join and does not verify inbound
-    attestations.
+    These describe what the signer asserted, rather than current Session authority.
 
     Attributes:
-        issuer_did: Team DID that signed the statement.
-        agent_did: Agent `did:key` this Team vouches for.
-        team_name: Team named in the JWT audience.
-        name: Agent name in this Team.
-        address: Qualified Address in this Team.
-        issued_at: Unix `iat` seconds.
-        expires_at: Unix `exp` seconds.
+        issuer_did: Team identity used to verify the signature.
+        agent_did: Agent identity the signer vouches for.
+        team_name: Team named by the statement's audience.
+        name: Membership name recorded by the signer.
+        address: Qualified membership Address recorded by the signer.
+        issued_at: Unix issuance time in seconds.
+        expires_at: Unix expiry time in seconds.
     """
 
     issuer_did: str
@@ -93,11 +78,7 @@ class MembershipAttestationClaims(TypedDict):
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time with tzinfo set.
-
-    Returns:
-        A timezone-aware UTC datetime.
-    """
+    """Return the current UTC time with tzinfo set."""
     return datetime.now(timezone.utc)
 
 
@@ -106,9 +87,6 @@ def b58encode(data: bytes) -> str:
 
     Args:
         data: Raw bytes, including a `did:key` multicodec prefix.
-
-    Returns:
-        Base58 text without a check suffix.
     """
     n = int.from_bytes(data, "big")
     out: list[str] = []
@@ -130,9 +108,6 @@ def b58decode(value: str) -> bytes:
 
     Args:
         value: Base58 text without a check suffix.
-
-    Returns:
-        Raw bytes.
 
     Raises:
         ValueError: `value` is empty or contains an invalid character.
@@ -158,18 +133,10 @@ def b58decode(value: str) -> bytes:
 
 
 def did_key_from_public_bytes(raw: bytes) -> str:
-    """Return a `did:key` for a 32-byte Ed25519 public key.
-
-    A DID here is `did:key:z...` derived from the public key.
-
-    Args:
-        raw: 32-byte Ed25519 public key.
-
-    Returns:
-        A `did:key` identifier.
+    """Derive an Agent DID from a raw Ed25519 public key.
 
     Raises:
-        ValueError: `raw` is not 32 bytes.
+        ValueError: The key is not 32 bytes.
     """
     if len(raw) != 32:
         raise ValueError("Ed25519 public key must be 32 bytes")
@@ -177,16 +144,10 @@ def did_key_from_public_bytes(raw: bytes) -> str:
 
 
 def public_bytes_from_did_key(did: str) -> bytes:
-    """Return the 32-byte Ed25519 public key encoded in `did`.
-
-    Args:
-        did: An Ed25519 `did:key` identifier.
-
-    Returns:
-        The 32-byte public key.
+    """Read the raw Ed25519 public key encoded in an Agent DID.
 
     Raises:
-        ValueError: `did` is not an Ed25519 `did:key`.
+        ValueError: The DID does not encode an Ed25519 key.
     """
     if not isinstance(did, str) or _DID_KEY.fullmatch(did) is None:
         raise ValueError("agent_did must be a did:key identifier")
@@ -197,14 +158,7 @@ def public_bytes_from_did_key(did: str) -> bytes:
 
 
 def is_ed25519_did_key(did: str) -> bool:
-    """Return True when `did` is an Ed25519 `did:key`.
-
-    Args:
-        did: Candidate identifier.
-
-    Returns:
-        True when the DID encodes a 32-byte Ed25519 public key.
-    """
+    """Return whether the DID encodes a 32-byte Ed25519 public key."""
     try:
         public_bytes_from_did_key(did)
         return True
@@ -239,16 +193,10 @@ def _load_public_key(pem: str) -> Ed25519PublicKey:
 
 
 def public_key_pem_from_did(did: str) -> str:
-    """Return a SubjectPublicKeyInfo PEM for an Ed25519 `did:key`.
-
-    Args:
-        did: An Ed25519 `did:key` identifier.
-
-    Returns:
-        PEM-encoded public key.
+    """Convert an Agent DID to its SubjectPublicKeyInfo public-key PEM.
 
     Raises:
-        ValueError: `did` is not an Ed25519 `did:key`.
+        ValueError: The DID does not encode an Ed25519 key.
     """
     raw = public_bytes_from_did_key(did)
     key = Ed25519PublicKey.from_public_bytes(raw)
@@ -259,20 +207,16 @@ def public_key_pem_from_did(did: str) -> str:
 
 
 def encode_eddsa_jwt(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, JsonValue],
     private_key_pem: str,
     *,
     typ: str = "JWT",
 ) -> str:
-    """Return a compact EdDSA JWT signed with `private_key_pem`.
+    """Sign claims as a compact EdDSA JWT.
 
     Args:
-        payload: JWT claims object.
-        private_key_pem: PKCS8 PEM of an Ed25519 private key.
-        typ: JWT `typ` header. Defaults to `JWT`.
-
-    Returns:
-        Compact `header.payload.signature` string.
+        private_key_pem: Ed25519 key in PKCS8 PEM form.
+        typ: Token category to include in the JWT header.
 
     Raises:
         ValueError: The PEM is not an Ed25519 private key.
@@ -291,14 +235,11 @@ def encode_eddsa_jwt(
     return signing_input + "." + _b64url_encode(signature)
 
 
-def split_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]:
+def split_jwt(token: str) -> tuple[JsonObject, JsonObject, bytes, bytes]:
     """Split a compact JWT. Does not verify the signature.
 
     Args:
         token: Compact `header.payload.signature` string.
-
-    Returns:
-        `(header, payload, signing_input, signature)`.
 
     Raises:
         ValueError: The token is not three segments, or a segment is not JSON.
@@ -307,8 +248,8 @@ def split_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]
         raise ValueError("JWT must have three compact segments")
     encoded_header, encoded_payload, encoded_sig = token.split(".")
     try:
-        header = json.loads(_b64url_decode(encoded_header))
-        payload = json.loads(_b64url_decode(encoded_payload))
+        header: JsonValue = json.loads(_b64url_decode(encoded_header))
+        payload: JsonValue = json.loads(_b64url_decode(encoded_payload))
     except (ValueError, json.JSONDecodeError) as exc:
         raise ValueError("JWT header or payload is not JSON") from exc
     if not isinstance(header, dict) or not isinstance(payload, dict):
@@ -318,18 +259,16 @@ def split_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]
     return header, payload, signing_input, signature
 
 
-def decode_eddsa_jwt(token: str, public_key_pem: str) -> dict[str, Any]:
-    """Verify an EdDSA JWT and return its payload.
+def decode_eddsa_jwt(token: str, public_key_pem: str) -> JsonObject:
+    """Verify an EdDSA signature and return the JWT payload.
+
+    This checks the signature, rather than expiry, audience or other claim policy.
 
     Args:
-        token: Compact EdDSA JWT.
-        public_key_pem: SubjectPublicKeyInfo PEM of the signer.
-
-    Returns:
-        The JWT payload object.
+        public_key_pem: Expected signer's SubjectPublicKeyInfo PEM.
 
     Raises:
-        ValueError: The token is malformed or the signature is wrong.
+        ValueError: The token or signature is invalid.
     """
     header, payload, signing_input, signature = split_jwt(token)
     if header.get("alg") != "EdDSA":
@@ -341,50 +280,32 @@ def decode_eddsa_jwt(token: str, public_key_pem: str) -> dict[str, Any]:
     return payload
 
 
-def decode_eddsa_jwt_from_did(token: str, did: str) -> dict[str, Any]:
-    """Verify an EdDSA JWT with the Ed25519 key encoded in `did`.
+def decode_eddsa_jwt_from_did(token: str, did: str) -> JsonObject:
+    """Verify a JWT signature using the key in the expected signer's DID.
 
-    Args:
-        token: Compact EdDSA JWT.
-        did: Signer `did:key`.
-
-    Returns:
-        The JWT payload object.
+    Does not validate expiry, audience or other claim policy.
 
     Raises:
-        ValueError: `did` is not Ed25519, or the signature is wrong.
+        ValueError: The DID, token or signature is invalid.
     """
     return decode_eddsa_jwt(token, public_key_pem_from_did(did))
 
 
 @dataclass
 class AgentIdentity:
-    """Ed25519 `did:key` identity for one Agent.
+    """An Agent's Ed25519 key identity.
 
-    A DID is `did:key:...` derived from the public key. The private key
-    stays with the Client. `create_key_based` mints a new key pair. Pass
-    the result to `BaseAgent` when you already hold the identity, or pass
-    `identity_path` and the Client loads or creates the file.
+    `create_key_based` creates a new identity. Pass a retained identity to
+    `BaseAgent`, or use `identity_path` there to load or create a key file.
+    Creating another key cannot reclaim an existing Membership's name.
 
     Attributes:
-        did: `did:key` identifier derived from the public key.
+        did: Identifier derived from the public key.
         public_key: SubjectPublicKeyInfo PEM.
-        private_key: PKCS8 PEM, or omitted on a public-only view.
-        verification_status: Local check state.
-        created_at: When this object was created.
-        metadata: Extra JSON-friendly fields.
-
-    Examples:
-        ```python
-        identity = AgentIdentity.create_key_based()
-        agent = Researcher(name="researcher", identity=identity)
-        ```
-
-        Persist across restarts with a key file:
-
-        ```python
-        agent = Researcher(name="researcher", identity_path="researcher.json")
-        ```
+        private_key: PKCS8 PEM; absent on a public-only view.
+        verification_status: Local key/DID check, rather than Team admission.
+        created_at: Object creation time; not Team admission time.
+        metadata: Application information included in serialized views.
     """
 
     did: str
@@ -392,15 +313,11 @@ class AgentIdentity:
     private_key: Optional[str] = None
     verification_status: VerificationStatus = VerificationStatus.PENDING
     created_at: datetime = field(default_factory=utc_now)
-    metadata: Dict = field(default_factory=dict)
+    metadata: JsonObject = field(default_factory=dict)
 
     @classmethod
     def create_key_based(cls) -> "AgentIdentity":
-        """Create an identity with a generated Ed25519 key pair and `did:key`.
-
-        Returns:
-            A new identity with `private_key` set and status `verified`.
-        """
+        """Create a new key pair with its derived DID and verified local status."""
         private_key = Ed25519PrivateKey.generate()
         public_key = private_key.public_key()
         private_pem = private_key.private_bytes(
@@ -429,13 +346,10 @@ class AgentIdentity:
         )
 
     def public_bytes(self) -> bytes:
-        """Return the 32-byte Ed25519 public key.
-
-        Returns:
-            Raw public key bytes.
+        """Return the raw 32-byte public key.
 
         Raises:
-            ValueError: `public_key` is not an Ed25519 PEM.
+            ValueError: The stored public key is not an Ed25519 PEM.
         """
         return _load_public_key(self.public_key).public_bytes(
             encoding=serialization.Encoding.Raw,
@@ -443,24 +357,14 @@ class AgentIdentity:
         )
 
     def matches_did(self) -> bool:
-        """Return True when `did` is the `did:key` for `public_key`.
-
-        Returns:
-            True when the DID encodes this public key.
-        """
+        """Return whether the public key matches the DID; malformed keys or DIDs return False."""
         try:
             return public_bytes_from_did_key(self.did) == self.public_bytes()
         except ValueError:
             return False
 
     def sign_message(self, message: str) -> str:
-        """Sign `message` and return a standard-base64 Ed25519 signature.
-
-        Args:
-            message: UTF-8 text to sign.
-
-        Returns:
-            Standard-base64 signature.
+        """Sign UTF-8 text and return a standard-base64 Ed25519 signature.
 
         Raises:
             ValueError: This identity has no private key.
@@ -471,14 +375,9 @@ class AgentIdentity:
         return base64.b64encode(signature).decode("ascii")
 
     def verify_signature(self, message: str, signature: str) -> bool:
-        """Return True when `signature` matches `message` under the public key.
+        """Verify a standard-base64 Ed25519 signature over UTF-8 text.
 
-        Args:
-            message: UTF-8 text that was signed.
-            signature: Standard-base64 Ed25519 signature.
-
-        Returns:
-            True when the signature is valid.
+        Malformed keys or signatures return False.
         """
         try:
             _load_public_key(self.public_key).verify(
@@ -489,12 +388,8 @@ class AgentIdentity:
         except Exception:
             return False
 
-    def to_dict(self) -> Dict:
-        """Return a serializable public view. The private key is omitted.
-
-        Returns:
-            JSON-friendly dict with `did`, `public_key`, status, and metadata.
-        """
+    def to_dict(self) -> JsonObject:
+        """Return a serializable public view with the private key left out."""
         created = self.created_at
         if created.tzinfo is None:
             created_s = created.isoformat()
@@ -508,13 +403,11 @@ class AgentIdentity:
             "metadata": self.metadata,
         }
 
-    def to_secret_dict(self) -> Dict:
-        """Return `to_dict` plus the private key when present.
+    def to_secret_dict(self) -> JsonObject:
+        """Return a serializable identity including its private key when available.
 
-        For Runtime storage of the Team key. Never send this to a Client.
-
-        Returns:
-            JSON-friendly dict including `private_key` when this object has one.
+        Use for trusted key persistence. This result can sign as the identity;
+        keep it out of Messages and public responses.
         """
         data = self.to_dict()
         if self.private_key:
@@ -522,15 +415,8 @@ class AgentIdentity:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "AgentIdentity":
-        """Create an identity from `to_dict` or `to_secret_dict` output.
-
-        Args:
-            data: Mapping produced by `to_dict` or `to_secret_dict`.
-
-        Returns:
-            Reconstructed identity. `private_key` is set when present in `data`.
-        """
+    def from_dict(cls, data: Mapping[str, Any]) -> "AgentIdentity":
+        """Restore a serialized identity; a public view cannot restore a missing private key."""
         created_raw = data["created_at"]
         created = datetime.fromisoformat(created_raw)
         return cls(
@@ -549,9 +435,6 @@ def parse_rfc3339(value: str) -> datetime:
     Args:
         value: Timestamp such as `2026-08-18T15:00:00Z`.
 
-    Returns:
-        Timezone-aware UTC datetime.
-
     Raises:
         ValueError: `value` is not RFC 3339 UTC ending in `Z`.
     """
@@ -562,51 +445,35 @@ def parse_rfc3339(value: str) -> datetime:
 
 def issue_identity_proof(
     identity: AgentIdentity,
-    challenge: Mapping[str, Any],
+    challenge: JoinChallenge,
     *,
     now: Optional[datetime] = None,
 ) -> str:
-    """Return an EdDSA JWT proving control of `identity.did`.
+    """Sign a fresh Runtime challenge to prove control of the Agent DID.
 
-    Required claims are `iss`, `aud`, `nonce`, `iat`, and `exp`. `iss`
-    is the Agent DID. `aud` and `nonce` copy the challenge. `exp` is the
-    challenge expiry.
+    Send the JWT as `identity_proof` alongside the Team's join invitation. The
+    proof alone does not authorize admission.
 
     Args:
-        identity: Agent key pair. Must include `private_key`.
-        challenge: `JoinChallenge` fields from the Runtime.
-        now: Clock used for `iat`. Defaults to current UTC.
-
-    Returns:
-        Compact EdDSA JWT to send as join `identity_proof`.
+        identity: Must hold the Agent private key.
+        challenge: Runtime JoinChallenge, including audience, nonce and expiry.
+        now: Override the current UTC clock used for issuance.
 
     Raises:
-        ValueError: The identity has no private key, the challenge is
-            invalid, or the challenge has already expired.
-
-    Examples:
-        ```python
-        proof = issue_identity_proof(agent.identity, challenge)
-        ```
+        ValueError: The private key is absent or the challenge is invalid or expired.
     """
     if not identity.private_key:
         raise ValueError("Private key not available for signing")
-    nonce = challenge.get("nonce")
-    audience = challenge.get("audience")
-    expires_at = challenge.get("expires_at")
-    if not isinstance(nonce, str) or _NONCE.fullmatch(nonce) is None:
-        raise ValueError("challenge nonce is invalid")
-    if not isinstance(audience, str) or _AUDIENCE.fullmatch(audience) is None:
-        raise ValueError("challenge audience is invalid")
-    if not isinstance(expires_at, str):
-        raise ValueError("challenge expires_at is invalid")
+    nonce = challenge.nonce
+    audience = challenge.audience
+    expires_at = challenge.expires_at
     expires = parse_rfc3339(expires_at)
     instant = now or utc_now()
     iat = int(instant.timestamp())
     exp = int(expires.timestamp())
     if exp <= iat:
         raise ValueError("challenge has already expired")
-    payload = {
+    payload: JsonObject = {
         "iss": identity.did,
         "aud": audience,
         "nonce": nonce,
@@ -619,28 +486,22 @@ def issue_identity_proof(
 def verify_identity_proof(
     token: str,
     *,
-    agent_did: str,
-    challenge: Mapping[str, Any],
+    agent_did: AgentDid,
+    challenge: JoinChallenge,
     now: Optional[datetime] = None,
-) -> dict[str, Any]:
-    """Verify a join `identity_proof` JWT.
+) -> JsonObject:
+    """Verify key control and claims against the supplied join challenge.
 
-    Checks the Ed25519 signature against `agent_did`, then the required
-    claims against `challenge`. Callers that must not reveal which check
-    failed should map that to `unauthorized`.
+    The caller must ensure the challenge is issued, unused and consumed atomically
+    with admission. This cryptographic check does not consume it.
 
     Args:
-        token: Compact identity-proof JWT.
-        agent_did: Expected issuer `did:key`.
-        challenge: `JoinChallenge` the proof must match.
-        now: Clock used for expiry and `iat` skew. Defaults to current UTC.
-
-    Returns:
-        The verified payload object.
+        agent_did: Expected proof issuer.
+        now: Override the current UTC clock for expiry and issuance skew.
 
     Raises:
-        ValueError: The token is malformed, the signature is wrong, or a
-            claim does not match the challenge.
+        ValueError: The token, signature, timing or challenge claims are invalid.
+            Admission callers should expose a single `unauthorized` failure.
     """
     header, payload, signing_input, signature = split_jwt(token)
     if header.get("alg") != "EdDSA" or header.get("typ") != "JWT":
@@ -654,9 +515,9 @@ def verify_identity_proof(
         _load_public_key(pem).verify(signature, signing_input)
     except InvalidSignature as exc:
         raise ValueError("identity_proof signature is invalid") from exc
-    nonce = challenge.get("nonce")
-    audience = challenge.get("audience")
-    expires_at = challenge.get("expires_at")
+    nonce = challenge.nonce
+    audience = challenge.audience
+    expires_at = challenge.expires_at
     if payload.get("aud") != audience:
         raise ValueError("identity_proof aud does not match the challenge")
     if payload.get("nonce") != nonce:
@@ -671,8 +532,6 @@ def verify_identity_proof(
         raise ValueError("identity_proof iat is too far in the future")
     if exp <= iat:
         raise ValueError("identity_proof exp must be later than iat")
-    if not isinstance(expires_at, str):
-        raise ValueError("challenge expires_at is invalid")
     challenge_exp = int(parse_rfc3339(expires_at).timestamp())
     if exp > challenge_exp:
         raise ValueError("identity_proof exp is after the challenge expiry")
@@ -684,52 +543,27 @@ def verify_identity_proof(
 def issue_membership_attestation(
     team_identity: AgentIdentity,
     *,
-    agent_did: str,
+    agent_did: AgentDid,
     name: str,
     address: str,
     team_name: str,
     now: Optional[datetime] = None,
     ttl_seconds: int = DEFAULT_ATTESTATION_TTL_SECONDS,
 ) -> str:
-    """Return a Team-signed JWT that this Team vouches for `agent_did`.
+    """Sign a statement that this Team vouches for an Agent's membership.
 
-    Header `typ` is `ac-membership+jwt`. Claims:
-
-    - `iss`: Team DID
-    - `sub`: Agent DID
-    - `aud`: `agentconnect:<team-name>`
-    - `name`: Agent name in this Team
-    - `address`: qualified Address (`name@team`)
-    - `iat` / `exp`
-
-    This Runtime mints that token at join and does not verify inbound
-    attestations. Store it and present it later at a Team boundary.
+    The statement includes the Agent DID, Team, name, Address and lifetime.
+    It is separate from join invitations and Session credentials. The current
+    Runtime issues these statements but does not admit callers using them.
 
     Args:
-        team_identity: Team key pair. Must include `private_key`.
-        agent_did: Agent `did:key` this Team vouches for.
-        name: Agent name in this Team.
-        address: Qualified Address in this Team.
-        team_name: Team named in the JWT audience.
-        now: Clock used for `iat`. Defaults to current UTC.
-        ttl_seconds: Lifetime from `now`. Defaults to 365 days.
-
-    Returns:
-        Compact membership-attestation JWT.
+        team_identity: Must hold the Team private key.
+        name: Membership name to record alongside its qualified Address.
+        now: Override the current UTC issuance clock.
+        ttl_seconds: Lifetime measured from issuance.
 
     Raises:
-        ValueError: The Team key is missing, or `agent_did` is not Ed25519.
-
-    Examples:
-        ```python
-        jwt = issue_membership_attestation(
-            team.identity,
-            agent_did=agent.agent_did,
-            name="writer",
-            address="writer@content-squad",
-            team_name="content-squad",
-        )
-        ```
+        ValueError: The Team key is absent or the Agent DID is not Ed25519.
     """
     if not team_identity.private_key:
         raise ValueError("Team private key not available for signing")
@@ -738,7 +572,7 @@ def issue_membership_attestation(
     instant = now or utc_now()
     iat = int(instant.timestamp())
     exp = int((instant + timedelta(seconds=int(ttl_seconds))).timestamp())
-    payload = {
+    payload: JsonObject = {
         "iss": team_identity.did,
         "sub": agent_did,
         "aud": f"agentconnect:{team_name}",
@@ -756,22 +590,18 @@ def verify_membership_attestation(
     team_did: str,
     now: Optional[datetime] = None,
 ) -> MembershipAttestationClaims:
-    """Verify a membership attestation JWT against `team_did`.
+    """Verify a Team-signed statement and return its decoded membership claims.
 
-    Provided so the format is testable. This Runtime mints that token at
-    join and does not verify inbound attestations.
+    The expected Team DID must come from a source the caller trusts. This helper
+    checks the signer, required claims and expiry; it does not grant Team access
+    or check an expected audience or membership revocation.
 
     Args:
-        token: Compact membership-attestation JWT.
-        team_did: Expected issuer DID.
-        now: Clock used for expiry. Defaults to current UTC.
-
-    Returns:
-        Decoded claims including Agent DID, name, and Address.
+        team_did: Trusted expected issuer.
+        now: Override the current UTC expiry clock.
 
     Raises:
-        ValueError: The token is malformed, the signature is wrong, a
-            required claim is missing, or the attestation has expired.
+        ValueError: The token, signer, required claims or expiry are invalid.
     """
     header, payload, signing_input, signature = split_jwt(token)
     if header.get("alg") != "EdDSA" or header.get("typ") != _ATTESTATION_TYP:

@@ -12,14 +12,53 @@ returns JSON-ready data. Optional fields that were omitted stay missing.
 
 ## Public API
 
+* [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)
+* [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject)
+* [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint)
+* [`JsonFloat`](/api/core-base#agentconnect-core-base-jsonfloat)
 * [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 * [`public_json_schema`](/api/core-base#agentconnect-core-base-public-json-schema)
 * [`public_result_schema`](/api/core-base#agentconnect-core-base-public-result-schema)
 * [`dump_public`](/api/core-base#agentconnect-core-base-dump-public)
 * [`parse_schema`](/api/core-base#agentconnect-core-base-parse-schema)
-* [`validation_message`](/api/core-base#agentconnect-core-base-validation-message)
-* [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject)
-* [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)
+
+<a id="agentconnect-core-base-jsonvalue"></a>
+
+## `JsonValue`
+
+```python
+JsonValue: TypeAlias = Union[str, int, float, bool, None, list['JsonValue'], dict[str, 'JsonValue']]
+```
+
+<a id="agentconnect-core-base-jsonobject"></a>
+
+## `JsonObject`
+
+```python
+JsonObject = dict[str, JsonValue]
+```
+
+Application JSON object with string keys.
+
+<a id="agentconnect-core-base-jsonint"></a>
+
+## `JsonInt`
+
+```python
+JsonInt = Annotated[int, BeforeValidator(_json_int), _JsonIntJsonSchema()]
+```
+
+Whole JSON number; booleans and numeric strings are rejected.
+
+<a id="agentconnect-core-base-jsonfloat"></a>
+
+## `JsonFloat`
+
+```python
+JsonFloat = Annotated[float, BeforeValidator(_json_float)]
+```
+
+Finite JSON number; booleans and numeric strings are rejected.
 
 <a id="agentconnect-core-base-schemamodel"></a>
 
@@ -40,17 +79,12 @@ operation results and Messages. An omitted optional field is absent.
 ### `to_public_dict`
 
 ```python
-to_public_dict() -> dict[str, Any]
+to_public_dict() -> JsonObject
 ```
 
-JSON-ready mapping. Optional fields that were omitted stay missing.
+Return JSON-ready fields, omitting optional values that are absent.
 
-Required fields whose JSON value is `null` are kept. That matters
-for Message `content`, which may be null.
-
-**Returns:**
-
-* (`dict[str, Any]`): A dict suitable for JSON encoding.
+Required JSON-null content is kept. Nested models are serialized recursively.
 
 <a id="agentconnect-core-base-schemamodel---getitem--"></a>
 
@@ -60,19 +94,11 @@ for Message `content`, which may be null.
 __getitem__(key: str) -> Any
 ```
 
-Return a declared field by name, as `result["ticket"]`.
-
-**Parameters:**
-
-* `key` (`str`): Field name on this model.
-
-**Returns:**
-
-* (`Any`): The field value.
+Read a declared field by name.
 
 **Raises:**
 
-* (`KeyError`): `key` is not a field, or an optional field was omitted.
+* (`KeyError`): The field is undeclared or was omitted.
 
 <a id="agentconnect-core-base-schemamodel-get"></a>
 
@@ -82,17 +108,7 @@ Return a declared field by name, as `result["ticket"]`.
 get(key: str, default: Any = None) -> Any
 ```
 
-Return `self[key]` or `default` when the field is absent.
-
-**Parameters:**
-
-* `key` (`str`): Field name on this model.
-
-* `default` (`Any`): Value when `key` is missing or omitted.
-
-**Returns:**
-
-* (`Any`): The field value, or `default`.
+Read a field, using `default` when it is undeclared or omitted.
 
 <a id="agentconnect-core-base-schemamodel---contains--"></a>
 
@@ -102,28 +118,20 @@ Return `self[key]` or `default` when the field is absent.
 __contains__(key: object) -> bool
 ```
 
-Return True when `self[key]` succeeds.
-
-**Parameters:**
-
-* `key` (`object`): Field name to test.
-
-**Returns:**
-
-* (`bool`): True when the field is present and was not omitted.
+Return whether a declared field is present rather than omitted.
 
 <a id="agentconnect-core-base-public-json-schema"></a>
 
 ## `public_json_schema`
 
 ```python
-public_json_schema(model: type[SchemaModel]) -> dict[str, Any]
+public_json_schema(model: type[SchemaModel]) -> JsonSchemaValue
 ```
 
 JSON Schema for `model` as sent on the wire.
 
 Optional fields are omit-only: JSON null is not in the type, and
-`default: null` is not advertised. `JsonInt` is a JSON number with
+`default: null` is not advertised. [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint) is a JSON number with
 `multipleOf: 1`. Undeclared properties are forbidden. Unmodified
 pydantic `model_json_schema()` output does not encode omit-only
 fields this way.
@@ -133,16 +141,13 @@ fields this way.
 ## `public_result_schema`
 
 ```python
-public_result_schema(model: Any) -> dict[str, Any]
+public_result_schema(model: object) -> JsonSchemaValue
 ```
 
-JSON Schema for a tool success result, including tagged unions.
+Return a JSON Schema for a Team tool success result.
 
-MCP structuredContent may be any JSON value. Team tool results are
-JSON objects, so this projection advertises `type: object`. Tagged
-unions of public objects keep `oneOf`/`anyOf`; the wrapper does
-not set `additionalProperties`, which would make variants
-uninhabitable.
+Tagged object unions keep their variants and advertise an object result.
+Omit-only optional fields do not accept JSON null.
 
 <a id="agentconnect-core-base-dump-public"></a>
 
@@ -152,32 +157,20 @@ uninhabitable.
 dump_public(value: Any) -> Any
 ```
 
-Convert schema models to JSON-ready data.
+Serialize public models, nested dicts and lists to JSON-ready data.
 
-Omit-only optional fields stay missing. Nested models, lists, and
-dicts are converted recursively. MCP tools and Session-bound tools
-serialize through this helper. Session and [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) methods
-return typed objects.
-
-**Parameters:**
-
-* `value` (`Any`): A [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel), mapping, sequence, or JSON scalar.
-
-**Returns:**
-
-* (`Any`): JSON-ready data with the same shape.
+Omit-only optional fields stay missing; required JSON-null content stays null.
+Use this for wire or tool output rather than a model dump that adds absent keys.
 
 **Examples:**
 
+For `profile`, an existing AgentProfile with no description:
+
 ```python
 from agentconnect.core.base import dump_public
-from agentconnect.core.profile import AgentProfile, Skill
 
-profile = AgentProfile(
-    summary="Writes short drafts from notes.",
-    skills=[Skill(name="drafting", description="Turn notes into a draft.")],
-)
-dump_public(profile)["summary"]
+body = dump_public(profile)
+assert "description" not in body
 ```
 
 <a id="agentconnect-core-base-parse-schema"></a>
@@ -185,67 +178,11 @@ dump_public(profile)["summary"]
 ## `parse_schema`
 
 ```python
-parse_schema(model: type[TSchema], data: Any) -> TSchema
+parse_schema(model: type[TSchema], data: object) -> TSchema
 ```
 
-Parse a mapping as `model` at an untrusted edge.
-
-An instance of `model` is returned unchanged. Any other non-mapping
-value fails.
-
-**Parameters:**
-
-* `model` (`type[TSchema]`): Schema class to validate against.
-
-* `data` (`Any`): JSON object, or an existing `model` instance.
-
-**Returns:**
-
-* (`TSchema`): A frozen `model` instance.
+Validate a mapping as a public model; return an existing instance unchanged.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or it fails validation.
-
-**Examples:**
-
-```python
-from agentconnect.core.base import parse_schema
-from agentconnect.core.operations import LeaseRequest
-
-lease = parse_schema(LeaseRequest, {"max_items": 2})
-```
-
-<a id="agentconnect-core-base-validation-message"></a>
-
-## `validation_message`
-
-```python
-validation_message(exc: ValidationError) -> str
-```
-
-Short `invalid_request` text from a pydantic error.
-
-**Parameters:**
-
-* `exc` (`ValidationError`): Pydantic validation failure.
-
-**Returns:**
-
-* (`str`): One-line text naming the first field and its problem.
-
-<a id="agentconnect-core-base-jsonobject"></a>
-
-## `JsonObject`
-
-```python
-JsonObject = dict[str, JsonValue]
-```
-
-<a id="agentconnect-core-base-jsonvalue"></a>
-
-## `JsonValue`
-
-```python
-JsonValue = TypeAliasType('JsonValue', Union[str, int, float, bool, None, list['JsonValue'], dict[str, 'JsonValue']])
-```
+* (`ValueError`): Input is not an object or fails the model's validation.

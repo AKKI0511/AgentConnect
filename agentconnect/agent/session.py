@@ -13,34 +13,56 @@ import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Awaitable, Callable, Mapping
+from typing import TYPE_CHECKING, Optional, Protocol, TypeVar, runtime_checkable
+
+from pydantic import ConfigDict, TypeAdapter
+
+from agentconnect.core.base import JsonObject, JsonValue
+from agentconnect.core.error import ErrorObject
+from agentconnect.core.profile import AgentProfile
 
 from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.identity import issue_identity_proof
-from agentconnect.core.message import Delivery, parse_delivery
+from agentconnect.core.message import Delivery
 from agentconnect.core.operations import (
     AcceptedSendResult,
-    HeartbeatResult,
+    CompleteResult,
+    EventSendRequest,
+    JoinRequest,
+    ReplyResult,
+    RequestSendRequest,
+    ReplySuccessRequest,
+    ReplyFailureRequest,
+    RuntimeLimits,
     HistoryResult,
     JoinResult,
-    RenewResult,
     TicketedSendResult,
-    parse_history_result,
-    parse_join_result,
-    parse_lease_result,
-    parse_send_result,
 )
-from agentconnect.core.primitives import CollectMode, DeliveryHistoryForm
+from agentconnect.core.primitives import CollectMode, DeliveryHistoryForm, ReplyOutcome
 from agentconnect.core.spec import SPEC_VERSION
-from agentconnect.core.ticket import Ticket, parse_ticket
+from agentconnect.core.ticket import Ticket
 from agentconnect.transport.agent_http import HttpRuntimeTransport
 from agentconnect.transport.inprocess import InProcessTransport
-from agentconnect.transport.runtime import TransportError
+from agentconnect.transport.runtime import (
+    RuntimeOperations,
+    RuntimeTransport,
+    TransportError,
+)
 
 if TYPE_CHECKING:
     from agentconnect.agent.base import BaseAgent
+
+_Result = TypeVar("_Result")
+
+
+@runtime_checkable
+class _JoinAuthSettings(Protocol):
+    @property
+    def require_join_auth(self) -> bool: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +92,7 @@ _NO_RECONNECT_CODES = frozenset(
     }
 )
 _DEFAULT_RECOVERY_SECONDS = 30.0
-_handling: ContextVar[Optional[tuple[Any, Delivery]]] = ContextVar(
+_handling: ContextVar[Optional[tuple["Session", Delivery]]] = ContextVar(
     "agentconnect_handling", default=None
 )
 
@@ -81,7 +103,7 @@ class _TrackedLease:
 
     delivery: Delivery
     lease_expires_at: str
-    task: Optional[asyncio.Task] = None
+    task: Optional[asyncio.Task[None]] = None
 
 
 def _local_name(address: str) -> str:
@@ -97,13 +119,6 @@ def _parse_deadline(value: str) -> Optional[datetime]:
         return None
 
 
-def _lease_id_of(delivery: Any) -> str:
-    """Return the lease id from a Delivery model or mapping."""
-    if isinstance(delivery, Mapping):
-        return str(delivery["lease_id"])
-    return str(delivery.lease_id)
-
-
 def _should_reconnect(exc: TransportError) -> bool:
     """Reconnect on lost Session or unreachable Runtime, not on busy Mailboxes."""
     if exc.code in _NO_RECONNECT_CODES:
@@ -111,7 +126,7 @@ def _should_reconnect(exc: TransportError) -> bool:
     return exc.code in _RECONNECT_CODES
 
 
-def bind_transport(target: Any) -> Any:
+def bind_transport(target: RuntimeOperations | str) -> RuntimeTransport:
     """Return an HTTP transport for a URL, or in-process for a Team object.
 
     Args:
@@ -171,11 +186,11 @@ class Session:
     def __init__(
         self,
         agent: "BaseAgent",
-        target: Any,
+        target: RuntimeOperations | str,
         *,
         instance_id: str,
         agent_did: str,
-        profile: Mapping[str, Any],
+        profile: AgentProfile,
         max_in_flight: int,
         delivery_history: DeliveryHistoryForm = "bodies",
     ) -> None:
@@ -198,21 +213,21 @@ class Session:
         self._target = target
         self.instance_id = instance_id
         self.agent_did = agent_did
-        self._profile = dict(profile)
+        self._profile = profile
         self.max_in_flight = max_in_flight
         self.delivery_history = delivery_history
-        self._transport = bind_transport(target)
+        self._transport: RuntimeTransport = bind_transport(target)
         self.session_token: Optional[str] = None
         self.address: Optional[str] = None
         self.team_name: Optional[str] = None
-        self.limits: dict[str, int | float] = {}
+        self.limits: RuntimeLimits | None = None
         self.persistence: Optional[str] = None
         self.session_expires_at: Optional[str] = None
         self._connected = False
         self._stopped = False
         self._wake = asyncio.Event()
-        self._supervisor: Optional[asyncio.Task] = None
-        self._inflight: set[asyncio.Task] = set()
+        self._supervisor: Optional[asyncio.Task[None]] = None
+        self._inflight: set[asyncio.Task[None]] = set()
         self._active: dict[str, _TrackedLease] = {}
         self._capacity = asyncio.Event()
         self._renew_wake = asyncio.Event()
@@ -290,13 +305,13 @@ class Session:
     async def ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
         message_id: Optional[str] = None,
         deadline: Optional[str] = None,
         handling: Optional[Delivery] = None,
@@ -380,7 +395,7 @@ class Session:
             deadline_seconds=deadline_seconds,
             handling=handling,
         )
-        body: dict[str, Any] = {
+        body: JsonObject = {
             "id": message_id or str(uuid.uuid4()),
             "recipient": recipient,
             "kind": "request",
@@ -395,7 +410,11 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        result = parse_send_result(await self._call("send", self._token(), body))
+        try:
+            request = RequestSendRequest.model_validate(body)
+        except ValueError as exc:
+            raise SessionError("invalid_request", str(exc)) from exc
+        result = await self._call(lambda token: self._transport.send(token, request))
         if not isinstance(result, TicketedSendResult):
             raise SessionError("internal", "request send did not return a Ticket")
         return result.ticket
@@ -403,11 +422,11 @@ class Session:
     async def tell(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
         message_id: Optional[str] = None,
         handling: Optional[Delivery] = None,
     ) -> AcceptedSendResult:
@@ -452,7 +471,7 @@ class Session:
             event=True,
             handling=handling,
         )
-        body: dict[str, Any] = {
+        body: JsonObject = {
             "id": message_id or str(uuid.uuid4()),
             "recipient": recipient,
             "kind": "event",
@@ -464,7 +483,11 @@ class Session:
             body["parent_id"] = parent_id
         if metadata is not None:
             body["metadata"] = dict(metadata)
-        result = parse_send_result(await self._call("send", self._token(), body))
+        try:
+            request = EventSendRequest.model_validate(body)
+        except ValueError as exc:
+            raise SessionError("invalid_request", str(exc)) from exc
+        result = await self._call(lambda token: self._transport.send(token, request))
         if not isinstance(result, AcceptedSendResult):
             raise SessionError("internal", "event send did not return accepted")
         return result
@@ -493,13 +516,8 @@ class Session:
             found.matches[0].address
             ```
         """
-        return FindResult.model_validate(
-            await self._call(
-                "find",
-                self._token(),
-                query,
-                limit=limit,
-            )
+        return await self._call(
+            lambda token: self._transport.find(token, query, limit=limit)
         )
 
     async def get_entry(self, address: str) -> DirectoryEntry:
@@ -521,8 +539,8 @@ class Session:
             entry.profile.summary
             ```
         """
-        return DirectoryEntry.model_validate(
-            await self._call("get_profile", self._token(), address)
+        return await self._call(
+            lambda token: self._transport.get_profile(token, address)
         )
 
     async def get_result(self, ticket_id: str) -> Ticket:
@@ -551,7 +569,9 @@ class Session:
                 ticket.response.content
             ```
         """
-        return parse_ticket(await self._call("get_result", self._token(), ticket_id))
+        return await self._call(
+            lambda token: self._transport.get_result(token, ticket_id)
+        )
 
     async def get_history(
         self,
@@ -590,19 +610,13 @@ class Session:
                 )
             ```
         """
-        return parse_history_result(
-            await self._call(
-                "get_history",
-                self._token(),
-                thread_id,
-                before=before,
-                limit=limit,
+        return await self._call(
+            lambda token: self._transport.get_history(
+                token, thread_id, before=before, limit=limit
             )
         )
 
-    async def complete_delivery(
-        self, delivery: Delivery | Mapping[str, Any]
-    ) -> dict[str, Any]:
+    async def complete_delivery(self, delivery: Delivery) -> CompleteResult:
         """Finish a Delivery without a response Message.
 
         Use this to decline a request, or to finish an event. Prefer
@@ -610,7 +624,7 @@ class Session:
         a failure.
 
         Args:
-            delivery: The leased Delivery, or a mapping with `lease_id`.
+            delivery: The leased Delivery.
 
         Returns:
             The Runtime acknowledgement for this complete.
@@ -619,9 +633,11 @@ class Session:
             SessionError: The Session is not connected, the lease
                 expired, or the Ticket is already closed.
         """
-        lease_id = _lease_id_of(delivery)
+        lease_id = delivery.lease_id
         try:
-            result = await self._call("complete", self._token(), lease_id)
+            result = await self._call(
+                lambda token: self._transport.complete(token, lease_id)
+            )
         except SessionError as exc:
             if exc.code in {"lease_expired", "ticket_closed", "not_found"}:
                 self._release_local_lease(lease_id)
@@ -631,12 +647,12 @@ class Session:
 
     async def reply_delivery(
         self,
-        delivery: Delivery | Mapping[str, Any],
+        delivery: Delivery,
         *,
-        outcome: str,
-        content: Any = None,
-        error: Optional[Mapping[str, Any]] = None,
-    ) -> dict[str, Any]:
+        outcome: ReplyOutcome,
+        content: JsonValue = None,
+        error: Optional[ErrorObject] = None,
+    ) -> ReplyResult:
         """Finish a leased reply-expected Delivery.
 
         Prefer `DeferredReply.reply` or `DeferredReply.fail` from a
@@ -644,7 +660,7 @@ class Session:
         Any other `outcome` stores a failure. `None` is valid content.
 
         Args:
-            delivery: The leased Delivery, or a mapping with `lease_id`.
+            delivery: The leased Delivery.
             outcome: `"completed"` to reply, or another value to fail.
             content: Reply body when `outcome` is `"completed"`.
             error: Failure object when `outcome` is not `"completed"`.
@@ -659,20 +675,29 @@ class Session:
             SessionError: The Session is not connected, the lease
                 expired, or the Ticket is already closed.
         """
-        lease_id = _lease_id_of(delivery)
-        body: dict[str, Any] = {
-            "id": str(uuid.uuid4()),
-            "lease_id": lease_id,
-            "outcome": outcome,
-        }
-        if outcome == "completed":
-            body["content"] = content
-        else:
-            body["error"] = dict(
-                error or {"code": "handler_failed", "message": "failed"}
-            )
+        lease_id = delivery.lease_id
+        request: ReplySuccessRequest | ReplyFailureRequest
         try:
-            result = await self._call("reply", self._token(), body)
+            if outcome == "completed":
+                request = ReplySuccessRequest(
+                    id=str(uuid.uuid4()),
+                    lease_id=lease_id,
+                    outcome="completed",
+                    content=content,
+                )
+            else:
+                request = ReplyFailureRequest(
+                    id=str(uuid.uuid4()),
+                    lease_id=lease_id,
+                    outcome=outcome,
+                    error=error or ErrorObject(code="handler_failed", message="failed"),
+                )
+        except ValueError as exc:
+            raise SessionError("invalid_request", str(exc)) from exc
+        try:
+            result = await self._call(
+                lambda token: self._transport.reply(token, request)
+            )
         except SessionError as exc:
             if exc.code in {"lease_expired", "ticket_closed", "not_found"}:
                 self._release_local_lease(lease_id)
@@ -778,17 +803,20 @@ class Session:
             raise SessionError("unauthorized", "Agent is not connected to a Team")
         return token
 
-    def _join_body(self) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "spec_version": SPEC_VERSION,
-            "name": self._agent._agent_name,
-            "agent_did": self.agent_did,
-            "profile": dict(self._profile),
-            "instance_id": self.instance_id,
-            "max_in_flight": self.max_in_flight,
-        }
+    def _join_body(self) -> JoinRequest:
+        try:
+            body = JoinRequest(
+                spec_version=SPEC_VERSION,
+                name=self._agent._agent_name,
+                agent_did=self.agent_did,
+                profile=self._profile,
+                instance_id=self.instance_id,
+                max_in_flight=self.max_in_flight,
+            )
+        except ValueError as exc:
+            raise TransportError("invalid_request", str(exc)) from exc
         if self.delivery_history != "bodies":
-            body["delivery_history"] = self.delivery_history
+            body = body.model_copy(update={"delivery_history": self.delivery_history})
         return body
 
     async def _connect_with_retry(self) -> None:
@@ -796,10 +824,10 @@ class Session:
         while not self._stopped:
             try:
                 body = self._join_body()
-                await self._attach_join_credentials(body)
-                result = await self._transport.join(body)
+                body = await self._attach_join_credentials(body)
+                result = await self._transport.join(request=body)
                 if self._stopped:
-                    parsed = parse_join_result(result)
+                    parsed = result
                     if parsed.session_token:
                         try:
                             await self._transport.disconnect(parsed.session_token)
@@ -820,44 +848,42 @@ class Session:
                     continue
                 raise SessionError.from_transport(exc) from exc
 
-    async def _attach_join_credentials(self, body: dict[str, Any]) -> None:
-        """Add join_token and identity_proof when this join is authenticated."""
-        token = getattr(self._agent, "join_token", None)
+    async def _attach_join_credentials(self, body: JoinRequest) -> JoinRequest:
+        """Add credentials to the canonical join request when admission requires them."""
+        token = self._agent.join_token
         target_is_url = isinstance(self._target, str)
-        require = bool(getattr(self._target, "require_join_auth", False))
+        require = (
+            isinstance(self._target, _JoinAuthSettings)
+            and self._target.require_join_auth
+        )
         if not (target_is_url or token or require):
-            return
-        challenge_fn = getattr(self._transport, "join_challenge", None)
-        if challenge_fn is None:
-            return
-        challenge = await challenge_fn()
+            return body
+        challenge = await self._transport.join_challenge()
         try:
-            body["identity_proof"] = issue_identity_proof(
-                self._agent.identity, challenge
-            )
+            proof = issue_identity_proof(self._agent.identity, challenge)
         except ValueError as exc:
             raise SessionError(
                 "unauthorized", "Join credentials are missing or invalid"
             ) from exc
+        updates = {"identity_proof": proof}
         if token:
-            body["join_token"] = token
+            updates["join_token"] = token
+        return body.model_copy(update=updates)
 
-    def _apply_join(self, result: Mapping[str, Any] | JoinResult) -> None:
-        parsed = parse_join_result(result)
+    def _apply_join(self, parsed: JoinResult) -> None:
         self.session_token = parsed.session_token
         self.address = parsed.address
         self.team_name = parsed.team_name
         self.instance_id = parsed.instance_id
-        self.limits = parsed.limits.to_public_dict()
+        self.limits = parsed.limits
         self.persistence = parsed.persistence
         self.session_expires_at = parsed.session_expires_at
         self._connected = True
         self._active.clear()
         self._capacity.set()
         self._wake.set()
-        configure = getattr(self._transport, "configure_wait_hold", None)
-        if callable(configure):
-            configure(float(parsed.limits.wait_hold_seconds))
+        if isinstance(self._transport, HttpRuntimeTransport):
+            self._transport.configure_wait_hold(parsed.limits.wait_hold_seconds)
         logger.info(
             "joined team=%s address=%s instance=%s",
             self.team_name,
@@ -886,9 +912,7 @@ class Session:
                 await asyncio.sleep(interval)
                 if self._stopped or not self.session_token:
                     continue
-                result = HeartbeatResult.model_validate(
-                    await self._transport.heartbeat(self.session_token)
-                )
+                result = await self._transport.heartbeat(self.session_token)
                 self.session_expires_at = result.session_expires_at
             except asyncio.CancelledError:
                 raise
@@ -948,8 +972,8 @@ class Session:
                     continue
                 for lease_id in list(self._active):
                     try:
-                        result = RenewResult.model_validate(
-                            await self._transport.renew(self.session_token, lease_id)
+                        result = await self._transport.renew(
+                            self.session_token, lease_id
                         )
                     except TransportError as exc:
                         if self._stopped:
@@ -986,9 +1010,7 @@ class Session:
                 async for event in self._transport.events(token):
                     if self._stopped:
                         return
-                    if not isinstance(event, dict):
-                        continue
-                    if event.get("type") == "work_available":
+                    if event.type == "work_available":
                         self._wake.set()
             except asyncio.CancelledError:
                 raise
@@ -1023,9 +1045,7 @@ class Session:
                     pass
                 continue
             try:
-                leased = parse_lease_result(
-                    await self._transport.lease(self.session_token, room)
-                )
+                leased = await self._transport.lease(self.session_token, room)
             except TransportError as exc:
                 if self._stopped:
                     return
@@ -1046,7 +1066,7 @@ class Session:
                 self._wake.clear()
                 continue
             for delivery in deliveries:
-                parsed = parse_delivery(delivery)
+                parsed = delivery
                 self._track(parsed)
                 task = asyncio.create_task(
                     self._handle(parsed), name=f"delivery:{parsed.lease_id}"
@@ -1065,9 +1085,7 @@ class Session:
                 return
             if self.session_token and self._connected:
                 try:
-                    result = HeartbeatResult.model_validate(
-                        await self._transport.heartbeat(self.session_token)
-                    )
+                    result = await self._transport.heartbeat(self.session_token)
                     self.session_expires_at = result.session_expires_at
                     return
                 except TransportError:
@@ -1095,8 +1113,8 @@ class Session:
         triggered this recovery is waiting for it to finish.
         """
         current = asyncio.current_task()
-        tasks: list[asyncio.Task] = []
-        seen: set[asyncio.Task] = set()
+        tasks: list[asyncio.Task[None]] = []
+        seen: set[asyncio.Task[None]] = set()
         for tracked in list(self._active.values()):
             task = tracked.task
             if task is None or task.done() or task is current:
@@ -1114,14 +1132,14 @@ class Session:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    def _on_handler_done(self, task: asyncio.Task) -> None:
+    def _on_handler_done(self, task: asyncio.Task[None]) -> None:
         """Drop a finished handler task and wake pull when a slot is free."""
         self._inflight.discard(task)
         if self._room() > 0:
             self._capacity.set()
 
-    async def _handle(self, delivery: Any) -> None:
-        parsed = parse_delivery(delivery)
+    async def _handle(self, delivery: Delivery) -> None:
+        parsed = delivery
         message = parsed.message
         token = _handling.set((self, parsed))
         try:
@@ -1145,24 +1163,17 @@ class Session:
         finally:
             _handling.reset(token)
 
-    async def _build_context(self, delivery: Any) -> Context:
-        from agentconnect.core.message import Delivery as DeliveryModel
+    async def _build_context(self, delivery: Delivery) -> Context:
+        return Context(self, delivery)
 
-        parsed = (
-            delivery
-            if isinstance(delivery, DeliveryModel)
-            else parse_delivery(delivery)
-        )
-        return Context(self, parsed)
-
-    async def _finish_handler(self, delivery: Any, result: Any) -> None:
+    async def _finish_handler(self, delivery: Delivery, result: object) -> None:
         from agentconnect.core.message import is_reply_expected
 
         reply_expected = is_reply_expected(delivery.message)
-        content = _handler_content(result)
         try:
             if reply_expected:
-                if content is _DECLINED:
+                content = _handler_content(result)
+                if isinstance(content, _Declined):
                     await self.complete_delivery(delivery)
                 else:
                     await self.reply_delivery(
@@ -1176,10 +1187,9 @@ class Session:
                     await self.reply_delivery(
                         delivery,
                         outcome="failed",
-                        error={
-                            "code": "handler_failed",
-                            "message": HANDLER_FAILURE_MESSAGE,
-                        },
+                        error=ErrorObject(
+                            code="handler_failed", message=HANDLER_FAILURE_MESSAGE
+                        ),
                     )
                 except SessionError as finish_exc:
                     logger.warning(
@@ -1192,7 +1202,7 @@ class Session:
                 "finish delivery failed address=%s code=%s", self.address, exc.code
             )
 
-    async def _fail_or_complete(self, delivery: Any, exc: BaseException) -> None:
+    async def _fail_or_complete(self, delivery: Delivery, exc: BaseException) -> None:
         from agentconnect.core.message import is_reply_expected
 
         reply_expected = is_reply_expected(delivery.message)
@@ -1202,10 +1212,9 @@ class Session:
                 await self.reply_delivery(
                     delivery,
                     outcome="failed",
-                    error={
-                        "code": "handler_failed",
-                        "message": HANDLER_FAILURE_MESSAGE,
-                    },
+                    error=ErrorObject(
+                        code="handler_failed", message=HANDLER_FAILURE_MESSAGE
+                    ),
                 )
             else:
                 await self.complete_delivery(delivery)
@@ -1216,13 +1225,9 @@ class Session:
                 finish_exc.code,
             )
 
-    async def _invoke(self, op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        method = getattr(self._transport, op)
-        return await method(*args, **kwargs)
-
-    async def _call(self, op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    async def _call(self, operation: Callable[[str], Awaitable[_Result]]) -> _Result:
         try:
-            return await self._invoke(op, *args, **kwargs)
+            return await operation(self._token())
         except TransportError as exc:
             if _should_reconnect(exc):
                 try:
@@ -1239,15 +1244,18 @@ class Session:
                         retryable=True,
                     ) from exc
                 if self._connected and self.session_token:
-                    retry_args = (self._token(), *args[1:])
                     try:
-                        return await self._invoke(op, *retry_args, **kwargs)
+                        return await operation(self._token())
                     except TransportError as retry_exc:
                         raise SessionError.from_transport(retry_exc) from retry_exc
             raise SessionError.from_transport(exc) from exc
 
     def _foreground_recovery_seconds(self) -> float:
-        timeout = getattr(self._transport, "_timeout", _DEFAULT_RECOVERY_SECONDS)
+        timeout: object = getattr(
+            self._transport, "_timeout", _DEFAULT_RECOVERY_SECONDS
+        )
+        if not isinstance(timeout, (int, float, str)):
+            return _DEFAULT_RECOVERY_SECONDS
         try:
             value = float(timeout)
         except (TypeError, ValueError):
@@ -1257,15 +1265,26 @@ class Session:
         return value
 
 
-_DECLINED = object()
+class _Declined:
+    """Internal sentinel distinct from successful JSON null."""
 
 
-def _handler_content(result: Any) -> Any:
-    """Map a handler return value onto reply content, or _DECLINED."""
+_DECLINED = _Declined()
+_JSON_CONTENT: TypeAdapter[JsonValue] = TypeAdapter(
+    JsonValue, config=ConfigDict(strict=True)
+)
+
+
+def _handler_content(result: object) -> JsonValue | _Declined:
+    """Normalize arbitrary harness results at the handler integration boundary."""
     if result is None:
         return _DECLINED
-    content_attr = getattr(result, "content", None)
-    kind_attr = getattr(result, "kind", None)
-    if content_attr is not None and kind_attr is not None:
-        return content_attr
-    return result
+    content_attr: object = getattr(result, "content", None)
+    kind_attr: object = getattr(result, "kind", None)
+    candidate = (
+        content_attr if content_attr is not None and kind_attr is not None else result
+    )
+    try:
+        return _JSON_CONTENT.validate_python(candidate)
+    except ValueError as exc:
+        raise SessionError("invalid_request", str(exc)) from exc

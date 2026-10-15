@@ -37,7 +37,7 @@ async with RegistryAPIClient(base_url="http://127.0.0.1:8000") as client:
 ## `with_retry`
 
 ```python
-with_retry(max_retries: Optional[int] = None, retry_backoff_factor: Optional[float] = None, retryable_status_codes: Optional[List[int]] = None)
+with_retry(max_retries: Optional[int] = None, retry_backoff_factor: Optional[float] = None, retryable_status_codes: Optional[List[int]] = None) -> Callable[[Callable[_P, Coroutine[object, object, _T]]], Callable[_P, Coroutine[object, object, _T]]]
 ```
 
 Decorator to add exponential backoff retry logic to async methods.
@@ -88,7 +88,7 @@ Open an HTTP client for one Index origin.
 ### `close`
 
 ```python
-close()
+close() -> None
 ```
 
 Closes the underlying HTTPX client. Should be called on cleanup.
@@ -100,10 +100,10 @@ Closes the underlying HTTPX client. Should be called on cleanup.
 ### `ensure_initialized`
 
 ```python
-ensure_initialized()
+ensure_initialized() -> None
 ```
 
-Mimics AgentRegistry's ensure\_initialized. For the client, this is a no-op.
+Mimics AgentRegistry's ensure_initialized. For the client, this is a no-op.
 
 <a id="agentconnect-index-client-registryapiclient-register"></a>
 
@@ -160,7 +160,7 @@ Get a list of all agents registered in the system.
 ### `update_registration`
 
 ```python
-update_registration(agent_id: str, updates: Dict[str, Any]) -> Optional[AgentRegistration]
+update_registration(agent_id: str, updates: dict[str, object]) -> Optional[AgentRegistration]
 ```
 
 Update agent registration details.

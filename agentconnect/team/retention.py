@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Awaitable, Optional
 
 import agentconnect.team.expiry as expiry_mod
 from agentconnect.team.codec import format_timestamp, json_size, parse_timestamp
@@ -110,7 +110,7 @@ async def plan_retained_bytes(
     return [Cas(RETAINED_BYTES_KEY, record.version, nxt)]
 
 
-def message_bytes(value: Any) -> int:
+def message_bytes(value: object) -> int:
     """Return the UTF-8 JSON size of a stored Message body."""
     if not isinstance(value, dict):
         return 0
@@ -127,7 +127,7 @@ async def is_ticket_retained(store: Store, message_id: str) -> bool:
     return await store.set_is_member(RETAIN_MESSAGES_SET, message_id)
 
 
-async def _thread_lists(store: Store, message_id: str, stored: Any) -> bool:
+async def _thread_lists(store: Store, message_id: str, stored: object) -> bool:
     if not isinstance(stored, dict):
         return False
     thread_id = stored.get("thread_id")
@@ -145,7 +145,7 @@ async def has_remaining_owner(
     message_id: str,
     *,
     ignore: IgnoreOwners = IgnoreOwners(),
-    stored: Any = None,
+    stored: object = None,
 ) -> bool:
     """Return True when another owner still needs ``msg:{id}``."""
     if not ignore.live and await is_live_work(store, message_id):
@@ -222,7 +222,7 @@ async def reclaim_unowned_bodies(
 
 async def _apply_reclaim(
     store: Store,
-    plan: Callable[[], Coroutine[Any, Any, list[StoreOp]]],
+    plan: Callable[[], Awaitable[list[StoreOp]]],
 ) -> None:
     """Commit ``plan()`` or retry a compare-and-set conflict.
 

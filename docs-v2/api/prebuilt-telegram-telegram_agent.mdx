@@ -35,7 +35,7 @@ await agent.join(team)
 ## `TelegramAIAgent`
 
 ```python
-TelegramAIAgent(name: str, *, model: str, telegram_token: Optional[str] = None, instructions: str = 'You are a helpful Telegram assistant.', tools: Optional[Sequence[ToolLike]] = None, identity: Optional[AgentIdentity] = None, profile: Any = None, completion: Optional[CompletionOptions] = None, api_key: Optional[str] = None, complete: Optional[CompletionFn] = None, max_tool_rounds: int = 8, include_team_tools: bool = True, groups_file: str = 'groups.txt', join_token: Optional[str] = None, instance_id: Optional[str] = None)
+TelegramAIAgent(name: str, *, model: str, telegram_token: Optional[str] = None, instructions: str = 'You are a helpful Telegram assistant.', tools: Optional[Sequence[ToolLike]] = None, identity: Optional[AgentIdentity] = None, profile: AgentProfile | Mapping[str, object] | None = None, completion: Optional[CompletionOptions] = None, api_key: Optional[str] = None, complete: Optional[CompletionFn] = None, max_tool_rounds: int = 8, include_team_tools: bool = True, groups_file: str = 'groups.txt', join_token: Optional[str] = None, instance_id: Optional[str] = None)
 ```
 
 [`AIAgent`](/api/prebuilt-ai_agent#agentconnect-prebuilt-ai-agent-aiagent) with a Telegram bot. Team deliveries use `handle`.
@@ -68,7 +68,7 @@ Create a Telegram-backed Agent. It has not joined a Team or started polling.
 
 * `identity` (`Optional[AgentIdentity]`): Optional Agent identity. Omit to create one.
 
-* `profile` (`Any`): Discovery Profile mapping or [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
+* `profile` (`AgentProfile | Mapping[str, object] | None`): Discovery Profile mapping or [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
 
 * `completion` (`Optional[CompletionOptions]`): Extra LiteLLM kwargs such as `temperature`.
 

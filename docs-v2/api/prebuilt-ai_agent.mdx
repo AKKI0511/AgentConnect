@@ -51,7 +51,7 @@ Common fields: `temperature`, `max_tokens`, `top_p`.
 ## `AIAgent`
 
 ```python
-AIAgent(name: str, *, model: str, profile: AgentProfile | Mapping[str, Any] | None = None, identity: Optional[AgentIdentity] = None, instructions: str = 'You are a helpful teammate. Use tools when they help you do the work.', tools: Optional[Sequence[ToolLike]] = None, max_tool_rounds: int = DEFAULT_MAX_ROUNDS, completion: Optional[CompletionOptions] = None, api_key: Optional[str] = None, complete: Optional[CompletionFn] = None, include_team_tools: bool = True, instance_id: Optional[str] = None, max_in_flight: int = 1, join_token: Optional[str] = None)
+AIAgent(name: str, *, model: str, profile: AgentProfile | Mapping[str, object] | None = None, identity: Optional[AgentIdentity] = None, instructions: str = 'You are a helpful teammate. Use tools when they help you do the work.', tools: Optional[Sequence[ToolLike]] = None, max_tool_rounds: int = DEFAULT_MAX_ROUNDS, completion: Optional[CompletionOptions] = None, api_key: Optional[str] = None, complete: Optional[CompletionFn] = None, include_team_tools: bool = True, instance_id: Optional[str] = None, max_in_flight: int = 1, join_token: Optional[str] = None)
 ```
 
 [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) that answers with a LiteLLM model and a short tool loop.
@@ -72,7 +72,7 @@ Create a model-backed Agent. It has not joined a Team yet.
 
 * `model` (`str`): LiteLLM model id, for example `gpt-4o-mini`.
 
-* `profile` (`AgentProfile | Mapping[str, Any] | None`): Discovery Profile mapping or [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile). A class
+* `profile` (`AgentProfile | Mapping[str, object] | None`): Discovery Profile mapping or [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile). A class
   attribute named `profile` is used when this is omitted.
 
 * `identity` (`Optional[AgentIdentity]`): Optional Agent identity. Omit to create one.
@@ -135,7 +135,7 @@ Session exists and `include_team_tools` is True.
 ### `complete`
 
 ```python
-complete(text: str, *, history: Optional[Sequence[Any]] = None, current: Optional[Any] = None, include_team_tools: Optional[bool] = None, self_address: Optional[str] = None) -> str
+complete(text: str, *, history: Optional[Sequence[Message | Mapping[str, object]]] = None, current: Message | Mapping[str, object] | str | None = None, include_team_tools: Optional[bool] = None, self_address: Optional[str] = None) -> str
 ```
 
 Run one model turn. Used by `handle`, `chat`, and Telegram.
@@ -144,9 +144,9 @@ Run one model turn. Used by `handle`, `chat`, and Telegram.
 
 * `text` (`str`): User turn when `current` is omitted.
 
-* `history` (`Optional[Sequence[Any]]`): Prior Messages or chat dicts. Defaults to empty.
+* `history` (`Optional[Sequence[Message | Mapping[str, object]]]`): Prior Messages or chat dicts. Defaults to empty.
 
-* `current` (`Optional[Any]`): This turn as a Message, chat dict, or string.
+* `current` (`Message | Mapping[str, object] | str | None`): This turn as a Message, chat dict, or string.
 
 * `include_team_tools` (`Optional[bool]`): Override the constructor flag for this call.
 

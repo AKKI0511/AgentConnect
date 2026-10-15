@@ -104,9 +104,6 @@
         "directory_match": {
           "$ref": "#/definitions/DirectoryMatch"
         },
-        "profile_view": {
-          "$ref": "#/definitions/ProfileView"
-        },
         "profile_found": {
           "$ref": "#/definitions/ProfileFound"
         },
@@ -1621,25 +1618,6 @@
       ],
       "additionalProperties": false,
       "description": "One ranked discovery result. Light on purpose so a search can list a whole Team without flooding a model's context. Read selected Profiles with `get_profiles`."
-    },
-    "ProfileView": {
-      "type": "object",
-      "properties": {
-        "address": {
-          "$ref": "#/definitions/QualifiedAddress",
-          "description": "Canonical qualified Address."
-        },
-        "profile": {
-          "$ref": "#/definitions/AgentProfile",
-          "description": "Full discovery information."
-        }
-      },
-      "required": [
-        "address",
-        "profile"
-      ],
-      "additionalProperties": false,
-      "description": "Address and Profile without Directory DID bookkeeping. Runtime, HTTP, and Client `get_profile` / `get_entry` still return `DirectoryEntry`."
     },
     "ProfileFound": {
       "type": "object",

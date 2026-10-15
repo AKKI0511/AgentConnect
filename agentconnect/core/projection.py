@@ -7,7 +7,6 @@ does a Python type whose fields drifted.
 
 from __future__ import annotations
 
-from typing import Any
 
 from agentconnect.core.base import JsonObject, JsonValue
 from agentconnect.core.directory import (
@@ -20,7 +19,6 @@ from agentconnect.core.directory import (
     ProfileFound,
     ProfileItem,
     ProfileMiss,
-    ProfileView,
 )
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
 from agentconnect.core.message import (
@@ -119,7 +117,7 @@ from agentconnect.core.ticket import (
 )
 
 # Every schema.json definition except the generation wrapper.
-PUBLIC_SCHEMA_TYPES: dict[str, Any] = {
+PUBLIC_SCHEMA_TYPES: dict[str, object] = {
     "SpecVersion": SpecVersion,
     "Timestamp": Timestamp,
     "Uuid": Uuid,
@@ -166,7 +164,6 @@ PUBLIC_SCHEMA_TYPES: dict[str, Any] = {
     "TicketView": TicketView,
     "DirectoryEntry": DirectoryEntry,
     "DirectoryMatch": DirectoryMatch,
-    "ProfileView": ProfileView,
     "ProfileFound": ProfileFound,
     "ProfileMiss": ProfileMiss,
     "ProfileItem": ProfileItem,

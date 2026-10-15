@@ -72,7 +72,7 @@ None when unknown or successful.
 ## `Insert`
 
 ```python
-Insert(key: str, value: Any)
+Insert(key: str, value: object)
 ```
 
 Write `value` only if `key` is absent. Fails the batch with `exists`.
@@ -92,7 +92,7 @@ Document key.
 ### `value`
 
 ```python
-value: Any
+value: object
 ```
 
 JSON-compatible document.
@@ -102,7 +102,7 @@ JSON-compatible document.
 ## `Cas`
 
 ```python
-Cas(key: str, version: int, value: Any)
+Cas(key: str, version: int, value: object)
 ```
 
 Replace `key` when its stored version equals `version`.
@@ -135,7 +135,7 @@ Expected current version.
 ### `value`
 
 ```python
-value: Any
+value: object
 ```
 
 JSON-compatible document to store.
@@ -145,7 +145,7 @@ JSON-compatible document to store.
 ## `Put`
 
 ```python
-Put(key: str, value: Any)
+Put(key: str, value: object)
 ```
 
 Unconditionally write `value`, bumping the stored version.
@@ -165,7 +165,7 @@ Document key.
 ### `value`
 
 ```python
-value: Any
+value: object
 ```
 
 JSON-compatible document.

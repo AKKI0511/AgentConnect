@@ -70,8 +70,10 @@ demo = [
 ]
 dev = [
     { name = "jsonschema", specifier = ">=4.23.0,<5.0.0" },
+    { name = "mypy", specifier = "==2.4.0" },
     { name = "pytest", specifier = ">=8.3.5,<9.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.26.0,<0.27.0" },
+    { name = "types-pyyaml", specifier = ">=6.0.12,<7" },
 ]
 docs = [
     { name = "myst-parser", specifier = ">=4.0.1,<5.0.0" },

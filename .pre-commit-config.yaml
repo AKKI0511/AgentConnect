@@ -1,7 +1,13 @@
-# Optional Python checks. uv resolves the latest stable Ruff release.
+# Ruff owns lint/formatting; mypy uses the locked project environment.
 repos:
   - repo: local
     hooks:
+      - id: mypy
+        name: Framework types
+        entry: uv run --locked --all-extras mypy
+        language: system
+        pass_filenames: false
+        files: ^agentconnect/.*\.(py|pyi)$|^tests/typing/.*\.(py|pyi)$|^pyproject\.toml$|^uv\.lock$|^\.pre-commit-config\.yaml$|^\.github/workflows/main\.yml$
       - id: ruff-check
         name: Ruff check
         entry: uvx ruff@latest check --force-exclude --fix

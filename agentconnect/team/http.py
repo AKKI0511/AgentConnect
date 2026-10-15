@@ -5,14 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Callable, Optional, TypeVar
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from agentconnect.core.base import dump_public
+from agentconnect.core.base import dump_public, parse_schema
 from agentconnect.core.operations import (
     GetHistoryRequest,
     parse_complete_request,
@@ -21,7 +22,6 @@ from agentconnect.core.operations import (
     parse_lease_request,
     parse_renew_request,
     parse_revoke_join_token_request,
-    parse_schema,
 )
 from agentconnect.team.constants import DEFAULT_MAX_MESSAGE_BYTES
 from agentconnect.team.errors import TeamError
@@ -53,12 +53,17 @@ _STATUS = {
 }
 
 
-def _json(body: Any, **kwargs: Any) -> JSONResponse:
+def _json(
+    body: object, *, status_code: int = 200, headers: dict[str, str] | None = None
+) -> JSONResponse:
     """Serialize a public schema object or mapping as JSON."""
-    return JSONResponse(dump_public(body), **kwargs)
+    return JSONResponse(dump_public(body), status_code=status_code, headers=headers)
 
 
-def _wire(parse_fn, body: Any):
+_Parsed = TypeVar("_Parsed")
+
+
+def _wire(parse_fn: Callable[[object], _Parsed], body: object) -> _Parsed:
     """Parse a wire body or raise ``invalid_request``."""
     try:
         return parse_fn(body)
@@ -146,7 +151,7 @@ def create_runtime_app(team: Team) -> FastAPI:
     )
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI):
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         async with mcp.session_manager.run():
             yield
 
@@ -306,7 +311,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         token = _bound_session(request)
         queue = await team._subscribe_trace_events(token)
 
-        async def generate_trace():
+        async def generate_trace() -> AsyncIterator[str]:
             """Yield SSE frames until the client disconnects."""
             try:
                 yield ": keepalive\n\n"
@@ -371,7 +376,7 @@ def create_runtime_app(team: Team) -> FastAPI:
         token = _bound_session(request)
         queue = await team._subscribe_events(token)
 
-        async def generate():
+        async def generate() -> AsyncIterator[str]:
             """Yield SSE frames until the client disconnects."""
             try:
                 yield ": keepalive\n\n"
@@ -404,7 +409,9 @@ def create_runtime_app(team: Team) -> FastAPI:
     return app
 
 
-async def _json_object(request: Request, *, empty_ok: bool = False) -> dict[str, Any]:
+async def _json_object(
+    request: Request, *, empty_ok: bool = False
+) -> dict[str, object]:
     """Read a JSON object body, capped at the Team ``max_message_bytes``.
 
     When ``Content-Length`` exceeds that budget this fails before the rest

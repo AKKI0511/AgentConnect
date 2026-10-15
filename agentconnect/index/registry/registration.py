@@ -7,7 +7,9 @@ information of agents in the system.
 
 # Standard library imports
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
+
+from agentconnect.core.base import JsonObject
 
 from pydantic import BaseModel, Field
 
@@ -75,10 +77,10 @@ class AgentRegistration(BaseModel):
     examples: List[str] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
     payment_address: Optional[str] = None
-    custom_metadata: Dict[str, Any] = Field(default_factory=dict)  # Replaces metadata
+    custom_metadata: JsonObject = Field(default_factory=dict)  # Replaces metadata
     registered_at: datetime = Field(default_factory=datetime.now)
 
-    def model_dump(self, *args, **kwargs):  # type: ignore[override]
+    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Serialize without private keys for security."""
         data = super().model_dump(*args, **kwargs)
         if isinstance(self.identity, AgentIdentity):

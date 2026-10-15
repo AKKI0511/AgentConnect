@@ -13,12 +13,41 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterator, Optional
+from typing import Callable, Iterator, Optional, TypeVar
+from types import TracebackType
+from typing_extensions import TypedDict, Unpack
+
+from agentconnect.core.base import JsonObject, JsonValue, parse_schema
+from agentconnect.core.directory import FindResult
+from agentconnect.core.primitives import CollectMode
+from agentconnect.core.operations import (
+    StatusResult,
+    TraceResult,
+    JoinTokenIssued,
+    SendResult,
+    parse_send_result,
+)
 from uuid import uuid4
 
 import httpx
 
 from agentconnect.team.errors import TeamError
+
+_Parsed = TypeVar("_Parsed")
+
+
+class _RequestOptions(TypedDict, total=False):
+    json: object
+    timeout: float | None
+    headers: dict[str, str]
+
+
+def _parse(parser: Callable[[object], _Parsed], data: object) -> _Parsed:
+    try:
+        return parser(data)
+    except ValueError as exc:
+        raise TeamError("internal", "Runtime returned an invalid result") from exc
+
 
 HTTP_PREFIX = "/agentconnect/v1"
 DEFAULT_TIMEOUT = 35.0
@@ -49,36 +78,46 @@ class RuntimeClient:
         """Return this client for use as a context manager."""
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """Close on context exit."""
         self.close()
 
-    def status(self) -> dict[str, Any]:
+    def status(self) -> StatusResult:
         """GET /status as the loopback operator."""
-        return self._get("/status")
+        return _parse(
+            lambda data: parse_schema(StatusResult, data), self._get("/status")
+        )
 
     def find(
         self,
         query: str,
         *,
         limit: Optional[int] = None,
-    ) -> dict[str, Any]:
+    ) -> FindResult:
         """POST /directory/find."""
-        body: dict[str, Any] = {"query": query}
+        body: JsonObject = {"query": query}
         if limit is not None:
             body["limit"] = limit
-        return self._post("/directory/find", body)
+        return _parse(
+            lambda data: parse_schema(FindResult, data),
+            self._post("/directory/find", body),
+        )
 
     def ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
-        collect: str = "wait",
-    ) -> dict[str, Any]:
+        collect: CollectMode = "wait",
+    ) -> SendResult:
         """POST /messages as a reply-expected request."""
-        body: dict[str, Any] = {
+        body: JsonObject = {
             "id": str(uuid4()),
             "recipient": recipient,
             "kind": "request",
@@ -92,11 +131,14 @@ class RuntimeClient:
             timeout = max(timeout, deadline_seconds + 10.0)
         else:
             timeout = max(timeout, DEFAULT_TIMEOUT)
-        return self._post("/messages", body, timeout=timeout)
+        return _parse(parse_send_result, self._post("/messages", body, timeout=timeout))
 
-    def get_trace(self, trace_id: str) -> dict[str, Any]:
+    def get_trace(self, trace_id: str) -> TraceResult:
         """GET /traces/{trace_id}."""
-        return self._get(f"/traces/{trace_id}")
+        return _parse(
+            lambda data: parse_schema(TraceResult, data),
+            self._get(f"/traces/{trace_id}"),
+        )
 
     def issue_token(
         self,
@@ -105,16 +147,19 @@ class RuntimeClient:
         agent_did: Optional[str] = None,
         ttl_seconds: Optional[float] = None,
         single_use: bool = False,
-    ) -> dict[str, Any]:
+    ) -> JoinTokenIssued:
         """POST /tokens."""
-        body: dict[str, Any] = {"single_use": single_use}
+        body: JsonObject = {"single_use": single_use}
         if name is not None:
             body["name"] = name
         if agent_did is not None:
             body["agent_did"] = agent_did
         if ttl_seconds is not None:
             body["ttl_seconds"] = ttl_seconds
-        return self._post("/tokens", body)
+        return _parse(
+            lambda data: parse_schema(JoinTokenIssued, data),
+            self._post("/tokens", body),
+        )
 
     def revoke_token(self, token: str) -> None:
         """POST /tokens/revoke."""
@@ -123,7 +168,7 @@ class RuntimeClient:
             return
         self._raise(response)
 
-    def watch(self) -> Iterator[dict[str, Any]]:
+    def watch(self) -> Iterator[JsonObject]:
         """Yield Trace events from GET /traces/events."""
         try:
             stream = self._client.stream(
@@ -169,7 +214,9 @@ class RuntimeClient:
                 "unavailable", f"Runtime is unreachable at {self.origin}"
             ) from exc
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+    def _request(
+        self, method: str, path: str, **kwargs: Unpack[_RequestOptions]
+    ) -> httpx.Response:
         try:
             return self._client.request(method, HTTP_PREFIX + path, **kwargs)
         except httpx.HTTPError as exc:
@@ -177,22 +224,22 @@ class RuntimeClient:
                 "unavailable", f"Runtime is unreachable at {self.origin}"
             ) from exc
 
-    def _get(self, path: str) -> dict[str, Any]:
+    def _get(self, path: str) -> JsonObject:
         return self._result(self._request("GET", path))
 
     def _post(
-        self, path: str, body: dict[str, Any], *, timeout: Optional[float] = None
-    ) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"json": body}
+        self, path: str, body: JsonObject, *, timeout: Optional[float] = None
+    ) -> JsonObject:
+        kwargs: _RequestOptions = {"json": body}
         if timeout is not None:
             kwargs["timeout"] = timeout
         return self._result(self._request("POST", path, **kwargs))
 
-    def _result(self, response: httpx.Response) -> dict[str, Any]:
+    def _result(self, response: httpx.Response) -> JsonObject:
         if response.status_code in {200, 204}:
             if response.status_code == 204 or not response.content:
                 return {}
-            data = response.json()
+            data: JsonValue = response.json()
             if isinstance(data, dict):
                 return data
             raise TeamError("internal", "Runtime returned a non-object body")

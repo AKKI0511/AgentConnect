@@ -24,7 +24,18 @@ import asyncio
 import logging
 import time
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import (
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    ParamSpec,
+    Tuple,
+    TypeVar,
+)
+from types import TracebackType
 
 import httpx
 from pydantic import ValidationError
@@ -53,18 +64,27 @@ class _RegistryClientDefaults:
     max_keepalive_connections = 5
 
 
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
 def with_retry(
     max_retries: Optional[int] = None,
     retry_backoff_factor: Optional[float] = None,
     retryable_status_codes: Optional[List[int]] = None,
-):
+) -> Callable[
+    [Callable[_P, Coroutine[object, object, _T]]],
+    Callable[_P, Coroutine[object, object, _T]],
+]:
     """Decorator to add exponential backoff retry logic to async methods."""
 
-    def decorator(func):
+    def decorator(
+        func: Callable[_P, Coroutine[object, object, _T]],
+    ) -> Callable[_P, Coroutine[object, object, _T]]:
         """Decorator to add exponential backoff retry logic to async methods."""
 
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             """Wrapper function with retry logic."""
             # Get configuration from settings if not provided
             client_settings = _RegistryClientDefaults
@@ -86,7 +106,7 @@ def with_retry(
             if actual_max_retries < 0:
                 raise ValueError("max_retries must be >= 0")
 
-            last_exception = None
+            last_exception: Exception | None = None
 
             for attempt in range(actual_max_retries + 1):  # 0 to max_retries
                 try:
@@ -126,6 +146,7 @@ def with_retry(
                     raise e
 
             # Re-raise the last exception if all retries failed
+            assert last_exception is not None
             raise last_exception
 
         return wrapper
@@ -151,7 +172,7 @@ class RegistryAPIClient:
         pool_timeout: Optional[float] = None,
         max_connections: Optional[int] = None,
         max_keepalive_connections: Optional[int] = None,
-    ):
+    ) -> None:
         """Open an HTTP client for one Index origin.
 
         Args:
@@ -231,7 +252,7 @@ class RegistryAPIClient:
         self._initialized_event = asyncio.Event()
         self._initialized_event.set()  # Client is "initialized" upon instantiation
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes the underlying HTTPX client. Should be called on cleanup."""
         await self._client.aclose()
 
@@ -240,11 +261,11 @@ class RegistryAPIClient:
         self,
         method: str,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Any] = None,
+        params: Mapping[str, str | int | float | bool | None] | None = None,
+        json_data: object = None,
         expected_status: int = 200,
-        response_model: Optional[Type[Any]] = None,
-    ) -> Optional[Any]:
+        response_model: Callable[..., object] | None = None,
+    ) -> object:
         """Helper method to make HTTP requests with retry logic."""
         try:
             start_time = time.time()
@@ -311,6 +332,7 @@ class RegistryAPIClient:
 
             # Raise HTTPStatusError for all other error codes - let retry decorator handle retryable ones
             response.raise_for_status()
+            return None
 
         except Exception:
             logger.error(
@@ -321,7 +343,7 @@ class RegistryAPIClient:
             )
             return None
 
-    async def ensure_initialized(self):
+    async def ensure_initialized(self) -> None:
         """Mimics AgentRegistry's ensure_initialized. For the client, this is a no-op."""
         await self._initialized_event.wait()
         # Optionally, could add a ping to a server health endpoint here if one exists.
@@ -333,39 +355,45 @@ class RegistryAPIClient:
         response_data = await self._request(
             "POST", "agents/register", json_data=payload, expected_status=201
         )
-        return response_data is not None and "agent_id" in response_data
+        return isinstance(response_data, Mapping) and "agent_id" in response_data
 
     async def unregister(self, agent_id: str) -> bool:
         """Remove agent from registry."""
         response_data = await self._request(
             "DELETE", f"agents/{agent_id}", expected_status=200
         )  # Server returns 200 with a message
-        return response_data is not None and "agent_id" in response_data
+        return isinstance(response_data, Mapping) and "agent_id" in response_data
 
     async def get_registration(self, agent_id: str) -> Optional[AgentRegistration]:
         """Get agent registration details."""
-        return await self._request(
+        result = await self._request(
             "GET", f"agents/{agent_id}", response_model=AgentRegistration
         )
+        return result if isinstance(result, AgentRegistration) else None
 
     async def get_all_agents(self) -> List[AgentRegistration]:
         """Get a list of all agents registered in the system."""
         results = await self._request("GET", "agents", response_model=AgentRegistration)
-        return results if results else []
+        return (
+            [item for item in results if isinstance(item, AgentRegistration)]
+            if isinstance(results, list)
+            else []
+        )
 
     async def update_registration(
-        self, agent_id: str, updates: Dict[str, Any]
+        self, agent_id: str, updates: dict[str, object]
     ) -> Optional[AgentRegistration]:
         """Update agent registration details."""
         # The server expects AgentRegistrationUpdatePayload.
         # We construct it from the 'updates' dict. FastAPI will validate.
         # No need to instantiate AgentRegistrationUpdatePayload here if just passing dict.
-        return await self._request(
+        result = await self._request(
             "PUT",
             f"agents/{agent_id}",
             json_data=updates,
             response_model=AgentRegistration,
         )
+        return result if isinstance(result, AgentRegistration) else None
 
     async def get_by_capability_semantic(
         self,
@@ -390,7 +418,7 @@ class RegistryAPIClient:
             response_model=AgentSearchOutput,
         )
 
-        if not search_output_data or not hasattr(search_output_data, "results"):
+        if not isinstance(search_output_data, AgentSearchOutput):
             return []
 
         # search_output_data is an AgentSearchOutput instance if parsing was successful
@@ -438,7 +466,9 @@ class RegistryAPIClient:
                 )
                 continue
 
-        async def fetch_full_reg_with_score(agent_id: str, score: float):
+        async def fetch_full_reg_with_score(
+            agent_id: str, score: float
+        ) -> tuple[AgentRegistration, float] | None:
             full_reg = await self.get_registration(agent_id)
             if full_reg:
                 return (full_reg, score)
@@ -465,7 +495,7 @@ class RegistryAPIClient:
         similarity_threshold: float = 0.1,  # similarity_threshold for API consistency
     ) -> List[AgentRegistration]:
         """Find agents by capability name (exact match)."""
-        params = {
+        params: dict[str, str | int | float | bool | None] = {
             "capability_name": capability_name,
             "limit": limit,
             "similarity_threshold": similarity_threshold,  # Server endpoint has this param
@@ -476,13 +506,21 @@ class RegistryAPIClient:
             params=params,
             response_model=AgentRegistration,
         )
-        return results if results else []
+        return (
+            [item for item in results if isinstance(item, AgentRegistration)]
+            if isinstance(results, list)
+            else []
+        )
 
     async def get_all_capabilities(self) -> List[str]:
         """Get a list of all unique capability names registered in the system."""
         # The server returns List[str] directly.
         results = await self._request("GET", "capabilities")
-        return results if isinstance(results, list) else []
+        if not isinstance(results, list) or not all(
+            isinstance(item, str) for item in results
+        ):
+            return []
+        return results
 
     async def get_agent_type(self, agent_id: str) -> Optional[AgentType]:
         """Get the type of an agent."""
@@ -501,7 +539,11 @@ class RegistryAPIClient:
             f"agents/interaction-mode/{mode.value}",
             response_model=AgentRegistration,
         )
-        return results if results else []
+        return (
+            [item for item in results if isinstance(item, AgentRegistration)]
+            if isinstance(results, list)
+            else []
+        )
 
     async def get_by_organization(self, organization: str) -> List[AgentRegistration]:
         """Find agents by organization."""
@@ -510,14 +552,22 @@ class RegistryAPIClient:
             f"agents/organization/{organization}",
             response_model=AgentRegistration,
         )
-        return results if results else []
+        return (
+            [item for item in results if isinstance(item, AgentRegistration)]
+            if isinstance(results, list)
+            else []
+        )
 
     async def get_verified_agents(self) -> List[AgentRegistration]:
         """Get all verified agents."""
         results = await self._request(
             "GET", "agents/verified", response_model=AgentRegistration
         )
-        return results if results else []
+        return (
+            [item for item in results if isinstance(item, AgentRegistration)]
+            if isinstance(results, list)
+            else []
+        )
 
     async def verify_agent(self, agent_id: str) -> bool:
         """Verify an agent's identity (triggers verification process on server)."""
@@ -534,7 +584,11 @@ class RegistryAPIClient:
         results = await self._request(
             "GET", f"agents/owner/{owner_id}", response_model=AgentRegistration
         )
-        return results if results else []
+        return (
+            [item for item in results if isinstance(item, AgentRegistration)]
+            if isinstance(results, list)
+            else []
+        )
 
     async def verify_owner(
         self, agent_id: str, owner_id: str
@@ -547,11 +601,16 @@ class RegistryAPIClient:
         return isinstance(result, bool) and result
 
     # --- Context manager methods ---
-    async def __aenter__(self):
+    async def __aenter__(self) -> "RegistryAPIClient":
         # self._client is initialized in __init__
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         await self.close()
 
 

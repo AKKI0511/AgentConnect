@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 
+from agentconnect.core.operations import JoinChallenge
 from agentconnect.core.identity import (
     AgentIdentity,
     did_key_from_public_bytes,
@@ -44,6 +45,7 @@ def test_identity_proof_round_trip():
         "audience": "agentconnect:content-squad",
         "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
     }
+    challenge = JoinChallenge.model_validate(challenge)
     proof = issue_identity_proof(identity, challenge)
     payload = verify_identity_proof(proof, agent_did=identity.did, challenge=challenge)
     assert payload["iss"] == identity.did
@@ -60,6 +62,7 @@ def test_identity_proof_rejects_wrong_key():
         "audience": "agentconnect:content-squad",
         "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
     }
+    challenge = JoinChallenge.model_validate(challenge)
     proof = issue_identity_proof(other, challenge)
     with pytest.raises(ValueError):
         verify_identity_proof(proof, agent_did=identity.did, challenge=challenge)
@@ -73,6 +76,7 @@ def test_identity_proof_rejects_expired_exp():
         "audience": "agentconnect:content-squad",
         "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
     }
+    challenge = JoinChallenge.model_validate(challenge)
     now = int(utc_now().timestamp())
     token = encode_eddsa_jwt(
         {

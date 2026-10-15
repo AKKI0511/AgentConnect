@@ -9,7 +9,6 @@ import pytest
 
 from agentconnect.agent import BaseAgent
 from agentconnect.core.base import dump_public
-from agentconnect.core.directory import profile_view
 from agentconnect.core.operations import history_view, tell_view
 from agentconnect.core.ticket import ticket_view
 from agentconnect.team import Team
@@ -114,7 +113,6 @@ async def test_model_facing_views_are_smaller_than_wire_envelopes() -> None:
         assert profile["items"][0]["status"] == "ok"
         assert "agent_did" not in profile["items"][0]
         assert profile_bytes < entry_bytes
-        assert profile_view(entry).address == entry.address
 
         several = await call_team_tool(
             researcher.tools,

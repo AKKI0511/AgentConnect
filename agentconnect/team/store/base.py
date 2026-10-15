@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
+from agentconnect.core.primitives import PersistenceMode
+
 from agentconnect.team.store.ops import ApplyResult, StoreOp
 
 
@@ -42,7 +44,7 @@ class Store(ABC):
     write or disguising an unknown outcome as a conflict.
     """
 
-    persistence: str
+    persistence: PersistenceMode
     """`volatile` for process memory, or `durable` for persistent storage."""
 
     @abstractmethod
@@ -54,10 +56,10 @@ class Store(ABC):
         """Release backend resources."""
 
     @abstractmethod
-    async def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> Any:
         """Return a copy of the stored value, or None when the key is missing."""
 
-    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+    async def get_many(self, keys: Sequence[str]) -> list[Any]:
         """Return copied values in input order; missing keys are None.
 
         Duplicate keys keep their positions. This call does not promise a
@@ -70,18 +72,18 @@ class Store(ABC):
         """Return a copied value and its version, or None when the key is missing."""
 
     @abstractmethod
-    async def put(self, key: str, value: Any) -> None:
+    async def put(self, key: str, value: object) -> None:
         """Write a copy of `value`, starting at version 1 or incrementing it."""
 
     @abstractmethod
-    async def insert(self, key: str, value: Any) -> bool:
+    async def insert(self, key: str, value: object) -> bool:
         """Atomically insert a copy at version 1 if the key is absent.
 
         Return True if inserted, or False with the existing value unchanged.
         """
 
     @abstractmethod
-    async def compare_and_set(self, key: str, version: int, value: Any) -> bool:
+    async def compare_and_set(self, key: str, version: int, value: object) -> bool:
         """Atomically replace `key` when its stored version equals `version`.
 
         Store a copy at version `version + 1`. False if the key is

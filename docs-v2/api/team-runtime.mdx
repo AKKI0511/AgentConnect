@@ -16,7 +16,7 @@ The [`Team`](/api/team-runtime#agentconnect-team-runtime-team) you construct, st
 ## `Team`
 
 ```python
-Team(name: str, *, store: Store | str | None = None, max_message_bytes: int = 1048576, max_mailbox_depth: int = 1000, delivery_history_limit: int = 50, wait_hold_seconds: float = 25.0, max_held_waits: int = 16, work_lifetime_seconds: float = 3600.0, max_deadline_seconds: float = 86400, max_open_tickets: int = 1000, replay_horizon_seconds: float = 86400, max_retained_bytes: int = 67108864, session_ttl_seconds: float = 300, lease_ttl_seconds: float = 60, thread_message_limit: int = 10000, max_instances: int = 100, max_join_challenges: int = 128, sweep_interval_seconds: float = 0.5, require_join_auth: bool = False, join_challenge_ttl_seconds: float = 60, join_token_ttl_seconds: float = 3600, embeddings: EmbeddingsArg = 'auto', tools: Sequence[Callable[..., Any]] | None = None)
+Team(name: str, *, store: Store | str | None = None, max_message_bytes: int = 1048576, max_mailbox_depth: int = 1000, delivery_history_limit: int = 50, wait_hold_seconds: float = 25.0, max_held_waits: int = 16, work_lifetime_seconds: float = 3600.0, max_deadline_seconds: float = 86400, max_open_tickets: int = 1000, replay_horizon_seconds: float = 86400, max_retained_bytes: int = 67108864, session_ttl_seconds: float = 300, lease_ttl_seconds: float = 60, thread_message_limit: int = 10000, max_instances: int = 100, max_join_challenges: int = 128, sweep_interval_seconds: float = 0.5, require_join_auth: bool = False, join_challenge_ttl_seconds: float = 60, join_token_ttl_seconds: float = 3600, embeddings: EmbeddingsArg = 'auto', tools: Sequence[Callable[..., object]] | None = None)
 ```
 
 The group your agents join to find each other and exchange work.
@@ -99,7 +99,7 @@ Create a stopped Team.
   [`agentconnect.team.directory`](/api/team-directory) for choices. A backend failure
   makes `find` rebuild one coherent vector space.
 
-* `tools` (`Sequence[Callable[..., Any]] | None`): Extra MCP tools beside the reserved Team tools.
+* `tools` (`Sequence[Callable[..., object]] | None`): Extra MCP tools beside the reserved Team tools.
   Each callable's `__name__` is its tool name; reserved or
   duplicate names are rejected.
 
@@ -116,7 +116,7 @@ Create a stopped Team.
 ### `persistence`
 
 ```python
-persistence: str
+persistence: PersistenceMode
 ```
 
 `volatile` for the memory store, or `durable` for Redis.
@@ -560,7 +560,7 @@ Fetch this, sign it with the Agent key, then pass the JWT as
 ### `join`
 
 ```python
-join(name: str | None = None, agent_did: str | None = None, profile: Mapping[str, Any] | None = None, *, spec_version: str = '1.0.0-draft', instance_id: str | None = None, max_in_flight: int = 1, join_token: str | None = None, identity_proof: str | None = None, delivery_history: DeliveryHistoryForm | None = None, request: Mapping[str, Any] | None = None) -> JoinResult
+join(name: str | None = None, agent_did: str | None = None, profile: AgentProfile | Mapping[str, object] | None = None, *, spec_version: str = '1.0.0-draft', instance_id: str | None = None, max_in_flight: int = 1, join_token: str | None = None, identity_proof: str | None = None, delivery_history: DeliveryHistoryForm | None = None, request: JoinRequest | Mapping[str, object] | None = None) -> JoinResult
 ```
 
 Create or reconnect a Membership and open a Session.
@@ -580,7 +580,7 @@ None selects bodies. Keep the returned Session token secret.
 
 * `agent_did` (`str | None`): This agent's `did:key` identity.
 
-* `profile` (`Mapping[str, Any] | None`): Discovery fields matching [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
+* `profile` (`AgentProfile | Mapping[str, object] | None`): Discovery fields matching [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
 
 * `spec_version` (`str`): Must match the Runtime's contract version.
 
@@ -592,7 +592,7 @@ None selects bodies. Keep the returned Session token secret.
 
 * `identity_proof` (`str | None`): EdDSA JWT over a join challenge.
 
-* `request` (`Mapping[str, Any] | None`): [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest) mapping supplying the join arguments.
+* `request` (`JoinRequest | Mapping[str, object] | None`): [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest) or raw mapping supplying the join arguments.
 
 **Raises:**
 
@@ -646,7 +646,7 @@ Prove the Client still holds its Session and extend expiry.
 ### `send`
 
 ```python
-send(session_token: str, request: Mapping[str, Any]) -> SendResult
+send(session_token: str, request: SendRequest | Mapping[str, object]) -> SendResult
 ```
 
 Accept one request or event for one recipient in this Team.
@@ -668,7 +668,7 @@ within the replay horizon. Changing data under that ID fails with
 
 * `session_token` (`str`): Credential from `join`.
 
-* `request` (`Mapping[str, Any]`): Send body. Required keys are `id` (client-generated
+* `request` (`SendRequest | Mapping[str, object]`): Send body. Required keys are `id` (client-generated
   UUID, becomes the Message id), `recipient` (Agent name or
   Address), `kind` (`"request"` or `"event"`), and
   `content` (JSON). A request also needs `collect`
@@ -798,7 +798,7 @@ within the replay horizon.
 ### `reply`
 
 ```python
-reply(session_token: str, request: Mapping[str, Any]) -> ReplyResult
+reply(session_token: str, request: ReplyRequest | Mapping[str, object]) -> ReplyResult
 ```
 
 Finish a reply-expected Delivery with content or an error.
@@ -817,7 +817,7 @@ to belong to the calling membership.
 
 * `session_token` (`str`): Live Session token from `join`.
 
-* `request` (`Mapping[str, Any]`): Reply body. Required keys are `id` (client-generated
+* `request` (`ReplyRequest | Mapping[str, object]`): Reply body. Required keys are `id` (client-generated
   UUID), `lease_id`, and `outcome` (`"completed"` or
   `"failed"`). Completed replies need `content`. Failed
   replies need `error` (`code` and `message`).

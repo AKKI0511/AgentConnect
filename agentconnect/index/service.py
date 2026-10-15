@@ -8,7 +8,10 @@ Runtime Directory.
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
+from collections.abc import AsyncIterator
+
+from agentconnect.core.base import JsonObject
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,7 +52,7 @@ def create_registry_api_app(
     resolved_settings = settings or RegistryAPISettings()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):  # type: ignore[override]
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         global _agent_registry_instance
         # Apply our logger level at lifespan start so it reflects runtime settings
         logger.setLevel(getattr(logging, resolved_settings.log_level))
@@ -126,7 +129,7 @@ class AgentRegistrationUpdatePayload(BaseModel):
     examples: Optional[List[str]] = None
     tags: Optional[List[str]] = None
     payment_address: Optional[str] = None
-    custom_metadata: Optional[Dict[str, Any]] = None
+    custom_metadata: Optional[JsonObject] = None
 
     class Config:
         """Pydantic model configuration."""
@@ -149,7 +152,7 @@ def get_registry() -> AgentRegistry:
     summary="Check server health and registry initialization status",
     tags=["Server Health"],
 )
-async def health_check_endpoint():
+async def health_check_endpoint() -> dict[str, str]:
     """
     Checks the operational status of the server and its core components.
     - Returns "healthy" if the server is running and the AgentRegistry is fully initialized.
@@ -197,7 +200,7 @@ async def get_verified_agents_endpoint() -> List[AgentRegistration]:
 )
 async def register_agent_endpoint(
     registration_data: AgentRegistration,
-) -> Dict[str, Any]:
+) -> JsonObject:
     registry = get_registry()
     try:
         success = await registry.register(registration_data)
@@ -291,7 +294,7 @@ async def update_agent_registration_endpoint(
     summary="Unregister an agent",
     tags=["Agents"],
 )
-async def unregister_agent_endpoint(agent_id: str) -> Dict[str, Any]:
+async def unregister_agent_endpoint(agent_id: str) -> JsonObject:
     registry = get_registry()
     try:
         success = await registry.unregister(agent_id)

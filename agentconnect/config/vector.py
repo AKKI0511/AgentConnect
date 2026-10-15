@@ -7,7 +7,7 @@ them from ``AGENTCONNECT_REGISTRY_*`` environment variables.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
@@ -83,9 +83,9 @@ class VectorSearchSettings(BaseModel):
         default_factory=VectorSearchAdvancedSettings
     )
 
-    def get_connection_config(self) -> Dict[str, Any]:
+    def get_connection_config(self) -> dict[str, object]:
         """Return Qdrant client kwargs for this deployment."""
-        base_config: Dict[str, Any] = {
+        base_config: dict[str, object] = {
             "timeout": self.advanced.timeout,
             "prefer_grpc": self.advanced.prefer_grpc,
         }
@@ -99,7 +99,7 @@ class VectorSearchSettings(BaseModel):
             return {**base_config, "url": self.deployment.url}
         return base_config
 
-    def get_performance_config(self) -> Dict[str, Any]:
+    def get_performance_config(self) -> dict[str, object]:
         """Return quantization and disk flags."""
         return {
             "use_quantization": self.advanced.use_quantization,
@@ -108,6 +108,6 @@ class VectorSearchSettings(BaseModel):
             "batch_size": self.advanced.batch_size,
         }
 
-    def get_vector_search_config(self) -> Dict[str, Any]:
+    def get_vector_search_config(self) -> dict[str, object]:
         """Return this model as a plain dict."""
         return self.model_dump()

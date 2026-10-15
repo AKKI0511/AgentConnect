@@ -27,7 +27,7 @@ import logging
 import tomllib
 import warnings
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Iterator, Optional
 
 from agentconnect.config.models import TeamConfig
 
@@ -80,7 +80,7 @@ def _read_text(path: Path) -> str:
         raise ValueError(f"could not read {path}: {exc}") from exc
 
 
-def _load_toml(path: Path) -> dict[str, Any]:
+def _load_toml(path: Path) -> dict[str, object]:
     try:
         data = tomllib.loads(_read_text(path))
     except tomllib.TOMLDecodeError as exc:
@@ -90,7 +90,7 @@ def _load_toml(path: Path) -> dict[str, Any]:
     return data
 
 
-def _tool_table(data: dict[str, Any]) -> dict[str, Any] | None:
+def _tool_table(data: dict[str, object]) -> dict[str, object] | None:
     tool = data.get("tool")
     if not isinstance(tool, dict) or "agentconnect" not in tool:
         return None
@@ -100,7 +100,7 @@ def _tool_table(data: dict[str, Any]) -> dict[str, Any] | None:
     return table
 
 
-def _pyproject_team_table(path: Path) -> dict[str, Any] | None:
+def _pyproject_team_table(path: Path) -> dict[str, object] | None:
     data = _load_toml(path)
     try:
         return _tool_table(data)
@@ -108,7 +108,7 @@ def _pyproject_team_table(path: Path) -> dict[str, Any] | None:
         raise ValueError(f"{path}: {exc}") from exc
 
 
-def _mapping_from_toml_file(path: Path) -> dict[str, Any]:
+def _mapping_from_toml_file(path: Path) -> dict[str, object]:
     data = _load_toml(path)
     if path.name == PYPROJECT_FILENAME:
         table = _tool_table(data)
@@ -125,7 +125,7 @@ def _is_yaml_path(path: Path) -> bool:
     return path.suffix.lower() in _YAML_SUFFIXES
 
 
-def _mapping_from_file(path: Path) -> dict[str, Any]:
+def _mapping_from_file(path: Path) -> dict[str, object]:
     if _is_yaml_path(path):
         from agentconnect.compat.yaml import load_yaml_mapping
 
@@ -195,12 +195,14 @@ def load_team_config(
         FileNotFoundError: No Team file exists.
         ValueError: The file is malformed or fails validation.
     """
+    config_path: Path | None
     if path is not None:
         config_path = path
         if not config_path.is_file():
             raise FileNotFoundError(f"Team file was not found: {config_path}")
     else:
-        config_path = find_config_file(start)
+        found_path = find_config_file(start)
+        config_path = found_path
         if config_path is None:
             raise FileNotFoundError(
                 "Team file was not found. Create agentconnect.toml, add "
@@ -274,18 +276,18 @@ def dump_team_toml(config: TeamConfig) -> str:
     Returns:
         TOML text including the `[tool.agentconnect]` header.
     """
-    data: dict[str, Any] = config.model_dump(by_alias=True, exclude_none=True)
+    data: dict[str, object] = config.model_dump(by_alias=True, exclude_none=True)
     lines = ["[tool.agentconnect]"]
     for key in ("team", "store", "embeddings", "host", "port", "require_join_auth"):
         lines.append(f"{key} = {_toml_literal(data[key])}")
     tools = data.get("tools") or []
     if tools:
         lines.append(f"tools = {_toml_literal(tools)}")
-    for agent in data.get("agents") or []:
+    for agent in config.agents:
         lines.append("")
         lines.append("[[tool.agentconnect.agents]]")
-        lines.append(f"class = {_toml_literal(agent['class'])}")
-        lines.append(f"name = {_toml_literal(agent['name'])}")
+        lines.append(f"class = {_toml_literal(agent.class_path)}")
+        lines.append(f"name = {_toml_literal(agent.name)}")
     return "\n".join(lines) + "\n"
 
 

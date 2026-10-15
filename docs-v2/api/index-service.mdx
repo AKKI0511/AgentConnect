@@ -235,7 +235,7 @@ Default: `None`.
 ### `custom_metadata`
 
 ```python
-custom_metadata: Optional[Dict[str, Any]] = None
+custom_metadata: Optional[JsonObject] = None
 ```
 
 Default: `None`.
@@ -263,7 +263,7 @@ Dependency injector for AgentRegistry instance.
 ## `health_check_endpoint`
 
 ```python
-health_check_endpoint()
+health_check_endpoint() -> dict[str, str]
 ```
 
 Checks the operational status of the server and its core components.
@@ -289,7 +289,7 @@ get_verified_agents_endpoint() -> List[AgentRegistration]
 ## `register_agent_endpoint`
 
 ```python
-register_agent_endpoint(registration_data: AgentRegistration) -> Dict[str, Any]
+register_agent_endpoint(registration_data: AgentRegistration) -> JsonObject
 ```
 
 <a id="agentconnect-index-service-get-agent-registration-endpoint"></a>
@@ -329,7 +329,7 @@ update_agent_registration_endpoint(agent_id: str, payload: AgentRegistrationUpda
 ## `unregister_agent_endpoint`
 
 ```python
-unregister_agent_endpoint(agent_id: str) -> Dict[str, Any]
+unregister_agent_endpoint(agent_id: str) -> JsonObject
 ```
 
 <a id="agentconnect-index-service-search-agents-semantic-endpoint"></a>

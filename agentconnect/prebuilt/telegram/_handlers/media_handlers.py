@@ -5,11 +5,12 @@ This module contains handlers for Telegram media messages, including
 photos, documents, voice messages, and other media types.
 """
 
-from typing import Callable, Dict
-
 from aiogram import Dispatcher, F, types
 
-from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import (
+    BaseHandler,
+    _HandlerCallbacks,
+)
 
 
 class MediaHandler(BaseHandler):
@@ -20,7 +21,7 @@ class MediaHandler(BaseHandler):
     photos, documents, voice messages, and other media types.
     """
 
-    async def register(self, dp: Dispatcher, callback_map: Dict[str, Callable]) -> None:
+    async def register(self, dp: Dispatcher, callback_map: _HandlerCallbacks) -> None:
         """
         Register media message handlers with the Telegram dispatcher.
 
@@ -31,36 +32,36 @@ class MediaHandler(BaseHandler):
 
         # Media message handlers for private chats
         @dp.message(F.photo, F.chat.type == "private")
-        async def handle_private_photo(message: types.Message):
+        async def handle_private_photo(message: types.Message) -> None:
             """Handle photo messages in private chats."""
             await callback_map["handle_media_message"](message, "photo")
 
         @dp.message(F.document, F.chat.type == "private")
-        async def handle_private_document(message: types.Message):
+        async def handle_private_document(message: types.Message) -> None:
             """Handle document messages in private chats."""
             await callback_map["handle_media_message"](message, "document")
 
         @dp.message(F.voice, F.chat.type == "private")
-        async def handle_private_voice(message: types.Message):
+        async def handle_private_voice(message: types.Message) -> None:
             """Handle voice messages in private chats."""
             await callback_map["handle_media_message"](message, "voice")
 
         @dp.message(F.audio, F.chat.type == "private")
-        async def handle_private_audio(message: types.Message):
+        async def handle_private_audio(message: types.Message) -> None:
             """Handle audio messages in private chats."""
             await callback_map["handle_media_message"](message, "audio")
 
         @dp.message(F.location, F.chat.type == "private")
-        async def handle_private_location(message: types.Message):
+        async def handle_private_location(message: types.Message) -> None:
             """Handle location messages in private chats."""
             await callback_map["handle_media_message"](message, "location")
 
         @dp.message(F.video, F.chat.type == "private")
-        async def handle_private_video(message: types.Message):
+        async def handle_private_video(message: types.Message) -> None:
             """Handle video messages in private chats."""
             await callback_map["handle_media_message"](message, "video")
 
         @dp.message(F.sticker, F.chat.type == "private")
-        async def handle_private_sticker(message: types.Message):
+        async def handle_private_sticker(message: types.Message) -> None:
             """Handle sticker messages in private chats."""
             await callback_map["handle_media_message"](message, "sticker")

@@ -25,7 +25,7 @@ import asyncio
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any, Optional
+from typing import Optional
 
 from aiogram import types
 from dotenv import load_dotenv
@@ -36,13 +36,17 @@ from agentconnect.core.profile import AgentProfile, Skill
 from agentconnect.prebuilt.ai_agent import AIAgent, CompletionOptions
 from agentconnect.prebuilt.loop import CompletionFn
 from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
+from agentconnect.prebuilt.telegram._handlers.base_handler import _HandlerCallbacks
 from agentconnect.prebuilt.telegram._utils.file_utils import ensure_download_directory
 from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
 from agentconnect.prebuilt.telegram.keyboards import (
     GROUP_CHAT_KEYBOARD,
     PRIVATE_CHAT_KEYBOARD,
 )
-from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
+from agentconnect.prebuilt.telegram.message_processor import (
+    TelegramMessageProcessor,
+    _TelegramPayload,
+)
 from agentconnect.prebuilt.tools import Tool
 
 logger = logging.getLogger(__name__)
@@ -94,7 +98,7 @@ class TelegramAIAgent(AIAgent):
         instructions: str = "You are a helpful Telegram assistant.",
         tools: Optional[Sequence[ToolLike]] = None,
         identity: Optional[AgentIdentity] = None,
-        profile: Any = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         completion: Optional[CompletionOptions] = None,
         api_key: Optional[str] = None,
         complete: Optional[CompletionFn] = None,
@@ -136,8 +140,8 @@ class TelegramAIAgent(AIAgent):
         self.telegram_token = token
         self.groups_file = groups_file
         self.downloads_dir = ensure_download_directory(__file__)
-        self._telegram_history: dict[int, list[dict[str, Any]]] = {}
-        self.telegram_polling_task: Optional[asyncio.Task] = None
+        self._telegram_history: dict[int, list[dict[str, object]]] = {}
+        self.telegram_polling_task: Optional[asyncio.Task[None]] = None
         self.bot_manager = TelegramBotManager(
             token=self.telegram_token,
             groups_file=self.groups_file,
@@ -186,7 +190,7 @@ class TelegramAIAgent(AIAgent):
         if not await self.bot_manager.start_polling():
             raise RuntimeError("Failed to start Telegram bot polling")
         handler_registry = HandlerRegistry()
-        callback_map = {
+        callback_map: _HandlerCallbacks = {
             "handle_start": self._handle_start,
             "handle_help": self._handle_help,
             "handle_about": self._handle_about,
@@ -197,6 +201,7 @@ class TelegramAIAgent(AIAgent):
             "get_help_text": lambda: self.HELP_TEXT,
             "get_bot_user": lambda: self.bot_manager.me,
         }
+        assert self.bot_manager.dp is not None
         await handler_registry.register_all(self.bot_manager.dp, callback_map)
 
     async def stop_telegram_bot(self) -> None:
@@ -226,7 +231,7 @@ class TelegramAIAgent(AIAgent):
 
     on_shutdown = _on_shutdown
 
-    async def _answer_telegram(self, payload: Mapping[str, Any]) -> None:
+    async def _answer_telegram(self, payload: _TelegramPayload) -> None:
         """Run the model loop for one Telegram payload and send the reply."""
         chat_id = int(payload["chat_id"])
         content = str(payload.get("content") or "")

@@ -16,7 +16,7 @@ The error raised when a Team operation fails.
 ## `TeamError`
 
 ```python
-TeamError(code: str, message: str, *, details: Optional[dict[str, Any]] = None, retryable: Optional[bool] = None)
+TeamError(code: str, message: str, *, details: Optional[JsonObject] = None, retryable: Optional[bool] = None)
 ```
 
 A failed Team operation.
@@ -67,7 +67,7 @@ Explanation of the failure for a person.
 ### `details`
 
 ```python
-details: Optional[dict[str, Any]]
+details: Optional[JsonObject]
 ```
 
 Additional error fields, or None when unspecified.
@@ -87,7 +87,7 @@ Whether the same call may succeed later, or None when unspecified.
 ### `to_error_object`
 
 ```python
-to_error_object() -> dict[str, Any]
+to_error_object() -> JsonObject
 ```
 
 Serialize this error for a Runtime response.

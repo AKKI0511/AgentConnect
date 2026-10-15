@@ -391,6 +391,8 @@ async def get_lease(store: Store, lease_id: str) -> Optional[dict[str, Any]]:
     record = await store.get(lease_key(lease_id))
     if record is None:
         return None
+    if not isinstance(record, dict):
+        raise ValueError("stored record must be an object")
     return record
 
 

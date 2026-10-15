@@ -21,12 +21,16 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, NoReturn, Optional, TypedDict
 
 import typer
 
 from agentconnect import __version__
 from agentconnect.cli import doctor as doctor_cmds
+from agentconnect.agent import BaseAgent
+from agentconnect.core.base import JsonValue, dump_public
+from collections.abc import Mapping
+
 from agentconnect.cli.client import RuntimeClient
 from agentconnect.cli.hosting import (
     construct_hosted_agent,
@@ -68,7 +72,7 @@ app = typer.Typer(
 )
 
 
-def _die(message: str, code: int = 1) -> None:
+def _die(message: str, code: int = 1) -> NoReturn:
     typer.echo(message, err=True)
     raise typer.Exit(code=code)
 
@@ -81,24 +85,30 @@ def _concise(exc: BaseException, *, limit: int = 400) -> str:
     return text
 
 
-def _die_exc(exc: BaseException) -> None:
+def _die_exc(exc: BaseException) -> NoReturn:
     _die(_concise(exc))
 
 
-def _die_startup(config_path: Path, exc: BaseException) -> None:
+def _die_startup(config_path: Path, exc: BaseException) -> NoReturn:
     if os.environ.get("AGENTCONNECT_CLI_TRACE"):
         traceback.print_exc()
     _die(f"{config_path}: {_concise(exc)}")
 
 
-def _emit(data: Any, *, as_json: bool) -> None:
+class _LaunchOptions(TypedDict, total=False):
+    cwd: str
+    creationflags: int
+    start_new_session: bool
+
+
+def _emit(data: object, *, as_json: bool) -> None:
     if as_json:
-        typer.echo(json.dumps(data, indent=2))
+        typer.echo(json.dumps(dump_public(data), indent=2))
         return
     if isinstance(data, str):
         typer.echo(data)
         return
-    typer.echo(json.dumps(data, indent=2))
+    typer.echo(json.dumps(dump_public(data), indent=2))
 
 
 def _resolve_url(
@@ -122,7 +132,7 @@ def _client(
     return RuntimeClient(_resolve_url(url, file=file), timeout=timeout)
 
 
-def _handle_team_error(exc: TeamError) -> None:
+def _handle_team_error(exc: TeamError) -> NoReturn:
     _die(f"{exc.code}: {exc.message}")
 
 
@@ -287,7 +297,7 @@ async def _run_up(config: TeamConfig, config_path: Path) -> None:
         raise
     except Exception as exc:
         _die_startup(config_path, exc)
-    joined: list[Any] = []
+    joined: list[BaseAgent] = []
     pid = os.getpid()
     published: Optional[str] = None
     try:
@@ -349,7 +359,7 @@ def _spawn_detached(config_path: Path) -> None:
         "--file",
         str(config_path.resolve()),
     ]
-    kwargs: dict[str, Any] = {"cwd": str(config_path.parent)}
+    kwargs: _LaunchOptions = {"cwd": str(config_path.parent)}
     if sys.platform == "win32":
         kwargs["creationflags"] = (
             subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -388,7 +398,8 @@ def down(
     state = read_state(config_path)
     if state is None or not isinstance(state.get("pid"), int):
         _die(f"no running Team for {config_path}")
-    pid = int(state["pid"])
+    pid = state["pid"]
+    assert isinstance(pid, int)
     if pid == os.getpid():
         _die("refusing to stop the current process")
     recorded = state.get("created")
@@ -611,7 +622,7 @@ def ask(
         agentconnect ask writer "Draft two paragraphs"
         ```
     """
-    content: Any = question
+    content: JsonValue = question
     stripped = question.strip()
     if stripped[:1] in "{[":
         try:
@@ -678,12 +689,13 @@ def trace_cmd(
         _print_trace_event(event)
 
 
-def _print_trace_event(event: dict[str, Any]) -> None:
+def _print_trace_event(event: Mapping[str, object]) -> None:
     at = str(event.get("at") or "")
     stamp = at[11:19] if len(at) >= 19 else at
     kind = event.get("type")
     actor = event.get("actor") or ""
-    detail = event.get("detail") or {}
+    raw_detail = event.get("detail")
+    detail = raw_detail if isinstance(raw_detail, Mapping) else {}
     extra = ""
     if kind == "accepted":
         extra = f"{detail.get('sender')} -> {detail.get('recipient')}"

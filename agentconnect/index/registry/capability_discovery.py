@@ -12,7 +12,7 @@ import asyncio
 # Standard library imports
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 
 from agentconnect.config.vector import VectorSearchSettings
 
@@ -48,9 +48,9 @@ class CapabilityDiscoveryService:
     def __init__(
         self,
         vector_search_config: Optional[
-            Union[VectorSearchSettings, Dict[str, Any]]
+            Union[VectorSearchSettings, dict[str, object]]
         ] = None,
-    ):
+    ) -> None:
         """
         Initialize the capability discovery service.
 
@@ -71,7 +71,7 @@ class CapabilityDiscoveryService:
             self._vector_store_config = VectorSearchSettings.model_validate(
                 vector_search_config
             )
-        self._available_backends = {}
+        self._available_backends: dict[str, bool] = {}
         self._vector_store_initialized = asyncio.Event()
         self._vector_store_initialized.clear()
         self._collection_initialized = False
@@ -86,7 +86,7 @@ class CapabilityDiscoveryService:
         except Exception:
             return 100
 
-    async def initialize_embeddings_model(self):
+    async def initialize_embeddings_model(self) -> None:
         """
         Initialize the embeddings model for semantic search and Qdrant client.
 
@@ -112,10 +112,7 @@ class CapabilityDiscoveryService:
                 return
 
             # Initialize embeddings model
-            self._embeddings_model = cast(
-                "Optional[_Embeddings]",
-                create_embeddings(self._vector_store_config),
-            )
+            self._embeddings_model = create_embeddings(self._vector_store_config)
             if not self._embeddings_model:
                 logger.warning("Failed to initialize embeddings model")
                 return
@@ -129,10 +126,10 @@ class CapabilityDiscoveryService:
                 initialize_qdrant_clients,
             )
 
-            self._qdrant_client, self._async_qdrant_client = cast(
-                "Tuple[Optional[_QdrantClient], Optional[_AsyncQdrantClient]]",
-                await initialize_qdrant_clients(self._vector_store_config),
-            )
+            (
+                self._qdrant_client,
+                self._async_qdrant_client,
+            ) = await initialize_qdrant_clients(self._vector_store_config)
 
             if not self._qdrant_client or not self._async_qdrant_client:
                 logger.warning("Failed to initialize Qdrant clients")

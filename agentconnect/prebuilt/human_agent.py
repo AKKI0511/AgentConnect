@@ -145,10 +145,13 @@ class HumanAgent(BaseAgent):
 async def _ainput(prompt: str) -> str:
     """Read one line from stdin. Requires ``agentconnect[cli]``."""
     try:
-        import aioconsole
+        import aioconsole  # type: ignore[import-untyped]  # aioconsole does not publish typing metadata.
     except ImportError as exc:
         raise ImportError(
             "HumanAgent requires the cli extra. "
             "Install with: pip install 'agentconnect[cli]'"
         ) from exc
-    return await aioconsole.ainput(prompt)
+    value: object = await aioconsole.ainput(prompt)
+    if not isinstance(value, str):
+        raise TypeError("console input must be text")
+    return value

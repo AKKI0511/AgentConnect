@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 _VERIFY_WAIT_SECONDS = 3.0
 _SIGKILL = getattr(signal, "SIGKILL", 9)
@@ -63,7 +63,7 @@ def process_created_token(pid: int) -> Optional[str]:
     return None
 
 
-def is_owned_team_process(state: dict[str, Any], config_path: Path) -> bool:
+def is_owned_team_process(state: dict[str, object], config_path: Path) -> bool:
     """Return True when ``state`` still names the Team process we started.
 
     Requires a recorded creation token and a matching live identity.
@@ -175,11 +175,11 @@ def _posix_inspect(pid: int) -> tuple[ProcessStatus, Optional[str]]:
         return "dead", None
     if exists is None:
         return "unknown", None
-    state, token = _ps_state_and_start(pid)
-    if state in _TERMINAL_STATES:
+    posix_state, posix_token = _ps_state_and_start(pid)
+    if posix_state in _TERMINAL_STATES:
         return "dead", None
-    if token:
-        return "live", token
+    if posix_token:
+        return "live", posix_token
     exists = _posix_exists(pid)
     if exists is False:
         return "dead", None

@@ -1,18 +1,13 @@
-"""Wire primitive aliases and closed unions.
-
-These strings, ids, and enumerations appear on Messages, Tickets,
-Addresses, and operation bodies. An Address is an Agent name, optionally
-qualified as `name@team`. A DID is the Agent's `did:key` identity. A
-Ticket is the requester's durable record for one request; `TicketState`
-is its closed set of states.
-"""
+"""Names, identifiers and closed value sets used in Runtime data."""
 
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Literal, get_args
 
-from pydantic import AfterValidator, Field
+from pydantic import AfterValidator, Field, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 from agentconnect.core.spec import SPEC_VERSION
 
@@ -77,8 +72,8 @@ class _AddressJsonSchema:
 
     @classmethod
     def __get_pydantic_json_schema__(
-        cls, core_schema: Any, handler: Any
-    ) -> dict[str, Any]:
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
         """Attach maxLength and the Address pattern without a pydantic regex."""
         schema = handler(core_schema)
         schema["type"] = "string"
@@ -92,8 +87,8 @@ class _QualifiedAddressJsonSchema:
 
     @classmethod
     def __get_pydantic_json_schema__(
-        cls, core_schema: Any, handler: Any
-    ) -> dict[str, Any]:
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
         """Attach maxLength and the QualifiedAddress pattern without a pydantic regex."""
         schema = handler(core_schema)
         schema["type"] = "string"

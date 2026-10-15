@@ -7,7 +7,16 @@ backends that publish a character limit.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Protocol, Sequence
+
+if TYPE_CHECKING:
+    from tiktoken import Encoding
+
+
+class _HostedTokenModule(Protocol):
+    def encoding_for_model(self, model_name: str) -> Encoding: ...
+    def get_encoding(self, encoding_name: str) -> Encoding: ...
+
 
 # OpenAI embedding models: 8192 tokens per input, 300_000 per request.
 # Windows use 8191 so a request stays strictly inside the published cap.
@@ -23,7 +32,7 @@ class EmbeddingSetupError(RuntimeError):
     """Hosted embedding extras or model metadata are missing or unsafe."""
 
 
-def require_tiktoken() -> Any:
+def require_tiktoken() -> _HostedTokenModule:
     """Import tiktoken or raise an install error."""
     try:
         import tiktoken
@@ -35,7 +44,7 @@ def require_tiktoken() -> Any:
     return tiktoken
 
 
-def encoding_for_hosted_model(model: str) -> Any:
+def encoding_for_hosted_model(model: str) -> Encoding:
     """Return the tiktoken encoding for an OpenAI-compatible embedding model."""
     tiktoken = require_tiktoken()
     names = [model]
@@ -49,12 +58,14 @@ def encoding_for_hosted_model(model: str) -> Any:
     return tiktoken.get_encoding("cl100k_base")
 
 
-def encode_hosted(encoding: Any, text: str) -> list[int]:
+def encode_hosted(encoding: Encoding, text: str) -> list[int]:
     """Encode ``text``, keeping literal special-token strings as ordinary text."""
     return encoding.encode(text, disallowed_special=())
 
 
-def split_token_windows(encoding: Any, text: str, max_tokens: int) -> list[list[int]]:
+def split_token_windows(
+    encoding: Encoding, text: str, max_tokens: int
+) -> list[list[int]]:
     """Split ``text`` into token-id windows of at most ``max_tokens``."""
     if max_tokens < 1:
         raise ValueError("token limit must be positive")
@@ -94,7 +105,7 @@ def pack_token_batches(
     return chunks
 
 
-def litellm_embedding_info(model: str) -> dict[str, Any]:
+def litellm_embedding_info(model: str) -> dict[str, object]:
     """Return LiteLLM metadata for ``model``, or raise a setup error."""
     try:
         from litellm.utils import get_model_info
@@ -141,7 +152,7 @@ def hosted_litellm_limits(model: str) -> tuple[int, int]:
     if raw is None:
         raw = info.get("max_tokens")
     try:
-        input_tokens = int(raw)
+        input_tokens = int(raw) if isinstance(raw, (str, int, float)) else 0
     except (TypeError, ValueError):
         input_tokens = 0
     if input_tokens < 1:
@@ -217,7 +228,7 @@ def token_windows(tokenizer: Any, text: str, max_tokens: int) -> list[str]:
 def _window_text(
     tokenizer: Any,
     stripped: str,
-    ids: Sequence[Any],
+    ids: Sequence[int],
     offsets: Any,
     start: int,
     end: int,

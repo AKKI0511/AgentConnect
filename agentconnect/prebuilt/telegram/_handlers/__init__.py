@@ -4,11 +4,14 @@ Telegram message handlers package.
 This package contains all the handlers for Telegram messages.
 """
 
-from typing import Callable, Dict, List
+from typing import List
 
 from aiogram import Dispatcher
 
-from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import (
+    BaseHandler,
+    _HandlerCallbacks,
+)
 from agentconnect.prebuilt.telegram._handlers.command_handlers import CommandHandler
 from agentconnect.prebuilt.telegram._handlers.group_handlers import GroupHandler
 from agentconnect.prebuilt.telegram._handlers.media_handlers import MediaHandler
@@ -22,7 +25,7 @@ class HandlerRegistry:
     This class manages all the handlers for Telegram messages.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the handler registry."""
         self.handlers: List[BaseHandler] = [
             CommandHandler(),
@@ -32,7 +35,7 @@ class HandlerRegistry:
         ]
 
     async def register_all(
-        self, dp: Dispatcher, callback_map: Dict[str, Callable]
+        self, dp: Dispatcher, callback_map: _HandlerCallbacks
     ) -> None:
         """
         Register all handlers with the Telegram dispatcher.

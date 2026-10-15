@@ -48,7 +48,7 @@ Inherits from [`Store`](/api/team-store-base#agentconnect-team-store-base-store)
 ### `persistence`
 
 ```python
-persistence = 'durable'
+persistence: PersistenceMode = 'durable'
 ```
 
 State survives a Runtime restart while Redis retains its data.
@@ -100,7 +100,7 @@ Confirm Redis is reachable, reconnecting after a dropped link.
 ### `get`
 
 ```python
-get(key: str) -> Any | None
+get(key: str) -> object
 ```
 
 Return the stored JSON value, or None when the key is missing.
@@ -112,7 +112,7 @@ Return the stored JSON value, or None when the key is missing.
 ### `get_many`
 
 ```python
-get_many(keys: Sequence[str]) -> list[Any | None]
+get_many(keys: Sequence[str]) -> list[object]
 ```
 
 Return values for `keys` in the same order. Missing keys are None.
@@ -156,7 +156,7 @@ may be unknown. See [`Store.apply`](/api/team-store-base#agentconnect-team-store
 ### `put`
 
 ```python
-put(key: str, value: Any) -> None
+put(key: str, value: object) -> None
 ```
 
 Write a JSON value at `key`, bumping the version.
@@ -168,7 +168,7 @@ Write a JSON value at `key`, bumping the version.
 ### `insert`
 
 ```python
-insert(key: str, value: Any) -> bool
+insert(key: str, value: object) -> bool
 ```
 
 Write `value` only if `key` is absent. True when inserted.
@@ -180,7 +180,7 @@ Write `value` only if `key` is absent. True when inserted.
 ### `compare_and_set`
 
 ```python
-compare_and_set(key: str, version: int, value: Any) -> bool
+compare_and_set(key: str, version: int, value: object) -> bool
 ```
 
 Replace `key` when the stored version matches.

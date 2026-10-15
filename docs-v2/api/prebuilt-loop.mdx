@@ -81,7 +81,7 @@ and others) are forwarded unchanged.
 ## `run_tool_loop`
 
 ```python
-run_tool_loop(*, complete: CompletionFn, model: str, messages: Sequence[Mapping[str, Any]], tools: Sequence[ToolLike] | None = None, max_rounds: int = DEFAULT_MAX_ROUNDS, **complete_kwargs: Any) -> str
+run_tool_loop(*, complete: CompletionFn, model: str, messages: Sequence[Mapping[str, object]], tools: Sequence[ToolLike] | None = None, max_rounds: int = DEFAULT_MAX_ROUNDS, **complete_kwargs: object) -> str
 ```
 
 Call `complete` until the model returns text or raise on exhaustion.
@@ -97,13 +97,13 @@ Hitting `max_rounds` while tool calls remain raises [`ToolLoopExhausted`](/api/p
 
 * `model` (`str`): LiteLLM model id.
 
-* `messages` (`Sequence[Mapping[str, Any]]`): Chat history. Copied; the original is not mutated.
+* `messages` (`Sequence[Mapping[str, object]]`): Chat history. Copied; the original is not mutated.
 
 * `tools` (`Sequence[ToolLike] | None`): Callables or [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) objects. Omit when the model has none.
 
 * `max_rounds` (`int`): Cap on model-tool-model cycles. Defaults to 8.
 
-* `**complete_kwargs` (`Any`): Extra kwargs forwarded to `complete`.
+* `**complete_kwargs` (`object`): Extra kwargs forwarded to `complete`.
 
 **Returns:**
 
@@ -131,16 +131,16 @@ reply = await run_tool_loop(
 ## `messages_from_thread`
 
 ```python
-messages_from_thread(history: Sequence[Any], current: Any, *, self_address: Optional[str] = None, instructions: Optional[str] = None) -> list[dict[str, Any]]
+messages_from_thread(history: Sequence[Message | Mapping[str, object]], current: Message | Mapping[str, object] | str, *, self_address: Optional[str] = None, instructions: Optional[str] = None) -> list[dict[str, object]]
 ```
 
 Build a chat history from Runtime Messages (`ctx.history` plus this turn).
 
 **Parameters:**
 
-* `history` (`Sequence[Any]`): Earlier Thread Messages or chat dicts.
+* `history` (`Sequence[Message | Mapping[str, object]]`): Earlier Thread Messages or chat dicts.
 
-* `current` (`Any`): This turn as a Message, chat dict, or string.
+* `current` (`Message | Mapping[str, object] | str`): This turn as a Message, chat dict, or string.
 
 * `self_address` (`Optional[str]`): Address treated as this Agent (`assistant` role).
 
@@ -148,7 +148,7 @@ Build a chat history from Runtime Messages (`ctx.history` plus this turn).
 
 **Returns:**
 
-* (`list[dict[str, Any]]`): OpenAI-style chat messages.
+* (`list[dict[str, object]]`): OpenAI-style chat messages.
 
 **Examples:**
 

@@ -22,6 +22,8 @@ import secrets
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+from agentconnect.core.profile import AgentProfile
+
 from agentconnect.core.directory import DirectoryMatch, FindResult
 from agentconnect.team.codec import canonical_json
 from agentconnect.team.directory.embedder import (
@@ -97,7 +99,9 @@ class _Directory:
         """True after a configured backend failed and hashed ranking took over."""
         return self._fallback
 
-    async def upsert(self, name: str, profile: Mapping[str, Any]) -> None:
+    async def upsert(
+        self, name: str, profile: AgentProfile | Mapping[str, Any]
+    ) -> None:
         """Embed `profile` and store the vector when it changed.
 
         Args:
@@ -214,10 +218,10 @@ class _Directory:
                     await asyncio.sleep(0)
         resolved: list[list[float]] = []
         addresses: list[str] = []
-        for member, vector in zip(candidates, vectors, strict=True):
-            if vector is None:
+        for member, resolved_vector in zip(candidates, vectors, strict=True):
+            if resolved_vector is None:
                 raise RuntimeError("Directory ranking missed a candidate vector")
-            resolved.append(vector)
+            resolved.append(resolved_vector)
             addresses.append(str(member["address"]))
         scored = await self._score(query_vector, resolved, addresses)
         by_address = {str(member["address"]): member for member in candidates}
@@ -229,7 +233,7 @@ class _Directory:
 
     async def _prepare_vectors(
         self,
-        records: Sequence[Any],
+        records: Sequence[object],
         candidates: Sequence[Mapping[str, Any]],
         space: _Space,
     ) -> tuple[list[list[float] | None], list[str], list[int]]:
@@ -259,7 +263,7 @@ class _Directory:
         return _score_rows(query_vector, vectors, addresses)
 
     async def _embed_member(
-        self, name: str, profile: Mapping[str, Any], *, force: bool
+        self, name: str, profile: AgentProfile | Mapping[str, Any], *, force: bool
     ) -> list[float]:
         space = await self._ensure_space()
         fingerprint = _fingerprint(profile)
@@ -303,7 +307,7 @@ class _Directory:
 
     async def _embed_profiles(
         self,
-        profiles: Sequence[Mapping[str, Any]],
+        profiles: Sequence[AgentProfile | Mapping[str, Any]],
         *,
         expected_dim: int,
     ) -> list[list[float]]:
@@ -349,7 +353,7 @@ class _Directory:
         return out
 
 
-def _profile_text(profile: Mapping[str, Any]) -> str:
+def _profile_text(profile: AgentProfile | Mapping[str, Any]) -> str:
     """Flatten a discovery Profile into the string that gets embedded.
 
     Args:
@@ -361,7 +365,9 @@ def _profile_text(profile: Mapping[str, Any]) -> str:
     return "\n".join(_profile_units(profile)).strip()
 
 
-def _profile_windows(profile: Mapping[str, Any], limit: int | None) -> list[str]:
+def _profile_windows(
+    profile: AgentProfile | Mapping[str, Any], limit: int | None
+) -> list[str]:
     """Bounded Profile windows for one embedding space.
 
     When `limit` is omitted, the whole Profile is one window and the
@@ -399,25 +405,32 @@ def _profile_windows(profile: Mapping[str, Any], limit: int | None) -> list[str]
     return packed or [""]
 
 
-def _profile_units(profile: Mapping[str, Any]) -> list[str]:
+def _profile_units(profile: AgentProfile | Mapping[str, Any]) -> list[str]:
+    if isinstance(profile, AgentProfile):
+        profile = profile.to_public_dict()
     units: list[str] = []
     head_parts = [str(profile.get("summary") or "")]
     description = profile.get("description")
     if description:
         head_parts.append(str(description))
     tags = profile.get("tags") or []
-    if tags:
+    if isinstance(tags, (list, tuple, str)) and tags:
         head_parts.append(" ".join(str(tag) for tag in tags))
     head = "\n".join(part for part in head_parts if part).strip()
     if head:
         units.append(head)
-    for skill in profile.get("skills") or []:
+    skills = profile.get("skills") or []
+    if not isinstance(skills, (list, tuple)):
+        skills = []
+    for skill in skills:
         if not isinstance(skill, Mapping):
             continue
         skill_parts = [f"{skill.get('name') or ''}. {skill.get('description') or ''}"]
-        skill_parts.extend(str(example) for example in skill.get("examples") or [])
+        examples = skill.get("examples") or []
+        if isinstance(examples, (list, tuple, str)):
+            skill_parts.extend(str(example) for example in examples)
         skill_tags = skill.get("tags") or []
-        if skill_tags:
+        if isinstance(skill_tags, (list, tuple, str)) and skill_tags:
             skill_parts.append(" ".join(str(tag) for tag in skill_tags))
         text = "\n".join(part for part in skill_parts if part).strip()
         if text:
@@ -426,8 +439,8 @@ def _profile_units(profile: Mapping[str, Any]) -> list[str]:
 
 
 def _prepare_candidate_vectors(
-    records: Sequence[Any],
-    profiles: Sequence[Mapping[str, Any]],
+    records: Sequence[object],
+    profiles: Sequence[AgentProfile | Mapping[str, Any]],
     space_id: str,
     dim: int,
 ) -> tuple[list[list[float] | None], list[str], list[int]]:
@@ -446,8 +459,11 @@ def _prepare_candidate_vectors(
     return vectors, fingerprints, missing
 
 
-def _fingerprint(profile: Mapping[str, Any]) -> str:
-    payload = canonical_json({"profile": dict(profile)})
+def _fingerprint(profile: AgentProfile | Mapping[str, Any]) -> str:
+    data = (
+        profile.to_public_dict() if isinstance(profile, AgentProfile) else dict(profile)
+    )
+    payload = canonical_json({"profile": data})
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -474,7 +490,9 @@ def _stable_backend(backend: str) -> bool:
     )
 
 
-def _usable_vector(record: Any, space: _Space, fingerprint: str) -> list[float] | None:
+def _usable_vector(
+    record: object, space: _Space, fingerprint: str
+) -> list[float] | None:
     if not isinstance(record, dict):
         return None
     if record.get("space") != space.id:
@@ -502,7 +520,7 @@ def _score_rows(
 
 def _match_card(member: Mapping[str, Any]) -> DirectoryMatch:
     profile = member["profile"]
-    data: dict[str, Any] = {
+    data: dict[str, object] = {
         "address": str(member["address"]),
         "summary": str(profile["summary"]),
         "skill_names": [str(skill["name"]) for skill in profile.get("skills") or []],

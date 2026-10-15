@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from agentconnect.core.message import Delivery, MailboxMessage, Message
-from agentconnect.core.operations import AcceptedSendResult, HistoryResult
+from agentconnect.core.operations import (
+    AcceptedSendResult,
+    CompleteResult,
+    HistoryResult,
+    ReplyResult,
+)
+from agentconnect.core.base import JsonObject, JsonValue
+from agentconnect.agent.errors import SessionError
+from agentconnect.core.error import ErrorObject
 from agentconnect.core.primitives import CollectMode
 from agentconnect.core.ticket import Ticket
 
@@ -39,7 +47,7 @@ class DeferredReply:
         """Id of the delivered Message. For a request, this is also the Ticket id."""
         return self._delivery.message.id
 
-    async def reply(self, content: Any = None) -> dict[str, Any]:
+    async def reply(self, content: JsonValue = None) -> ReplyResult:
         """Complete the request with `content`.
 
         `None` is a valid reply body.
@@ -67,8 +75,8 @@ class DeferredReply:
         message: str,
         *,
         code: str = "handler_failed",
-        details: Optional[Mapping[str, Any]] = None,
-    ) -> dict[str, Any]:
+        details: Optional[Mapping[str, JsonValue]] = None,
+    ) -> ReplyResult:
         """Fail the request with a message the requester can read.
 
         The Ticket error code is `handler_failed`. This call stores
@@ -94,11 +102,15 @@ class DeferredReply:
         """
         self._ensure_open()
         extra = dict(details or {})
-        error: dict[str, Any] = {"code": "handler_failed", "message": message}
+        payload: JsonObject = {"code": "handler_failed", "message": message}
         if code != "handler_failed":
             extra.setdefault("code", code)
         if extra:
-            error["details"] = extra
+            payload["details"] = extra
+        try:
+            error = ErrorObject.model_validate(payload)
+        except ValueError as exc:
+            raise SessionError("invalid_request", str(exc)) from exc
         result = await self._session.reply_delivery(
             self._delivery,
             outcome="failed",
@@ -107,7 +119,7 @@ class DeferredReply:
         self._done = True
         return result
 
-    async def decline(self) -> dict[str, Any]:
+    async def decline(self) -> CompleteResult:
         """Decline a request, or finish an event without a reply.
 
         A declined Ticket is a finished result. It is not a failure, and
@@ -259,13 +271,13 @@ class Context:
     async def ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
     ) -> Ticket:
         """Send a request from `handle` and return a `Ticket`.
 
@@ -334,11 +346,11 @@ class Context:
     async def tell(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
     ) -> AcceptedSendResult:
         """Send a notice from `handle`. No Ticket is created.
 

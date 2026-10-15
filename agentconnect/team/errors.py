@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
+
+from agentconnect.core.base import JsonObject
 
 IDENTITY_MISSING = (
     "Stored Team state is missing Membership identity. "
@@ -39,7 +41,7 @@ class TeamError(Exception):
         code: str,
         message: str,
         *,
-        details: Optional[dict[str, Any]] = None,
+        details: Optional[JsonObject] = None,
         retryable: Optional[bool] = None,
     ) -> None:
         super().__init__(f"{code}: {message}")
@@ -47,18 +49,18 @@ class TeamError(Exception):
         """Machine-readable failure code."""
         self.message: str = message
         """Explanation of the failure for a person."""
-        self.details: Optional[dict[str, Any]] = details
+        self.details: Optional[JsonObject] = details
         """Additional error fields, or None when unspecified."""
         self.retryable: Optional[bool] = retryable
         """Whether the same call may succeed later, or None when unspecified."""
 
-    def to_error_object(self) -> dict[str, Any]:
+    def to_error_object(self) -> JsonObject:
         """Serialize this error for a Runtime response.
 
         Includes `code` and `message`; `details` and `retryable` are omitted
         when None.
         """
-        error: dict[str, Any] = {"code": self.code, "message": self.message}
+        error: JsonObject = {"code": self.code, "message": self.message}
         if self.details is not None:
             error["details"] = self.details
         if self.retryable is not None:

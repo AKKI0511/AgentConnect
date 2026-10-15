@@ -209,7 +209,7 @@ await pending.reply(draft)
 ### `ask`
 
 ```python
-ask(recipient: str, content: Any, *, deadline_seconds: Optional[float] = None, collect: CollectMode = 'wait', thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, Any]] = None) -> Ticket
+ask(recipient: str, content: JsonValue, *, deadline_seconds: Optional[float] = None, collect: CollectMode = 'wait', thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> Ticket
 ```
 
 Send a request from `handle` and return a [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
@@ -228,7 +228,7 @@ must return before it can reply.
 * `recipient` (`str`): Local name or same-Team Address, such as `writer`
   or `writer@content-squad`.
 
-* `content` (`Any`): The work, as text or JSON.
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The work, as text or JSON.
 
 * `deadline_seconds` (`Optional[float]`): Work cutoff in seconds. This does not change
   how long `collect="wait"` waits. Omit it to inherit the
@@ -247,7 +247,7 @@ must return before it can reply.
 * `parent_id` (`Optional[str]`): Message this request answers. Omit it to use the
   current Message id.
 
-* `metadata` (`Optional[Mapping[str, Any]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -282,7 +282,7 @@ if ticket.state == "completed":
 ### `tell`
 
 ```python
-tell(recipient: str, content: Any, *, thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, Any]] = None) -> AcceptedSendResult
+tell(recipient: str, content: JsonValue, *, thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> AcceptedSendResult
 ```
 
 Send a notice from `handle`. No Ticket is created.
@@ -296,7 +296,7 @@ Thread by the same rule as `ask`.
 
 * `recipient` (`str`): Local name or same-Team Address.
 
-* `content` (`Any`): The notice, as text or JSON.
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The notice, as text or JSON.
 
 * `thread_id` (`Optional[str]`): Thread to continue with a current participant.
   Omit it to continue or start a Thread by the same rule
@@ -305,7 +305,7 @@ Thread by the same rule as `ask`.
 * `parent_id` (`Optional[str]`): Message this notice answers. Omit it to use the
   current Message id.
 
-* `metadata` (`Optional[Mapping[str, Any]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -391,7 +391,7 @@ Id of the delivered Message. For a request, this is also the Ticket id.
 ### `reply`
 
 ```python
-reply(content: Any = None) -> dict[str, Any]
+reply(content: JsonValue = None) -> ReplyResult
 ```
 
 Complete the request with `content`.
@@ -400,11 +400,11 @@ Complete the request with `content`.
 
 **Parameters:**
 
-* `content` (`Any`): Reply body, as text or JSON. Defaults to `None`.
+* `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): Reply body, as text or JSON. Defaults to `None`.
 
 **Returns:**
 
-* (`dict[str, Any]`): The Team acknowledgement for this reply.
+* ([`ReplyResult`](/api/core-operations#agentconnect-core-operations-replyresult)): The Team acknowledgement for this reply.
 
 **Raises:**
 
@@ -420,7 +420,7 @@ Complete the request with `content`.
 ### `fail`
 
 ```python
-fail(message: str, *, code: str = 'handler_failed', details: Optional[Mapping[str, Any]] = None) -> dict[str, Any]
+fail(message: str, *, code: str = 'handler_failed', details: Optional[Mapping[str, JsonValue]] = None) -> ReplyResult
 ```
 
 Fail the request with a message the requester can read.
@@ -439,11 +439,11 @@ the exception text.
 * `code` (`str`): Extra code stored in `details` when it is not
   `handler_failed`.
 
-* `details` (`Optional[Mapping[str, Any]]`): JSON object stored on the error. Omit to store none.
+* `details` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the error. Omit to store none.
 
 **Returns:**
 
-* (`dict[str, Any]`): The Team acknowledgement for this failed reply.
+* ([`ReplyResult`](/api/core-operations#agentconnect-core-operations-replyresult)): The Team acknowledgement for this failed reply.
 
 **Raises:**
 
@@ -459,7 +459,7 @@ the exception text.
 ### `decline`
 
 ```python
-decline() -> dict[str, Any]
+decline() -> CompleteResult
 ```
 
 Decline a request, or finish an event without a reply.
@@ -469,7 +469,7 @@ it has no reply body.
 
 **Returns:**
 
-* (`dict[str, Any]`): The Team acknowledgement for this completion.
+* ([`CompleteResult`](/api/core-operations#agentconnect-core-operations-completeresult)): The Team acknowledgement for this completion.
 
 **Raises:**
 

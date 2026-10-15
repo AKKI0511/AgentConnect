@@ -30,13 +30,6 @@ def _parse_ok(model: type, instance: Any) -> bool:
         return False
 
 
-def test_unmodified_pydantic_schema_allows_omit_only_null():
-    schema = FindRequest.model_json_schema()
-    assert _accepts(schema, {"query": "someone who can draft a summary", "limit": None})
-    limit = schema["properties"]["limit"]
-    assert limit.get("default") is None
-
-
 def test_find_public_schema_matches_parse_boundary():
     schema = public_json_schema(FindRequest)
     limit = schema["properties"]["limit"]

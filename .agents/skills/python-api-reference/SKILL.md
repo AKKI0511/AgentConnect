@@ -76,7 +76,7 @@ Use an example to clarify a choice, a difficult input or a result. Simple access
 
 These steps are for the author; keep them out of user-facing prose.
 
-1. Read signatures and behavior. Check inherited docs and overloads before calling something undocumented. Preserve runtime behavior, exports and tested tool/schema text.
+1. Read signatures and behavior. Check inherited docs and overloads before calling something undocumented. Preserve runtime behavior, exports and tested tool/schema text. A docstring naming a specific result does not repair an Any/dict annotation. Compare interface annotations with real implementations and flag mismatches separately from prose. Model docstrings may become schema descriptions delivered to tools; inspect that output too.
 2. Edit the source. Follow the configured docstring format and link syntax. Avoid duplicating constructor parameters when the renderer merges them into the class.
 3. Regenerate the affected pages. Inspect the whole delivered page, including unchanged members: blank attribute sections, repeated parameter prose and internal helpers can overwhelm a concise introduction. Report pre-existing surface problems separately from new writing defects. Inspect signatures, links, code blocks and result descriptions. Keep site markup out of Python snippets.
 4. Follow the user's verification scope. For prose-only changes, inspect source and regenerated output; do not add or run tests by habit. When executable examples or implementation change and testing is authorized, exercise representative behavior with setup off-page. Distinguish reported checks from checks you ran, and never call a fragment verified solely because it compiles.

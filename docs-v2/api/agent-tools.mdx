@@ -17,7 +17,7 @@ Describe Python callables and Team operations for attachment to a harness.
 ## `Tool`
 
 ```python
-Tool(name: str, description: str, parameters: dict[str, Any], handler: ToolHandler, params_model: Any = None)
+Tool(name: str, description: str, parameters: JsonSchemaValue, handler: ToolHandler, params_model: type[BaseModel] | None = None)
 ```
 
 A callable exposed to a harness, with its argument schema.
@@ -32,11 +32,11 @@ directly when annotations cannot express the schema.
 
 * `description` (`str`): Text the host shows for this tool.
 
-* `parameters` (`dict[str, Any]`): JSON Schema object for keyword arguments.
+* `parameters` (`JsonSchemaValue`): JSON Schema object for keyword arguments.
 
 * `handler` (`ToolHandler`): Callable invoked with those keywords.
 
-* `params_model` (`Any`): Optional Pydantic model used to validate arguments.
+* `params_model` (`type[BaseModel] | None`): Optional Pydantic model used to validate arguments.
 
 <a id="agentconnect-agent-tools-tool-name"></a>
 
@@ -63,7 +63,7 @@ Text the host shows for this tool.
 ### `parameters`
 
 ```python
-parameters: dict[str, Any]
+parameters: JsonSchemaValue
 ```
 
 JSON Schema object for keyword arguments.
@@ -83,7 +83,7 @@ Callable invoked with those keywords.
 ### `params_model`
 
 ```python
-params_model: Any = None
+params_model: type[BaseModel] | None = None
 ```
 
 Optional Pydantic model used to validate arguments.
@@ -130,14 +130,14 @@ you pass one.
 ### `openai_schema`
 
 ```python
-openai_schema() -> dict[str, Any]
+openai_schema() -> dict[str, object]
 ```
 
 Return the OpenAI function-tool descriptor for this tool.
 
 **Returns:**
 
-* (`dict[str, Any]`): A mapping with `type` `"function"` and a `function` object holding `name`, `description`, and `parameters`.
+* (`dict[str, object]`): A mapping with `type` `"function"` and a `function` object holding `name`, `description`, and `parameters`.
 
 <a id="agentconnect-agent-tools-teamtools"></a>
 
@@ -155,7 +155,7 @@ A completed result has `content`.
 ### `__getitem__`
 
 ```python
-__getitem__(index: int) -> Tool
+__getitem__(index: int | slice) -> Tool | tuple[Tool, ...]
 ```
 
 Return the [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) at `index` in catalog order.

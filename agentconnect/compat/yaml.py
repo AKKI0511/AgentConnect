@@ -7,10 +7,9 @@ This is the only module that imports PyYAML. Callers in
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 
-def load_yaml_mapping(path: Path) -> dict[str, Any]:
+def load_yaml_mapping(path: Path) -> dict[str, object]:
     """Return the mapping stored in a YAML Team file.
 
     Args:

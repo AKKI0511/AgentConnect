@@ -206,3 +206,17 @@ snapshot guarantees matter; the implementation's loop does not.
 
 Keep meaningful extension contracts even when they are technical. Being an
 advanced API is not a reason to narrate its implementation or repeat its signature.
+
+
+## Do not repair a weak contract with prose
+
+| DON'T | DO |
+| --- | --- |
+| Annotate `challenge: Mapping[str, Any]`, then describe a known `Challenge` model in Args. | Use `Challenge` inside typed code; parse raw input once at the boundary. If signatures are outside scope, report the mismatch. |
+| Declare `get_result() -> dict` when the implementation returns a `JobResult` model. | Make the annotation and delivered reference match the actual supported result. |
+| Merge a ranked card, full record and per-item batch error because they share fields. | Retain distinct consumer contracts; remove a projection only after checking producers, callers and compatibility. |
+| Treat every model-docstring edit as website-only prose. | Inspect schema descriptions too when tools consume the model schema. |
+
+Raw JSON, arbitrary user content and third-party adapters can legitimately be
+open-shaped. Type annotations alone do not validate input or replace authorization,
+signature verification, expiry or ownership checks.

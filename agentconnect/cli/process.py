@@ -242,6 +242,8 @@ def _ps_state_and_start(pid: int) -> tuple[Optional[str], Optional[str]]:
 
 
 def _windows_inspect(pid: int) -> tuple[ProcessStatus, Optional[str]]:
+    if sys.platform != "win32":
+        return "unknown", None
     import ctypes
     from ctypes import wintypes
 

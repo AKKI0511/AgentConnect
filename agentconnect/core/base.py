@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     JsonValue: TypeAlias = Union[
         str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]
     ]
+    """Application JSON content, including null and nested arrays or objects."""
 else:
     JsonValue = TypeAliasType(
         "JsonValue",

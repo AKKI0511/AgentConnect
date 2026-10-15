@@ -948,7 +948,7 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ticket_id: Uuid
 ```
 
-ticket_id from ask, equal to the request Message id. Repeat while state is open. Ending a wait does not cancel work.
+ticket\_id from ask, equal to the request Message id. Repeat while state is open. Ending a wait does not cancel work.
 
 <a id="agentconnect-core-operations-gethistoryrequest"></a>
 
@@ -980,7 +980,7 @@ Conversation id from a saved request result or Message. Only a participant may r
 before: Optional[Uuid] = None
 ```
 
-Return Messages older than this id. Omit for the newest page. Prefer next_before from the previous page over picking an id.
+Return Messages older than this id. Omit for the newest page. Prefer next\_before from the previous page over picking an id.
 
 <a id="agentconnect-core-operations-gethistoryrequest-limit"></a>
 
@@ -1309,7 +1309,7 @@ Work cutoff in seconds (1–86400). Omit to inherit a request parent or the Runt
 collect: CollectMode = 'wait'
 ```
 
-How long this ask call waits. wait (default) holds until the Ticket is terminal or the Runtime wait hold ends, then returns the current saved request result, which may still be open. ticket returns immediately. Neither cancels work. While open, call get_result; do not send a second ask.
+How long this ask call waits. wait (default) holds until the Ticket is terminal or the Runtime wait hold ends, then returns the current saved request result, which may still be open. ticket returns immediately. Neither cancels work. While open, call get\_result; do not send a second ask.
 
 <a id="agentconnect-core-operations-asktoolrequest-thread-id"></a>
 
@@ -1319,7 +1319,7 @@ How long this ask call waits. wait (default) holds until the Ticket is terminal 
 thread_id: Optional[Uuid] = None
 ```
 
-Continue this conversation with the same recipient (a current participant). Omit to start a conversation; that is the usual path. A well-formed unused id also starts one. Another peer cannot join an existing conversation (forbidden); omit thread_id and put needed context in content.
+Continue this conversation with the same recipient (a current participant). Omit to start a conversation; that is the usual path. A well-formed unused id also starts one. Another peer cannot join an existing conversation (forbidden); omit thread\_id and put needed context in content.
 
 <a id="agentconnect-core-operations-asktoolrequest-idempotency-key"></a>
 
@@ -1329,7 +1329,7 @@ Continue this conversation with the same recipient (a current participant). Omit
 idempotency_key: Optional[str] = None
 ```
 
-Stable key so a retry does not create a second request. Changing recipient, content, collect, or a supplied thread_id under the same key fails with id_conflict. Retry identical arguments, or use a new key only for new work; do not drop the key after an uncertain accept.
+Stable key so a retry does not create a second request. Changing recipient, content, collect, or a supplied thread\_id under the same key fails with id\_conflict. Retry identical arguments, or use a new key only for new work; do not drop the key after an uncertain accept.
 
 * `min_length`: `1`
 * `max_length`: `200`
@@ -1374,7 +1374,7 @@ The notice or event, as text or JSON. No Ticket is created.
 thread_id: Optional[Uuid] = None
 ```
 
-Continue this conversation only with a current participant. Omit for an unthreaded notice; that is the usual path. Another peer cannot join an existing conversation (forbidden); omit thread_id and put context in content.
+Continue this conversation only with a current participant. Omit for an unthreaded notice; that is the usual path. Another peer cannot join an existing conversation (forbidden); omit thread\_id and put context in content.
 
 <a id="agentconnect-core-operations-telltoolrequest-idempotency-key"></a>
 
@@ -1384,7 +1384,7 @@ Continue this conversation only with a current participant. Omit for an unthread
 idempotency_key: Optional[str] = None
 ```
 
-Stable key so a retry does not create a second send. Changing recipient, content, or thread_id under the same key fails with id_conflict. Retry identical arguments, or use a new key only for new work; do not drop the key after an uncertain accept.
+Stable key so a retry does not create a second send. Changing recipient, content, or thread\_id under the same key fails with id\_conflict. Retry identical arguments, or use a new key only for new work; do not drop the key after an uncertain accept.
 
 * `min_length`: `1`
 * `max_length`: `200`

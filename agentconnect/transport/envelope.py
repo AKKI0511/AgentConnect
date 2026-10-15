@@ -13,8 +13,6 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from agentconnect.core.base import JsonObject
-
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.kinds import MessageKind
 
@@ -38,7 +36,7 @@ class CollaborationMessage:
     content: str
     kind: MessageKind
     timestamp: datetime
-    metadata: JsonObject = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
     protocol_version: ProtocolVersion = ProtocolVersion.V1_0
     signature: Optional[str] = None
 
@@ -50,7 +48,7 @@ class CollaborationMessage:
         content: str,
         sender_identity: AgentIdentity,
         kind: MessageKind = MessageKind.EVENT,
-        metadata: Optional[JsonObject] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         control: Optional[str] = None,
     ) -> "CollaborationMessage":
         """Create and sign an envelope."""
@@ -81,7 +79,7 @@ class CollaborationMessage:
             f"{self.content}:{self.timestamp.isoformat()}"
         )
 
-    def to_wire_dict(self) -> JsonObject:
+    def to_wire_dict(self) -> dict[str, Any]:
         """JSON-ready envelope body."""
         kind = self.kind.value if isinstance(self.kind, MessageKind) else str(self.kind)
         version = (

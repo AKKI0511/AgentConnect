@@ -174,7 +174,6 @@ demos/scenarios/
 docs/coverage/
 docs/markdown_build/
 req/
-internal/
 src/
 example_usage.py
 example_multi_agent.py

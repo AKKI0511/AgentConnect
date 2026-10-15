@@ -40,13 +40,12 @@ from agentconnect.config.loaders import (
     validate_config_file,
 )
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
-from agentconnect.config.servers import InboxServerSettings, RegistryAPISettings
+from agentconnect.config.servers import RegistryAPISettings
 
 __all__ = [
     "TeamConfig",
     "HostedAgentConfig",
     "RegistryAPISettings",
-    "InboxServerSettings",
     "load_team_config",
     "load_selected_team",
     "find_config_file",

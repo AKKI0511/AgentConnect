@@ -1,10 +1,11 @@
 # AgentConnect CLI
 
-The `agentconnect` program is a person talking to a Team. Every verb an
-Agent has, a person has. `up` starts the Runtime from
-`agentconnect.toml` or `[tool.agentconnect]` in `pyproject.toml`.
-The other commands call that Runtime over loopback HTTP as the reserved
-`operator` Membership.
+The `agentconnect` program starts a Team and talks to it as the reserved
+`operator` Membership. The command set is a subset of the SDK and of
+Team MCP. `up` starts the Runtime from `agentconnect.toml` or
+`[tool.agentconnect]` in `pyproject.toml`, then constructs and joins
+the hosted Agents. The other commands call that Runtime over loopback
+HTTP.
 
 ```bash
 agentconnect init
@@ -33,14 +34,11 @@ agentconnect trace <trace-id>
 - `doctor` — Team file, keys, and whether the Runtime is reachable
 - `version` — package version
 
-`up --detach` starts in the background. `down` stops the process started
-for the selected Team file after verifying a matching start-time token.
-Terminated and zombie processes count as gone; an unreadable identity
-does not. State lives next to that file in `.agentconnect/<filename>.json`.
-Failed stops and identity-query failures keep the state file. `up` will
-not overwrite a record whose owner cannot be verified. A failed or
-exiting `up` does not remove another launch's record. `up` prints the
-Team file it selected and refuses if that Team is already running.
+`up --detach` starts the process and returns before the Runtime is
+ready. `down` stops only the process this CLI started for the selected
+Team file. If `down` cannot confirm that ownership, it leaves the
+process and the saved record alone. `up` prints the Team file it
+selected and refuses while that record still belongs to a live process.
 
 `--url` points any command at a Runtime that is already serving. `--file`
 selects a Team file. Precedence is `--url`, then `--file`, then saved
@@ -53,11 +51,10 @@ not fall back to another Team.
 
 ## Team files
 
-Discovery is nearest-directory first. In each directory,
-`agentconnect.toml` beats `[tool.agentconnect]` in `pyproject.toml`.
-YAML is last-resort compatibility after no ancestor TOML Team file
-exists. Files are never merged. Relative `module:Name` imports resolve
-from the selected file's directory.
+Discovery walks toward the filesystem root and stops at the first Team
+file. In that directory, `agentconnect.toml` beats
+`[tool.agentconnect]` in `pyproject.toml`. Files are never merged. Relative `module:Name` imports resolve from
+the selected file's directory.
 
 `init` refuses when a Team file already exists. Use `--force` to replace
 the starter files. Independently deployed Agents are not listed in the

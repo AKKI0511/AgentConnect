@@ -220,3 +220,26 @@ advanced API is not a reason to narrate its implementation or repeat its signatu
 Raw JSON, arbitrary user content and third-party adapters can legitimately be
 open-shaped. Type annotations alone do not validate input or replace authorization,
 signature verification, expiry or ownership checks.
+
+
+## Outcomes instead of implementation narration
+
+These pairs generalize rejected reference text. The DO examples assume the stated
+behavior is true; verify it before publishing. Link named public symbols using the
+site's supported syntax and inspect the resulting links.
+
+| DON'T | DO |
+| --- | --- |
+| “Each hit is loaded again so the result includes identity and other fields.” | “Each match includes the full record and its score.” Put request cost here only if callers can meaningfully control it. |
+| “Tools come from the Session” repeated in package, module and class intros. | “After joining, the agent can ask teammates for help.” Name the supported tool option where the caller configures it. |
+| “The bot token stays on this object.” | Omit the storage location. State how to supply the token in the constructor contract. |
+| “The helper is not the product.” | “Use this agent when you need a model-backed reply without writing a harness.” |
+| A paragraph about PID tokens, zombie detection and saved-record deletion. | “Stops only the process started by this command. If ownership cannot be confirmed, it leaves the process running.” |
+| “This stores payment and authentication text but does not pay or authenticate.” | Report whether those fields belong in the supported API. Do not preserve unused features by adding disclaimers. |
+| “It uses ctx.history” as the complete explanation of conversation state. | “Replies use the current conversation's earlier messages.” Link the public context/history API if callers can use it. |
+| “Use the class shown on the package page.” | Name and link the public class; state the local prerequisite, such as “Join a running Team before sending a request.” |
+
+Self-contained does not mean exhaustive. A method using a product-specific result
+must identify what that result means and link its public type; it need not repeat
+that type's complete field list. Keep errors, destructive effects and required
+setup beside the operation. A leaf module can still be one useful sentence.

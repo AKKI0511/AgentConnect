@@ -19,183 +19,191 @@ Direct connectivity to an embedded Team.
 InProcessTransport(runtime: RuntimeOperations)
 ```
 
+**Types:** [`RuntimeOperations`](/api/transport-runtime#agentconnect-transport-runtime-runtimeoperations).
+
 Use the RuntimeTransport operations against a started Team in this process.
 
-The caller owns the Team. Runtime failures become [`TransportError`](/api/transport-runtime#agentconnect-transport-runtime-transporterror);
+The caller owns the Team. Runtime failures become `TransportError`;
 async cancellation propagates. The shared operation contracts are described
-on [`RuntimeTransport`](/api/transport-runtime#agentconnect-transport-runtime-runtimetransport). Ordinary agents select this transport with [`BaseAgent.join`](/api/agent-base#agentconnect-agent-base-baseagent-join).
+on `RuntimeTransport`. Ordinary agents select this transport with `BaseAgent.join`.
 
 Use an existing started Team; construction does not start it.
 
 **Raises:**
 
-* (`TypeError`): The supplied Runtime is absent or a URL.
+* [`TypeError`](https://docs.python.org/3/library/exceptions.html#TypeError): The supplied Runtime is absent or a URL.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-join-challenge"></a>
 
-`async`
-
-### `join_challenge`
+### `join_challenge` `async`
 
 ```python
 join_challenge() -> JoinChallenge
 ```
 
+**Types:** [`JoinChallenge`](/api/core-operations#agentconnect-core-operations-joinchallenge).
+
 Obtain a fresh challenge from the embedded Team.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-join"></a>
 
-`async`
-
-### `join`
+### `join` `async`
 
 ```python
 join(request: JoinRequest) -> JoinResult
 ```
 
+**Types:** [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest), [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult).
+
 Open a Session on the embedded Team using the public JoinRequest body.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-disconnect"></a>
 
-`async`
-
-### `disconnect`
+### `disconnect` `async`
 
 ```python
 disconnect(session_token: SessionToken) -> None
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken).
+
 End the Session on the embedded Team; its Membership and accepted work remain.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-heartbeat"></a>
 
-`async`
-
-### `heartbeat`
+### `heartbeat` `async`
 
 ```python
 heartbeat(session_token: SessionToken) -> HeartbeatResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`HeartbeatResult`](/api/core-operations#agentconnect-core-operations-heartbeatresult).
+
 Renew Session expiry on the embedded Team, leaving Delivery leases unchanged.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-send"></a>
 
-`async`
-
-### `send`
+### `send` `async`
 
 ```python
 send(session_token: SessionToken, request: SendRequest) -> SendResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`SendRequest`](/api/core-operations#agentconnect-core-operations-sendrequest), [`SendResult`](/api/core-operations#agentconnect-core-operations-sendresult).
+
 Submit work directly to the Team; an ended wait does not cancel accepted work.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-lease"></a>
 
-`async`
-
-### `lease`
+### `lease` `async`
 
 ```python
 lease(session_token: SessionToken, max_items: int = 1) -> LeaseResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult).
+
 Lease available attempts from the embedded Team within Session capacity.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-renew"></a>
 
-`async`
-
-### `renew`
+### `renew` `async`
 
 ```python
 renew(session_token: SessionToken, lease_id: Uuid) -> RenewResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`RenewResult`](/api/core-operations#agentconnect-core-operations-renewresult).
+
 Renew an active attempt owned by the Session.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-complete"></a>
 
-`async`
-
-### `complete`
+### `complete` `async`
 
 ```python
 complete(session_token: SessionToken, lease_id: Uuid) -> CompleteResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`CompleteResult`](/api/core-operations#agentconnect-core-operations-completeresult).
+
 Complete an event or decline a request under an active Session-owned lease.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-reply"></a>
 
-`async`
-
-### `reply`
+### `reply` `async`
 
 ```python
 reply(session_token: SessionToken, request: ReplyRequest) -> ReplyResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`ReplyRequest`](/api/core-operations#agentconnect-core-operations-replyrequest), [`ReplyResult`](/api/core-operations#agentconnect-core-operations-replyresult).
+
 Submit a successful or failed reply under an active Session-owned request lease.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-get-result"></a>
 
-`async`
-
-### `get_result`
+### `get_result` `async`
 
 ```python
 get_result(session_token: SessionToken, ticket_id: Uuid) -> Ticket
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
+
 Read a retained Ticket owned by this Membership from the embedded Team.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-get-history"></a>
 
-`async`
-
-### `get_history`
+### `get_history` `async`
 
 ```python
-get_history(session_token: SessionToken, thread_id: Uuid, *, before: Uuid | None = None, limit: int = 50) -> HistoryResult
+get_history(
+    session_token: SessionToken,
+    thread_id: Uuid,
+    *,
+    before: Uuid | None = None,
+    limit: int = 50,
+) -> HistoryResult
 ```
+
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
 
 Read a retained history page for a Thread this Membership participates in.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-find"></a>
 
-`async`
-
-### `find`
+### `find` `async`
 
 ```python
 find(session_token: SessionToken, query: str, *, limit: int | None = None) -> FindResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`FindResult`](/api/core-directory#agentconnect-core-directory-findresult).
+
 Read ranked discovery candidates from the embedded Team.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-get-profile"></a>
 
-`async`
-
-### `get_profile`
+### `get_profile` `async`
 
 ```python
 get_profile(session_token: SessionToken, address: Address) -> DirectoryEntry
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Address`](/api/core-primitives#agentconnect-core-primitives-address), [`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry).
+
 Read a full Directory entry for a same-Team Address.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-events"></a>
 
-`async`
-
-### `events`
+### `events` `async`
 
 ```python
 events(session_token: SessionToken) -> AsyncIterator[RuntimeEvent]
 ```
+
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`RuntimeEvent`](/api/core-operations#agentconnect-core-operations-runtimeevent).
 
 Yield work hints while the embedded Team makes attempts available.
 
@@ -204,9 +212,7 @@ can yield nothing; callers still lease work. Cancellation propagates.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-close"></a>
 
-`async`
-
-### `close`
+### `close` `async`
 
 ```python
 close() -> None

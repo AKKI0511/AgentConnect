@@ -7,8 +7,8 @@ sidebarTitle: "ticket"
 
 Saved request results and their model-facing views.
 
-[`BaseAgent.ask`](/api/agent-base#agentconnect-agent-base-baseagent-ask) and `get_result` return a wire Ticket: its `id` is the
-request Message id. MCP and Session-bound tools return a [`TicketView`](/api/core-ticket#agentconnect-core-ticket-ticketview),
+`BaseAgent.ask` and `get_result` return a wire Ticket: its `id` is the
+request Message id. MCP and Session-bound tools return a `TicketView`,
 whose handle is `ticket_id`. Both use the same `state` values; their
 fields are not interchangeable.
 
@@ -70,6 +70,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Also the request Message id.
 
 <a id="agentconnect-core-ticket-ticketbase-requester"></a>
@@ -79,6 +81,8 @@ Also the request Message id.
 ```python
 requester: QualifiedAddress
 ```
+
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
 
 Membership that owns collection rights, including after Session replacement.
 
@@ -90,6 +94,8 @@ Membership that owns collection rights, including after Session replacement.
 recipient: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 Membership asked to handle the work.
 
 <a id="agentconnect-core-ticket-ticketbase-thread-id"></a>
@@ -99,6 +105,8 @@ Membership asked to handle the work.
 ```python
 thread_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Conversation for continuing with the same participants; omitted for unthreaded work.
 
@@ -110,6 +118,8 @@ Conversation for continuing with the same participants; omitted for unthreaded w
 trace_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Causal operation id usable with operator `get_trace`.
 
 <a id="agentconnect-core-ticket-ticketbase-created-at"></a>
@@ -119,6 +129,8 @@ Causal operation id usable with operator `get_trace`.
 ```python
 created_at: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 Request acceptance time.
 
@@ -130,6 +142,8 @@ Request acceptance time.
 updated_at: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 Last state transition or observation of a late reply.
 
 <a id="agentconnect-core-ticket-ticketbase-deadline"></a>
@@ -140,6 +154,8 @@ Last state transition or observation of a late reply.
 deadline: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 Work cutoff; a retained terminal Ticket stays terminal after this time.
 
 <a id="agentconnect-core-ticket-ticketbase-late-reply-count"></a>
@@ -149,6 +165,8 @@ Work cutoff; a retained terminal Ticket stays terminal after this time.
 ```python
 late_reply_count: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Distinct replies observed after the Ticket became terminal.
 
@@ -194,17 +212,19 @@ state: Literal['completed']
 response: ResponseMessage
 ```
 
+**Types:** [`ResponseMessage`](/api/core-message#agentconnect-core-message-responsemessage).
+
 Winning immutable response Message, including its envelope.
 
 <a id="agentconnect-core-ticket-completedticket-content"></a>
 
-`property`
-
-### `content`
+### `content` `property`
 
 ```python
 content: JsonValue
 ```
+
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
 
 Successful response content; may be JSON null. Other Ticket states have no content property.
 
@@ -235,6 +255,8 @@ state: Literal['failed']
 error: ErrorObject
 ```
 
+**Types:** [`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject).
+
 <a id="agentconnect-core-ticket-expiredticket"></a>
 
 ## `ExpiredTicket`
@@ -258,6 +280,8 @@ state: Literal['expired']
 ```python
 error: DeadlineExceededError
 ```
+
+**Types:** [`DeadlineExceededError`](/api/core-error#agentconnect-core-error-deadlineexceedederror).
 
 <a id="agentconnect-core-ticket-declinedticket"></a>
 
@@ -297,13 +321,15 @@ Requester-owned durable result record, discriminated on `state`.
 parse_ticket(data: object) -> Ticket
 ```
 
+**Types:** [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
+
 Parse a saved wire result, choosing the variant from `state`.
 
 An existing Ticket is returned unchanged.
 
 **Raises:**
 
-* (`ValueError`): Input is not an object or fails validation.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): Input is not an object or fails validation.
 
 <a id="agentconnect-core-ticket-ticketviewerror"></a>
 
@@ -320,6 +346,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 code: ErrorCode
 ```
+
+**Types:** [`ErrorCode`](/api/core-primitives#agentconnect-core-primitives-errorcode).
 
 <a id="agentconnect-core-ticket-ticketviewerror-message"></a>
 
@@ -352,6 +380,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ticket_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Request Message id to keep for `get_result`; wire Tickets use `id`.
 
 <a id="agentconnect-core-ticket-ticketviewbase-thread-id"></a>
@@ -361,6 +391,8 @@ Request Message id to keep for `get_result`; wire Tickets use `id`.
 ```python
 thread_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Conversation to continue with the same participants, when present.
 
@@ -387,6 +419,8 @@ state: Literal['open']
 ```python
 deadline: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 Absolute work cutoff stamped at acceptance. Not an ETA, not a wait bound, and not proof of state.
 
@@ -434,6 +468,8 @@ state: Literal['completed']
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 <a id="agentconnect-core-ticket-failedticketview"></a>
 
 ## `FailedTicketView`
@@ -458,6 +494,8 @@ state: Literal['failed']
 error: TicketViewError
 ```
 
+**Types:** [`TicketViewError`](/api/core-ticket#agentconnect-core-ticket-ticketviewerror).
+
 <a id="agentconnect-core-ticket-expiredticketview"></a>
 
 ## `ExpiredTicketView`
@@ -481,6 +519,8 @@ state: Literal['expired']
 ```python
 error: TicketViewError
 ```
+
+**Types:** [`TicketViewError`](/api/core-ticket#agentconnect-core-ticket-ticketviewerror).
 
 <a id="agentconnect-core-ticket-declinedticketview"></a>
 
@@ -526,13 +566,15 @@ Model-facing Ticket projection, discriminated on `state` with the same states as
 parse_ticket_view(data: object) -> TicketView
 ```
 
+**Types:** [`TicketView`](/api/core-ticket#agentconnect-core-ticket-ticketview).
+
 Parse a model-facing result, choosing the variant from `state`.
 
 An existing TicketView is returned unchanged.
 
 **Raises:**
 
-* (`ValueError`): Input is not an object or fails validation.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): Input is not an object or fails validation.
 
 <a id="agentconnect-core-ticket-ticket-view"></a>
 
@@ -541,6 +583,8 @@ An existing TicketView is returned unchanged.
 ```python
 ticket_view(ticket: Ticket) -> TicketView
 ```
+
+**Types:** [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket), [`TicketView`](/api/core-ticket#agentconnect-core-ticket-ticketview).
 
 Return the model-facing projection of a wire Ticket.
 

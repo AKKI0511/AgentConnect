@@ -1,28 +1,26 @@
-"""Model-backed Agent on a LiteLLM tool loop.
+"""Model-backed `BaseAgent` that calls LiteLLM for you.
 
-`AIAgent` is a convenience on `BaseAgent`. It is not the product.
-Subclass `BaseAgent` when you already have a model loop. Use this helper
-when you want a model string, Team tools, and optional custom tools
-without wiring LiteLLM yourself.
-
-Conversation state for Team work comes from `ctx.history`. Team tools
-(`find`, `ask`, `tell`, `get_result`, `get_history`, `get_profiles`)
-are attached from the Session. Extra tools are yours: pass a plain
-annotated function or an explicit `Tool`.
-
-`model` is a LiteLLM model id, for example `gpt-4o-mini` or
-`gemini/gemini-2.0-flash`. Provider keys stay in the environment.
+Use `AIAgent` when you have a model id and want that model to answer
+Team requests. Subclass `BaseAgent` when your harness already does.
+`model` is a LiteLLM model id. Provider keys stay in the environment.
+Pass your own functions as `tools`. Pass `complete` to replace LiteLLM.
 
 Examples:
-    For a started Team, after `pip install 'agentconnect[aiagent]'`.
-    Close the Session with `leave` when finished:
+    `team` is started and `researcher` has joined it. After
+    `pip install 'agentconnect[aiagent]'`:
 
     ```python
     from agentconnect.prebuilt import AIAgent
 
-    agent = AIAgent(name="writer", model="gpt-4o-mini")
-    await agent.join(team)
-    await agent.leave()
+    writer = AIAgent(
+        name="writer",
+        model="gpt-4o-mini",
+        instructions="Draft short release notes from the request.",
+    )
+    await writer.join(team)
+    ticket = await researcher.ask("writer", "Draft a release note: search is faster.")
+    if ticket.state == "completed":
+        print(ticket.response.content)
     ```
 """
 
@@ -62,12 +60,10 @@ class CompletionOptions(TypedDict, total=False):
 class AIAgent(BaseAgent):
     """`BaseAgent` that answers with a LiteLLM model and a short tool loop.
 
-    Examples:
-        ```python
-        agent = AIAgent(name="assistant", model="gpt-4o-mini")
-        await agent.join(team)
-        reply = await agent.chat("What does this Team do?")
-        ```
+    `handle` reads `ctx.history` and can call Session tools. `chat` keeps
+    a local history and does not attach those tools. Pass `complete` to
+    replace LiteLLM with another callable of the same shape. `ToolLoopExhausted`
+    propagates from `handle`, `chat`, and `complete`.
     """
 
     def __init__(
@@ -138,15 +134,11 @@ class AIAgent(BaseAgent):
         self._chats: dict[str, list[dict[str, object]]] = {}
 
     async def handle(self, message: MailboxMessage, ctx: Context) -> str:
-        """Answer one Delivery with the model loop.
+        """Answer one Team delivery with the model.
 
-        Thread history comes from `ctx.history`. Team tools attach when a
-        Session exists and `include_team_tools` is True.
-        `ToolLoopExhausted` is not caught here.
-
-        Args:
-            message: Incoming Delivery Message.
-            ctx: Handler context for this Delivery.
+        Prior Thread messages come from `ctx.history`. Session tools are
+        included when `include_team_tools` is true. `ToolLoopExhausted`
+        reaches the caller.
         """
         address = self.address
         user_text = _message_text(message)
@@ -217,21 +209,11 @@ class AIAgent(BaseAgent):
         *,
         conversation_id: str = "chat",
     ) -> str:
-        """Talk to this Agent without a Team. History is local to `conversation_id`.
+        """Talk to this Agent without a Team.
 
-        Team tools are never attached. Join a Team and handle Deliveries
-        for teammate work.
-
-        Args:
-            query: User text.
-            conversation_id: Local history bucket. Defaults to `"chat"`.
-
-        Returns:
-            Model text.
-
-        Raises:
-            ToolLoopExhausted: The model was still calling tools after
-                `max_tool_rounds`.
+        History stays on this object, under `conversation_id`, and is
+        not a Team Thread. Session tools are not included.
+        `ToolLoopExhausted` reaches the caller.
 
         Examples:
             ```python

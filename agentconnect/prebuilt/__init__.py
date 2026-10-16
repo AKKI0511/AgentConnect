@@ -1,29 +1,34 @@
-"""Optional ready-made Agents on top of `BaseAgent`.
+"""Optional Agents for when you do not already have a harness loop.
 
-The product is `BaseAgent` plus a Team. This package is convenience:
-a LiteLLM loop, a stdin human, and a Telegram bot. None of these is
-required to join a Team.
+Subclass `BaseAgent` when a harness already answers Team requests.
+Use `AIAgent` for a LiteLLM model id. Use `HumanAgent` when a person
+types the reply. Use `TelegramAIAgent` when Telegram chats should use
+that same model.
 
-`AIAgent` needs `pip install 'agentconnect[aiagent]'`. `HumanAgent`
-needs `pip install 'agentconnect[cli]'`. `TelegramAIAgent` needs
-`pip install 'agentconnect[telegram]'`. `Tool` is the same callable
-wrapper as `agentconnect.agent.tools.Tool`.
-
-Pass extra tools as annotated functions or explicit `Tool` objects.
-Team coordination tools (`find`, `ask`, `tell`, `get_result`,
-`get_history`, `get_profiles`) attach from the Session. `model` is a
-LiteLLM model id. Provider keys stay in the environment.
+`AIAgent` needs `agentconnect[aiagent]`. `HumanAgent` needs
+`agentconnect[cli]`. `TelegramAIAgent` needs `agentconnect[telegram]`.
+Provider keys and `TELEGRAM_BOT_TOKEN` stay in the environment.
 
 Examples:
-    For a started Team, after `pip install 'agentconnect[aiagent]'`.
-    Close the Session with `leave` when finished:
+    `team` is started and `researcher` has joined. After
+    `pip install 'agentconnect[aiagent]'`:
 
     ```python
     from agentconnect.prebuilt import AIAgent
 
-    agent = AIAgent(name="assistant", model="gpt-4o-mini")
-    await agent.join(team)
-    await agent.leave()
+    writer = AIAgent(
+        name="writer",
+        model="gpt-4o-mini",
+        instructions="Draft short release notes from the request.",
+    )
+    await writer.join(team)
+    ticket = await researcher.ask(
+        "writer",
+        "Draft a release note: search is faster, and deadlines now "
+        "appear in the activity log.",
+    )
+    if ticket.state == "completed":
+        print(ticket.response.content)
     ```
 """
 

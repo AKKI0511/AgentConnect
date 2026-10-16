@@ -9,34 +9,53 @@ Describe Python callables and Team operations for attachment to a harness.
 
 ## Public API
 
+* [`ToolHandler`](/api/agent-tools#agentconnect-agent-tools-toolhandler)
+* [`ToolLike`](/api/agent-tools#agentconnect-agent-tools-toollike)
 * [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool)
 * [`TeamTools`](/api/agent-tools#agentconnect-agent-tools-teamtools)
+
+<a id="agentconnect-agent-tools-toolhandler"></a>
+
+## `ToolHandler`
+
+```python
+ToolHandler = Callable[..., object]
+```
+
+A callable invoked with tool keyword arguments; it may return an awaitable.
+
+<a id="agentconnect-agent-tools-toollike"></a>
+
+## `ToolLike`
+
+```python
+ToolLike = Union['Tool', ToolHandler]
+```
+
+A [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) or a callable converted with
+[`Tool.from_callable`](/api/agent-tools#agentconnect-agent-tools-tool-from-callable).
 
 <a id="agentconnect-agent-tools-tool"></a>
 
 ## `Tool`
 
 ```python
-Tool(name: str, description: str, parameters: JsonSchemaValue, handler: ToolHandler, params_model: type[BaseModel] | None = None)
+Tool(
+    name: str,
+    description: str,
+    parameters: JsonSchemaValue,
+    handler: ToolHandler,
+    params_model: type[BaseModel] | None = None,
+)
 ```
+
+**Types:** [`ToolHandler`](/api/agent-tools#agentconnect-agent-tools-toolhandler), [`BaseModel`](https://docs.pydantic.dev/latest/api/base_model/#pydantic.BaseModel).
 
 A callable exposed to a harness, with its argument schema.
 
 Pass a plain annotated function to `from_callable` to derive the
-JSON Schema from the signature and docstring. Construct [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool)
+JSON Schema from the signature and docstring. Construct `Tool`
 directly when annotations cannot express the schema.
-
-**Attributes:**
-
-* `name` (`str`): Tool name advertised to the host.
-
-* `description` (`str`): Text the host shows for this tool.
-
-* `parameters` (`JsonSchemaValue`): JSON Schema object for keyword arguments.
-
-* `handler` (`ToolHandler`): Callable invoked with those keywords.
-
-* `params_model` (`type[BaseModel] | None`): Optional Pydantic model used to validate arguments.
 
 <a id="agentconnect-agent-tools-tool-name"></a>
 
@@ -76,6 +95,8 @@ JSON Schema object for keyword arguments.
 handler: ToolHandler
 ```
 
+**Types:** [`ToolHandler`](/api/agent-tools#agentconnect-agent-tools-toolhandler).
+
 Callable invoked with those keywords.
 
 <a id="agentconnect-agent-tools-tool-params-model"></a>
@@ -86,16 +107,21 @@ Callable invoked with those keywords.
 params_model: type[BaseModel] | None = None
 ```
 
+**Types:** [`BaseModel`](https://docs.pydantic.dev/latest/api/base_model/#pydantic.BaseModel).
+
 Optional Pydantic model used to validate arguments.
 
 <a id="agentconnect-agent-tools-tool-from-callable"></a>
 
-`classmethod`
-
-### `from_callable`
+### `from_callable` `classmethod`
 
 ```python
-from_callable(fn: ToolHandler, *, name: str | None = None, description: str | None = None) -> Tool
+from_callable(
+    fn: ToolHandler,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+) -> Tool
 ```
 
 Build a Tool from an annotated function and its docstring.
@@ -106,22 +132,22 @@ you pass one.
 
 **Parameters:**
 
-* `fn` (`ToolHandler`): Async or sync callable. Each advertised argument needs a
+* `fn` ([`ToolHandler`](/api/agent-tools#agentconnect-agent-tools-toolhandler)): Async or sync callable. Each advertised argument needs a
   type annotation other than `Any`. Keyword-only and
   positional-or-keyword arguments are supported.
 
-* `name` (`str | None`): Tool name. Defaults to `fn.__name__`.
+* `name` ([`str`](https://docs.python.org/3/library/stdtypes.html#str) | None): Tool name. Defaults to `fn.__name__`.
 
-* `description` (`str | None`): Tool description. Defaults to the docstring
+* `description` ([`str`](https://docs.python.org/3/library/stdtypes.html#str) | None): Tool description. Defaults to the docstring
   summary.
 
 **Returns:**
 
-* ([`Tool`](/api/agent-tools#agentconnect-agent-tools-tool)): A [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) whose `parameters` schema matches the signature.
+* ([`Tool`](/api/agent-tools#agentconnect-agent-tools-tool)): A `Tool` whose `parameters` schema matches the signature.
 
 **Raises:**
 
-* (`ValueError`): The signature cannot be advertised (`*args`,
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The signature cannot be advertised (`*args`,
   `**kwargs`, positional-only, missing annotation, or
   `Any`).
 
@@ -137,7 +163,7 @@ Return the OpenAI function-tool descriptor for this tool.
 
 **Returns:**
 
-* (`dict[str, object]`): A mapping with `type` `"function"` and a `function` object holding `name`, `description`, and `parameters`.
+* ([`dict`](https://docs.python.org/3/library/stdtypes.html#dict)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`object`](https://docs.python.org/3/library/functions.html#object)]): A mapping with `type` `"function"` and a `function` object holding `name`, `description`, and `parameters`.
 
 <a id="agentconnect-agent-tools-teamtools"></a>
 
@@ -145,8 +171,8 @@ Return the OpenAI function-tool descriptor for this tool.
 
 The six Team tool descriptors for one Agent.
 
-[`BaseAgent.team_tools`](/api/agent-base#agentconnect-agent-base-baseagent-team-tools) returns this sequence. Iterate it and pass it
-to a harness. Each [`Tool.handler`](/api/agent-tools#agentconnect-agent-tools-tool-handler) returns JSON. `ask` and
+`BaseAgent.team_tools` returns this sequence. Iterate it and pass it
+to a harness. Each `Tool.handler` returns JSON. `ask` and
 `get_result` include `ticket_id`. An `open` result has no `content`.
 A completed result has `content`.
 
@@ -158,4 +184,6 @@ A completed result has `content`.
 __getitem__(index: int | slice) -> Tool | tuple[Tool, ...]
 ```
 
-Return the [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) at `index` in catalog order.
+**Types:** [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool).
+
+Return the `Tool` at `index` in catalog order.

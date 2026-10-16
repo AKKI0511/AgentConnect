@@ -177,7 +177,7 @@ Derive an Agent DID from a raw Ed25519 public key.
 
 **Raises:**
 
-* (`ValueError`): The key is not 32 bytes.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The key is not 32 bytes.
 
 <a id="agentconnect-core-identity-public-bytes-from-did-key"></a>
 
@@ -191,7 +191,7 @@ Read the raw Ed25519 public key encoded in an Agent DID.
 
 **Raises:**
 
-* (`ValueError`): The DID does not encode an Ed25519 key.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The DID does not encode an Ed25519 key.
 
 <a id="agentconnect-core-identity-is-ed25519-did-key"></a>
 
@@ -215,27 +215,34 @@ Convert an Agent DID to its SubjectPublicKeyInfo public-key PEM.
 
 **Raises:**
 
-* (`ValueError`): The DID does not encode an Ed25519 key.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The DID does not encode an Ed25519 key.
 
 <a id="agentconnect-core-identity-encode-eddsa-jwt"></a>
 
 ## `encode_eddsa_jwt`
 
 ```python
-encode_eddsa_jwt(payload: Mapping[str, JsonValue], private_key_pem: str, *, typ: str = 'JWT') -> str
+encode_eddsa_jwt(
+    payload: Mapping[str, JsonValue],
+    private_key_pem: str,
+    *,
+    typ: str = 'JWT',
+) -> str
 ```
+
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
 
 Sign claims as a compact EdDSA JWT.
 
 **Parameters:**
 
-* `private_key_pem` (`str`): Ed25519 key in PKCS8 PEM form.
+* `private_key_pem` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Ed25519 key in PKCS8 PEM form.
 
-* `typ` (`str`): Token category to include in the JWT header.
+* `typ` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Token category to include in the JWT header.
 
 **Raises:**
 
-* (`ValueError`): The PEM is not an Ed25519 private key.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The PEM is not an Ed25519 private key.
 
 <a id="agentconnect-core-identity-decode-eddsa-jwt"></a>
 
@@ -245,17 +252,19 @@ Sign claims as a compact EdDSA JWT.
 decode_eddsa_jwt(token: str, public_key_pem: str) -> JsonObject
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Verify an EdDSA signature and return the JWT payload.
 
 This checks the signature, rather than expiry, audience or other claim policy.
 
 **Parameters:**
 
-* `public_key_pem` (`str`): Expected signer's SubjectPublicKeyInfo PEM.
+* `public_key_pem` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Expected signer's SubjectPublicKeyInfo PEM.
 
 **Raises:**
 
-* (`ValueError`): The token or signature is invalid.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The token or signature is invalid.
 
 <a id="agentconnect-core-identity-decode-eddsa-jwt-from-did"></a>
 
@@ -265,26 +274,37 @@ This checks the signature, rather than expiry, audience or other claim policy.
 decode_eddsa_jwt_from_did(token: str, did: str) -> JsonObject
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Verify a JWT signature using the key in the expected signer's DID.
 
 Does not validate expiry, audience or other claim policy.
 
 **Raises:**
 
-* (`ValueError`): The DID, token or signature is invalid.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The DID, token or signature is invalid.
 
 <a id="agentconnect-core-identity-agentidentity"></a>
 
 ## `AgentIdentity`
 
 ```python
-AgentIdentity(did: str, public_key: str, private_key: Optional[str] = None, verification_status: VerificationStatus = VerificationStatus.PENDING, created_at: datetime = utc_now(), metadata: JsonObject = dict())
+AgentIdentity(
+    did: str,
+    public_key: str,
+    private_key: Optional[str] = None,
+    verification_status: VerificationStatus = VerificationStatus.PENDING,
+    created_at: datetime = utc_now(),
+    metadata: JsonObject = dict(),
+)
 ```
+
+**Types:** [`VerificationStatus`](/api/core-identity#agentconnect-core-identity-verificationstatus), [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 An Agent's Ed25519 key identity.
 
 `create_key_based` creates a new identity. Pass a retained identity to
-[`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent), or use `identity_path` there to load or create a key file.
+`BaseAgent`, or use `identity_path` there to load or create a key file.
 Creating another key cannot reclaim an existing Membership's name.
 
 <a id="agentconnect-core-identity-agentidentity-did"></a>
@@ -325,6 +345,8 @@ PKCS8 PEM; absent on a public-only view.
 verification_status: VerificationStatus = VerificationStatus.PENDING
 ```
 
+**Types:** [`VerificationStatus`](/api/core-identity#agentconnect-core-identity-verificationstatus).
+
 Local key/DID check, rather than Team admission.
 
 <a id="agentconnect-core-identity-agentidentity-created-at"></a>
@@ -345,17 +367,19 @@ Object creation time; not Team admission time.
 metadata: JsonObject = field(default_factory=dict)
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Application information included in serialized views.
 
 <a id="agentconnect-core-identity-agentidentity-create-key-based"></a>
 
-`classmethod`
-
-### `create_key_based`
+### `create_key_based` `classmethod`
 
 ```python
 create_key_based() -> 'AgentIdentity'
 ```
+
+**Types:** [`AgentIdentity`](/api/core-identity#agentconnect-core-identity-agentidentity).
 
 Create a new key pair with its derived DID and verified local status.
 
@@ -371,7 +395,7 @@ Return the raw 32-byte public key.
 
 **Raises:**
 
-* (`ValueError`): The stored public key is not an Ed25519 PEM.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The stored public key is not an Ed25519 PEM.
 
 <a id="agentconnect-core-identity-agentidentity-matches-did"></a>
 
@@ -395,7 +419,7 @@ Sign UTF-8 text and return a standard-base64 Ed25519 signature.
 
 **Raises:**
 
-* (`ValueError`): This identity has no private key.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): This identity has no private key.
 
 <a id="agentconnect-core-identity-agentidentity-verify-signature"></a>
 
@@ -417,6 +441,8 @@ Malformed keys or signatures return False.
 to_dict() -> JsonObject
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Return a serializable public view with the private key left out.
 
 <a id="agentconnect-core-identity-agentidentity-to-secret-dict"></a>
@@ -427,6 +453,8 @@ Return a serializable public view with the private key left out.
 to_secret_dict() -> JsonObject
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Return a serializable identity including its private key when available.
 
 Use for trusted key persistence. This result can sign as the identity;
@@ -434,13 +462,13 @@ keep it out of Messages and public responses.
 
 <a id="agentconnect-core-identity-agentidentity-from-dict"></a>
 
-`classmethod`
-
-### `from_dict`
+### `from_dict` `classmethod`
 
 ```python
 from_dict(data: Mapping[str, Any]) -> 'AgentIdentity'
 ```
+
+**Types:** [`AgentIdentity`](/api/core-identity#agentconnect-core-identity-agentidentity).
 
 Restore a serialized identity; a public view cannot restore a missing private key.
 
@@ -449,7 +477,12 @@ Restore a serialized identity; a public view cannot restore a missing private ke
 ## `issue_identity_proof`
 
 ```python
-issue_identity_proof(identity: AgentIdentity, challenge: JoinChallenge, *, now: Optional[datetime] = None) -> str
+issue_identity_proof(
+    identity: AgentIdentity,
+    challenge: JoinChallenge,
+    *,
+    now: Optional[datetime] = None,
+) -> str
 ```
 
 Sign a fresh Runtime challenge to prove control of the Agent DID.
@@ -463,19 +496,27 @@ proof alone does not authorize admission.
 
 * `challenge` ([`JoinChallenge`](/api/core-operations#agentconnect-core-operations-joinchallenge)): Runtime JoinChallenge, including audience, nonce and expiry.
 
-* `now` (`Optional[datetime]`): Override the current UTC clock used for issuance.
+* `now` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`datetime`](https://docs.python.org/3/library/datetime.html#datetime.datetime)]): Override the current UTC clock used for issuance.
 
 **Raises:**
 
-* (`ValueError`): The private key is absent or the challenge is invalid or expired.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The private key is absent or the challenge is invalid or expired.
 
 <a id="agentconnect-core-identity-verify-identity-proof"></a>
 
 ## `verify_identity_proof`
 
 ```python
-verify_identity_proof(token: str, *, agent_did: AgentDid, challenge: JoinChallenge, now: Optional[datetime] = None) -> JsonObject
+verify_identity_proof(
+    token: str,
+    *,
+    agent_did: AgentDid,
+    challenge: JoinChallenge,
+    now: Optional[datetime] = None,
+) -> JsonObject
 ```
+
+**Types:** [`JoinChallenge`](/api/core-operations#agentconnect-core-operations-joinchallenge), [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 Verify key control and claims against the supplied join challenge.
 
@@ -486,11 +527,11 @@ with admission. This cryptographic check does not consume it.
 
 * `agent_did` ([`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid)): Expected proof issuer.
 
-* `now` (`Optional[datetime]`): Override the current UTC clock for expiry and issuance skew.
+* `now` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`datetime`](https://docs.python.org/3/library/datetime.html#datetime.datetime)]): Override the current UTC clock for expiry and issuance skew.
 
 **Raises:**
 
-* (`ValueError`): The token, signature, timing or challenge claims are invalid.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The token, signature, timing or challenge claims are invalid.
   Admission callers should expose a single `unauthorized` failure.
 
 <a id="agentconnect-core-identity-issue-membership-attestation"></a>
@@ -498,8 +539,19 @@ with admission. This cryptographic check does not consume it.
 ## `issue_membership_attestation`
 
 ```python
-issue_membership_attestation(team_identity: AgentIdentity, *, agent_did: AgentDid, name: str, address: str, team_name: str, now: Optional[datetime] = None, ttl_seconds: int = 31536000) -> str
+issue_membership_attestation(
+    team_identity: AgentIdentity,
+    *,
+    agent_did: AgentDid,
+    name: str,
+    address: str,
+    team_name: str,
+    now: Optional[datetime] = None,
+    ttl_seconds: int = 365 * 24 * 60 * 60,
+) -> str
 ```
+
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
 
 Sign a statement that this Team vouches for an Agent's membership.
 
@@ -511,23 +563,30 @@ Runtime issues these statements but does not admit callers using them.
 
 * `team_identity` ([`AgentIdentity`](/api/core-identity#agentconnect-core-identity-agentidentity)): Must hold the Team private key.
 
-* `name` (`str`): Membership name to record alongside its qualified Address.
+* `name` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Membership name to record alongside its qualified Address.
 
-* `now` (`Optional[datetime]`): Override the current UTC issuance clock.
+* `now` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`datetime`](https://docs.python.org/3/library/datetime.html#datetime.datetime)]): Override the current UTC issuance clock.
 
-* `ttl_seconds` (`int`): Lifetime measured from issuance.
+* `ttl_seconds` ([`int`](https://docs.python.org/3/library/stdtypes.html#int)): Lifetime measured from issuance.
 
 **Raises:**
 
-* (`ValueError`): The Team key is absent or the Agent DID is not Ed25519.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The Team key is absent or the Agent DID is not Ed25519.
 
 <a id="agentconnect-core-identity-verify-membership-attestation"></a>
 
 ## `verify_membership_attestation`
 
 ```python
-verify_membership_attestation(token: str, *, team_did: str, now: Optional[datetime] = None) -> MembershipAttestationClaims
+verify_membership_attestation(
+    token: str,
+    *,
+    team_did: str,
+    now: Optional[datetime] = None,
+) -> MembershipAttestationClaims
 ```
+
+**Types:** [`MembershipAttestationClaims`](/api/core-identity#agentconnect-core-identity-membershipattestationclaims).
 
 Verify a Team-signed statement and return its decoded membership claims.
 
@@ -537,10 +596,10 @@ or check an expected audience or membership revocation.
 
 **Parameters:**
 
-* `team_did` (`str`): Trusted expected issuer.
+* `team_did` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Trusted expected issuer.
 
-* `now` (`Optional[datetime]`): Override the current UTC expiry clock.
+* `now` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`datetime`](https://docs.python.org/3/library/datetime.html#datetime.datetime)]): Override the current UTC expiry clock.
 
 **Raises:**
 
-* (`ValueError`): The token, signer, required claims or expiry are invalid.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The token, signer, required claims or expiry are invalid.

@@ -7,24 +7,23 @@ sidebarTitle: "human_agent"
 
 Terminal human on a Team.
 
-[`HumanAgent`](/api/prebuilt-human_agent#agentconnect-prebuilt-human-agent-humanagent) is a [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) that prints incoming work and reads a
+`HumanAgent` is a `BaseAgent` that prints incoming work and reads a
 reply from stdin. It needs the `cli` extra (`aioconsole`).
+
+`read_line` replaces stdin when another UI should supply the text.
+Empty input, `exit`, `quit`, and `bye` decline a request. Call `leave`
+when the Session should close.
 
 **Examples:**
 
-```bash
-pip install 'agentconnect[cli]'
-```
+`team` is started and `assistant` has joined. After
+`pip install 'agentconnect[cli]'`:
 
 ```python
-from agentconnect.prebuilt import HumanAgent, AIAgent
-from agentconnect.team import Team
+from agentconnect.prebuilt import HumanAgent
 
-team = await Team("content-squad").start()
 human = HumanAgent(name="operator-human")
-assistant = AIAgent(name="assistant", model="gpt-4o-mini")
 await human.join(team)
-await assistant.join(team)
 await human.start_interaction("assistant")
 ```
 
@@ -37,35 +36,35 @@ await human.start_interaction("assistant")
 ## `HumanAgent`
 
 ```python
-HumanAgent(name: str, *, identity: Optional[AgentIdentity] = None, prompt: str = 'You: ', read_line: Optional[Callable[[str], Awaitable[str]]] = None, instance_id: Optional[str] = None, join_token: Optional[str] = None)
+HumanAgent(
+    name: str,
+    *,
+    identity: Optional[AgentIdentity] = None,
+    prompt: str = 'You: ',
+    read_line: Optional[Callable[[str], Awaitable[str]]] = None,
+    instance_id: Optional[str] = None,
+    join_token: Optional[str] = None,
+)
 ```
 
 Person on a Team. Incoming work is printed; stdin is the reply.
-
-**Examples:**
-
-```python
-human = HumanAgent(name="operator-human")
-await human.join(team)
-await human.start_interaction("assistant")
-```
 
 Create a human member. It has not joined a Team yet.
 
 **Parameters:**
 
-* `name` (`str`): Agent name, unique within the Team.
+* `name` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Agent name, unique within the Team.
 
-* `identity` (`Optional[AgentIdentity]`): Optional Agent identity. Omit to create one.
+* `identity` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`AgentIdentity`](/api/core-identity#agentconnect-core-identity-agentidentity)]): Optional Agent identity. Omit to create one.
 
-* `prompt` (`str`): Stdin prompt shown when a reply is needed.
+* `prompt` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Stdin prompt shown when a reply is needed.
 
-* `read_line` (`Optional[Callable[[str], Awaitable[str]]]`): Optional async `(prompt) -> str`. Non-stdin UIs
+* `read_line` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`Callable`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable)\[\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)], [`Awaitable`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Awaitable)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]]]): Optional async `(prompt) -> str`. Non-stdin UIs
   pass this instead of using the terminal.
 
-* `instance_id` (`Optional[str]`): Stable id for this running copy.
+* `instance_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Stable id for this running copy.
 
-* `join_token` (`Optional[str]`): Token from [`Team.issue_join_token`](/api/team-runtime#agentconnect-team-runtime-team-issue-join-token), when required.
+* `join_token` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Token from `Team.issue_join_token`, when required.
 
 Inherits from [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent).
 
@@ -79,13 +78,13 @@ profile = AgentProfile(summary='A person on this Team who reads and types replie
 
 <a id="agentconnect-prebuilt-human-agent-humanagent-handle"></a>
 
-`async`
-
-### `handle`
+### `handle` `async`
 
 ```python
 handle(message: MailboxMessage, ctx: Context) -> JsonValue
 ```
+
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
 
 Print the Delivery and wait for a typed reply.
 
@@ -100,9 +99,7 @@ declines.
 
 <a id="agentconnect-prebuilt-human-agent-humanagent-start-interaction"></a>
 
-`async`
-
-### `start_interaction`
+### `start_interaction` `async`
 
 ```python
 start_interaction(recipient: str) -> None
@@ -114,7 +111,7 @@ Join a Team first. Type `exit` to stop.
 
 **Parameters:**
 
-* `recipient` (`str`): Directory name or Address of the peer Agent.
+* `recipient` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Directory name or Address of the peer Agent.
 
 **Examples:**
 

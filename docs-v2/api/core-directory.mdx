@@ -34,7 +34,7 @@ MAX_GET_PROFILES = 20
 
 Full Profile and identity for one Team Membership.
 
-[`BaseAgent.get_entry`](/api/agent-base#agentconnect-agent-base-baseagent-get-entry) returns this record. The DID identifies the agent;
+`BaseAgent.get_entry` returns this record. The DID identifies the agent;
 the Profile describes suitable work. Model-facing `get_profiles` returns
 per-Address Profile items instead.
 
@@ -48,6 +48,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 address: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 <a id="agentconnect-core-directory-directoryentry-agent-did"></a>
 
 ### `agent_did`
@@ -56,6 +58,8 @@ address: QualifiedAddress
 agent_did: AgentDid
 ```
 
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
+
 <a id="agentconnect-core-directory-directoryentry-profile"></a>
 
 ### `profile`
@@ -63,6 +67,8 @@ agent_did: AgentDid
 ```python
 profile: AgentProfile
 ```
+
+**Types:** [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
 
 <a id="agentconnect-core-directory-directorymatch"></a>
 
@@ -82,6 +88,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 address: QualifiedAddress
 ```
+
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
 
 <a id="agentconnect-core-directory-directorymatch-summary"></a>
 
@@ -107,6 +115,8 @@ skill_names: list[str]
 tags: Optional[list[Tag]] = None
 ```
 
+**Types:** [`Tag`](/api/core-primitives#agentconnect-core-primitives-tag).
+
 <a id="agentconnect-core-directory-profilefound"></a>
 
 ## `ProfileFound`
@@ -131,6 +141,8 @@ status: Literal['ok']
 address: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 <a id="agentconnect-core-directory-profilefound-profile"></a>
 
 ### `profile`
@@ -138,6 +150,8 @@ address: QualifiedAddress
 ```python
 profile: AgentProfile
 ```
+
+**Types:** [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
 
 <a id="agentconnect-core-directory-profilemiss"></a>
 
@@ -166,6 +180,8 @@ status: Literal['error']
 address: Address
 ```
 
+**Types:** [`Address`](/api/core-primitives#agentconnect-core-primitives-address).
+
 <a id="agentconnect-core-directory-profilemiss-error"></a>
 
 ### `error`
@@ -173,6 +189,8 @@ address: Address
 ```python
 error: ErrorObject
 ```
+
+**Types:** [`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject).
 
 <a id="agentconnect-core-directory-profileitem"></a>
 
@@ -199,6 +217,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 items: list[ProfileItem]
 ```
+
+**Types:** [`ProfileItem`](/api/core-directory#agentconnect-core-directory-profileitem).
 
 <a id="agentconnect-core-directory-findrequest"></a>
 
@@ -235,6 +255,8 @@ Natural-language description of the work. Ranked matches are candidates, not pro
 limit: Optional[JsonInt] = None
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 Maximum matches from 1 to 100. Omit to receive every other member, at most 100.
 
 * `ge`: `1`
@@ -259,6 +281,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 matches: list[DirectoryMatch]
 ```
 
+**Types:** [`DirectoryMatch`](/api/core-directory#agentconnect-core-directory-directorymatch).
+
 <a id="agentconnect-core-directory-getprofilesrequest"></a>
 
 ## `GetProfilesRequest`
@@ -275,10 +299,12 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 addresses: list[Address]
 ```
 
+**Types:** [`Address`](/api/core-primitives#agentconnect-core-primitives-address).
+
 Member Addresses to read, 1 to 20. Duplicate requested strings are read once, keeping the first.
 
 * `min_length`: `1`
-* `max_length`: [`MAX_GET_PROFILES`](/api/core-directory#agentconnect-core-directory-max-get-profiles)
+* `max_length`: `MAX_GET_PROFILES`
 
 <a id="agentconnect-core-directory-getprofilesrequest-unique-requested"></a>
 

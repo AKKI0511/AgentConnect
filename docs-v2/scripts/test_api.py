@@ -89,6 +89,9 @@ class Widget(Base):
     def mixed(self, typed: int, untyped=None):
         """Accept mixed annotations."""
 
+    def long(self, first: list[dict[str, list[int]]], second: dict[str, list[int]], *, count: int = 2) -> list[int]:
+        """Accept nested annotated values."""
+
     def positional(self, value: int, /):
         """Accept only positional input."""
 
@@ -139,13 +142,20 @@ raise RuntimeError("Documentation must never execute this module")
         self.assertNotIn("inherited()", text)
         text = render_object(self.env, widget["run"])
         self.assertIn("*values: int, flag: bool = False, **options: str", text)
-        self.assertIn("`async`", text)
+        self.assertIn("`run` `async`", text)
+        self.assertIn("```python", text)
+        self.assertNotIn("SdkSignature", text)
         for section in ("Parameters", "Returns", "Raises", "Examples"):
             self.assertIn(section, text)
         self.assertIn(
             "typed: int, untyped=None", render_object(self.env, widget["mixed"])
         )
         self.assertIn("value: int, /)", render_object(self.env, widget["positional"]))
+        long = render_object(self.env, widget["long"])
+        self.assertIn("long(\n", long)
+        self.assertIn("    first: list[dict[str, list[int]]],\n", long)
+        self.assertIn("    *,\n", long)
+        self.assertIn(") -> list[int]", long)
 
     def test_properties_aliases_and_instance_attributes(self):
         self.assertEqual(
@@ -167,7 +177,7 @@ raise RuntimeError("Documentation must never execute this module")
         self.assertIn(
             "An ordinary instance field", render_object(self.env, widget["note"])
         )
-        self.assertIn(
+        self.assertNotIn(
             "Visible label stored on the widget.", render_object(self.env, widget)
         )
         self.assertIn(
@@ -187,13 +197,17 @@ raise RuntimeError("Documentation must never execute this module")
         self.assertIn("name", [obj.name for obj in public_members(model)])
         self.assertNotIn("validate_name", [obj.name for obj in public_members(model)])
         text = render_object(self.env, model["name"])
-        self.assertIn("Required.", text)
+        self.assertNotIn("Required.", text)
+        self.assertIn("name: str", text)
         self.assertIn("Visible name.", text)
         self.assertIn("`min_length`: `1`", text)
-        self.assertIn(
-            "Default factory: `list`", render_object(self.env, model["values"])
-        )
-        self.assertIn("Default: `False`", render_object(self.env, model["enabled"]))
+        values = render_object(self.env, model["values"])
+        self.assertIn("= []", values)
+        self.assertNotIn("Default factory", values)
+        self.assertNotIn("**Types:**", values)
+        enabled = render_object(self.env, model["enabled"])
+        self.assertIn("= False", enabled)
+        self.assertNotIn("Default:", enabled)
 
     def test_dataclass_enum_and_settings(self):
         self.assertIn(
@@ -208,16 +222,30 @@ raise RuntimeError("Documentation must never execute this module")
             "validate_port", [obj.name for obj in public_members(settings)]
         )
         text = render_object(self.env, settings["port"])
-        self.assertIn("Default: `8000`", text)
+        self.assertIn("port: int = 8000", text)
+        self.assertNotIn("Default:", text)
         self.assertIn("`ge`: `1`", text)
 
     def test_markdown_preserves_code_and_resolves_references(self):
         body = render_object(self.env, self.module["Widget"]["run"])
-        body += "\nLiteral {braces}. `{origin}/mcp` and `Widget`.\n"
+        body += (
+            "\nLiteral {braces}. `{origin}/mcp` and `Widget`.\n\n"
+            "See [`Widget`][sample.Widget].\n"
+            "\n~~~python\n[Thing][agentconnect.missing.Thing]\n~~~\n"
+            "\n``[Thing][agentconnect.missing.Thing]``\n"
+        )
         process = subprocess.run(
             ["node", str(DOCS / "scripts/markdown.mjs")],
             input=json.dumps(
-                {"page": {"body": body, "refs": {"Widget": "/widget#widget"}}}
+                {
+                    "page": {
+                        "body": body,
+                        "refs": {
+                            "sample.Widget": "/widget#widget",
+                            "other.Widget": "/other#widget",
+                        },
+                    }
+                }
             ),
             text=True,
             encoding="utf-8",
@@ -227,8 +255,27 @@ raise RuntimeError("Documentation must never execute this module")
         text = json.loads(process.stdout)["page"]
         self.assertIn('payload = {"path": "{origin}/mcp"}', text)
         self.assertIn("`{origin}/mcp`", text)
+        self.assertIn("`Widget`", text)
+        self.assertEqual(text.count("[`Widget`](/widget#widget)"), 1)
         self.assertIn(r"\{braces\}", text)
         self.assertIn("[`Widget`](/widget#widget)", text)
+        failed = subprocess.run(
+            ["node", str(DOCS / "scripts/markdown.mjs")],
+            input=json.dumps(
+                {
+                    "page": {
+                        "body": "See [`Thing`][agentconnect.missing.Thing].\n",
+                        "refs": {},
+                    }
+                }
+            ),
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("Unresolved reference", failed.stderr)
 
 
 if __name__ == "__main__":

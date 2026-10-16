@@ -1,7 +1,8 @@
 {# Google sections are parsed by Griffe. Markdown stays portable; no JSX in source. #}
+{% set owner = function if function is defined else none %}
 {% for section in docstring_sections %}
 {# Reviewed classes have the same contracts at their individual field anchors. #}
-{% if section.kind.value != 'attributes' or class is not defined or not class.module.path.startswith(('agentconnect.core.', 'agentconnect.transport.', 'agentconnect.mcp.')) %}
+{% if section.kind.value != 'attributes' or class is not defined %}
 {% if section.kind.value == 'text' %}
 {{ section.value }}
 {% elif section.kind.value == 'examples' %}
@@ -19,10 +20,15 @@
 **{{ section.title or section.value.kind }}:**
 
 {{ section.value.description }}
+{% elif section.kind.value == 'raises' %}
+**{{ section.title or 'Raises' }}:**
+{% for item in section.value %}
+- {% if item.annotation %}{{ item.annotation|doc_type(owner) }}{% endif %}: {{ item.description|indent(2) }}
+{% endfor %}
 {% else %}
 **{{ section.title or section.kind.value|title }}:**
 {% for item in section.value %}
-- {% if item.name %}`{{ item.name }}`{% endif %}{% if item.annotation %} (`{{ item.annotation }}`){% endif %}: {{ item.description|indent(2) }}
+- {% if item.name %}`{{ item.name }}`{% endif %}{% if item.annotation %} ({{ item.annotation|doc_type(owner) }}){% endif %}: {{ item.description|indent(2) }}
 {% endfor %}
 {% endif %}
 {% endif %}

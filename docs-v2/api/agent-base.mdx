@@ -16,7 +16,17 @@ Create an agent, join a Team, and handle deliveries.
 ## `BaseAgent`
 
 ```python
-BaseAgent(name: str, *, profile: AgentProfile | Mapping[str, object] | None = None, identity: Optional[AgentIdentity] = None, identity_path: Optional[str | Path] = None, instance_id: Optional[str] = None, max_in_flight: int = 1, delivery_history: DeliveryHistoryForm = 'bodies', join_token: Optional[str] = None)
+BaseAgent(
+    name: str,
+    *,
+    profile: AgentProfile | Mapping[str, object] | None = None,
+    identity: Optional[AgentIdentity] = None,
+    identity_path: Optional[str | Path] = None,
+    instance_id: Optional[str] = None,
+    max_in_flight: int = 1,
+    delivery_history: DeliveryHistoryForm = 'bodies',
+    join_token: Optional[str] = None,
+)
 ```
 
 Connect an independent agent to a Team and handle incoming work.
@@ -29,26 +39,26 @@ Create an Agent that has not joined a Team.
 
 **Parameters:**
 
-* `name` (`str`): Agent name, unique in the Team.
+* `name` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Agent name, unique in the Team.
 
-* `profile` (`AgentProfile | Mapping[str, object] | None`): [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile), or a mapping with the same fields.
+* `profile` ([`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile) | [`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`object`](https://docs.python.org/3/library/functions.html#object)] | None): `AgentProfile`, or a mapping with the same fields.
   When omitted, a class attribute named `profile` is used.
   When both are omitted, join publishes a generic summary
   and a skill named `generic`.
 
-* `identity` (`Optional[AgentIdentity]`): Key to reuse. A valid `did:key` on it is kept.
+* `identity` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`AgentIdentity`](/api/core-identity#agentconnect-core-identity-agentidentity)]): Key to reuse. A valid `did:key` on it is kept.
   Otherwise the SDK mints one. Do not also pass
-  `identity_path`. Load a saved key with [`load_identity`](/api/agent-identity#agentconnect-agent-identity-load-identity)
+  `identity_path`. Load a saved key with `load_identity`
   and pass it here when you store the file yourself.
 
-* `identity_path` (`Optional[str | Path]`): JSON file for the Agent key. The file is loaded
+* `identity_path` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str) | [`Path`](https://docs.python.org/3/library/pathlib.html#pathlib.Path)]): JSON file for the Agent key. The file is loaded
   when it exists, and created when it does not. The same
   path keeps the same DID across restarts.
 
-* `instance_id` (`Optional[str]`): UUID for this running copy. Generated when omitted.
+* `instance_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): UUID for this running copy. Generated when omitted.
   Two copies must not share one.
 
-* `max_in_flight` (`int`): How many Deliveries this Session handles at
+* `max_in_flight` ([`int`](https://docs.python.org/3/library/stdtypes.html#int)): How many Deliveries this Session handles at
   once, from 1 to 100. Deferred replies that still hold a
   lease count toward this limit.
 
@@ -56,7 +66,7 @@ Create an Agent that has not joined a Team.
   Delivery. `ids` puts only their ids. Page the bodies
   with `get_history`.
 
-* `join_token` (`Optional[str]`): Token from the operator. Also read from
+* `join_token` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Token from the operator. Also read from
   `AGENTCONNECT_JOIN_TOKEN` when this argument is omitted.
   A URL join to a Team with `require_join_auth=True` needs
   this token. `join` on that Team object mints one, bound
@@ -64,7 +74,7 @@ Create an Agent that has not joined a Team.
 
 **Raises:**
 
-* (`ValueError`): `name` is not a valid Agent name, both `identity`
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `name` is not a valid Agent name, both `identity`
   and `identity_path` were passed, `instance_id` is not a
   UUID, or `max_in_flight` or `delivery_history` is invalid.
 
@@ -75,6 +85,8 @@ Create an Agent that has not joined a Team.
 ```python
 profile: AgentProfile
 ```
+
+**Types:** [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
 
 Profile published to the Directory at join.
 
@@ -95,6 +107,8 @@ Agent name, unique in the Team.
 ```python
 identity: AgentIdentity
 ```
+
+**Types:** [`AgentIdentity`](/api/core-identity#agentconnect-core-identity-agentidentity).
 
 Key for this Agent. Saving this key, or reusing `identity_path`, keeps the DID.
 
@@ -146,13 +160,13 @@ How many Deliveries this Session handles at once, including deferred replies.
 delivery_history: DeliveryHistoryForm
 ```
 
+**Types:** [`DeliveryHistoryForm`](/api/core-primitives#agentconnect-core-primitives-deliveryhistoryform).
+
 `bodies` includes earlier Message bodies. `ids` includes only their ids.
 
 <a id="agentconnect-agent-base-baseagent-address"></a>
 
-`property`
-
-### `address`
+### `address` `property`
 
 ```python
 address: Optional[str]
@@ -162,9 +176,7 @@ Qualified Address after `join`, or `None` before it.
 
 <a id="agentconnect-agent-base-baseagent-connected"></a>
 
-`property`
-
-### `connected`
+### `connected` `property`
 
 ```python
 connected: bool
@@ -174,12 +186,14 @@ True while this copy has a live Session.
 
 <a id="agentconnect-agent-base-baseagent-join"></a>
 
-`async`
-
-### `join`
+### `join` `async`
 
 ```python
-join(team_or_url: RuntimeOperations | str, *, join_token: Optional[str] = None) -> 'BaseAgent'
+join(
+    team_or_url: RuntimeOperations | str,
+    *,
+    join_token: Optional[str] = None,
+) -> 'BaseAgent'
 ```
 
 Join a started Team, or a URL that Team is serving.
@@ -195,32 +209,30 @@ That minted token is reused only when joining the same Team
 object again. A different in-process Team drops it, and mints
 another when that Team requires auth. A URL never mints a token.
 A token from the constructor, the environment, or this call is
-kept as given. [`Team.issue_join_token`](/api/team-runtime#agentconnect-team-runtime-team-issue-join-token) remains the operator call
+kept as given. `Team.issue_join_token` remains the operator call
 for a token you want to hand out.
 
 **Parameters:**
 
-* `team_or_url` (`RuntimeOperations | str`): A started [`Team`](/api/team-runtime#agentconnect-team-runtime-team) in this process, or a Runtime
+* `team_or_url` ([`RuntimeOperations`](/api/transport-runtime#agentconnect-transport-runtime-runtimeoperations) | [`str`](https://docs.python.org/3/library/stdtypes.html#str)): A started `Team` in this process, or a Runtime
   origin such as `http://127.0.0.1:9000`.
 
-* `join_token` (`Optional[str]`): Token for this join. Replaces the constructor
+* `join_token` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Token for this join. Replaces the constructor
   or environment token. A configured token is sent as
   given, including when it is expired or revoked.
 
 **Returns:**
 
-* (`'BaseAgent'`): This Agent, now connected.
+* ([`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent)): This Agent, now connected.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Team rejected the join. Read `code`.
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Team rejected the join. Read `code`.
   Common codes are `unauthorized` and `name_conflict`.
 
 <a id="agentconnect-agent-base-baseagent-leave"></a>
 
-`async`
-
-### `leave`
+### `leave` `async`
 
 ```python
 leave() -> None
@@ -231,19 +243,26 @@ Close this Session.
 Membership, the Mailbox, and Tickets stay on the Team. Join
 again with the same Membership to call `get_result` for an open
 Ticket. `leave` does not remove the Membership. Use
-[`Team.remove_membership`](/api/team-runtime#agentconnect-team-runtime-team-remove-membership) for that.
+`Team.remove_membership` for that.
 
 <a id="agentconnect-agent-base-baseagent-ask"></a>
 
-`async`
-
-### `ask`
+### `ask` `async`
 
 ```python
-ask(recipient: str, content: JsonValue, *, deadline_seconds: Optional[float] = None, collect: CollectMode = 'wait', thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> Ticket
+ask(
+    recipient: str,
+    content: JsonValue,
+    *,
+    deadline_seconds: Optional[float] = None,
+    collect: CollectMode = 'wait',
+    thread_id: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    metadata: Optional[Mapping[str, JsonValue]] = None,
+) -> Ticket
 ```
 
-Send a request and return a [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
+Send a request and return a `Ticket`.
 
 The returned Ticket may still be `open`. Accepted work keeps
 running after this call returns.
@@ -254,12 +273,12 @@ has `error`. A `declined` Ticket has no reply body.
 
 **Parameters:**
 
-* `recipient` (`str`): Local name or same-Team Address, such as `writer`
+* `recipient` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Local name or same-Team Address, such as `writer`
   or `writer@content-squad`.
 
 * `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The work, as text or JSON.
 
-* `deadline_seconds` (`Optional[float]`): Work cutoff in seconds. This does not change
+* `deadline_seconds` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`float`](https://docs.python.org/3/library/stdtypes.html#float)]): Work cutoff in seconds. This does not change
   how long `collect="wait"` waits. Omit it outside `handle`
   to use the Team's `work_lifetime_seconds`. Inside
   `handle`, omit it to inherit the parent request deadline.
@@ -269,17 +288,17 @@ has `error`. A `declined` Ticket has no reply body.
   `wait_hold_seconds` elapses. `ticket` returns the current
   Ticket without waiting.
 
-* `thread_id` (`Optional[str]`): Thread to continue with the same recipient. Omit it
+* `thread_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Thread to continue with the same recipient. Omit it
   outside `handle` to leave the request unthreaded. Inside
   `handle`, omit it to continue the current Thread when
   `recipient` is the sender and the Message has a
   `thread_id`. Otherwise a new Thread starts.
 
-* `parent_id` (`Optional[str]`): Message this request answers. Omit it outside
+* `parent_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Message this request answers. Omit it outside
   `handle` to send with no parent. Inside `handle`, the
   omitted value is the current Message id.
 
-* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)]]): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -287,7 +306,7 @@ has `error`. A `declined` Ticket has no reply body.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or the Team rejected
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or the Team rejected
   the send. Read `code`.
 
 **Examples:**
@@ -308,12 +327,17 @@ if ticket.state == "completed":
 
 <a id="agentconnect-agent-base-baseagent-tell"></a>
 
-`async`
-
-### `tell`
+### `tell` `async`
 
 ```python
-tell(recipient: str, content: JsonValue, *, thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> AcceptedSendResult
+tell(
+    recipient: str,
+    content: JsonValue,
+    *,
+    thread_id: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    metadata: Optional[Mapping[str, JsonValue]] = None,
+) -> AcceptedSendResult
 ```
 
 Send a notice. No Ticket is created.
@@ -329,19 +353,19 @@ Message id.
 
 **Parameters:**
 
-* `recipient` (`str`): Local name or same-Team Address.
+* `recipient` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Local name or same-Team Address.
 
 * `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The notice, as text or JSON.
 
-* `thread_id` (`Optional[str]`): Thread to continue with a current participant.
+* `thread_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Thread to continue with a current participant.
   Omit it outside `handle` for an unthreaded notice. Inside
   `handle`, omit it to follow the same rule as `ask`.
 
-* `parent_id` (`Optional[str]`): Message this notice answers. Omit it outside
+* `parent_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Message this notice answers. Omit it outside
   `handle` to send with no parent. Inside `handle`, the
   omitted value is the current Message id.
 
-* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)]]): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -349,14 +373,12 @@ Message id.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or the Team rejected
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or the Team rejected
   the send. Read `code`.
 
 <a id="agentconnect-agent-base-baseagent-find"></a>
 
-`async`
-
-### `find`
+### `find` `async`
 
 ```python
 find(query: str, *, limit: int | None = None) -> FindResult
@@ -370,9 +392,9 @@ peer can do the work. Call `get_entry` for one full Profile.
 
 **Parameters:**
 
-* `query` (`str`): Description of the work, in ordinary language.
+* `query` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Description of the work, in ordinary language.
 
-* `limit` (`int | None`): Maximum matches, from 1 to 100. Omit it to receive
+* `limit` ([`int`](https://docs.python.org/3/library/stdtypes.html#int) | None): Maximum matches, from 1 to 100. Omit it to receive
   every other member, at most 100.
 
 **Returns:**
@@ -381,7 +403,7 @@ peer can do the work. Call `get_entry` for one full Profile.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined.
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined.
 
 **Examples:**
 
@@ -402,9 +424,7 @@ if found.matches:
 
 <a id="agentconnect-agent-base-baseagent-get-entry"></a>
 
-`async`
-
-### `get_entry`
+### `get_entry` `async`
 
 ```python
 get_entry(address: str) -> DirectoryEntry
@@ -416,7 +436,7 @@ The entry includes Address, DID, and Profile.
 
 **Parameters:**
 
-* `address` (`str`): Local name or same-Team Address.
+* `address` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Local name or same-Team Address.
 
 **Returns:**
 
@@ -424,14 +444,12 @@ The entry includes Address, DID, and Profile.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or no Membership
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or no Membership
   has that Address.
 
 <a id="agentconnect-agent-base-baseagent-get-result"></a>
 
-`async`
-
-### `get_result`
+### `get_result` `async`
 
 ```python
 get_result(ticket_id: str) -> Ticket
@@ -446,7 +464,7 @@ state checks as `ask`.
 
 **Parameters:**
 
-* `ticket_id` (`str`): `Ticket.id` from `ask`. It equals the request
+* `ticket_id` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): `Ticket.id` from `ask`. It equals the request
   Message id.
 
 **Returns:**
@@ -455,7 +473,7 @@ state checks as `ask`.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or this Membership
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or this Membership
   did not open that Ticket.
 
 **Examples:**
@@ -471,12 +489,15 @@ if ticket.state == "completed":
 
 <a id="agentconnect-agent-base-baseagent-get-history"></a>
 
-`async`
-
-### `get_history`
+### `get_history` `async`
 
 ```python
-get_history(thread_id: str, *, before: Optional[str] = None, limit: int = 50) -> HistoryResult
+get_history(
+    thread_id: str,
+    *,
+    before: Optional[str] = None,
+    limit: int = 50,
+) -> HistoryResult
 ```
 
 Return one page of retained Thread history.
@@ -489,12 +510,12 @@ participant can read the Thread.
 
 **Parameters:**
 
-* `thread_id` (`str`): Conversation id from a Ticket or Message.
+* `thread_id` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Conversation id from a Ticket or Message.
 
-* `before` (`Optional[str]`): Return Messages older than this id. Use `next_before`
+* `before` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Return Messages older than this id. Use `next_before`
   from the previous page.
 
-* `limit` (`int`): Page size, from 1 to 200. Defaults to 50.
+* `limit` ([`int`](https://docs.python.org/3/library/stdtypes.html#int)): Page size, from 1 to 200. Defaults to 50.
 
 **Returns:**
 
@@ -502,7 +523,7 @@ participant can read the Thread.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or is not a participant.
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or is not a participant.
 
 <a id="agentconnect-agent-base-baseagent-team-tools"></a>
 
@@ -520,18 +541,16 @@ through your harness's tool interface. Calling `team_tools`
 before `join` is safe; handlers need a live connection.
 `ask` and `get_result` return JSON with `ticket_id`. Read
 `content` only when `state` is `completed`. An MCP client
-connects to `{origin}/mcp`. [`agentconnect.agent.tools`](/api/agent-tools)
-documents extra [`Tool`](/api/agent-tools#agentconnect-agent-tools-tool) callables.
+connects to `{origin}/mcp`. `agentconnect.agent.tools`
+documents extra `Tool` callables.
 
 **Returns:**
 
-* ([`TeamTools`](/api/agent-tools#agentconnect-agent-tools-teamtools)): A [`TeamTools`](/api/agent-tools#agentconnect-agent-tools-teamtools) sequence.
+* ([`TeamTools`](/api/agent-tools#agentconnect-agent-tools-teamtools)): A `TeamTools` sequence.
 
 <a id="agentconnect-agent-base-baseagent-handle"></a>
 
-`async`
-
-### `handle`
+### `handle` `async`
 
 ```python
 handle(message: MailboxMessage, ctx: Context) -> object
@@ -540,7 +559,7 @@ handle(message: MailboxMessage, ctx: Context) -> object
 Handle one Delivery. Override this.
 
 `message` is the delivered request or event. `ctx` is the
-[`Context`](/api/agent-context#agentconnect-agent-context-context) for this attempt. At-least-once delivery can call
+`Context` for this attempt. At-least-once delivery can call
 `handle` more than once for the same Message. `ctx.attempt`
 starts at 1.
 
@@ -554,7 +573,7 @@ A handler finishes the Delivery in one of four ways:
   no Ticket. Raising while handling an event finishes that
   Delivery without a reply.
 * Call `ctx.defer()` and return from `handle` to answer later.
-  The return value is not the reply. Finish through [`DeferredReply`](/api/agent-context#agentconnect-agent-context-deferredreply).
+  The return value is not the reply. Finish through `DeferredReply`.
 
 **Parameters:**
 
@@ -565,4 +584,4 @@ A handler finishes the Delivery in one of four ways:
 
 **Returns:**
 
-* (`object`): A reply body, or `None` to decline a request or finish an event.
+* ([`object`](https://docs.python.org/3/library/functions.html#object)): A reply body, or `None` to decline a request or finish an event.

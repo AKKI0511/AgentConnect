@@ -19,7 +19,7 @@ The Store backend that keeps Team state in process memory.
 MemoryStore()
 ```
 
-Keep Team state in process memory, following the [`Store`](/api/team-store-base#agentconnect-team-store-base-store) contract.
+Keep Team state in process memory, following the `Store` contract.
 
 `insert`, `compare_and_set`, and `apply` are atomic with respect to
 other MemoryStore operations. Values are copied on reads and writes.
@@ -36,13 +36,13 @@ Inherits from [`Store`](/api/team-store-base#agentconnect-team-store-base-store)
 persistence: PersistenceMode = 'volatile'
 ```
 
+**Types:** [`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode).
+
 State lasts only within this process.
 
 <a id="agentconnect-team-store-memory-memorystore-open"></a>
 
-`async`
-
-### `open`
+### `open` `async`
 
 ```python
 open() -> None
@@ -52,9 +52,7 @@ No-op. The store is ready after construction.
 
 <a id="agentconnect-team-store-memory-memorystore-close"></a>
 
-`async`
-
-### `close`
+### `close` `async`
 
 ```python
 close() -> None
@@ -64,9 +62,7 @@ No-op. Memory is not wiped on close.
 
 <a id="agentconnect-team-store-memory-memorystore-get"></a>
 
-`async`
-
-### `get`
+### `get` `async`
 
 ```python
 get(key: str) -> object
@@ -76,9 +72,7 @@ Return a copy of the stored value, or None when the key is missing.
 
 <a id="agentconnect-team-store-memory-memorystore-get-many"></a>
 
-`async`
-
-### `get_many`
+### `get_many` `async`
 
 ```python
 get_many(keys: Sequence[str]) -> list[object]
@@ -91,35 +85,33 @@ copies are independent of subsequent writes.
 
 <a id="agentconnect-team-store-memory-memorystore-get-record"></a>
 
-`async`
-
-### `get_record`
+### `get_record` `async`
 
 ```python
 get_record(key: str) -> StoreRecord | None
 ```
 
+**Types:** [`StoreRecord`](/api/team-store-base#agentconnect-team-store-base-storerecord).
+
 Return a copied value and its version, or None when the key is missing.
 
 <a id="agentconnect-team-store-memory-memorystore-apply"></a>
 
-`async`
-
-### `apply`
+### `apply` `async`
 
 ```python
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
 
+**Types:** [`StoreOp`](/api/team-store-ops#agentconnect-team-store-ops-storeop), [`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult).
+
 Apply the batch atomically, or leave every key unchanged.
 
-See [`Store.apply`](/api/team-store-base#agentconnect-team-store-base-store-apply) for ordering and conflict rules.
+See `Store.apply` for ordering and conflict rules.
 
 <a id="agentconnect-team-store-memory-memorystore-put"></a>
 
-`async`
-
-### `put`
+### `put` `async`
 
 ```python
 put(key: str, value: object) -> None
@@ -129,9 +121,7 @@ Write a copied value at `key`, bumping the version.
 
 <a id="agentconnect-team-store-memory-memorystore-insert"></a>
 
-`async`
-
-### `insert`
+### `insert` `async`
 
 ```python
 insert(key: str, value: object) -> bool
@@ -141,9 +131,7 @@ Write `value` only if `key` is absent. True when inserted.
 
 <a id="agentconnect-team-store-memory-memorystore-compare-and-set"></a>
 
-`async`
-
-### `compare_and_set`
+### `compare_and_set` `async`
 
 ```python
 compare_and_set(key: str, version: int, value: object) -> bool
@@ -153,9 +141,7 @@ Replace `key` when the stored version matches.
 
 <a id="agentconnect-team-store-memory-memorystore-delete"></a>
 
-`async`
-
-### `delete`
+### `delete` `async`
 
 ```python
 delete(key: str) -> None
@@ -165,9 +151,7 @@ Remove `key` from documents, sets, and indexes.
 
 <a id="agentconnect-team-store-memory-memorystore-set-add"></a>
 
-`async`
-
-### `set_add`
+### `set_add` `async`
 
 ```python
 set_add(key: str, member: str) -> None
@@ -177,9 +161,7 @@ Add `member` to the set at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-set-remove"></a>
 
-`async`
-
-### `set_remove`
+### `set_remove` `async`
 
 ```python
 set_remove(key: str, member: str) -> None
@@ -189,9 +171,7 @@ Remove `member` from the set at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-set-members"></a>
 
-`async`
-
-### `set_members`
+### `set_members` `async`
 
 ```python
 set_members(key: str) -> list[str]
@@ -201,9 +181,7 @@ Return the sorted members of the set at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-set-is-member"></a>
 
-`async`
-
-### `set_is_member`
+### `set_is_member` `async`
 
 ```python
 set_is_member(key: str, member: str) -> bool
@@ -213,9 +191,7 @@ Return True when `member` is in the set at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-index-add"></a>
 
-`async`
-
-### `index_add`
+### `index_add` `async`
 
 ```python
 index_add(key: str, score: float, member: str) -> None
@@ -225,9 +201,7 @@ Add or update `member` in the sorted index at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-index-remove"></a>
 
-`async`
-
-### `index_remove`
+### `index_remove` `async`
 
 ```python
 index_remove(key: str, member: str) -> None
@@ -237,21 +211,23 @@ Remove `member` from the sorted index at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-index-range"></a>
 
-`async`
-
-### `index_range`
+### `index_range` `async`
 
 ```python
-index_range(key: str, *, max_score: float, min_score: float = float('-inf'), limit: Optional[int] = None) -> list[str]
+index_range(
+    key: str,
+    *,
+    max_score: float,
+    min_score: float = float('-inf'),
+    limit: Optional[int] = None,
+) -> list[str]
 ```
 
 Return members with scores in `[min_score, max_score]`, lowest first.
 
 <a id="agentconnect-team-store-memory-memorystore-index-card"></a>
 
-`async`
-
-### `index_card`
+### `index_card` `async`
 
 ```python
 index_card(key: str) -> int
@@ -261,9 +237,7 @@ Return the number of members in the sorted index at `key`.
 
 <a id="agentconnect-team-store-memory-memorystore-index-add-if-card-below"></a>
 
-`async`
-
-### `index_add_if_card_below`
+### `index_add_if_card_below` `async`
 
 ```python
 index_add_if_card_below(key: str, score: float, member: str, max_card: int) -> bool
@@ -273,9 +247,7 @@ Add `member` when the index has fewer than `max_card` members.
 
 <a id="agentconnect-team-store-memory-memorystore-increment-if-below"></a>
 
-`async`
-
-### `increment_if_below`
+### `increment_if_below` `async`
 
 ```python
 increment_if_below(key: str, limit: int, *, ttl_seconds: Optional[float] = None) -> bool
@@ -285,9 +257,7 @@ Increment an integer document when it is below `limit`. Memory ignores `ttl_seco
 
 <a id="agentconnect-team-store-memory-memorystore-decrement-floor"></a>
 
-`async`
-
-### `decrement_floor`
+### `decrement_floor` `async`
 
 ```python
 decrement_floor(key: str, *, ttl_seconds: Optional[float] = None) -> int
@@ -297,9 +267,7 @@ Decrement an integer document, not below `0`. Memory ignores `ttl_seconds`.
 
 <a id="agentconnect-team-store-memory-memorystore-ping"></a>
 
-`async`
-
-### `ping`
+### `ping` `async`
 
 ```python
 ping() -> None
@@ -309,9 +277,7 @@ No-op. Memory is always reachable.
 
 <a id="agentconnect-team-store-memory-memorystore-clear"></a>
 
-`async`
-
-### `clear`
+### `clear` `async`
 
 ```python
 clear() -> None

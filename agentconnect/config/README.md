@@ -28,9 +28,6 @@ root. At each directory:
 1. ``agentconnect.toml``
 2. ``[tool.agentconnect]`` in ``pyproject.toml``
 
-Legacy ``agentconnect.yaml`` is last-resort compatibility after no
-TOML Team file exists in this directory or any ancestor.
-
 An unknown field is an error. Later Team features add fields when they
 ship. Malformed TOML fails instead of falling back to another file.
 
@@ -67,12 +64,7 @@ class = "agents.writer:Writer"
 name = "writer"
 ```
 
-The committed example at ``agentconnect/config/agentconnect.example.toml``
-is generated from ``TeamConfig.example()``. Changing the models without
-regenerating that file fails the config tests.
-
 ## Index process
 
-The optional Index service still uses environment variables
-(``AGENTCONNECT_REGISTRY_*``). See ``agentconnect/index/README.md``.
-``VectorSearchSettings`` lives in ``agentconnect.config.vector``.
+Index settings are `IndexSettings` in `agentconnect.index` and use
+`AGENTCONNECT_INDEX_*`. See `agentconnect/index/README.md`.

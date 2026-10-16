@@ -49,7 +49,7 @@ Successful compare-and-set stores `version + 1`.
 
 Key-value document store plus sets and a time-ordered index.
 
-Implement every abstract method, then pass the backend to [`Team`](/api/team-runtime#agentconnect-team-runtime-team).
+Implement every abstract method, then pass the backend to `Team`.
 The Team calls `open` on start and `close` on stop, including for a
 supplied backend. Close releases resources; it does not erase data.
 Reopening the same backend must preserve its state.
@@ -74,13 +74,13 @@ write or disguising an unknown outcome as a conflict.
 persistence: PersistenceMode
 ```
 
+**Types:** [`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode).
+
 `volatile` for process memory, or `durable` for persistent storage.
 
 <a id="agentconnect-team-store-base-store-open"></a>
 
-`async`
-
-### `open`
+### `open` `async`
 
 ```python
 open() -> None
@@ -90,9 +90,7 @@ Connect and prepare the backend.
 
 <a id="agentconnect-team-store-base-store-close"></a>
 
-`async`
-
-### `close`
+### `close` `async`
 
 ```python
 close() -> None
@@ -102,9 +100,7 @@ Release backend resources.
 
 <a id="agentconnect-team-store-base-store-get"></a>
 
-`async`
-
-### `get`
+### `get` `async`
 
 ```python
 get(key: str) -> Any
@@ -114,9 +110,7 @@ Return a copy of the stored value, or None when the key is missing.
 
 <a id="agentconnect-team-store-base-store-get-many"></a>
 
-`async`
-
-### `get_many`
+### `get_many` `async`
 
 ```python
 get_many(keys: Sequence[str]) -> list[Any]
@@ -129,21 +123,19 @@ snapshot across all keys.
 
 <a id="agentconnect-team-store-base-store-get-record"></a>
 
-`async`
-
-### `get_record`
+### `get_record` `async`
 
 ```python
 get_record(key: str) -> StoreRecord | None
 ```
 
+**Types:** [`StoreRecord`](/api/team-store-base#agentconnect-team-store-base-storerecord).
+
 Return a copied value and its version, or None when the key is missing.
 
 <a id="agentconnect-team-store-base-store-put"></a>
 
-`async`
-
-### `put`
+### `put` `async`
 
 ```python
 put(key: str, value: object) -> None
@@ -153,9 +145,7 @@ Write a copy of `value`, starting at version 1 or incrementing it.
 
 <a id="agentconnect-team-store-base-store-insert"></a>
 
-`async`
-
-### `insert`
+### `insert` `async`
 
 ```python
 insert(key: str, value: object) -> bool
@@ -167,9 +157,7 @@ Return True if inserted, or False with the existing value unchanged.
 
 <a id="agentconnect-team-store-base-store-compare-and-set"></a>
 
-`async`
-
-### `compare_and_set`
+### `compare_and_set` `async`
 
 ```python
 compare_and_set(key: str, version: int, value: object) -> bool
@@ -182,9 +170,7 @@ missing or the version does not match.
 
 <a id="agentconnect-team-store-base-store-delete"></a>
 
-`async`
-
-### `delete`
+### `delete` `async`
 
 ```python
 delete(key: str) -> None
@@ -194,9 +180,7 @@ Remove `key` if it exists, including set and index data.
 
 <a id="agentconnect-team-store-base-store-set-add"></a>
 
-`async`
-
-### `set_add`
+### `set_add` `async`
 
 ```python
 set_add(key: str, member: str) -> None
@@ -206,9 +190,7 @@ Add `member` to the set at `key`.
 
 <a id="agentconnect-team-store-base-store-set-remove"></a>
 
-`async`
-
-### `set_remove`
+### `set_remove` `async`
 
 ```python
 set_remove(key: str, member: str) -> None
@@ -218,9 +200,7 @@ Remove `member` from the set at `key`.
 
 <a id="agentconnect-team-store-base-store-set-members"></a>
 
-`async`
-
-### `set_members`
+### `set_members` `async`
 
 ```python
 set_members(key: str) -> list[str]
@@ -232,9 +212,7 @@ A missing set returns an empty list.
 
 <a id="agentconnect-team-store-base-store-set-is-member"></a>
 
-`async`
-
-### `set_is_member`
+### `set_is_member` `async`
 
 ```python
 set_is_member(key: str, member: str) -> bool
@@ -244,9 +222,7 @@ Return whether the set contains `member`; a missing set returns False.
 
 <a id="agentconnect-team-store-base-store-index-add"></a>
 
-`async`
-
-### `index_add`
+### `index_add` `async`
 
 ```python
 index_add(key: str, score: float, member: str) -> None
@@ -256,9 +232,7 @@ Add or update `member` in the sorted index at `key`.
 
 <a id="agentconnect-team-store-base-store-index-remove"></a>
 
-`async`
-
-### `index_remove`
+### `index_remove` `async`
 
 ```python
 index_remove(key: str, member: str) -> None
@@ -268,12 +242,16 @@ Remove `member` from the sorted index at `key`.
 
 <a id="agentconnect-team-store-base-store-index-range"></a>
 
-`async`
-
-### `index_range`
+### `index_range` `async`
 
 ```python
-index_range(key: str, *, max_score: float, min_score: float = float('-inf'), limit: Optional[int] = None) -> list[str]
+index_range(
+    key: str,
+    *,
+    max_score: float,
+    min_score: float = float('-inf'),
+    limit: Optional[int] = None,
+) -> list[str]
 ```
 
 Return members in the inclusive score window, lowest score first.
@@ -284,9 +262,7 @@ the whole window.
 
 <a id="agentconnect-team-store-base-store-index-card"></a>
 
-`async`
-
-### `index_card`
+### `index_card` `async`
 
 ```python
 index_card(key: str) -> int
@@ -296,9 +272,7 @@ Count index members; a missing index returns zero.
 
 <a id="agentconnect-team-store-base-store-index-add-if-card-below"></a>
 
-`async`
-
-### `index_add_if_card_below`
+### `index_add_if_card_below` `async`
 
 ```python
 index_add_if_card_below(key: str, score: float, member: str, max_card: int) -> bool
@@ -311,13 +285,13 @@ change cardinality. True when the member is in the index afterwards.
 
 <a id="agentconnect-team-store-base-store-apply"></a>
 
-`async`
-
-### `apply`
+### `apply` `async`
 
 ```python
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
+
+**Types:** [`StoreOp`](/api/team-store-ops#agentconnect-team-store-ops-storeop), [`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult).
 
 Apply `ops` atomically in order. Every write commits, or none do.
 
@@ -358,9 +332,7 @@ members = await store.set_members("sample:notes")  # ["release"]
 
 <a id="agentconnect-team-store-base-store-increment-if-below"></a>
 
-`async`
-
-### `increment_if_below`
+### `increment_if_below` `async`
 
 ```python
 increment_if_below(key: str, limit: int, *, ttl_seconds: Optional[float] = None) -> bool
@@ -377,9 +349,7 @@ A rejected increment changes neither value, version, nor TTL.
 
 <a id="agentconnect-team-store-base-store-decrement-floor"></a>
 
-`async`
-
-### `decrement_floor`
+### `decrement_floor` `async`
 
 ```python
 decrement_floor(key: str, *, ttl_seconds: Optional[float] = None) -> int
@@ -389,14 +359,12 @@ Decrement an integer document, not below `0`. Return the new value.
 
 Missing keys read as zero. On a positive value the write advances
 the version and uses the same TTL rule as `increment_if_below`.
-A direct call at zero need not write. The batch [`DecrementFloor`](/api/team-store-ops#agentconnect-team-store-ops-decrementfloor)
+A direct call at zero need not write. The batch `DecrementFloor`
 operation always writes, even at zero.
 
 <a id="agentconnect-team-store-base-store-exists"></a>
 
-`async`
-
-### `exists`
+### `exists` `async`
 
 ```python
 exists(key: str) -> bool
@@ -406,9 +374,7 @@ Return True when `key` has a value.
 
 <a id="agentconnect-team-store-base-store-ping"></a>
 
-`async`
-
-### `ping`
+### `ping` `async`
 
 ```python
 ping() -> None
@@ -418,9 +384,7 @@ Confirm the backend is reachable. Memory stores no-op.
 
 <a id="agentconnect-team-store-base-store-clear"></a>
 
-`async`
-
-### `clear`
+### `clear` `async`
 
 ```python
 clear() -> None

@@ -55,6 +55,8 @@ description: str
 examples: Optional[list[SkillExample]] = None
 ```
 
+**Types:** [`SkillExample`](/api/core-primitives#agentconnect-core-primitives-skillexample).
+
 Natural-language illustrations of suitable requests.
 
 * `max_length`: `10`
@@ -66,6 +68,8 @@ Natural-language illustrations of suitable requests.
 ```python
 tags: Optional[list[Tag]] = None
 ```
+
+**Types:** [`Tag`](/api/core-primitives#agentconnect-core-primitives-tag).
 
 Labels visible on the full Profile, rather than the discovery card.
 
@@ -124,6 +128,8 @@ summary: str
 skills: list[Skill]
 ```
 
+**Types:** [`Skill`](/api/core-profile#agentconnect-core-profile-skill).
+
 Names must be unique within this Profile.
 
 * `min_length`: `1`
@@ -150,6 +156,8 @@ Suitable work and boundaries to consider before asking for help.
 ```python
 tags: Optional[list[Tag]] = None
 ```
+
+**Types:** [`Tag`](/api/core-primitives#agentconnect-core-primitives-tag).
 
 Labels for the agent as a whole; repeated labels are invalid.
 

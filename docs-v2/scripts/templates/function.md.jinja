@@ -1,0 +1,31 @@
+{%- if root -%}
+{%- set show_full_path = config.show_root_full_path -%}
+{%- set root_members = True -%}
+{%- elif root_members -%}
+{%- set show_full_path = config.show_root_members_full_path or config.show_object_full_path -%}
+{%- set root_members = False -%}
+{%- else -%}
+{%- set show_full_path = config.show_object_full_path -%}
+{%- endif -%}
+
+{%- with obj = function, function_name = function.path if show_full_path else function.name -%}
+{%- if not root or config.show_root_heading -%}
+
+{%- filter heading(heading_level) -%}
+`{{ function_name }}`
+{% endfilter -%}
+
+{%- if 'property' in function.labels -%}
+{{ function|property_signature }}
+{%- elif config.separate_signature -%}
+{{ function|native_signature(function.name) }}
+{%- endif -%}
+
+{%- else -%}
+{%- set heading_level = heading_level - 1 -%}
+{%- endif -%}
+
+{%- with docstring_sections = function.docstring.parsed %}
+{%- include "docstring.md.jinja" with context -%}
+{%- endwith -%}
+{%- endwith %}

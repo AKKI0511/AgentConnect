@@ -39,7 +39,12 @@ from agentconnect.core.team_tools import TEAM_TOOL_SPECS
 from agentconnect.core.ticket import ticket_view
 
 ToolHandler = Callable[..., object]
+"""A callable invoked with tool keyword arguments; it may return an awaitable."""
+
 ToolLike = Union["Tool", ToolHandler]
+"""A [`Tool`][agentconnect.agent.tools.Tool] or a callable converted with
+[`Tool.from_callable`][agentconnect.agent.tools.Tool.from_callable].
+"""
 
 _ITEM_ERROR_CODES = frozenset({"not_found", "forbidden", "address_outside_team"})
 

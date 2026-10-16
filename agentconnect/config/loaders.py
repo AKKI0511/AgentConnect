@@ -1,41 +1,24 @@
 """Load a Team file and generate the example from the models.
 
-Discovery is nearest-directory first and never merged. At each directory,
-from the start path toward the filesystem root:
+Discovery walks from the start directory toward the filesystem root and
+stops at the first Team file. In each directory, `agentconnect.toml`
+beats `[tool.agentconnect]` in `pyproject.toml`. Files are never merged.
+An explicit path skips discovery. A missing or invalid explicit path
+fails.
 
-1. `agentconnect.toml`
-2. `[tool.agentconnect]` in `pyproject.toml`
-
-`agentconnect.yaml` / `agentconnect.yml` is last-resort compatibility,
-considered only after no TOML Team file exists in this directory or any
-ancestor. An explicit path skips discovery and never falls back to
-another file. Relative `module:Name` imports resolve from the chosen
-file's directory.
-
-Examples:
-    ```python
-    from agentconnect.config import load_team_config
-
-    config = load_team_config()
-    config.team
-    ```
+Relative `module:Name` imports resolve from the chosen file's directory.
 """
 
 from __future__ import annotations
 
-import logging
 import tomllib
-import warnings
 from pathlib import Path
 from typing import Iterator, Optional
 
 from agentconnect.config.models import TeamConfig
 
-logger = logging.getLogger(__name__)
-
 TOML_FILENAME = "agentconnect.toml"
 PYPROJECT_FILENAME = "pyproject.toml"
-YAML_FILENAMES = ("agentconnect.yaml", "agentconnect.yml")
 _YAML_SUFFIXES = {".yaml", ".yml"}
 
 _EXAMPLE_HEADER = (
@@ -44,7 +27,7 @@ _EXAMPLE_HEADER = (
     "# Secrets stay in the environment.\n"
     "#\n"
     "# store: memory  or  redis://localhost:6379/0\n"
-    "# embeddings: auto | none | fastembed | openai | litellm:<model>\n"
+    "# embeddings: auto | none | hashed | fastembed | openai | litellm:<model>\n"
     "# auto never sends Profiles or queries to a hosted embedder.\n"
     "#\n"
     "# Agents listed here are constructed by `agentconnect up`.\n"
@@ -56,9 +39,7 @@ _EXAMPLE_HEADER = (
     "# a separate step: add the Team MCP URL there.\n"
     "#\n"
     "# Nearest directory wins. In that directory, agentconnect.toml beats\n"
-    "# [tool.agentconnect] in pyproject.toml. YAML is last-resort\n"
-    "# compatibility after no ancestor TOML Team file exists. Files are\n"
-    "# never merged.\n"
+    "# [tool.agentconnect] in pyproject.toml. Files are never merged.\n"
     "\n"
 )
 
@@ -121,25 +102,16 @@ def _mapping_from_toml_file(path: Path) -> dict[str, object]:
     return data
 
 
-def _is_yaml_path(path: Path) -> bool:
-    return path.suffix.lower() in _YAML_SUFFIXES
-
-
 def _mapping_from_file(path: Path) -> dict[str, object]:
-    if _is_yaml_path(path):
-        from agentconnect.compat.yaml import load_yaml_mapping
-
-        warning = (
-            f"Loading legacy YAML Team file {path}. Move this configuration to "
-            "agentconnect.toml or [tool.agentconnect] in pyproject.toml."
+    if path.suffix.lower() in _YAML_SUFFIXES:
+        raise ValueError(
+            f"{path} is a YAML file. Team files are TOML: agentconnect.toml, "
+            "or pyproject.toml with [tool.agentconnect]."
         )
-        warnings.warn(warning, DeprecationWarning, stacklevel=3)
-        logger.warning(warning)
-        return load_yaml_mapping(path)
     if path.suffix.lower() != ".toml":
         raise ValueError(
-            f"{path} is not a Team file. Use agentconnect.toml, "
-            "pyproject.toml with [tool.agentconnect], or a legacy .yaml file."
+            f"{path} is not a Team file. Use agentconnect.toml, or "
+            "pyproject.toml with [tool.agentconnect]."
         )
     return _mapping_from_toml_file(path)
 
@@ -147,20 +119,12 @@ def _mapping_from_file(path: Path) -> dict[str, object]:
 def find_config_file(start: Optional[Path] = None) -> Optional[Path]:
     """Return the nearest Team file from `start`, or None.
 
-    At each directory, a dedicated TOML file beats `[tool.agentconnect]`
-    in `pyproject.toml`. YAML is considered only after the walk finds
-    no TOML Team file.
-
-    Args:
-        start: Directory to walk from. Defaults to the current directory.
-
-    Returns:
-        The chosen file path, or None when no Team file exists.
+    At each directory, `agentconnect.toml` beats `[tool.agentconnect]`
+    in `pyproject.toml`.
 
     Raises:
-        ValueError: A candidate file exists but cannot be parsed.
+        ValueError: A candidate `pyproject.toml` exists but cannot be parsed.
     """
-    yaml_fallback: Path | None = None
     for directory in _ancestors(start):
         toml_path = directory / TOML_FILENAME
         if toml_path.is_file():
@@ -168,13 +132,7 @@ def find_config_file(start: Optional[Path] = None) -> Optional[Path]:
         pyproject = directory / PYPROJECT_FILENAME
         if pyproject.is_file() and _pyproject_team_table(pyproject) is not None:
             return pyproject
-        if yaml_fallback is None:
-            for name in YAML_FILENAMES:
-                candidate = directory / name
-                if candidate.is_file():
-                    yaml_fallback = candidate
-                    break
-    return yaml_fallback
+    return None
 
 
 def load_team_config(
@@ -182,14 +140,8 @@ def load_team_config(
 ) -> TeamConfig:
     """Load and validate a Team file.
 
-    Args:
-        path: Explicit file. `.toml` is parsed with `tomllib`.
-            `pyproject.toml` requires `[tool.agentconnect]`. `.yaml`
-            files go through the compatibility shim.
-        start: Directory used when `path` is omitted.
-
-    Returns:
-        The validated Team configuration.
+    An explicit path is not replaced with another file. `pyproject.toml`
+    must contain `[tool.agentconnect]`.
 
     Raises:
         FileNotFoundError: No Team file exists.
@@ -222,12 +174,8 @@ def load_selected_team(
 ) -> tuple[Path, TeamConfig]:
     """Load an explicit Team file, or the nearest discovered one.
 
-    An explicit `path` must exist and be valid. This never chooses a
+    An explicit path must exist and be valid. This never chooses a
     different Team file.
-
-    Args:
-        path: Explicit file. Omit to discover from `start`.
-        start: Directory used when `path` is omitted.
 
     Returns:
         The resolved file path and its configuration.
@@ -268,14 +216,7 @@ def _toml_literal(value: object) -> str:
 
 
 def dump_team_toml(config: TeamConfig) -> str:
-    """Serialize `config` as a `[tool.agentconnect]` table.
-
-    Args:
-        config: Validated Team configuration.
-
-    Returns:
-        TOML text including the `[tool.agentconnect]` header.
-    """
+    """Serialize `config` as a `[tool.agentconnect]` table."""
     data: dict[str, object] = config.model_dump(by_alias=True, exclude_none=True)
     lines = ["[tool.agentconnect]"]
     for key in ("team", "store", "embeddings", "host", "port", "require_join_auth"):
@@ -292,43 +233,5 @@ def dump_team_toml(config: TeamConfig) -> str:
 
 
 def render_example_toml() -> str:
-    """Return example TOML generated from `TeamConfig.example`.
-
-    Returns:
-        Commented example `agentconnect.toml` text.
-    """
+    """Return the commented example generated from `TeamConfig.example`."""
     return _EXAMPLE_HEADER + dump_team_toml(TeamConfig.example())
-
-
-def save_example_config(path: Optional[Path] = None) -> Path:
-    """Write the generated example TOML to `path`.
-
-    Args:
-        path: Destination file. Defaults to `agentconnect.toml` in the
-            current directory.
-
-    Returns:
-        The path written.
-    """
-    target = path if path is not None else Path.cwd() / TOML_FILENAME
-    target.write_text(render_example_toml(), encoding="utf-8")
-    logger.info("Wrote Team file %s", target)
-    return target
-
-
-def validate_config_file(path: Path) -> bool:
-    """Return True when `path` is a valid Team file.
-
-    Args:
-        path: Team file to validate.
-
-    Returns:
-        True when the file loads as `TeamConfig`. False on parse or
-        validation errors (logged).
-    """
-    try:
-        load_team_config(path)
-        return True
-    except (ValueError, FileNotFoundError, OSError):
-        logger.error("Configuration validation failed for %s", path, exc_info=True)
-        return False

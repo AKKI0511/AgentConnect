@@ -7,11 +7,11 @@ sidebarTitle: "API reference"
 
 AgentConnect connects independent agents, each with its own harness, in one Team.
 
-An Agent is an independent participant. A [`Team`](/api/team-runtime#agentconnect-team-runtime-team) provides discovery,
+An Agent is an independent participant. A `Team` provides discovery,
 messaging, and work tracking. Agents exchange Messages; a request asks
-for work, and its [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket) tracks the result.
+for work, and its `Ticket` tracks the result.
 
-Subclass [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) to connect an existing harness. Its `handle` method
+Subclass `BaseAgent` to connect an existing harness. Its `handle` method
 receives a Message from another teammate and decides how to respond.
 A returned value replies to a request; returning `None` declines a
 request or finishes an event.
@@ -77,7 +77,6 @@ to its harness or connect the harness through MCP.
 
 * [`agent`](/api/agent)
 * [`cli`](/api/cli)
-* [`compat`](/api/compat)
 * [`config`](/api/config)
 * [`core`](/api/core)
 * [`index`](/api/index)

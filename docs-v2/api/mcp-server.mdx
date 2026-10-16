@@ -16,8 +16,15 @@ Construct the Team MCP Server for an existing hosting application.
 ## `create_team_mcp`
 
 ```python
-create_team_mcp(runtime: Team, extra_tools: Sequence[Callable[..., object]] | None = None, *, in_process: bool = True) -> Server[dict[str, object]]
+create_team_mcp(
+    runtime: Team,
+    extra_tools: Sequence[Callable[..., object]] | None = None,
+    *,
+    in_process: bool = True,
+) -> Server[dict[str, object]]
 ```
+
+**Types:** [`Team`](/api/team-runtime#agentconnect-team-runtime-team).
 
 Build an MCP Server backed by a started Team.
 
@@ -30,17 +37,17 @@ Calls and resource reads use a live member Session bearer. A join invitation
 is not that credential. In-process clients use the operator Membership when
 no Authorization header is supplied. For HTTP hosting, use `in_process=False`;
 only a trusted direct loopback path can then omit the bearer. See
-[`create_runtime_app`](/api/team-http#agentconnect-team-http-create-runtime-app) for the HTTP hosting contract.
+`create_runtime_app` for the HTTP hosting contract.
 
 **Parameters:**
 
-* `extra_tools` (`Sequence[Callable[..., object]] | None`): Callables to publish alongside the reserved tools. Omit to
+* `extra_tools` ([`Sequence`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence)\[[`Callable`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable)\[..., [`object`](https://docs.python.org/3/library/functions.html#object)]] | None): Callables to publish alongside the reserved tools. Omit to
   use tools supplied when the Team was constructed. An explicit empty
   list publishes no extra tools.
 
-* `in_process` (`bool`): Enables trusted in-process operator access without HTTP
+* `in_process` ([`bool`](https://docs.python.org/3/library/functions.html#bool)): Enables trusted in-process operator access without HTTP
   context. Disable for any HTTP host.
 
 **Raises:**
 
-* (`ValueError`): An extra tool duplicates a reserved or previously registered name.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): An extra tool duplicates a reserved or previously registered name.

@@ -1,9 +1,9 @@
-"""AgentConnect CLI.
+"""Operator commands for one Team.
 
-A person is a Client of the Team. ``up`` starts the Runtime from
-``agentconnect.toml`` or ``[tool.agentconnect]`` in ``pyproject.toml``.
-The other commands talk to that Runtime over loopback HTTP as the
-reserved ``operator`` Membership.
+`up` starts the Runtime from `agentconnect.toml` or
+`[tool.agentconnect]` in `pyproject.toml`, then joins the hosted
+Agents. The other commands call that Runtime over loopback HTTP as the
+reserved `operator` Membership.
 
     agentconnect init
     agentconnect up
@@ -260,12 +260,6 @@ def up(
         _die("Team file was not found. Run 'agentconnect init'.")
     except (ValueError, OSError) as exc:
         _die_exc(exc)
-    if config_path.suffix.lower() in {".yaml", ".yml"}:
-        typer.echo(
-            f"warning: {config_path} is a legacy YAML Team file; "
-            "migrate to agentconnect.toml",
-            err=True,
-        )
     typer.echo(f"using {config_path}")
     existing = read_state(config_path)
     if existing and is_owned_team_process(existing, config_path):
@@ -378,10 +372,11 @@ def down(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Stop the Team process this CLI started for the selected Team file.
+    """Stop the process this CLI started for the selected Team file.
 
-    Does not stop a Runtime started in Python or by another tool. The
-    saved pid must still be the process this CLI started.
+    A Runtime you started in Python keeps running. If this CLI cannot
+    confirm that it owns the process, it leaves the process and the
+    saved record alone.
 
     Examples:
         ```bash

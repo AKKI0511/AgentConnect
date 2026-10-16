@@ -1,7 +1,6 @@
 [
   "api-reference",
   "api/cli",
-  "api/compat",
   {
     "group": "agent",
     "root": "api/agent",
@@ -18,9 +17,7 @@
     "root": "api/config",
     "pages": [
       "api/config-loaders",
-      "api/config-models",
-      "api/config-servers",
-      "api/config-vector"
+      "api/config-models"
     ]
   },
   {
@@ -46,8 +43,8 @@
     "root": "api/index",
     "pages": [
       "api/index-client",
-      "api/index-service",
-      "api/index-types"
+      "api/index-models",
+      "api/index-service"
     ]
   },
   {

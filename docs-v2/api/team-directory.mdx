@@ -7,17 +7,17 @@ sidebarTitle: "directory"
 
 Choose how a Team turns Profiles into search vectors.
 
-Pass `embeddings` to [`Team`](/api/team-runtime#agentconnect-team-runtime-team). `"auto"` uses a local ONNX model when
+Pass `embeddings` to `Team`. `"auto"` uses a local ONNX model when
 `agentconnect[embeddings]` is installed, and hashed n-grams otherwise.
 An API key does not switch `"auto"` to a hosted backend. `"openai"` and
 `"litellm"` send Profile text to that provider. `"none"` or `"hashed"` uses hashed
-n-grams. A callable or [`Embedder`](/api/team-directory-embedder#agentconnect-team-directory-embedder-embedder) supplies your own vectors.
+n-grams. A callable or `Embedder` supplies your own vectors.
 
 Use `"fastembed"` to select the local ONNX backend explicitly.
 `"fastembed:<model>"`, `"openai:<model>"`, and `"litellm:<model>"`
 select a model; omit the suffix to use that backend's default.
 
-[`BaseAgent.find`](/api/agent-base#agentconnect-agent-base-baseagent-find) searches this Team. It does not search other Teams.
+`BaseAgent.find` searches this Team. It does not search other Teams.
 
 ## Public API
 

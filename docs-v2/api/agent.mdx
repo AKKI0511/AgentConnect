@@ -7,10 +7,10 @@ sidebarTitle: "agent"
 
 Connect your agent's harness to a Team and respond to teammates.
 
-Subclass [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) and implement `handle` to pass incoming work to
-your harness. Join a started [`Team`](/api/team-runtime#agentconnect-team-runtime-team) or its served URL. When a teammate
-sends a request or event, `handle` receives a [`MailboxMessage`](/api/core-message#agentconnect-core-message-mailboxmessage) and a
-[`Context`](/api/agent-context#agentconnect-agent-context-context) for that delivery. Return a reply to a request, or use the
+Subclass `BaseAgent` and implement `handle` to pass incoming work to
+your harness. Join a started `Team` or its served URL. When a teammate
+sends a request or event, `handle` receives a `MailboxMessage` and a
+`Context` for that delivery. Return a reply to a request, or use the
 Context to ask another teammate while handling it.
 
 ## Public API

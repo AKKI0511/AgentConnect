@@ -57,7 +57,6 @@ embeddings = [
     "fastembed (>=0.7.0,<0.9.0)",
 ]
 index = [
-    "qdrant-client (>=1.14.2,<2.0.0)",
     "fastapi (>=0.115.8,<0.116.0) ; python_version < '3.14'",
     "fastapi (>=0.116.2,<0.117.0) ; python_version >= '3.14'",
     "uvicorn (>=0.34.0,<0.35.0)",
@@ -67,7 +66,6 @@ payments = [
 ]
 cli = [
     "typer (>=0.16.1,<0.17.0)",
-    "pyyaml (>=6.0.2,<7.0.0)",
     "aioconsole (>=0.8.1,<0.9.0)",
 ]
 openai = [
@@ -110,7 +108,6 @@ research = [
 
 dev = [
     "mypy==2.4.0",
-    "types-PyYAML>=6.0.12,<7",
     "pytest-asyncio>=0.26.0,<0.27.0",
     "pytest>=8.3.5,<9.0.0",
     "jsonschema>=4.23.0,<5.0.0",
@@ -154,7 +151,6 @@ line-length = 88
 src = ["agentconnect", "tests", "examples", "experiments", "benchmarks"]
 extend-exclude = [
     ".venv",
-    "demos",
     "data",
     "downloads",
     "docs/source/api",

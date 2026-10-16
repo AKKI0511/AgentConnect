@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from agentconnect.core.identity import AgentIdentity
@@ -54,18 +53,23 @@ async def test_registry_register_search_and_secret() -> None:
     assert await registry.get_registration("writer") is None
 
 
-def test_http_register_rejects_duplicates_and_bad_ids() -> None:
+@pytest.mark.asyncio
+async def test_http_register_rejects_duplicates_and_bad_ids() -> None:
     app = create_index_app(IndexSettings(model_name="hashed"))
     body = _record("writer", summary="Drafts release notes.").model_dump(
         mode="json", exclude_none=True
     )
-    with TestClient(app) as client:
-        created = client.post("/agents/register", json=body)
-        assert created.status_code == 201
-        assert "private_key" not in created.text
-        assert client.post("/agents/register", json=body).status_code == 409
-        assert client.get("/agents/missing").status_code == 404
-        assert client.get("/agents/a.b").status_code == 400
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://index",
+        ) as client:
+            created = await client.post("/agents/register", json=body)
+            assert created.status_code == 201
+            assert "private_key" not in created.text
+            assert (await client.post("/agents/register", json=body)).status_code == 409
+            assert (await client.get("/agents/missing")).status_code == 404
+            assert (await client.get("/agents/a.b")).status_code == 400
 
 
 def test_invalid_records_are_client_errors() -> None:

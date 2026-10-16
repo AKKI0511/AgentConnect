@@ -99,3 +99,20 @@ An empty initializer can mean another page owns the introduction. Check the publ
 5. Record useful patterns and gaps separately. Copy a pattern only if it helps a caller.
 
 This was a sample, not a full audit. Provider-backed examples were not run. Published pages were read as served text/HTML; their versions may differ from pinned source. Prime's older hosted reference was unavailable, so its current v1 source guides supplied that evidence.
+
+
+## Explicit links and native signatures (2026-10-16)
+
+The official [LangChain language-model package](https://github.com/langchain-ai/langchain/blob/master/libs/core/langchain_core/language_models/__init__.py)
+uses ``[`BaseChatModel`][langchain_core.language_models.BaseChatModel]`` alongside
+ordinary backtick literals and absolute Markdown links to guides.
+[Contributor guidance](https://github.com/langchain-ai/docs/blob/main/src/oss/contributing/code.mdx)
+asks for Google-style docstrings and minimal examples. LangGraph's
+[StateGraph source](https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/graph/state.py)
+also uses plain backticks for literal names. These are website authoring examples;
+they do not establish that every IDE resolves symbol references.
+
+Use explicit symbol references for site links and verified absolute Markdown URLs
+when a portable href is required. Keep native fenced signatures copyable; code
+fences cannot contain clickable Markdown annotations. Put linked type references
+beside the signature in native Markdown rather than adding a custom renderer.

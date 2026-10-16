@@ -7,7 +7,7 @@ sidebarTitle: "operations"
 
 Request and result bodies for advanced Runtime clients.
 
-[`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) builds these requests for ordinary agent code. Transport authors
+`BaseAgent` builds these requests for ordinary agent code. Transport authors
 use the wire bodies for admission, delivery and collection. Model-facing
 views keep the same outcomes with less data; use their own parsers.
 
@@ -84,7 +84,7 @@ views keep the same outcomes with less data; use their own parsers.
 Short-lived challenge used to prove Agent DID control.
 
 A DID is the Agent's `did:key` identity. The Client signs this
-challenge with [`issue_identity_proof`](/api/core-identity#agentconnect-core-identity-issue-identity-proof) and sends the JWT as
+challenge with `issue_identity_proof` and sends the JWT as
 `identity_proof` on join.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
@@ -121,6 +121,8 @@ Exact JWT audience required by the Runtime.
 expires_at: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 Time after which this challenge cannot authenticate a join.
 
 <a id="agentconnect-core-operations-joinrequest"></a>
@@ -129,7 +131,7 @@ Time after which this challenge cannot authenticate a join.
 
 Create or reconnect a Membership and open a Session for one running Instance.
 
-`spec_version` is required on the wire. [`Team.join`](/api/team-runtime#agentconnect-team-runtime-team-join) supplies it for keyword
+`spec_version` is required on the wire. `Team.join` supplies it for keyword
 calls. Reconnection needs the retained Agent DID and, on authenticated joins,
 valid admission credentials and a fresh identity proof.
 
@@ -143,6 +145,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 spec_version: SpecVersion
 ```
 
+**Types:** [`SpecVersion`](/api/core-primitives#agentconnect-core-primitives-specversion).
+
 <a id="agentconnect-core-operations-joinrequest-name"></a>
 
 ### `name`
@@ -150,6 +154,8 @@ spec_version: SpecVersion
 ```python
 name: AgentName
 ```
+
+**Types:** [`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname).
 
 Requested name, canonicalized by the Runtime.
 
@@ -161,6 +167,8 @@ Requested name, canonicalized by the Runtime.
 agent_did: AgentDid
 ```
 
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
+
 Identity bound to the Membership; a new key cannot reclaim it.
 
 <a id="agentconnect-core-operations-joinrequest-profile"></a>
@@ -170,6 +178,8 @@ Identity bound to the Membership; a new key cannot reclaim it.
 ```python
 profile: AgentProfile
 ```
+
+**Types:** [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile).
 
 Replaces the Membership's discovery information.
 
@@ -181,6 +191,8 @@ Replaces the Membership's discovery information.
 instance_id: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Omit to allocate an Instance. Reusing it replaces that
 Instance's Session, invalidating its old token.
 
@@ -191,6 +203,8 @@ Instance's Session, invalidating its old token.
 ```python
 max_in_flight: Optional[JsonInt] = None
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Caps active Delivery leases, including deferred replies;
 omission lets the Runtime use one.
@@ -230,6 +244,8 @@ Fresh proof of Agent key control for authenticated admission.
 delivery_history: Optional[DeliveryHistoryForm] = None
 ```
 
+**Types:** [`DeliveryHistoryForm`](/api/core-primitives#agentconnect-core-primitives-deliveryhistoryform).
+
 Omit for Message bodies; ids mode leaves Delivery history
 bodies empty and supplies earlier Message ids.
 
@@ -249,6 +265,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 max_message_bytes: JsonInt
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 Maximum UTF-8 JSON bytes of a `send` or `reply`
 body. HTTP applies the same budget to every JSON request body.
 
@@ -261,6 +279,8 @@ body. HTTP applies the same budget to every JSON request body.
 ```python
 max_mailbox_depth: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Maximum queued plus leased Mailbox items before
 `send` returns `busy`.
@@ -275,6 +295,8 @@ Maximum queued plus leased Mailbox items before
 delivery_history_limit: JsonInt
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 Maximum earlier Thread Messages included
 in a Delivery `history` window.
 
@@ -288,6 +310,8 @@ in a Delivery `history` window.
 wait_hold_seconds: JsonFloat
 ```
 
+**Types:** [`JsonFloat`](/api/core-base#agentconnect-core-base-jsonfloat).
+
 Seconds a `collect="wait"` send may stay open.
 
 * `ge`: `0`
@@ -299,6 +323,8 @@ Seconds a `collect="wait"` send may stay open.
 ```python
 max_held_waits: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Maximum concurrent `collect="wait"` sends one
 Membership may hold. Further waits fail with `wait_limit`.
@@ -313,6 +339,8 @@ Membership may hold. Further waits fail with `wait_limit`.
 work_lifetime_seconds: JsonFloat
 ```
 
+**Types:** [`JsonFloat`](/api/core-base#agentconnect-core-base-jsonfloat).
+
 Cutoff stamped on a new request whose send
 omitted `deadline` and that has no request parent to inherit from.
 
@@ -325,6 +353,8 @@ omitted `deadline` and that has no request parent to inherit from.
 ```python
 max_deadline_seconds: JsonFloat
 ```
+
+**Types:** [`JsonFloat`](/api/core-base#agentconnect-core-base-jsonfloat).
 
 Farthest a new request deadline may be from
 acceptance.
@@ -339,6 +369,8 @@ acceptance.
 max_open_tickets: JsonInt
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 Maximum open Tickets one Membership may hold as
 requester. A Ticket is the durable record for one request.
 
@@ -352,6 +384,8 @@ requester. A Ticket is the durable record for one request.
 replay_horizon_seconds: JsonFloat
 ```
 
+**Types:** [`JsonFloat`](/api/core-base#agentconnect-core-base-jsonfloat).
+
 Seconds after an obligation ends during
 which an identical retry returns the original result.
 
@@ -364,6 +398,8 @@ which an identical retry returns the original result.
 ```python
 max_retained_bytes: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Maximum UTF-8 JSON bytes of retained Message
 bodies this Runtime keeps.
@@ -386,6 +422,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 session_token: SessionToken
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken).
+
 Bearer credential for the new Session.
 
 <a id="agentconnect-core-operations-joinresult-session-expires-at"></a>
@@ -395,6 +433,8 @@ Bearer credential for the new Session.
 ```python
 session_expires_at: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 Current Session expiry.
 
@@ -406,6 +446,8 @@ Current Session expiry.
 address: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 Canonical qualified Address assigned to the Membership.
 
 <a id="agentconnect-core-operations-joinresult-team-name"></a>
@@ -415,6 +457,8 @@ Canonical qualified Address assigned to the Membership.
 ```python
 team_name: TeamName
 ```
+
+**Types:** [`TeamName`](/api/core-primitives#agentconnect-core-primitives-teamname).
 
 Canonical name of the Team served by this Runtime.
 
@@ -426,6 +470,8 @@ Canonical name of the Team served by this Runtime.
 agent_did: AgentDid
 ```
 
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
+
 Verified `did:key` bound to the Membership.
 
 <a id="agentconnect-core-operations-joinresult-instance-id"></a>
@@ -435,6 +481,8 @@ Verified `did:key` bound to the Membership.
 ```python
 instance_id: Uuid
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Instance id for this Session, assigned when omitted.
 
@@ -446,6 +494,8 @@ Instance id for this Session, assigned when omitted.
 persistence: PersistenceMode
 ```
 
+**Types:** [`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode).
+
 Runtime restart guarantee, `volatile` or `durable`.
 
 <a id="agentconnect-core-operations-joinresult-limits"></a>
@@ -456,6 +506,8 @@ Runtime restart guarantee, `volatile` or `durable`.
 limits: RuntimeLimits
 ```
 
+**Types:** [`RuntimeLimits`](/api/core-operations#agentconnect-core-operations-runtimelimits).
+
 Operational limits this Runtime enforces.
 
 <a id="agentconnect-core-operations-joinresult-spec-version"></a>
@@ -465,6 +517,8 @@ Operational limits this Runtime enforces.
 ```python
 spec_version: SpecVersion
 ```
+
+**Types:** [`SpecVersion`](/api/core-primitives#agentconnect-core-primitives-specversion).
 
 Exact public contract version implemented by the Runtime.
 
@@ -484,6 +538,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 session_expires_at: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 <a id="agentconnect-core-operations-sendbase"></a>
 
 ## `SendBase`
@@ -500,6 +556,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Proposed Message id and replay key. Retry the same body under the
 same id; changing accepted data fails with `id_conflict`.
 
@@ -511,6 +569,8 @@ same id; changing accepted data fails with `id_conflict`.
 recipient: Address
 ```
 
+**Types:** [`Address`](/api/core-primitives#agentconnect-core-primitives-address).
+
 Local name or qualified Address within this Team.
 
 <a id="agentconnect-core-operations-sendbase-content"></a>
@@ -520,6 +580,8 @@ Local name or qualified Address within this Team.
 ```python
 content: JsonValue
 ```
+
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
 
 Application data, including JSON null.
 
@@ -531,6 +593,8 @@ Application data, including JSON null.
 thread_id: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Groups conversation history for its fixed participants.
 
 <a id="agentconnect-core-operations-sendbase-parent-id"></a>
@@ -540,6 +604,8 @@ Groups conversation history for its fixed participants.
 ```python
 parent_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Authorized Message causing or continued by this send; carries
 its trace into this work, even across Threads.
@@ -551,6 +617,8 @@ its trace into this work, even across Threads.
 ```python
 metadata: Optional[JsonObject] = None
 ```
+
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 Application data that does not control Runtime decisions.
 
@@ -578,6 +646,8 @@ kind: Literal['request']
 collect: CollectMode
 ```
 
+**Types:** [`CollectMode`](/api/core-primitives#agentconnect-core-primitives-collectmode).
+
 `ticket` returns immediately; `wait` holds until a terminal
 result or the Runtime wait bound. Either can return an open Ticket.
 
@@ -588,6 +658,8 @@ result or the Runtime wait bound. Either can return an open Ticket.
 ```python
 deadline: Optional[Timestamp] = None
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 Future absolute work cutoff. Omit to inherit a request parent's
 deadline, or receive the Runtime work lifetime when there is no request
@@ -643,6 +715,8 @@ status: Literal['accepted']
 message: EventMessage
 ```
 
+**Types:** [`EventMessage`](/api/core-message#agentconnect-core-message-eventmessage).
+
 <a id="agentconnect-core-operations-tellview"></a>
 
 ## `TellView`
@@ -666,6 +740,8 @@ status: Literal['accepted']
 ```python
 thread_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 <a id="agentconnect-core-operations-ticketedsendresult"></a>
 
@@ -695,6 +771,8 @@ status: Literal['ticketed']
 message: RequestMessage
 ```
 
+**Types:** [`RequestMessage`](/api/core-message#agentconnect-core-message-requestmessage).
+
 <a id="agentconnect-core-operations-ticketedsendresult-ticket"></a>
 
 ### `ticket`
@@ -702,6 +780,8 @@ message: RequestMessage
 ```python
 ticket: Ticket
 ```
+
+**Types:** [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
 
 <a id="agentconnect-core-operations-sendresult"></a>
 
@@ -732,6 +812,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 max_items: Optional[JsonInt] = None
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 * `ge`: `1`
 * `le`: `100`
 
@@ -751,6 +833,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 deliveries: list[Delivery]
 ```
 
+**Types:** [`Delivery`](/api/core-message#agentconnect-core-message-delivery).
+
 <a id="agentconnect-core-operations-renewrequest"></a>
 
 ## `RenewRequest`
@@ -766,6 +850,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 lease_id: Uuid
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 <a id="agentconnect-core-operations-renewresult"></a>
 
@@ -783,6 +869,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 lease_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 <a id="agentconnect-core-operations-renewresult-lease-expires-at"></a>
 
 ### `lease_expires_at`
@@ -790,6 +878,8 @@ lease_id: Uuid
 ```python
 lease_expires_at: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 <a id="agentconnect-core-operations-completerequest"></a>
 
@@ -810,6 +900,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 lease_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 <a id="agentconnect-core-operations-completeresult"></a>
 
 ## `CompleteResult`
@@ -825,6 +917,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 ticket: Optional[DeclinedTicket] = None
 ```
+
+**Types:** [`DeclinedTicket`](/api/core-ticket#agentconnect-core-ticket-declinedticket).
 
 <a id="agentconnect-core-operations-replybase"></a>
 
@@ -842,6 +936,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Proposed reply Message id. Identical retries keep this id and outcome.
 
 <a id="agentconnect-core-operations-replybase-lease-id"></a>
@@ -851,6 +947,8 @@ Proposed reply Message id. Identical retries keep this id and outcome.
 ```python
 lease_id: Uuid
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Authorizes the current attempt. Replay equality uses the target
 request and reply data, rather than this lease id.
@@ -879,6 +977,8 @@ outcome: Literal['completed']
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 <a id="agentconnect-core-operations-replyfailurerequest"></a>
 
 ## `ReplyFailureRequest`
@@ -902,6 +1002,8 @@ outcome: Literal['failed']
 ```python
 error: ErrorObject
 ```
+
+**Types:** [`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject).
 
 <a id="agentconnect-core-operations-replyrequest"></a>
 
@@ -929,6 +1031,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ticket: Union[CompletedTicket, FailedTicket]
 ```
 
+**Types:** [`CompletedTicket`](/api/core-ticket#agentconnect-core-ticket-completedticket), [`FailedTicket`](/api/core-ticket#agentconnect-core-ticket-failedticket).
+
 <a id="agentconnect-core-operations-getresultrequest"></a>
 
 ## `GetResultRequest`
@@ -947,6 +1051,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 ticket_id: Uuid
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 ticket\_id from ask, equal to the request Message id. Repeat while state is open. Ending a wait does not cancel work.
 
@@ -970,6 +1076,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 thread_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Conversation id from a saved request result or Message. Only a participant may read it.
 
 <a id="agentconnect-core-operations-gethistoryrequest-before"></a>
@@ -980,6 +1088,8 @@ Conversation id from a saved request result or Message. Only a participant may r
 before: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Return Messages older than this id. Omit for the newest page. Prefer next\_before from the previous page over picking an id.
 
 <a id="agentconnect-core-operations-gethistoryrequest-limit"></a>
@@ -989,6 +1099,8 @@ Return Messages older than this id. Omit for the newest page. Prefer next\_befor
 ```python
 limit: Optional[JsonInt] = None
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Page size from 1 to 200. Defaults to 50.
 
@@ -1015,6 +1127,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 messages: list[Message]
 ```
 
+**Types:** [`Message`](/api/core-message#agentconnect-core-message-message).
+
 Requested page, oldest to newest by `seq`.
 
 <a id="agentconnect-core-operations-historyresult-has-more"></a>
@@ -1035,6 +1149,8 @@ True when older retained Messages remain before this page.
 next_before: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Pass as the next `before` to load the older page.
 
 <a id="agentconnect-core-operations-historyturnbase"></a>
@@ -1053,7 +1169,9 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 id: Uuid
 ```
 
-Message id. [`HistoryView.next_before`](/api/core-operations#agentconnect-core-operations-historyview-next-before) is the paging cursor.
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
+Message id. `HistoryView.next_before` is the paging cursor.
 
 <a id="agentconnect-core-operations-historyturnbase-seq"></a>
 
@@ -1062,6 +1180,8 @@ Message id. [`HistoryView.next_before`](/api/core-operations#agentconnect-core-o
 ```python
 seq: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Thread sequence. History is ordered by `seq` ascending inside a page.
 
@@ -1075,6 +1195,8 @@ Thread sequence. History is ordered by `seq` ascending inside a page.
 sender: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 Address that sent this turn.
 
 <a id="agentconnect-core-operations-historyturnbase-created-at"></a>
@@ -1084,6 +1206,8 @@ Address that sent this turn.
 ```python
 created_at: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 When the Runtime accepted this Message.
 
@@ -1111,6 +1235,8 @@ kind: Literal['request']
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 <a id="agentconnect-core-operations-historyeventturn"></a>
 
 ## `HistoryEventTurn`
@@ -1134,6 +1260,8 @@ kind: Literal['event']
 ```python
 content: JsonValue
 ```
+
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
 
 <a id="agentconnect-core-operations-historyresponseturn"></a>
 
@@ -1161,6 +1289,8 @@ kind: Literal['response']
 parent_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 <a id="agentconnect-core-operations-historyresponseturn-content"></a>
 
 ### `content`
@@ -1168,6 +1298,8 @@ parent_id: Uuid
 ```python
 content: JsonValue
 ```
+
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
 
 <a id="agentconnect-core-operations-historyerrorturn"></a>
 
@@ -1196,6 +1328,8 @@ kind: Literal['error']
 parent_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 <a id="agentconnect-core-operations-historyerrorturn-error"></a>
 
 ### `error`
@@ -1203,6 +1337,8 @@ parent_id: Uuid
 ```python
 error: TicketViewError
 ```
+
+**Types:** [`TicketViewError`](/api/core-ticket#agentconnect-core-ticket-ticketviewerror).
 
 <a id="agentconnect-core-operations-historyturn"></a>
 
@@ -1218,10 +1354,10 @@ One history turn on a model-facing page, discriminated on `kind`.
 
 ## `HistoryView`
 
-Model-facing Thread history page. Same paging as [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
+Model-facing Thread history page. Same paging as `HistoryResult`.
 
 MCP `get_history` and Session-bound tools return this projection.
-Runtime and HTTP return [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult), as does [`BaseAgent.get_history`](/api/agent-base#agentconnect-agent-base-baseagent-get-history).
+Runtime and HTTP return `HistoryResult`, as does `BaseAgent.get_history`.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
 
@@ -1232,6 +1368,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 ```python
 messages: list[HistoryTurn]
 ```
+
+**Types:** [`HistoryTurn`](/api/core-operations#agentconnect-core-operations-historyturn).
 
 Requested page, oldest to newest by `seq`.
 
@@ -1252,6 +1390,8 @@ True when older retained Messages remain before this page.
 ```python
 next_before: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Pass as the next `before` to load the older page.
 
@@ -1276,6 +1416,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 recipient: Address
 ```
 
+**Types:** [`Address`](/api/core-primitives#agentconnect-core-primitives-address).
+
 Local or same-Team qualified Address, for example writer.
 
 <a id="agentconnect-core-operations-asktoolrequest-content"></a>
@@ -1286,6 +1428,8 @@ Local or same-Team qualified Address, for example writer.
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 The work, as text or JSON.
 
 <a id="agentconnect-core-operations-asktoolrequest-deadline-seconds"></a>
@@ -1295,6 +1439,8 @@ The work, as text or JSON.
 ```python
 deadline_seconds: Optional[JsonInt] = None
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Work cutoff in seconds (1–86400). Omit to inherit a request parent or the Runtime work lifetime. This is not how long ask waits.
 
@@ -1309,6 +1455,8 @@ Work cutoff in seconds (1–86400). Omit to inherit a request parent or the Runt
 collect: CollectMode = 'wait'
 ```
 
+**Types:** [`CollectMode`](/api/core-primitives#agentconnect-core-primitives-collectmode).
+
 How long this ask call waits. wait (default) holds until the Ticket is terminal or the Runtime wait hold ends, then returns the current saved request result, which may still be open. ticket returns immediately. Neither cancels work. While open, call get\_result; do not send a second ask.
 
 <a id="agentconnect-core-operations-asktoolrequest-thread-id"></a>
@@ -1318,6 +1466,8 @@ How long this ask call waits. wait (default) holds until the Ticket is terminal 
 ```python
 thread_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Continue this conversation with the same recipient (a current participant). Omit to start a conversation; that is the usual path. A well-formed unused id also starts one. Another peer cannot join an existing conversation (forbidden); omit thread\_id and put needed context in content.
 
@@ -1354,6 +1504,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 recipient: Address
 ```
 
+**Types:** [`Address`](/api/core-primitives#agentconnect-core-primitives-address).
+
 Local or same-Team qualified Address, for example writer.
 
 <a id="agentconnect-core-operations-telltoolrequest-content"></a>
@@ -1364,6 +1516,8 @@ Local or same-Team qualified Address, for example writer.
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 The notice or event, as text or JSON. No Ticket is created.
 
 <a id="agentconnect-core-operations-telltoolrequest-thread-id"></a>
@@ -1373,6 +1527,8 @@ The notice or event, as text or JSON. No Ticket is created.
 ```python
 thread_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Continue this conversation only with a current participant. Omit for an unthreaded notice; that is the usual path. Another peer cannot join an existing conversation (forbidden); omit thread\_id and put context in content.
 
@@ -1405,6 +1561,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 team_name: TeamName
 ```
 
+**Types:** [`TeamName`](/api/core-primitives#agentconnect-core-primitives-teamname).
+
 <a id="agentconnect-core-operations-teamroster-members"></a>
 
 ### `members`
@@ -1412,6 +1570,8 @@ team_name: TeamName
 ```python
 members: list[DirectoryEntry]
 ```
+
+**Types:** [`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry).
 
 <a id="agentconnect-core-operations-traceevent"></a>
 
@@ -1432,6 +1592,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 at: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 When the Runtime recorded the event.
 
 <a id="agentconnect-core-operations-traceevent-type"></a>
@@ -1441,6 +1603,8 @@ When the Runtime recorded the event.
 ```python
 type: TraceEventType
 ```
+
+**Types:** [`TraceEventType`](/api/core-primitives#agentconnect-core-primitives-traceeventtype).
 
 What happened (`accepted`, `ticket_opened`, `leased`,
 `completed`, `replied`, or `ticket_closed`).
@@ -1453,6 +1617,8 @@ What happened (`accepted`, `ticket_opened`, `leased`,
 trace_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Causal id shared with the Messages in this operation.
 
 <a id="agentconnect-core-operations-traceevent-actor"></a>
@@ -1462,6 +1628,8 @@ Causal id shared with the Messages in this operation.
 ```python
 actor: QualifiedAddress
 ```
+
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
 
 Membership that performed the step, or the requester for
 accept and open.
@@ -1474,6 +1642,8 @@ accept and open.
 message_id: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Message this step is about, when there is one.
 
 <a id="agentconnect-core-operations-traceevent-parent-id"></a>
@@ -1483,6 +1653,8 @@ Message this step is about, when there is one.
 ```python
 parent_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Parent of `message_id`, copied from that Message.
 
@@ -1494,6 +1666,8 @@ Parent of `message_id`, copied from that Message.
 ticket_id: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Ticket this step is about, when there is one.
 
 <a id="agentconnect-core-operations-traceevent-detail"></a>
@@ -1503,6 +1677,8 @@ Ticket this step is about, when there is one.
 ```python
 detail: JsonObject
 ```
+
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 Type-specific fields. Unknown keys are ignored by a Client.
 
@@ -1522,6 +1698,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 trace_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Requested causal id.
 
 <a id="agentconnect-core-operations-traceresult-events"></a>
@@ -1531,6 +1709,8 @@ Requested causal id.
 ```python
 events: list[TraceEvent]
 ```
+
+**Types:** [`TraceEvent`](/api/core-operations#agentconnect-core-operations-traceevent).
 
 Recorded events, oldest first.
 
@@ -1558,6 +1738,8 @@ kind: Literal['agent']
 name: AgentName
 ```
 
+**Types:** [`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname).
+
 <a id="agentconnect-core-operations-statusagent-address"></a>
 
 ### `address`
@@ -1565,6 +1747,8 @@ name: AgentName
 ```python
 address: QualifiedAddress
 ```
+
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
 
 <a id="agentconnect-core-operations-statusagent-online"></a>
 
@@ -1584,6 +1768,8 @@ At least one stored Session is unexpired; not proof of handler readiness.
 mailbox_depth: JsonInt
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 Queued and leased items together.
 
 * `ge`: `0`
@@ -1595,6 +1781,8 @@ Queued and leased items together.
 ```python
 open_tickets: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Open requests addressed to this Membership.
 
@@ -1627,6 +1815,8 @@ kind: Literal['principal']
 name: AgentName
 ```
 
+**Types:** [`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname).
+
 <a id="agentconnect-core-operations-statusprincipal-address"></a>
 
 ### `address`
@@ -1634,6 +1824,8 @@ name: AgentName
 ```python
 address: QualifiedAddress
 ```
+
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
 
 <a id="agentconnect-core-operations-statusprincipal-online"></a>
 
@@ -1669,6 +1861,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 team_name: TeamName
 ```
 
+**Types:** [`TeamName`](/api/core-primitives#agentconnect-core-primitives-teamname).
+
 Canonical Team name.
 
 <a id="agentconnect-core-operations-statusresult-persistence"></a>
@@ -1678,6 +1872,8 @@ Canonical Team name.
 ```python
 persistence: PersistenceMode
 ```
+
+**Types:** [`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode).
 
 Runtime restart guarantee.
 
@@ -1700,6 +1896,8 @@ HTTP origin when the Runtime is serving, such as
 open_tickets: JsonInt
 ```
 
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
+
 Open Tickets in the Team.
 
 * `ge`: `0`
@@ -1711,6 +1909,8 @@ Open Tickets in the Team.
 ```python
 members: list[StatusMember]
 ```
+
+**Types:** [`StatusMember`](/api/core-operations#agentconnect-core-operations-statusmember).
 
 Every Membership, including principals such as `operator`.
 
@@ -1730,6 +1930,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 name: Optional[AgentName] = None
 ```
 
+**Types:** [`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname).
+
 Bind the token to this Agent name.
 
 <a id="agentconnect-core-operations-issuejointokenrequest-agent-did"></a>
@@ -1740,6 +1942,8 @@ Bind the token to this Agent name.
 agent_did: Optional[AgentDid] = None
 ```
 
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
+
 Bind the token to this Agent DID (`did:key`).
 
 <a id="agentconnect-core-operations-issuejointokenrequest-ttl-seconds"></a>
@@ -1749,6 +1953,8 @@ Bind the token to this Agent DID (`did:key`).
 ```python
 ttl_seconds: Optional[JsonFloat] = None
 ```
+
+**Types:** [`JsonFloat`](/api/core-base#agentconnect-core-base-jsonfloat).
 
 Lifetime in seconds. Omit to use the Runtime default.
 
@@ -1794,6 +2000,8 @@ logs and Messages.
 expires_at: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 Time after which this token cannot authenticate a join.
 
 <a id="agentconnect-core-operations-jointokenissued-single-use"></a>
@@ -1815,6 +2023,8 @@ can reconnect only the admitted Membership.
 name: Optional[AgentName] = None
 ```
 
+**Types:** [`AgentName`](/api/core-primitives#agentconnect-core-primitives-agentname).
+
 Bound Agent name, when the operator set one.
 
 <a id="agentconnect-core-operations-jointokenissued-agent-did"></a>
@@ -1824,6 +2034,8 @@ Bound Agent name, when the operator set one.
 ```python
 agent_did: Optional[AgentDid] = None
 ```
+
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
 
 Bound Agent DID, when the operator set one.
 
@@ -1874,6 +2086,8 @@ type: str
 data: JsonObject
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 <a id="agentconnect-core-operations-toolerrorresult"></a>
 
 ## `ToolErrorResult`
@@ -1881,7 +2095,7 @@ data: JsonObject
 Structured MCP tool result when a Runtime operation fails.
 
 The MCP error flag is set. `error` is the unchanged Runtime
-[`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject). Readable text is `code: message`. Malformed arguments
+`ErrorObject`. Readable text is `code: message`. Malformed arguments
 and authentication failures stay MCP-level errors, not this object.
 
 Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
@@ -1894,6 +2108,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 error: ErrorObject
 ```
 
+**Types:** [`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject).
+
 Runtime failure preserved without reinterpretation.
 
 <a id="agentconnect-core-operations-parse-join-request"></a>
@@ -1904,15 +2120,17 @@ Runtime failure preserved without reinterpretation.
 parse_join_request(data: object) -> JoinRequest
 ```
 
+**Types:** [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest).
+
 Parse join input from a mapping. `spec_version` is required.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `JoinRequest`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-join-result"></a>
 
@@ -1922,15 +2140,17 @@ Parse join input from a mapping. `spec_version` is required.
 parse_join_result(data: object) -> JoinResult
 ```
 
-Parse a [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult) mapping.
+**Types:** [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult).
+
+Parse a `JoinResult` mapping.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `JoinResult`.
 
 **Raises:**
 
-* (`ValueError`): Validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): Validation fails.
 
 <a id="agentconnect-core-operations-parse-send-request"></a>
 
@@ -1940,15 +2160,17 @@ Parse a [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinres
 parse_send_request(data: object) -> SendRequest
 ```
 
+**Types:** [`SendRequest`](/api/core-operations#agentconnect-core-operations-sendrequest).
+
 Parse send input. A request requires `collect`. `deadline` may be omitted.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed send request.
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed send request.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, `kind` is unknown, or
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, `kind` is unknown, or
   validation fails.
 
 <a id="agentconnect-core-operations-parse-send-result"></a>
@@ -1959,15 +2181,17 @@ Parse send input. A request requires `collect`. `deadline` may be omitted.
 parse_send_result(data: object) -> SendResult
 ```
 
+**Types:** [`SendResult`](/api/core-operations#agentconnect-core-operations-sendresult).
+
 Parse a send result, including nested Message and Ticket.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed send result.
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed send result.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or nested validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or nested validation fails.
 
 <a id="agentconnect-core-operations-parse-reply-request"></a>
 
@@ -1977,15 +2201,17 @@ Parse a send result, including nested Message and Ticket.
 parse_reply_request(data: object) -> ReplyRequest
 ```
 
+**Types:** [`ReplyRequest`](/api/core-operations#agentconnect-core-operations-replyrequest).
+
 Parse reply input discriminated on `outcome`.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed reply request.
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed reply request.
 
 **Raises:**
 
-* (`ValueError`): Validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): Validation fails.
 
 <a id="agentconnect-core-operations-parse-lease-result"></a>
 
@@ -1995,15 +2221,17 @@ Parse reply input discriminated on `outcome`.
 parse_lease_result(data: object) -> LeaseResult
 ```
 
+**Types:** [`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult).
+
 Parse a lease result, including nested Deliveries.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `LeaseResult`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, `deliveries` is not an array,
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, `deliveries` is not an array,
   or nested validation fails.
 
 <a id="agentconnect-core-operations-parse-lease-request"></a>
@@ -2014,15 +2242,17 @@ Parse a lease result, including nested Deliveries.
 parse_lease_request(data: object) -> LeaseRequest
 ```
 
+**Types:** [`LeaseRequest`](/api/core-operations#agentconnect-core-operations-leaserequest).
+
 Parse lease input. An empty object is valid.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, `None` (treated as empty), or a [`LeaseRequest`](/api/core-operations#agentconnect-core-operations-leaserequest).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, `None` (treated as empty), or a `LeaseRequest`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-complete-request"></a>
 
@@ -2032,15 +2262,17 @@ Parse lease input. An empty object is valid.
 parse_complete_request(data: object) -> CompleteRequest
 ```
 
+**Types:** [`CompleteRequest`](/api/core-operations#agentconnect-core-operations-completerequest).
+
 Parse complete input.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`CompleteRequest`](/api/core-operations#agentconnect-core-operations-completerequest).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `CompleteRequest`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-renew-request"></a>
 
@@ -2050,15 +2282,17 @@ Parse complete input.
 parse_renew_request(data: object) -> RenewRequest
 ```
 
+**Types:** [`RenewRequest`](/api/core-operations#agentconnect-core-operations-renewrequest).
+
 Parse renew input.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`RenewRequest`](/api/core-operations#agentconnect-core-operations-renewrequest).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `RenewRequest`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-find-request"></a>
 
@@ -2068,15 +2302,17 @@ Parse renew input.
 parse_find_request(data: object) -> FindRequest
 ```
 
+**Types:** [`FindRequest`](/api/core-directory#agentconnect-core-directory-findrequest).
+
 Parse Directory find input.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`FindRequest`](/api/core-directory#agentconnect-core-directory-findrequest).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `FindRequest`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-issue-join-token-request"></a>
 
@@ -2086,15 +2322,17 @@ Parse Directory find input.
 parse_issue_join_token_request(data: object) -> IssueJoinTokenRequest
 ```
 
+**Types:** [`IssueJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-issuejointokenrequest).
+
 Parse operator token issuance input.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, `None` (treated as empty), or a parsed request.
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, `None` (treated as empty), or a parsed request.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-revoke-join-token-request"></a>
 
@@ -2104,15 +2342,17 @@ Parse operator token issuance input.
 parse_revoke_join_token_request(data: object) -> RevokeJoinTokenRequest
 ```
 
+**Types:** [`RevokeJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-revokejointokenrequest).
+
 Parse operator token revoke input.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`RevokeJoinTokenRequest`](/api/core-operations#agentconnect-core-operations-revokejointokenrequest).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `RevokeJoinTokenRequest`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, or validation fails.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, or validation fails.
 
 <a id="agentconnect-core-operations-parse-history-result"></a>
 
@@ -2122,15 +2362,17 @@ Parse operator token revoke input.
 parse_history_result(data: object) -> HistoryResult
 ```
 
+**Types:** [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
+
 Parse a history page, including nested Messages.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `HistoryResult`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, `messages` is not an array,
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, `messages` is not an array,
   or nested validation fails.
 
 <a id="agentconnect-core-operations-tell-view"></a>
@@ -2141,6 +2383,8 @@ Parse a history page, including nested Messages.
 tell_view(result: AcceptedSendResult) -> TellView
 ```
 
+**Types:** [`AcceptedSendResult`](/api/core-operations#agentconnect-core-operations-acceptedsendresult), [`TellView`](/api/core-operations#agentconnect-core-operations-tellview).
+
 Return event acceptance and its Thread id, leaving out the Message envelope.
 
 <a id="agentconnect-core-operations-history-view"></a>
@@ -2150,6 +2394,8 @@ Return event acceptance and its Thread id, leaving out the Message envelope.
 ```python
 history_view(result: HistoryResult) -> HistoryView
 ```
+
+**Types:** [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult), [`HistoryView`](/api/core-operations#agentconnect-core-operations-historyview).
 
 Return compact history turns with unchanged ordering and paging cursors.
 

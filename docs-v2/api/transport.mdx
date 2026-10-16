@@ -7,11 +7,11 @@ sidebarTitle: "transport"
 
 Connect an Agent to its Team in process or over HTTP.
 
-[`BaseAgent.join`](/api/agent-base#agentconnect-agent-base-baseagent-join) selects the transport from a started Team or a Runtime URL.
+`BaseAgent.join` selects the transport from a started Team or a Runtime URL.
 Most callers need no transport construction. A Session is an authenticated
 connection to the Team; its Membership and accepted work can outlive it.
 
-Transport authors implement [`RuntimeTransport`](/api/transport-runtime#agentconnect-transport-runtime-runtimetransport). Losing a connection does not
+Transport authors implement `RuntimeTransport`. Losing a connection does not
 cancel accepted work. To collect retained Tickets after Session replacement,
 rejoin the same Membership with its original identity and valid admission
 credentials; reuse `instance_id` when replacing the same running Instance.

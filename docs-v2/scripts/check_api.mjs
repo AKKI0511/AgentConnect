@@ -18,7 +18,7 @@ for (const path of paths) {
   } catch (error) {
     throw new Error(`${path}: ${error.message}`, {cause: error});
   }
-  const ids = [...body.matchAll(/<a id="([^"]+)"><\/a>/g)].map(m => m[1]);
+  const ids = [...body.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
   if (new Set(ids).size !== ids.length) throw new Error(`Duplicate anchors: ${path}`);
   anchors.set('/' + path.slice(0, -4), new Set(ids));
   function walk(node) {
@@ -26,6 +26,9 @@ for (const path of paths) {
     for (const child of node.children ?? []) walk(child);
   }
   walk(unified().use(remarkParse).use(remarkGfm).parse(body));
+  const hrefs = new Set();
+  for (const match of body.matchAll(/\bhref="(\/api[^"]+)"/g)) hrefs.add(match[1]);
+  for (const href of hrefs) links.push([path, href]);
 }
 for (const [source, url] of links) {
   const [page, id] = url.split('#');

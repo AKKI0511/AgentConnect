@@ -1,20 +1,6 @@
-"""Team file models for `[tool.agentconnect]` and `agentconnect.toml`.
+"""Team file models for `agentconnect.toml` and `[tool.agentconnect]`.
 
-Embedded `Team("name").start()` needs no file. This file describes a
-Team the CLI can start with `agentconnect up`: store, embeddings,
-hosted Agents, and extra MCP tools. Secrets stay in the environment.
-
-The example file is generated from `TeamConfig.example` so the
-committed TOML cannot drift from these fields.
-
-Examples:
-    ```python
-    from agentconnect.config import TeamConfig, load_team_config
-
-    config = load_team_config()
-    config.team
-    config.agents[0].class_path
-    ```
+`Team("name").start()` needs no file. Secrets stay in the environment.
 """
 
 from __future__ import annotations
@@ -102,21 +88,27 @@ class TeamConfig(BaseModel):
     team: str = Field(description="Team name, a lowercase DNS label.")
     store: str = Field(
         default="memory",
-        description="memory, or a Redis URL such as redis://localhost:6379/0.",
+        description="memory, or a Redis URL such as `redis://localhost:6379/0`.",
     )
     embeddings: str = Field(
         default="auto",
-        description="auto | none | hashed | fastembed | openai | litellm, with optional :model on the last three.",
+        description=(
+            "auto, none, hashed, fastembed, openai, or litellm. "
+            "The last three accept an optional :model suffix. "
+            "auto uses a local ONNX model when the embeddings extra is "
+            "installed, otherwise hashed n-grams, and does not send "
+            "Profiles or queries to a hosted embedder."
+        ),
     )
     host: str = Field(
         default="127.0.0.1",
-        description="Loopback address agentconnect up binds.",
+        description="Loopback address `agentconnect up` binds.",
     )
     port: int = Field(
         default=9000,
         ge=1,
         le=65535,
-        description="TCP port agentconnect up binds.",
+        description="TCP port `agentconnect up` binds.",
     )
     require_join_auth: bool = Field(
         default=True,
@@ -126,13 +118,13 @@ class TeamConfig(BaseModel):
         default_factory=list,
         description=(
             "Agents this process constructs and joins. Each class is a "
-            "BaseAgent subclass or a function create(name) -> BaseAgent. "
+            "`BaseAgent` subclass or a function `create(name) -> BaseAgent`. "
             "Independently deployed Agents join by URL and are not listed."
         ),
     )
     tools: List[str] = Field(
         default_factory=list,
-        description="Extra MCP tools as module:function import paths.",
+        description="Extra MCP tools as `module:function` import paths.",
     )
 
     @field_validator("team")
@@ -191,12 +183,12 @@ class TeamConfig(BaseModel):
     @field_validator("tools")
     @classmethod
     def validate_tools(cls, value: List[str]) -> List[str]:
-        """Require module:function for each extra tool."""
+        """Require `module:function` for each extra tool."""
         cleaned: List[str] = []
         for item in value:
             text = item.strip()
             if _IMPORT_REF.fullmatch(text) is None:
-                raise ValueError("each tool must be module:function")
+                raise ValueError("each tool must be `module:function`")
             cleaned.append(text)
         return cleaned
 

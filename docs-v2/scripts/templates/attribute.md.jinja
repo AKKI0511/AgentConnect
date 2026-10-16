@@ -1,8 +1,6 @@
 {{ ('`' ~ attribute.name ~ '`')|heading(heading_level) }}
 
-```python
-{{ attribute.name }}{% if attribute.annotation %}: {{ attribute.annotation }}{% endif %}{% if attribute.value is not none and ('class-attribute' in attribute.labels or 'instance-attribute' not in attribute.labels) %} = {{ attribute.value }}{% endif %}
-```
+{{ attribute|field_widget }}
 
 {% with docstring_sections = attribute|attribute_sections %}
 {% include 'docstring.md.jinja' %}

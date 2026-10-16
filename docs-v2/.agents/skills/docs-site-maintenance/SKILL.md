@@ -11,9 +11,28 @@ Work in `docs-v2/`. The SDK lives in `../agentconnect/`. The legacy `../docs/` s
 
 - `docs.json` owns navigation and appearance; handwritten MDX is grouped by topic. `images/` owns assets, `snippets/` owns reused content. Remove unused demonstration pages instead of publishing a component gallery.
 - `scripts/api_surface.py` owns the supported public module list and reference navigation. Do not expose internal modules by recursively documenting the SDK.
-- `scripts/generate_api.py` statically reads Python through Griffe and griffe-pydantic. griffe2md and its two Jinja adapters render objects; `markdown.mjs` handles Markdown through Remark. Do not add a second parser, runtime import pass or prose-repair layer.
+- `scripts/generate_api.py` statically reads Python through Griffe and griffe-pydantic. griffe2md and small Jinja adapters render objects; `markdown.mjs` handles Markdown through Remark. Do not add a second parser, runtime import pass or prose-repair layer.
 - Generated output is `api/*.mdx`, `api-reference.mdx`, and `api-pages.json`. Never edit it by hand. Package docstrings become overview pages; canonical object links lead to defining modules. Keep package roots and short sidebar labels.
-- Preserve the existing Aspen design, Atkinson Hyperlegible Next typography, dark default, restrained glass header and native code blocks. Keep renderer markup in templates rather than source docstrings.
+- Preserve the existing Aspen design, Atkinson Hyperlegible Next typography, dark default and restrained glass header. Let Mintlify render code fences and colors. Use native Python fences for signatures and examples; link annotation references in ordinary Markdown outside the fences. Keep renderer markup out of source docstrings.
+
+## Reference links and signatures
+
+Plain backticks mean literal code. Use the established explicit reference form
+``[`Record`][package.models.Record]`` for clickable prose symbols. Remark resolves
+reference definitions from the Griffe public inventory; unresolved internal targets
+fail generation. Keep docstrings readable without JSX. Standard Markdown links to
+verified published URLs are appropriate when a universal href is needed.
+
+Use Griffe expressions and canonical aliases for annotation links. Native fenced
+signatures are copyable Python; their code tokens cannot also be hyperlinks. Put
+linked types in native annotation/reference sections beside them. Keep short
+signatures on one line and break long ones between parameters. Put async, property,
+and classmethod labels immediately after the symbol name. Do not add a signature
+component, custom syntax colors, second Python parser, or inferred inline-code links.
+Do not expose internals solely to create links. Apply field/default rules by
+semantics, not package prefixes. Check canonical anchors and Markdown links in the
+existing checker. Website links do not prove IDE hover support; verify the editor
+separately before claiming it.
 
 ## Work loop
 

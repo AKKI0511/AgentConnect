@@ -19,7 +19,7 @@ The Store backend that keeps Team state in Redis.
 RedisStore(url: str, *, prefix: str = 'ac')
 ```
 
-Keep Team state in Redis, following the [`Store`](/api/team-store-base#agentconnect-team-store-base-store) contract.
+Keep Team state in Redis, following the `Store` contract.
 
 Pass the same `url` and `prefix` to a new Runtime after a restart to
 recover open Tickets and queued Mailbox work. A dropped connection
@@ -35,11 +35,11 @@ Open the connection later with `open`.
 
 **Parameters:**
 
-* `prefix` (`str`): [`Team`](/api/team-runtime#agentconnect-team-runtime-team) uses `ac:<team-name>` when given a Redis URL.
+* `prefix` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): `Team` uses `ac:<team-name>` when given a Redis URL.
 
 **Raises:**
 
-* (`ValueError`): `url` is empty.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `url` is empty.
 
 Inherits from [`Store`](/api/team-store-base#agentconnect-team-store-base-store).
 
@@ -51,13 +51,13 @@ Inherits from [`Store`](/api/team-store-base#agentconnect-team-store-base-store)
 persistence: PersistenceMode = 'durable'
 ```
 
+**Types:** [`PersistenceMode`](/api/core-primitives#agentconnect-core-primitives-persistencemode).
+
 State survives a Runtime restart while Redis retains its data.
 
 <a id="agentconnect-team-store-redis-redisstore-open"></a>
 
-`async`
-
-### `open`
+### `open` `async`
 
 ```python
 open() -> None
@@ -67,13 +67,11 @@ Prepare the Redis client. Use `ping` to check reachability.
 
 **Raises:**
 
-* (`ImportError`): The `redis` extra is not installed.
+* `ImportError`: The `redis` extra is not installed.
 
 <a id="agentconnect-team-store-redis-redisstore-close"></a>
 
-`async`
-
-### `close`
+### `close` `async`
 
 ```python
 close() -> None
@@ -83,9 +81,7 @@ Close the Redis client. The next `open` reconnects.
 
 <a id="agentconnect-team-store-redis-redisstore-ping"></a>
 
-`async`
-
-### `ping`
+### `ping` `async`
 
 ```python
 ping() -> None
@@ -95,9 +91,7 @@ Confirm Redis is reachable, reconnecting after a dropped link.
 
 <a id="agentconnect-team-store-redis-redisstore-get"></a>
 
-`async`
-
-### `get`
+### `get` `async`
 
 ```python
 get(key: str) -> object
@@ -107,9 +101,7 @@ Return the stored JSON value, or None when the key is missing.
 
 <a id="agentconnect-team-store-redis-redisstore-get-many"></a>
 
-`async`
-
-### `get_many`
+### `get_many` `async`
 
 ```python
 get_many(keys: Sequence[str]) -> list[object]
@@ -122,38 +114,36 @@ span several batches and do not promise one snapshot.
 
 <a id="agentconnect-team-store-redis-redisstore-get-record"></a>
 
-`async`
-
-### `get_record`
+### `get_record` `async`
 
 ```python
 get_record(key: str) -> StoreRecord | None
 ```
 
+**Types:** [`StoreRecord`](/api/team-store-base#agentconnect-team-store-base-storerecord).
+
 Return the stored value and version, or None when the key is missing.
 
 <a id="agentconnect-team-store-redis-redisstore-apply"></a>
 
-`async`
-
-### `apply`
+### `apply` `async`
 
 ```python
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
+
+**Types:** [`StoreOp`](/api/team-store-ops#agentconnect-team-store-ops-storeop), [`ApplyResult`](/api/team-store-ops#agentconnect-team-store-ops-applyresult).
 
 Apply `ops` as one transition, or leave every key unchanged.
 
 Conflicting concurrent writes are retried up to eight times.
 Exhausted retries return `ok=False, reason="cas"` with
 `op_index=None`. A connection failure raises; the write outcome
-may be unknown. See [`Store.apply`](/api/team-store-base#agentconnect-team-store-base-store-apply) for ordering and conflict rules.
+may be unknown. See `Store.apply` for ordering and conflict rules.
 
 <a id="agentconnect-team-store-redis-redisstore-put"></a>
 
-`async`
-
-### `put`
+### `put` `async`
 
 ```python
 put(key: str, value: object) -> None
@@ -163,9 +153,7 @@ Write a JSON value at `key`, bumping the version.
 
 <a id="agentconnect-team-store-redis-redisstore-insert"></a>
 
-`async`
-
-### `insert`
+### `insert` `async`
 
 ```python
 insert(key: str, value: object) -> bool
@@ -175,9 +163,7 @@ Write `value` only if `key` is absent. True when inserted.
 
 <a id="agentconnect-team-store-redis-redisstore-compare-and-set"></a>
 
-`async`
-
-### `compare_and_set`
+### `compare_and_set` `async`
 
 ```python
 compare_and_set(key: str, version: int, value: object) -> bool
@@ -187,9 +173,7 @@ Replace `key` when the stored version matches.
 
 <a id="agentconnect-team-store-redis-redisstore-delete"></a>
 
-`async`
-
-### `delete`
+### `delete` `async`
 
 ```python
 delete(key: str) -> None
@@ -199,9 +183,7 @@ Remove the document, set, and index at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-add"></a>
 
-`async`
-
-### `set_add`
+### `set_add` `async`
 
 ```python
 set_add(key: str, member: str) -> None
@@ -211,9 +193,7 @@ Add `member` to the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-remove"></a>
 
-`async`
-
-### `set_remove`
+### `set_remove` `async`
 
 ```python
 set_remove(key: str, member: str) -> None
@@ -223,9 +203,7 @@ Remove `member` from the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-members"></a>
 
-`async`
-
-### `set_members`
+### `set_members` `async`
 
 ```python
 set_members(key: str) -> list[str]
@@ -235,9 +213,7 @@ Return the sorted members of the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-is-member"></a>
 
-`async`
-
-### `set_is_member`
+### `set_is_member` `async`
 
 ```python
 set_is_member(key: str, member: str) -> bool
@@ -247,9 +223,7 @@ Return True when `member` is in the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-add"></a>
 
-`async`
-
-### `index_add`
+### `index_add` `async`
 
 ```python
 index_add(key: str, score: float, member: str) -> None
@@ -259,9 +233,7 @@ Add or update `member` in the Redis sorted set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-remove"></a>
 
-`async`
-
-### `index_remove`
+### `index_remove` `async`
 
 ```python
 index_remove(key: str, member: str) -> None
@@ -271,21 +243,23 @@ Remove `member` from the Redis sorted set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-range"></a>
 
-`async`
-
-### `index_range`
+### `index_range` `async`
 
 ```python
-index_range(key: str, *, max_score: float, min_score: float = float('-inf'), limit: Optional[int] = None) -> list[str]
+index_range(
+    key: str,
+    *,
+    max_score: float,
+    min_score: float = float('-inf'),
+    limit: Optional[int] = None,
+) -> list[str]
 ```
 
 Return members with scores in `[min_score, max_score]`, lowest first.
 
 <a id="agentconnect-team-store-redis-redisstore-index-card"></a>
 
-`async`
-
-### `index_card`
+### `index_card` `async`
 
 ```python
 index_card(key: str) -> int
@@ -295,9 +269,7 @@ Return the number of members in the Redis sorted set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-add-if-card-below"></a>
 
-`async`
-
-### `index_add_if_card_below`
+### `index_add_if_card_below` `async`
 
 ```python
 index_add_if_card_below(key: str, score: float, member: str, max_card: int) -> bool
@@ -307,9 +279,7 @@ Add `member` when the sorted set has fewer than `max_card` members.
 
 <a id="agentconnect-team-store-redis-redisstore-increment-if-below"></a>
 
-`async`
-
-### `increment_if_below`
+### `increment_if_below` `async`
 
 ```python
 increment_if_below(key: str, limit: int, *, ttl_seconds: Optional[float] = None) -> bool
@@ -319,9 +289,7 @@ Increment an integer document when it is below `limit`.
 
 <a id="agentconnect-team-store-redis-redisstore-decrement-floor"></a>
 
-`async`
-
-### `decrement_floor`
+### `decrement_floor` `async`
 
 ```python
 decrement_floor(key: str, *, ttl_seconds: Optional[float] = None) -> int
@@ -331,9 +299,7 @@ Decrement an integer document, not below `0`.
 
 <a id="agentconnect-team-store-redis-redisstore-clear"></a>
 
-`async`
-
-### `clear`
+### `clear` `async`
 
 ```python
 clear() -> None

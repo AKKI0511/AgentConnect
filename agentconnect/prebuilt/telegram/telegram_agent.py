@@ -1,22 +1,9 @@
 """Telegram bot that is also an `AIAgent`.
 
-Join a Team like any other Agent, then `run()` to poll Telegram. Incoming
-Telegram text goes through the same LiteLLM loop as Team work. Telegram
-operations are extra tools.
-
-Examples:
-    For a started Team. Close the Session with `leave` when finished:
-
-    ```python
-    from agentconnect.prebuilt import TelegramAIAgent
-
-    agent = TelegramAIAgent(
-        name="telegram-bot",
-        model="gpt-4o-mini",
-        telegram_token="...",
-    )
-    await agent.join(team)
-    ```
+Join a Team when teammates should reach this Agent, then `run` to poll.
+Telegram chats keep their own history, separate from `ctx.history`, and
+that history stops at 40 messages. `run` stops polling when cancelled
+and does not call `leave`.
 """
 
 from __future__ import annotations
@@ -55,17 +42,9 @@ _TELEGRAM_HISTORY_CAP = 40
 
 
 class TelegramAIAgent(AIAgent):
-    """`AIAgent` with a Telegram bot. Team deliveries use `handle`.
+    """`AIAgent` that also polls Telegram.
 
-    Join a Team first if teammates should reach you, then `run()` to poll.
-
-    Examples:
-        For a started Team:
-
-        ```python
-        agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
-        await agent.join(team)
-        ```
+    Team deliveries use `handle`. Telegram chats keep their own history.
     """
 
     HELP_TEXT = (
@@ -126,7 +105,8 @@ class TelegramAIAgent(AIAgent):
             max_tool_rounds: Cap on model-tool-model cycles per turn.
             include_team_tools: When True (default), Session Team tools are
                 attached on Team turns and Telegram replies.
-            groups_file: Path used to remember registered group chat ids.
+            groups_file: Group ids from `/start` in a group are written
+                here when polling stops.
             join_token: Token from `Team.issue_join_token`, when required.
             instance_id: Stable id for this running copy.
 

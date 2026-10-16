@@ -7,7 +7,7 @@ sidebarTitle: "base"
 
 Parse and serialize public schema objects.
 
-[`parse_schema`](/api/core-base#agentconnect-core-base-parse-schema) validates untrusted JSON as a schema type. [`dump_public`](/api/core-base#agentconnect-core-base-dump-public)
+`parse_schema` validates untrusted JSON as a schema type. `dump_public`
 returns JSON-ready data. Optional fields that were omitted stay missing.
 
 ## Public API
@@ -68,7 +68,7 @@ Finite JSON number; booleans and numeric strings are rejected.
 
 Frozen public schema object. Undeclared fields are rejected.
 
-Parse untrusted JSON with [`parse_schema`](/api/core-base#agentconnect-core-base-parse-schema). Serialize with [`dump_public`](/api/core-base#agentconnect-core-base-dump-public)
+Parse untrusted JSON with `parse_schema`. Serialize with `dump_public`
 or `to_public_dict`. Wire input is strict: a string is not an integer,
 `true` is not `1`, and an optional field must be omitted rather than
 sent as JSON null.
@@ -83,6 +83,8 @@ operation results and Messages. An omitted optional field is absent.
 ```python
 to_public_dict() -> JsonObject
 ```
+
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 Return JSON-ready fields, omitting optional values that are absent.
 
@@ -100,7 +102,7 @@ Read a declared field by name.
 
 **Raises:**
 
-* (`KeyError`): The field is undeclared or was omitted.
+* [`KeyError`](https://docs.python.org/3/library/exceptions.html#KeyError): The field is undeclared or was omitted.
 
 <a id="agentconnect-core-base-schemamodel-get"></a>
 
@@ -130,10 +132,12 @@ Return whether a declared field is present rather than omitted.
 public_json_schema(model: type[SchemaModel]) -> JsonSchemaValue
 ```
 
+**Types:** [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel).
+
 JSON Schema for `model` as sent on the wire.
 
 Optional fields are omit-only: JSON null is not in the type, and
-`default: null` is not advertised. [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint) is a JSON number with
+`default: null` is not advertised. `JsonInt` is a JSON number with
 `multipleOf: 1`. Undeclared properties are forbidden. Unmodified
 pydantic `model_json_schema()` output does not encode omit-only
 fields this way.
@@ -187,4 +191,4 @@ Validate a mapping as a public model; return an existing instance unchanged.
 
 **Raises:**
 
-* (`ValueError`): Input is not an object or fails the model's validation.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): Input is not an object or fails the model's validation.

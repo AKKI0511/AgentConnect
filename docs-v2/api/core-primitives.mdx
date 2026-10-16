@@ -191,7 +191,7 @@ Closed set of Ticket states. Read completion from `state`, not from missing cont
 ErrorCode = Literal['unsupported_version', 'unauthorized', 'forbidden', 'invalid_request', 'invalid_address', 'address_outside_team', 'not_found', 'name_conflict', 'id_conflict', 'busy', 'wait_limit', 'payload_too_large', 'lease_expired', 'ticket_closed', 'unavailable', 'internal', 'handler_failed', 'deadline_exceeded']
 ```
 
-Well-known public error codes. An Agent application code belongs in [`ErrorObject.details`](/api/core-error#agentconnect-core-error-errorobject-details).
+Well-known public error codes. An Agent application code belongs in `ErrorObject.details`.
 
 <a id="agentconnect-core-primitives-deliveryhistoryform"></a>
 
@@ -241,7 +241,7 @@ Discriminator on a send result. Events are `accepted`; requests are `ticketed`.
 ERROR_CODES: tuple[str, ...] = get_args(ErrorCode)
 ```
 
-Tuple of every [`ErrorCode`](/api/core-primitives#agentconnect-core-primitives-errorcode) value.
+Tuple of every `ErrorCode` value.
 
 <a id="agentconnect-core-primitives-collect-modes"></a>
 
@@ -251,7 +251,7 @@ Tuple of every [`ErrorCode`](/api/core-primitives#agentconnect-core-primitives-e
 COLLECT_MODES: tuple[str, ...] = get_args(CollectMode)
 ```
 
-Tuple of every [`CollectMode`](/api/core-primitives#agentconnect-core-primitives-collectmode) value.
+Tuple of every `CollectMode` value.
 
 <a id="agentconnect-core-primitives-membership-kinds"></a>
 
@@ -261,4 +261,4 @@ Tuple of every [`CollectMode`](/api/core-primitives#agentconnect-core-primitives
 MEMBERSHIP_KINDS: tuple[str, ...] = get_args(MembershipKind)
 ```
 
-Tuple of every [`MembershipKind`](/api/core-primitives#agentconnect-core-primitives-membershipkind) value.
+Tuple of every `MembershipKind` value.

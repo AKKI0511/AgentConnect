@@ -7,33 +7,25 @@ sidebarTitle: "config"
 
 Team file loading for `agentconnect.toml` and `[tool.agentconnect]`.
 
-A Team file describes a Team the CLI starts: name, store, embeddings,
-hosted Agents, and extra MCP tools. Embedded `Team("name").start()`
+A Team file names the Team, the store, the embedding choice, the Agents
+this process constructs, and extra MCP tools. `Team("name").start()`
 needs no file. Secrets stay in the environment.
 
-Discovery is nearest-directory first and never merged. In each directory,
-`agentconnect.toml` beats `[tool.agentconnect]` in `pyproject.toml`.
-YAML is last-resort compatibility after no ancestor TOML Team file
-exists. `load_team_config(path)` loads that path and does not fall back.
+`class` is a `BaseAgent` subclass or `create(name) -> BaseAgent` that
+returns an unjoined Agent. `agentconnect up` constructs the listed
+Agents. Agents in other processes join by URL and are not listed.
 
-[`TeamConfig`](/api/config-models#agentconnect-config-models-teamconfig) and [`HostedAgentConfig`](/api/config-models#agentconnect-config-models-hostedagentconfig) are the file models. `class` is a
-[`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) subclass or a function `create(name) -> BaseAgent` that
-returns an unjoined Agent. Agents listed here are hosted by this process.
-Independently deployed Agents join by URL and are not listed.
-
-[`RegistryAPISettings`](/api/config-servers#agentconnect-config-servers-registryapisettings) (and Index vector settings in
-[`agentconnect.config.vector`](/api/config-vector)) configure the optional Index process from
-the environment, not the Team file.
+[`load_team_config`](/api/config-loaders#agentconnect-config-loaders-load-team-config) chooses
+the file.
 
 **Examples:**
 
 From a directory that contains a Team file:
 
 ```python
-from agentconnect.config import TeamConfig, load_team_config
+from agentconnect.config import load_team_config
 
-config: TeamConfig = load_team_config()
-print(config.team, config.port)
+config = load_team_config()
 for spec in config.agents:
     print(spec.name, spec.class_path)
 ```
@@ -44,15 +36,10 @@ for spec in config.agents:
 * [`load_selected_team`](/api/config-loaders#agentconnect-config-loaders-load-selected-team)
 * [`load_team_config`](/api/config-loaders#agentconnect-config-loaders-load-team-config)
 * [`render_example_toml`](/api/config-loaders#agentconnect-config-loaders-render-example-toml)
-* [`save_example_config`](/api/config-loaders#agentconnect-config-loaders-save-example-config)
-* [`validate_config_file`](/api/config-loaders#agentconnect-config-loaders-validate-config-file)
 * [`HostedAgentConfig`](/api/config-models#agentconnect-config-models-hostedagentconfig)
 * [`TeamConfig`](/api/config-models#agentconnect-config-models-teamconfig)
-* [`RegistryAPISettings`](/api/config-servers#agentconnect-config-servers-registryapisettings)
 
 ## Modules
 
 * [`loaders`](/api/config-loaders)
 * [`models`](/api/config-models)
-* [`servers`](/api/config-servers)
-* [`vector`](/api/config-vector)

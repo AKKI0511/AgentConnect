@@ -26,19 +26,19 @@ credentials after admission; constructing the transport does not join.
 Runtime error bodies retain their public codes and details. Network failures
 become `unavailable`, and cancellation propagates.
 
-See [`RuntimeTransport`](/api/transport-runtime#agentconnect-transport-runtime-runtimetransport) for result shapes and operation authority.
+See `RuntimeTransport` for result shapes and operation authority.
 
 Prepare connectivity to the Runtime origin or its `/agentconnect/v1` URL.
 
 **Parameters:**
 
-* `timeout` (`float`): Finite ordinary request timeout in seconds. Connection setup
+* `timeout` ([`float`](https://docs.python.org/3/library/stdtypes.html#float)): Finite ordinary request timeout in seconds. Connection setup
   waits at most five seconds, or this shorter bound. Sends may wait
   longer to cover the Runtime's collection hold.
 
 **Raises:**
 
-* (`ValueError`): The URL is empty.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The URL is empty.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-configure-wait-hold"></a>
 
@@ -55,174 +55,180 @@ hold plus five seconds. This changes waiting, rather than a work deadline.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-join-challenge"></a>
 
-`async`
-
-### `join_challenge`
+### `join_challenge` `async`
 
 ```python
 join_challenge() -> JoinChallenge
 ```
 
+**Types:** [`JoinChallenge`](/api/core-operations#agentconnect-core-operations-joinchallenge).
+
 Fetch a fresh identity-proof challenge over HTTP without Session authentication.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-join"></a>
 
-`async`
-
-### `join`
+### `join` `async`
 
 ```python
 join(request: JoinRequest) -> JoinResult
 ```
 
+**Types:** [`JoinRequest`](/api/core-operations#agentconnect-core-operations-joinrequest), [`JoinResult`](/api/core-operations#agentconnect-core-operations-joinresult).
+
 Open a Session over HTTP with admission credentials in the JoinRequest body.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-disconnect"></a>
 
-`async`
-
-### `disconnect`
+### `disconnect` `async`
 
 ```python
 disconnect(session_token: SessionToken) -> None
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken).
+
 End the Session over HTTP; its Membership and accepted work remain.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-heartbeat"></a>
 
-`async`
-
-### `heartbeat`
+### `heartbeat` `async`
 
 ```python
 heartbeat(session_token: SessionToken) -> HeartbeatResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`HeartbeatResult`](/api/core-operations#agentconnect-core-operations-heartbeatresult).
+
 Renew Session expiry over HTTP; ordinary authenticated calls do not renew it.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-send"></a>
 
-`async`
-
-### `send`
+### `send` `async`
 
 ```python
 send(session_token: SessionToken, request: SendRequest) -> SendResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`SendRequest`](/api/core-operations#agentconnect-core-operations-sendrequest), [`SendResult`](/api/core-operations#agentconnect-core-operations-sendresult).
+
 Submit work over HTTP and retry once on timeout with the identical body.
 
 The send timeout covers the negotiated Runtime wait hold. If both attempts
-time out, raises [`TransportError`](/api/transport-runtime#agentconnect-transport-runtime-transporterror) with `unavailable`; the Message may already
+time out, raises `TransportError` with `unavailable`; the Message may already
 be accepted. Keep its id to recover the result rather than submitting new work.
 Other connection failures are surfaced without this timeout retry.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-lease"></a>
 
-`async`
-
-### `lease`
+### `lease` `async`
 
 ```python
 lease(session_token: SessionToken, max_items: int = 1) -> LeaseResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`LeaseResult`](/api/core-operations#agentconnect-core-operations-leaseresult).
+
 Fetch available Delivery attempts over HTTP within Session capacity.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-renew"></a>
 
-`async`
-
-### `renew`
+### `renew` `async`
 
 ```python
 renew(session_token: SessionToken, lease_id: Uuid) -> RenewResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`RenewResult`](/api/core-operations#agentconnect-core-operations-renewresult).
+
 Renew an active attempt owned by the Session.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-complete"></a>
 
-`async`
-
-### `complete`
+### `complete` `async`
 
 ```python
 complete(session_token: SessionToken, lease_id: Uuid) -> CompleteResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`CompleteResult`](/api/core-operations#agentconnect-core-operations-completeresult).
+
 Complete an event or decline a request under an active Session-owned lease.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-reply"></a>
 
-`async`
-
-### `reply`
+### `reply` `async`
 
 ```python
 reply(session_token: SessionToken, request: ReplyRequest) -> ReplyResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`ReplyRequest`](/api/core-operations#agentconnect-core-operations-replyrequest), [`ReplyResult`](/api/core-operations#agentconnect-core-operations-replyresult).
+
 Submit a successful or failed reply under an active Session-owned request lease.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-get-result"></a>
 
-`async`
-
-### `get_result`
+### `get_result` `async`
 
 ```python
 get_result(session_token: SessionToken, ticket_id: Uuid) -> Ticket
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
+
 Fetch retained wire Ticket data over HTTP under its owning Membership.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-get-history"></a>
 
-`async`
-
-### `get_history`
+### `get_history` `async`
 
 ```python
-get_history(session_token: SessionToken, thread_id: Uuid, *, before: Uuid | None = None, limit: int = 50) -> HistoryResult
+get_history(
+    session_token: SessionToken,
+    thread_id: Uuid,
+    *,
+    before: Uuid | None = None,
+    limit: int = 50,
+) -> HistoryResult
 ```
+
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid), [`HistoryResult`](/api/core-operations#agentconnect-core-operations-historyresult).
 
 Fetch a retained history page over HTTP for a Thread the caller participates in.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-find"></a>
 
-`async`
-
-### `find`
+### `find` `async`
 
 ```python
 find(session_token: SessionToken, query: str, *, limit: int | None = None) -> FindResult
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`FindResult`](/api/core-directory#agentconnect-core-directory-findresult).
+
 Fetch ranked Directory candidates over HTTP.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-get-profile"></a>
 
-`async`
-
-### `get_profile`
+### `get_profile` `async`
 
 ```python
 get_profile(session_token: SessionToken, address: Address) -> DirectoryEntry
 ```
 
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`Address`](/api/core-primitives#agentconnect-core-primitives-address), [`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry).
+
 Fetch a full Directory entry over HTTP for a same-Team Address.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-events"></a>
 
-`async`
-
-### `events`
+### `events` `async`
 
 ```python
 events(session_token: SessionToken) -> AsyncIterator[RuntimeEvent]
 ```
+
+**Types:** [`SessionToken`](/api/core-primitives#agentconnect-core-primitives-sessiontoken), [`RuntimeEvent`](/api/core-operations#agentconnect-core-operations-runtimeevent).
 
 Read SSE work hints with no finite stream timeout.
 
@@ -232,9 +238,7 @@ are yielded for the client to ignore.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-close"></a>
 
-`async`
-
-### `close`
+### `close` `async`
 
 ```python
 close() -> None

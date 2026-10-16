@@ -48,6 +48,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Immutable Message id and idempotency key.
 
 <a id="agentconnect-core-message-messagebase-sender"></a>
@@ -58,6 +60,8 @@ Immutable Message id and idempotency key.
 sender: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 Canonical qualified Address set by the Runtime.
 
 <a id="agentconnect-core-message-messagebase-sender-did"></a>
@@ -67,6 +71,8 @@ Canonical qualified Address set by the Runtime.
 ```python
 sender_did: AgentDid
 ```
+
+**Types:** [`AgentDid`](/api/core-primitives#agentconnect-core-primitives-agentdid).
 
 Verified DID of the sending Membership, copied from
 the Session at acceptance.
@@ -79,6 +85,8 @@ the Session at acceptance.
 recipient: QualifiedAddress
 ```
 
+**Types:** [`QualifiedAddress`](/api/core-primitives#agentconnect-core-primitives-qualifiedaddress).
+
 Canonical qualified Address set by the Runtime.
 
 <a id="agentconnect-core-message-messagebase-created-at"></a>
@@ -88,6 +96,8 @@ Canonical qualified Address set by the Runtime.
 ```python
 created_at: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 Runtime acceptance time.
 
@@ -99,6 +109,8 @@ Runtime acceptance time.
 trace_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Correlation id for one causal operation.
 
 <a id="agentconnect-core-message-messagebase-thread-id"></a>
@@ -108,6 +120,8 @@ Correlation id for one causal operation.
 ```python
 thread_id: Optional[Uuid] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Conversation grouping id, when the Message has one.
 
@@ -119,6 +133,8 @@ Conversation grouping id, when the Message has one.
 parent_id: Optional[Uuid] = None
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Message this one replies to or continues.
 
 <a id="agentconnect-core-message-messagebase-seq"></a>
@@ -128,6 +144,8 @@ Message this one replies to or continues.
 ```python
 seq: Optional[JsonInt] = None
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Position in the Thread, assigned on acceptance. Present
 exactly when `thread_id` is present. First Message is `1`.
@@ -161,6 +179,8 @@ kind: Literal['request']
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 Sender's work input; may be any JSON value, including null.
 
 <a id="agentconnect-core-message-requestmessage-metadata"></a>
@@ -171,6 +191,8 @@ Sender's work input; may be any JSON value, including null.
 metadata: Optional[JsonObject] = None
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Application data that does not control Runtime decisions.
 
 <a id="agentconnect-core-message-requestmessage-deadline"></a>
@@ -180,6 +202,8 @@ Application data that does not control Runtime decisions.
 ```python
 deadline: Timestamp
 ```
+
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
 
 Work cutoff after which an open Ticket expires.
 
@@ -207,6 +231,8 @@ kind: Literal['event']
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 <a id="agentconnect-core-message-eventmessage-metadata"></a>
 
 ### `metadata`
@@ -214,6 +240,8 @@ content: JsonValue
 ```python
 metadata: Optional[JsonObject] = None
 ```
+
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 Application data that does not control Runtime decisions.
 
@@ -241,6 +269,8 @@ kind: Literal['response']
 content: JsonValue
 ```
 
+**Types:** [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue).
+
 Application result; JSON null is a successful answer too.
 
 <a id="agentconnect-core-message-responsemessage-parent-id"></a>
@@ -250,6 +280,8 @@ Application result; JSON null is a successful answer too.
 ```python
 parent_id: Uuid
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Request Message id this reply answers.
 
@@ -277,6 +309,8 @@ kind: Literal['error']
 error: ErrorObject
 ```
 
+**Types:** [`ErrorObject`](/api/core-error#agentconnect-core-error-errorobject).
+
 Failure information safe to reveal to the requester.
 
 <a id="agentconnect-core-message-errormessage-parent-id"></a>
@@ -286,6 +320,8 @@ Failure information safe to reveal to the requester.
 ```python
 parent_id: Uuid
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Request Message id this failure answers.
 
@@ -328,6 +364,8 @@ Inherits from [`SchemaModel`](/api/core-base#agentconnect-core-base-schemamodel)
 lease_id: Uuid
 ```
 
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
+
 Authorizes this attempt's renewal, completion or reply.
 
 <a id="agentconnect-core-message-delivery-lease-expires-at"></a>
@@ -338,6 +376,8 @@ Authorizes this attempt's renewal, completion or reply.
 lease_expires_at: Timestamp
 ```
 
+**Types:** [`Timestamp`](/api/core-primitives#agentconnect-core-primitives-timestamp).
+
 After this time the attempt is no longer active.
 
 <a id="agentconnect-core-message-delivery-attempt"></a>
@@ -347,6 +387,8 @@ After this time the attempt is no longer active.
 ```python
 attempt: JsonInt
 ```
+
+**Types:** [`JsonInt`](/api/core-base#agentconnect-core-base-jsonint).
 
 Starts at one and increases after recovery.
 
@@ -360,6 +402,8 @@ Starts at one and increases after recovery.
 message: Union[RequestMessage, EventMessage]
 ```
 
+**Types:** [`RequestMessage`](/api/core-message#agentconnect-core-message-requestmessage), [`EventMessage`](/api/core-message#agentconnect-core-message-eventmessage).
+
 <a id="agentconnect-core-message-delivery-history"></a>
 
 ### `history`
@@ -367,6 +411,8 @@ message: Union[RequestMessage, EventMessage]
 ```python
 history: list[Message]
 ```
+
+**Types:** [`Message`](/api/core-message#agentconnect-core-message-message).
 
 Recent earlier Thread Messages in ascending `seq` order,
 excluding the delivered Message. Empty in `delivery_history="ids"` mode.
@@ -378,6 +424,8 @@ excluding the delivered Message. Empty in `delivery_history="ids"` mode.
 ```python
 history_ids: Optional[list[Uuid]] = None
 ```
+
+**Types:** [`Uuid`](/api/core-primitives#agentconnect-core-primitives-uuid).
 
 Earlier Message ids in ids mode; omitted in bodies mode.
 
@@ -400,6 +448,8 @@ Use Thread history paging when you need more.
 is_reply_expected(message: Message) -> bool
 ```
 
+**Types:** [`Message`](/api/core-message#agentconnect-core-message-message).
+
 Return whether the Message is a request and therefore expects a reply.
 
 <a id="agentconnect-core-message-parse-message"></a>
@@ -410,15 +460,17 @@ Return whether the Message is a request and therefore expects a reply.
 parse_message(data: object) -> Message
 ```
 
+**Types:** [`Message`](/api/core-message#agentconnect-core-message-message).
+
 Parse a Message mapping. A request requires `deadline`.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed Message instance.
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed Message instance.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, `kind` is unknown, or
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, `kind` is unknown, or
   validation fails.
 
 <a id="agentconnect-core-message-parse-delivery"></a>
@@ -429,13 +481,15 @@ Parse a Message mapping. A request requires `deadline`.
 parse_delivery(data: object) -> Delivery
 ```
 
+**Types:** [`Delivery`](/api/core-message#agentconnect-core-message-delivery).
+
 Parse a Delivery, including nested Messages.
 
 **Parameters:**
 
-* `data` (`object`): JSON object, or an already parsed [`Delivery`](/api/core-message#agentconnect-core-message-delivery).
+* `data` ([`object`](https://docs.python.org/3/library/functions.html#object)): JSON object, or an already parsed `Delivery`.
 
 **Raises:**
 
-* (`ValueError`): `data` is not an object, `history` is not an array,
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): `data` is not an object, `history` is not an array,
   or nested validation fails.

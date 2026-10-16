@@ -3,7 +3,7 @@
 # Secrets stay in the environment.
 #
 # store: memory  or  redis://localhost:6379/0
-# embeddings: auto | none | fastembed | openai | litellm:<model>
+# embeddings: auto | none | hashed | fastembed | openai | litellm:<model>
 # auto never sends Profiles or queries to a hosted embedder.
 #
 # Agents listed here are constructed by `agentconnect up`.
@@ -15,9 +15,7 @@
 # a separate step: add the Team MCP URL there.
 #
 # Nearest directory wins. In that directory, agentconnect.toml beats
-# [tool.agentconnect] in pyproject.toml. YAML is last-resort
-# compatibility after no ancestor TOML Team file exists. Files are
-# never merged.
+# [tool.agentconnect] in pyproject.toml. Files are never merged.
 
 [tool.agentconnect]
 team = "content-squad"

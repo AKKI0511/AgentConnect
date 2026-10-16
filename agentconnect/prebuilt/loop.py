@@ -1,25 +1,15 @@
-"""Model tool loop owned by AgentConnect.
+"""Run a model call until it stops asking for tools.
 
-LiteLLM normalizes provider APIs. It does not run tools. This loop does:
-call the model, run any tool calls, append results, repeat until the model
-stops calling tools or `max_rounds` is hit.
+[`run_tool_loop`][agentconnect.prebuilt.loop.run_tool_loop] returns the
+model's text. If the model is still calling tools when `max_rounds`
+ends, it raises
+[`ToolLoopExhausted`][agentconnect.prebuilt.loop.ToolLoopExhausted]. A tool
+exception is reported back to the model as error JSON, and the loop
+continues. The messages you passed are not changed, and tool results
+are not written to a Team thread.
 
-When the turn budget is exhausted while the model is still calling tools,
-`ToolLoopExhausted` is raised. That is an unsuccessful outcome, not
-a successful string reply.
-
-Examples:
-    ```python
-    from agentconnect.prebuilt.loop import run_tool_loop
-    from agentconnect.prebuilt.tools import Tool
-
-    reply = await run_tool_loop(
-        complete=litellm.acompletion,
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": "ping the tool"}],
-        tools=[Tool.from_callable(ping)],
-    )
-    ```
+Pass `complete` to use a callable other than LiteLLM. It receives
+`model`, `messages`, and `tools` when tools are present.
 """
 
 from __future__ import annotations
@@ -41,9 +31,10 @@ DEFAULT_MAX_ROUNDS = 8
 class ToolLoopExhausted(Exception):
     """The model was still calling tools when `max_rounds` was reached.
 
-    Raised by `run_tool_loop`. `AIAgent.handle` does not catch it, so
-    an in-Team request fails through the handler-failure path. `chat` and
-    `complete` let the same exception reach the caller.
+    Raised by [`run_tool_loop`][agentconnect.prebuilt.loop.run_tool_loop].
+    [`AIAgent`][agentconnect.prebuilt.ai_agent.AIAgent] `handle` does not
+    catch it, so an in-Team request fails through the handler-failure
+    path. `chat` and `complete` let the same exception reach the caller.
 
     Attributes:
         max_rounds: Turn budget that was exhausted.
@@ -81,30 +72,10 @@ async def run_tool_loop(
     A tool exception becomes one error JSON payload and the loop continues.
     Hitting `max_rounds` while tool calls remain raises `ToolLoopExhausted`.
 
-    Args:
-        complete: Async callable with the LiteLLM `acompletion` shape.
-        model: LiteLLM model id.
-        messages: Chat history. Copied; the original is not mutated.
-        tools: Callables or `Tool` objects. Omit when the model has none.
-        max_rounds: Cap on model-tool-model cycles. Defaults to 8.
-        **complete_kwargs: Extra kwargs forwarded to `complete`.
-
-    Returns:
-        Model text when it stops calling tools.
-
     Raises:
         ValueError: `max_rounds` is below 1.
         ToolLoopExhausted: The model was still calling tools after
             `max_rounds`.
-
-    Examples:
-        ```python
-        reply = await run_tool_loop(
-            complete=scripted_complete,
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": "hello"}],
-        )
-        ```
     """
     if max_rounds < 1:
         raise ValueError("max_rounds must be at least 1")

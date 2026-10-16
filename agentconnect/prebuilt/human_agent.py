@@ -3,20 +3,19 @@
 `HumanAgent` is a `BaseAgent` that prints incoming work and reads a
 reply from stdin. It needs the `cli` extra (`aioconsole`).
 
+`read_line` replaces stdin when another UI should supply the text.
+Empty input, `exit`, `quit`, and `bye` decline a request. Call `leave`
+when the Session should close.
+
 Examples:
-    ```bash
-    pip install 'agentconnect[cli]'
-    ```
+    `team` is started and `assistant` has joined. After
+    `pip install 'agentconnect[cli]'`:
 
     ```python
-    from agentconnect.prebuilt import HumanAgent, AIAgent
-    from agentconnect.team import Team
+    from agentconnect.prebuilt import HumanAgent
 
-    team = await Team("content-squad").start()
     human = HumanAgent(name="operator-human")
-    assistant = AIAgent(name="assistant", model="gpt-4o-mini")
     await human.join(team)
-    await assistant.join(team)
     await human.start_interaction("assistant")
     ```
 """
@@ -37,15 +36,7 @@ _EXIT = frozenset({"exit", "quit", "bye"})
 
 
 class HumanAgent(BaseAgent):
-    """Person on a Team. Incoming work is printed; stdin is the reply.
-
-    Examples:
-        ```python
-        human = HumanAgent(name="operator-human")
-        await human.join(team)
-        await human.start_interaction("assistant")
-        ```
-    """
+    """Person on a Team. Incoming work is printed; stdin is the reply."""
 
     profile = AgentProfile(
         summary="A person on this Team who reads and types replies.",

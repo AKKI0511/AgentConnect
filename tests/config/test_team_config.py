@@ -1,4 +1,4 @@
-"""Team file models, TOML discovery, and the YAML compatibility path."""
+"""Team file models and TOML discovery."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ from agentconnect.config.loaders import (
     find_config_file,
     load_team_config,
     render_example_toml,
-    save_example_config,
-    validate_config_file,
 )
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
 
@@ -40,7 +38,7 @@ def test_load_team_config_from_cwd_toml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    save_example_config(tmp_path / "agentconnect.toml")
+    (tmp_path / "agentconnect.toml").write_text(render_example_toml(), encoding="utf-8")
     config = load_team_config()
     assert config.team == "content-squad"
     assert config.agents[0].class_path.startswith("agents.")
@@ -73,34 +71,29 @@ def test_toml_beats_pyproject_in_same_directory(
     assert find_config_file() == tmp_path / "agentconnect.toml"
 
 
-def test_pyproject_in_parent_beats_cwd_yaml(
+def test_yaml_in_cwd_does_not_hide_parent_pyproject(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    yaml = pytest.importorskip("yaml")
     project = tmp_path / "project"
     nested = project / "nested"
     nested.mkdir(parents=True)
     _write(project / "pyproject.toml", dump_team_toml(TeamConfig(team="from-parent")))
-    _write(
-        nested / "agentconnect.yaml",
-        yaml.safe_dump({"team": "from-yaml"}),
-    )
+    _write(nested / "agentconnect.yaml", "team: from-yaml\n")
     monkeypatch.chdir(nested)
     assert load_team_config().team == "from-parent"
     assert find_config_file() == project / "pyproject.toml"
 
 
-def test_yaml_fallback_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    yaml = pytest.importorskip("yaml")
+def test_yaml_is_not_a_team_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
-    path = _write(
-        tmp_path / "agentconnect.yaml",
-        yaml.safe_dump({"team": "legacy-yaml", "store": "memory"}),
-    )
-    with pytest.warns(DeprecationWarning, match="legacy YAML"):
-        config = load_team_config()
-    assert config.team == "legacy-yaml"
-    assert find_config_file() == path
+    path = _write(tmp_path / "agentconnect.yml", "team: legacy-yaml\n")
+    with pytest.raises(FileNotFoundError, match="Team file was not found"):
+        load_team_config()
+    assert find_config_file() is None
+    with pytest.raises(ValueError, match="YAML"):
+        load_team_config(path)
 
 
 def test_explicit_file_skips_discovery(
@@ -211,11 +204,3 @@ def test_duplicate_agent_names_are_rejected() -> None:
                 ],
             }
         )
-
-
-def test_validate_config_file(tmp_path: Path) -> None:
-    path = tmp_path / "agentconnect.toml"
-    path.write_text("team = true\n", encoding="utf-8")
-    assert validate_config_file(path) is False
-    save_example_config(path)
-    assert validate_config_file(path) is True

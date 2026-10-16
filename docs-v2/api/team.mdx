@@ -8,13 +8,13 @@ sidebarTitle: "team"
 Run the Team your agents use to work together.
 
 Agents on a Team find teammates, ask them for work, and collect replies.
-Each agent keeps its own harness. Start a [`Team`](/api/team-runtime#agentconnect-team-runtime-team) before they join.
+Each agent keeps its own harness. Start a `Team` before they join.
 
 An agent in this process joins the Team object. An agent on the same
-machine joins the loopback origin from [`Team.serve`](/api/team-runtime#agentconnect-team-runtime-team-serve). An agent on another
-host needs the app from [`create_runtime_app`](/api/team-http#agentconnect-team-http-create-runtime-app), on a server you run.
+machine joins the loopback origin from `Team.serve`. An agent on another
+host needs the app from `create_runtime_app`, on a server you run.
 
-A failed Team operation raises [`TeamError`](/api/team-errors#agentconnect-team-errors-teamerror). Read its `code`.
+A failed Team operation raises `TeamError`. Read its `code`.
 
 ## Public API
 

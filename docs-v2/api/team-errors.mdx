@@ -16,8 +16,16 @@ The error raised when a Team operation fails.
 ## `TeamError`
 
 ```python
-TeamError(code: str, message: str, *, details: Optional[JsonObject] = None, retryable: Optional[bool] = None)
+TeamError(
+    code: str,
+    message: str,
+    *,
+    details: Optional[JsonObject] = None,
+    retryable: Optional[bool] = None,
+)
 ```
+
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 A failed Team operation.
 
@@ -29,7 +37,7 @@ Common codes are `not_found`, `unauthorized`, `busy`, and
 **Examples:**
 
 `team` is started, and `name` is an agent name. Removing a
-membership that is already gone is safe. Any other [`TeamError`](/api/team-errors#agentconnect-team-errors-teamerror)
+membership that is already gone is safe. Any other `TeamError`
 still propagates.
 
 ```python
@@ -70,6 +78,8 @@ Explanation of the failure for a person.
 details: Optional[JsonObject]
 ```
 
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
+
 Additional error fields, or None when unspecified.
 
 <a id="agentconnect-team-errors-teamerror-retryable"></a>
@@ -89,6 +99,8 @@ Whether the same call may succeed later, or None when unspecified.
 ```python
 to_error_object() -> JsonObject
 ```
+
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
 Serialize this error for a Runtime response.
 

@@ -20,6 +20,33 @@ Keep a detail if it changes what the caller chooses, writes, expects or handles.
 - Separate everyday APIs, supported extension contracts and internal plumbing when reviewing the delivered surface. Trace callers before proposing removal; a reference edit does not authorize API redesign.
 - Describe the visible effect. For example, say “Closing the client leaves accepted jobs running.” The caller does not need the internal shutdown sequence.
 
+Apply a sentence-level decision test: name the caller action or expectation that
+would change if the sentence were removed. If there is none, delete it. Rewriting
+an internal step in simpler English does not make it useful. Do not replace removed
+implementation narration with lists of what the API does not do. Report weak or
+unnecessary APIs as design findings instead of explaining away their complexity.
+
+Every public docstring must work for a reader arriving directly at that symbol.
+Keep this lean: usually one short purpose sentence and only the context needed
+to use the API safely. Self-contained is not a request for a tutorial or glossary.
+Assume no product vocabulary or prior page reading, while retaining ordinary Python
+and domain knowledge. Explain essential prerequisites and consequences locally.
+For dependent product types or operations, use the site's supported clickable
+symbol reference and verify its rendered target. Plain backticks denote literal code. Use an explicit symbol reference for a
+link, such as ``[`Record`][package.models.Record]`` when the site supports that syntax.
+Use this established LangChain-style explicit form; plain backticks remain literal.
+For a portable href, use a normal Markdown link to a verified published URL.
+Do not infer hyperlinks from code formatting. Website reference resolution does
+not prove IDE hover clickability; verify the target editor separately. Prefer the precise public class/method over an internal module or “example
+on page X.” A link supplements essential call-site context; it does not replace it.
+
+Review overview, module, class and methods together. Give a fact one primary owner;
+repeat it only where omission could cause misuse for a direct-arrival reader.
+Implementation details such as cache maps, internal Sessions, serialization steps,
+per-hit fetches and process bookkeeping belong outside the public reference unless
+they change a supported user choice. Keep observable history isolation, data loss,
+authority limits and failure behavior, expressed as outcomes at the relevant API.
+
 Authoring rules and research belong in this skill. Published reference pages contain only user guidance.
 
 ## Give each level a job

@@ -7,13 +7,13 @@ sidebarTitle: "core"
 
 Create discovery Profiles and read the Messages and results your agents exchange.
 
-[`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent) returns these models and passes request or event Messages to
-handlers. Use [`AgentProfile`](/api/core-profile#agentconnect-core-profile-agentprofile) and [`Skill`](/api/core-profile#agentconnect-core-profile-skill) to describe suitable work; read a
+`BaseAgent` returns these models and passes request or event Messages to
+handlers. Use `AgentProfile` and `Skill` to describe suitable work; read a
 Ticket's `state` before using its result. Advanced clients use the operation
 models and parsers to work with Runtime JSON.
 
 The models reject undeclared fields and cannot be reassigned. Use
-[`dump_public`](/api/core-base#agentconnect-core-base-dump-public) to serialize them: omitted optional fields stay absent,
+`dump_public` to serialize them: omitted optional fields stay absent,
 while required content may be JSON null.
 
 ## Public API

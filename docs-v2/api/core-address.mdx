@@ -50,7 +50,7 @@ Returned when a valid location is not this Team.
 AddressErrorCode = Literal['invalid_address', 'address_outside_team']
 ```
 
-Error codes [`resolve_address`](/api/core-address#agentconnect-core-address-resolve-address) returns instead of a canonical Address.
+Error codes `resolve_address` returns instead of a canonical Address.
 
 <a id="agentconnect-core-address-parsedaddress"></a>
 
@@ -127,6 +127,8 @@ Accepts dot-separated DNS labels, at most 253 characters and no trailing dot.
 parse_address(value: str) -> Union[ParsedAddress, Literal['invalid_address']]
 ```
 
+**Types:** [`ParsedAddress`](/api/core-address#agentconnect-core-address-parsedaddress).
+
 Split a name or qualified Address, canonicalizing ASCII uppercase.
 
 Returns `invalid_address` for invalid syntax, including non-ASCII input.
@@ -139,6 +141,8 @@ Returns `invalid_address` for invalid syntax, including non-ASCII input.
 resolve_address(value: str, team_name: str) -> Union[str, AddressErrorCode]
 ```
 
+**Types:** [`AddressErrorCode`](/api/core-address#agentconnect-core-address-addresserrorcode).
+
 Return a canonical qualified Address within the supplied Team.
 
 Local names gain the Team location. Invalid syntax returns `invalid_address`;
@@ -146,11 +150,11 @@ a valid different location returns `address_outside_team`.
 
 **Parameters:**
 
-* `team_name` (`str`): Team against which the input is resolved.
+* `team_name` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Team against which the input is resolved.
 
 **Raises:**
 
-* (`ValueError`): The Address parses but the Team name is invalid.
+* [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError): The Address parses but the Team name is invalid.
 
 **Examples:**
 

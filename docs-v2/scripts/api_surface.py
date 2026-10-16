@@ -14,12 +14,9 @@ PUBLIC_MODULES = frozenset(
         "agentconnect.agent.identity",
         "agentconnect.agent.tools",
         "agentconnect.cli",
-        "agentconnect.compat",
         "agentconnect.config",
         "agentconnect.config.loaders",
         "agentconnect.config.models",
-        "agentconnect.config.servers",
-        "agentconnect.config.vector",
         "agentconnect.core",
         "agentconnect.core.address",
         "agentconnect.core.base",
@@ -35,8 +32,8 @@ PUBLIC_MODULES = frozenset(
         "agentconnect.core.ticket",
         "agentconnect.index",
         "agentconnect.index.client",
+        "agentconnect.index.models",
         "agentconnect.index.service",
-        "agentconnect.index.types",
         "agentconnect.mcp",
         "agentconnect.mcp.server",
         "agentconnect.prebuilt",
@@ -61,6 +58,53 @@ PUBLIC_MODULES = frozenset(
         "agentconnect.transport.agent_http",
         "agentconnect.transport.inprocess",
         "agentconnect.transport.runtime",
+    }
+)
+
+
+# Public module names do not make all their implementation helpers public.
+PUBLIC_MEMBERS = {
+    "agentconnect.team.http": {"create_runtime_app"},
+    "agentconnect.core.base": {
+        "JsonValue",
+        "JsonObject",
+        "JsonInt",
+        "JsonFloat",
+        "SchemaModel",
+        "parse_schema",
+        "dump_public",
+        "public_json_schema",
+        "public_result_schema",
+    },
+    "agentconnect.core.identity": {
+        "IDENTITY_PROOF_IAT_SKEW_SECONDS",
+        "DEFAULT_ATTESTATION_TTL_SECONDS",
+        "VerificationStatus",
+        "MembershipAttestationClaims",
+        "AgentIdentity",
+        "did_key_from_public_bytes",
+        "public_bytes_from_did_key",
+        "is_ed25519_did_key",
+        "public_key_pem_from_did",
+        "encode_eddsa_jwt",
+        "decode_eddsa_jwt",
+        "decode_eddsa_jwt_from_did",
+        "issue_identity_proof",
+        "verify_identity_proof",
+        "issue_membership_attestation",
+        "verify_membership_attestation",
+    },
+    "agentconnect.transport.agent_http": {"HttpRuntimeTransport"},
+    "agentconnect.transport.inprocess": {"InProcessTransport"},
+    "agentconnect.mcp.server": {"create_team_mcp"},
+}
+
+# Callers obtain these objects from handle, defer, or team_tools.
+NO_PUBLIC_INIT = frozenset(
+    {
+        "agentconnect.agent.context.Context",
+        "agentconnect.agent.context.DeferredReply",
+        "agentconnect.agent.tools.TeamTools",
     }
 )
 

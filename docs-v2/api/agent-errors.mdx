@@ -7,7 +7,7 @@ sidebarTitle: "errors"
 
 Errors raised by the agent Session client.
 
-Catch [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror) on join, send, Directory, and delivery-finish
+Catch `SessionError` on join, send, Directory, and delivery-finish
 calls. `code` is a public Runtime error code. Branch on `code`, not on
 the exception message.
 
@@ -33,7 +33,13 @@ except SessionError as exc:
 ## `SessionError`
 
 ```python
-SessionError(code: str, message: str, *, details: Optional[JsonObject] = None, retryable: Optional[bool] = None)
+SessionError(
+    code: str,
+    message: str,
+    *,
+    details: Optional[JsonObject] = None,
+    retryable: Optional[bool] = None,
+)
 ```
 
 A Session or handler-facing Runtime operation failed.
@@ -42,28 +48,17 @@ A Session or handler-facing Runtime operation failed.
 `invalid_request`, or `not_found`. Branch on `code`, not on the
 exception message.
 
-**Attributes:**
-
-* `code`: Public Runtime error code.
-
-* `message`: Human-readable explanation.
-
-* `details`: Optional JSON object with more data.
-
-* `retryable`: Whether the caller may retry the same operation, when
-  the Runtime said so. `None` means unspecified.
-
 Record the public error `code` and human-readable `message`.
 
 **Parameters:**
 
-* `code` (`str`): Public Runtime error code.
+* `code` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Public Runtime error code.
 
-* `message` (`str`): Human-readable explanation.
+* `message` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Human-readable explanation.
 
-* `details` (`Optional[JsonObject]`): Optional JSON object with more data.
+* `details` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject)]): Optional JSON object with more data.
 
-* `retryable` (`Optional[bool]`): Whether the caller may retry the same operation.
+* `retryable` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`bool`](https://docs.python.org/3/library/functions.html#bool)]): Whether the caller may retry the same operation.
 
 <a id="agentconnect-agent-errors-sessionerror-code"></a>
 
@@ -108,9 +103,7 @@ the Runtime said so. `None` means unspecified.
 
 <a id="agentconnect-agent-errors-sessionerror-from-transport"></a>
 
-`classmethod`
-
-### `from_transport`
+### `from_transport` `classmethod`
 
 ```python
 from_transport(exc: TransportError) -> 'SessionError'
@@ -119,7 +112,7 @@ from_transport(exc: TransportError) -> 'SessionError'
 Wrap a transport failure for agent-facing callers.
 
 Session methods already do this. Application code usually
-catches [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror) rather than constructing it.
+catches `SessionError` rather than constructing it.
 
 **Parameters:**
 
@@ -127,6 +120,6 @@ catches [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerro
 
 **Returns:**
 
-* (`'SessionError'`): A [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror) with the same `code`, `message`, `details`,
+* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): A `SessionError` with the same `code`, `message`, `details`,
 
-* (`'SessionError'`): and `retryable` flag.
+* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): and `retryable` flag.

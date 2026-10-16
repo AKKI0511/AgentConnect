@@ -24,9 +24,7 @@ to send related work. `get_history` reads older conversation turns.
 
 <a id="agentconnect-agent-context-context-sender"></a>
 
-`property`
-
-### `sender`
+### `sender` `property`
 
 ```python
 sender: str
@@ -36,9 +34,7 @@ Address of the Membership that sent this Message.
 
 <a id="agentconnect-agent-context-context-sender-did"></a>
 
-`property`
-
-### `sender_did`
+### `sender_did` `property`
 
 ```python
 sender_did: str
@@ -51,21 +47,19 @@ value unchanged.
 
 <a id="agentconnect-agent-context-context-message"></a>
 
-`property`
-
-### `message`
+### `message` `property`
 
 ```python
 message: MailboxMessage
 ```
 
+**Types:** [`MailboxMessage`](/api/core-message#agentconnect-core-message-mailboxmessage).
+
 The delivered request or event.
 
 <a id="agentconnect-agent-context-context-attempt"></a>
 
-`property`
-
-### `attempt`
+### `attempt` `property`
 
 ```python
 attempt: int
@@ -78,9 +72,7 @@ same Message.
 
 <a id="agentconnect-agent-context-context-lease-id"></a>
 
-`property`
-
-### `lease_id`
+### `lease_id` `property`
 
 ```python
 lease_id: str
@@ -90,9 +82,7 @@ Lease that authorizes completion of this attempt.
 
 <a id="agentconnect-agent-context-context-deadline"></a>
 
-`property`
-
-### `deadline`
+### `deadline` `property`
 
 ```python
 deadline: Optional[str]
@@ -102,9 +92,7 @@ Request deadline as an RFC 3339 timestamp. `None` for an event.
 
 <a id="agentconnect-agent-context-context-trace-id"></a>
 
-`property`
-
-### `trace_id`
+### `trace_id` `property`
 
 ```python
 trace_id: str
@@ -114,9 +102,7 @@ Id shared by this Message and Messages sent while handling it.
 
 <a id="agentconnect-agent-context-context-thread-id"></a>
 
-`property`
-
-### `thread_id`
+### `thread_id` `property`
 
 ```python
 thread_id: Optional[str]
@@ -126,13 +112,13 @@ Thread id when the Message belongs to a conversation. Otherwise `None`.
 
 <a id="agentconnect-agent-context-context-history"></a>
 
-`property`
-
-### `history`
+### `history` `property`
 
 ```python
 history: list[Message]
 ```
+
+**Types:** [`Message`](/api/core-message#agentconnect-core-message-message).
 
 Recent Thread Messages, excluding the Message being handled.
 
@@ -143,9 +129,7 @@ list is empty and `history_ids` holds the earlier ids.
 
 <a id="agentconnect-agent-context-context-history-ids"></a>
 
-`property`
-
-### `history_ids`
+### `history_ids` `property`
 
 ```python
 history_ids: Optional[list[str]]
@@ -158,9 +142,7 @@ Earlier Message ids when this Session joined with `delivery_history="ids"`.
 
 <a id="agentconnect-agent-context-context-history-complete"></a>
 
-`property`
-
-### `history_complete`
+### `history_complete` `property`
 
 ```python
 history_complete: bool
@@ -179,7 +161,7 @@ defer() -> DeferredReply
 Keep this Delivery leased and answer after `handle` returns.
 
 Return from `handle` after this call; its return value is ignored.
-Give the returned [`DeferredReply`](/api/agent-context#agentconnect-agent-context-deferredreply) to your existing completion
+Give the returned `DeferredReply` to your existing completion
 workflow, which must finish it with `reply`, `fail`, or `decline`.
 
 **Returns:**
@@ -204,33 +186,40 @@ await pending.reply(draft)
 
 <a id="agentconnect-agent-context-context-ask"></a>
 
-`async`
-
-### `ask`
+### `ask` `async`
 
 ```python
-ask(recipient: str, content: JsonValue, *, deadline_seconds: Optional[float] = None, collect: CollectMode = 'wait', thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> Ticket
+ask(
+    recipient: str,
+    content: JsonValue,
+    *,
+    deadline_seconds: Optional[float] = None,
+    collect: CollectMode = 'wait',
+    thread_id: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    metadata: Optional[Mapping[str, JsonValue]] = None,
+) -> Ticket
 ```
 
-Send a request from `handle` and return a [`Ticket`](/api/core-ticket#agentconnect-core-ticket-ticket).
+Send a request from `handle` and return a `Ticket`.
 
 The returned Ticket may still be `open`. Accepted work keeps
 running after this call returns.
 
 Read `content` only when `state` is `completed`. Call
-[`BaseAgent.get_result`](/api/agent-base#agentconnect-agent-base-baseagent-get-result) with `id` while `state` is `open`.
+`BaseAgent.get_result` with `id` while `state` is `open`.
 An open child does not finish the incoming request. Returning
 `None` from `handle` declines it. Use `defer` if your handler
 must return before it can reply.
 
 **Parameters:**
 
-* `recipient` (`str`): Local name or same-Team Address, such as `writer`
+* `recipient` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Local name or same-Team Address, such as `writer`
   or `writer@content-squad`.
 
 * `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The work, as text or JSON.
 
-* `deadline_seconds` (`Optional[float]`): Work cutoff in seconds. This does not change
+* `deadline_seconds` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`float`](https://docs.python.org/3/library/stdtypes.html#float)]): Work cutoff in seconds. This does not change
   how long `collect="wait"` waits. Omit it to inherit the
   parent request deadline. The Team rejects a later child
   deadline.
@@ -239,15 +228,15 @@ must return before it can reply.
   `wait_hold_seconds` elapses. `ticket` returns the current
   Ticket without waiting.
 
-* `thread_id` (`Optional[str]`): Thread to continue with the same recipient. Omit it
+* `thread_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Thread to continue with the same recipient. Omit it
   to continue the current Thread when `recipient` is the
   sender and this Message has a `thread_id`. Otherwise a
   new Thread starts.
 
-* `parent_id` (`Optional[str]`): Message this request answers. Omit it to use the
+* `parent_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Message this request answers. Omit it to use the
   current Message id.
 
-* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)]]): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -255,7 +244,7 @@ must return before it can reply.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or the Team rejected
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or the Team rejected
   the send. Read `code`.
 
 **Examples:**
@@ -277,12 +266,17 @@ if ticket.state == "completed":
 
 <a id="agentconnect-agent-context-context-tell"></a>
 
-`async`
-
-### `tell`
+### `tell` `async`
 
 ```python
-tell(recipient: str, content: JsonValue, *, thread_id: Optional[str] = None, parent_id: Optional[str] = None, metadata: Optional[Mapping[str, JsonValue]] = None) -> AcceptedSendResult
+tell(
+    recipient: str,
+    content: JsonValue,
+    *,
+    thread_id: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    metadata: Optional[Mapping[str, JsonValue]] = None,
+) -> AcceptedSendResult
 ```
 
 Send a notice from `handle`. No Ticket is created.
@@ -294,18 +288,18 @@ Thread by the same rule as `ask`.
 
 **Parameters:**
 
-* `recipient` (`str`): Local name or same-Team Address.
+* `recipient` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Local name or same-Team Address.
 
 * `content` ([`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)): The notice, as text or JSON.
 
-* `thread_id` (`Optional[str]`): Thread to continue with a current participant.
+* `thread_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Thread to continue with a current participant.
   Omit it to continue or start a Thread by the same rule
   as `ask`.
 
-* `parent_id` (`Optional[str]`): Message this notice answers. Omit it to use the
+* `parent_id` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Message this notice answers. Omit it to use the
   current Message id.
 
-* `metadata` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the Message. Omit to store none.
+* `metadata` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)]]): JSON object stored on the Message. Omit to store none.
 
 **Returns:**
 
@@ -313,14 +307,12 @@ Thread by the same rule as `ask`.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or the Team rejected
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or the Team rejected
   the send. Read `code`.
 
 <a id="agentconnect-agent-context-context-get-history"></a>
 
-`async`
-
-### `get_history`
+### `get_history` `async`
 
 ```python
 get_history(*, before: Optional[str] = None, limit: int = 50) -> HistoryResult
@@ -335,10 +327,10 @@ is empty when this Message has no `thread_id`.
 
 **Parameters:**
 
-* `before` (`Optional[str]`): Return Messages older than this id. Use `next_before`
+* `before` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str)]): Return Messages older than this id. Use `next_before`
   from the previous page.
 
-* `limit` (`int`): Page size, from 1 to 200. Defaults to 50.
+* `limit` ([`int`](https://docs.python.org/3/library/stdtypes.html#int)): Page size, from 1 to 200. Defaults to 50.
 
 **Returns:**
 
@@ -346,7 +338,7 @@ is empty when this Message has no `thread_id`.
 
 **Raises:**
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Agent has not joined, or is not a participant.
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Agent has not joined, or is not a participant.
 
 <a id="agentconnect-agent-context-deferredreply"></a>
 
@@ -354,7 +346,7 @@ is empty when this Message has no `thread_id`.
 
 Handle that finishes one request after `handle` returns.
 
-Obtain it from [`Context.defer`](/api/agent-context#agentconnect-agent-context-context-defer), then finish once with `reply`,
+Obtain it from `Context.defer`, then finish once with `reply`,
 `fail`, or `decline`. The Delivery remains leased and counts
 toward `max_in_flight`. The lease is renewed until completion,
 the request deadline, a disconnect, or revocation by the Team.
@@ -362,9 +354,7 @@ If it expires, another running copy may handle the Delivery.
 
 <a id="agentconnect-agent-context-deferredreply-lease-id"></a>
 
-`property`
-
-### `lease_id`
+### `lease_id` `property`
 
 ```python
 lease_id: str
@@ -374,9 +364,7 @@ Lease that authorizes this attempt.
 
 <a id="agentconnect-agent-context-deferredreply-message-id"></a>
 
-`property`
-
-### `message_id`
+### `message_id` `property`
 
 ```python
 message_id: str
@@ -386,9 +374,7 @@ Id of the delivered Message. For a request, this is also the Ticket id.
 
 <a id="agentconnect-agent-context-deferredreply-reply"></a>
 
-`async`
-
-### `reply`
+### `reply` `async`
 
 ```python
 reply(content: JsonValue = None) -> ReplyResult
@@ -408,19 +394,22 @@ Complete the request with `content`.
 
 **Raises:**
 
-* (`RuntimeError`): This handle already finished the Delivery.
+* [`RuntimeError`](https://docs.python.org/3/library/exceptions.html#RuntimeError): This handle already finished the Delivery.
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Session is disconnected, the lease expired,
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Session is disconnected, the lease expired,
   or the Ticket is already closed.
 
 <a id="agentconnect-agent-context-deferredreply-fail"></a>
 
-`async`
-
-### `fail`
+### `fail` `async`
 
 ```python
-fail(message: str, *, code: str = 'handler_failed', details: Optional[Mapping[str, JsonValue]] = None) -> ReplyResult
+fail(
+    message: str,
+    *,
+    code: str = 'handler_failed',
+    details: Optional[Mapping[str, JsonValue]] = None,
+) -> ReplyResult
 ```
 
 Fail the request with a message the requester can read.
@@ -434,12 +423,12 @@ the exception text.
 
 **Parameters:**
 
-* `message` (`str`): Text the requester can read.
+* `message` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Text the requester can read.
 
-* `code` (`str`): Extra code stored in `details` when it is not
+* `code` ([`str`](https://docs.python.org/3/library/stdtypes.html#str)): Extra code stored in `details` when it is not
   `handler_failed`.
 
-* `details` (`Optional[Mapping[str, JsonValue]]`): JSON object stored on the error. Omit to store none.
+* `details` ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)\[[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)\[[`str`](https://docs.python.org/3/library/stdtypes.html#str), [`JsonValue`](/api/core-base#agentconnect-core-base-jsonvalue)]]): JSON object stored on the error. Omit to store none.
 
 **Returns:**
 
@@ -447,16 +436,14 @@ the exception text.
 
 **Raises:**
 
-* (`RuntimeError`): This handle already finished the Delivery.
+* [`RuntimeError`](https://docs.python.org/3/library/exceptions.html#RuntimeError): This handle already finished the Delivery.
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Session is disconnected, the lease expired,
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Session is disconnected, the lease expired,
   or the Ticket is already closed.
 
 <a id="agentconnect-agent-context-deferredreply-decline"></a>
 
-`async`
-
-### `decline`
+### `decline` `async`
 
 ```python
 decline() -> CompleteResult
@@ -473,7 +460,7 @@ it has no reply body.
 
 **Raises:**
 
-* (`RuntimeError`): This handle already finished the Delivery.
+* [`RuntimeError`](https://docs.python.org/3/library/exceptions.html#RuntimeError): This handle already finished the Delivery.
 
-* ([`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror)): The Session is disconnected, the lease expired,
+* [`SessionError`](/api/agent-errors#agentconnect-agent-errors-sessionerror): The Session is disconnected, the lease expired,
   or the Ticket is already closed.

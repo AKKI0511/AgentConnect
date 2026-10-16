@@ -1,66 +1,44 @@
-# Prebuilt Agents
+# Prebuilt agents
 
-Optional helpers on top of ``BaseAgent``. They are not the product. Subclass
-``BaseAgent`` when you already have a model loop. Use these when you want a
-model string, a terminal, or a Telegram bot without writing that loop.
-
-```
-prebuilt/
-├── ai_agent.py      # AIAgent: LiteLLM tool loop
-├── human_agent.py   # HumanAgent: stdin on a Team (cli extra)
-├── telegram/        # TelegramAIAgent (telegram extra)
-├── loop.py          # call model, run tools, repeat
-└── tools.py         # Tool
-```
+Optional helpers on `BaseAgent`. Subclass `BaseAgent` when you already
+have a harness. Use these when you want a LiteLLM model string, a
+terminal reply, or a Telegram bot.
 
 ## AIAgent
 
-Install ``agentconnect[aiagent]``. ``model`` is a LiteLLM model id. Team tools
-attach from the Session. Conversation state for Team work is ``ctx.history``.
+Install `agentconnect[aiagent]`. `model` is a LiteLLM model id. Provider
+keys stay in the environment.
+
+`handle` answers a Team delivery from `ctx.history` and can call the
+Session tools. Extra tools are annotated functions or `Tool` objects.
+`chat` talks to the model without a Team and does not attach those
+Session tools. Pass `complete` to replace LiteLLM.
+
+`team` is started and `researcher` has joined:
 
 ```python
-from agentconnect.prebuilt import AIAgent, Tool
-from agentconnect.team import Team
+from agentconnect.prebuilt import AIAgent
 
-
-async def search_docs(query: str) -> str:
-    return f"no hits for {query}"
-
-
-agent = AIAgent(
-    name="researcher",
+writer = AIAgent(
+    name="writer",
     model="gpt-4o-mini",
-    instructions="Search docs, then answer.",
-    tools=[
-        Tool(
-            name="search_docs",
-            description="Search internal docs.",
-            parameters={
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"],
-            },
-            handler=search_docs,
-        )
-    ],
+    instructions="Draft short release notes from the request.",
 )
-team = await Team("content-squad").start()
-await agent.join(team)
+await writer.join(team)
+ticket = await researcher.ask("writer", "Draft a release note: search is faster.")
+if ticket.state == "completed":
+    print(ticket.response.content)
 ```
 
-``chat()`` talks to the Agent with no Team. History is local to
-``conversation_id``. Team tools are not attached.
-
-```python
-reply = await agent.chat("What is a Ticket?")
-```
-
-Provider keys stay in the environment (``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``,
-``GEMINI_API_KEY``, ...). Pass ``api_key=`` only when you need to override.
+Call `leave` when the Session should close.
 
 ## HumanAgent
 
-Install ``agentconnect[cli]``. The Agent prints incoming work and reads stdin.
+Install `agentconnect[cli]`. Incoming work is printed. The reply is a
+line from stdin, or from `read_line` when you supply one. Empty input
+declines a request. `exit`, `quit`, or `bye` stops `start_interaction`.
+
+`team` is started and `assistant` has joined:
 
 ```python
 from agentconnect.prebuilt import HumanAgent
@@ -70,27 +48,23 @@ await human.join(team)
 await human.start_interaction("assistant")
 ```
 
-Empty input declines a request. ``exit``, ``quit``, or ``bye`` stops
-``start_interaction``.
-
 ## TelegramAIAgent
 
-Install ``agentconnect[telegram]``. Extends ``AIAgent`` with a Telegram bot.
-Join a Team the same way as any Agent, then ``await agent.run()`` to poll
-Telegram.
+Install `agentconnect[telegram]`. Set `TELEGRAM_BOT_TOKEN`, or pass
+`telegram_token`. Join a Team when teammates should reach the bot, then
+`run` to poll. `run` stops polling when cancelled and does not call
+`leave`.
+
+Telegram text, mentions, and media use the model loop. That history is
+per chat and stops at 40 messages. Team deliveries still use `handle`
+and `ctx.history`. With `include_team_tools` left on, a Telegram turn
+can call Session tools after `join`. `/start` in a group records that
+chat for announcements. `groups_file` is rewritten when polling stops.
 
 ```python
 from agentconnect.prebuilt import TelegramAIAgent
-from agentconnect.team import Team
 
-agent = TelegramAIAgent(
-    name="telegram-bot",
-    model="gpt-4o-mini",
-    telegram_token="...",
-)
-team = await Team("content-squad").start()
+agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
 await agent.join(team)
 await agent.run()
 ```
-
-``TELEGRAM_BOT_TOKEN`` is read when ``telegram_token`` is omitted.

@@ -27,7 +27,7 @@ def thread_key(thread_id: str) -> str:
     return f"{THREAD_KEY_PREFIX}{thread_id}"
 
 
-def _sort_key(message: dict[str, Any]) -> tuple:
+def _sort_key(message: dict[str, Any]) -> tuple[int]:
     return (int(message["seq"]),)
 
 
@@ -42,6 +42,8 @@ async def load_thread(store: Store, thread_id: str) -> Optional[dict[str, Any]]:
     record = await store.get(thread_key(thread_id))
     if record is None:
         return None
+    if not isinstance(record, dict):
+        raise TypeError("stored Thread must be an object")
     return record
 
 
@@ -84,7 +86,7 @@ def allocate_seq(thread: dict[str, Any], message: dict[str, Any]) -> int:
         if seq is not None:
             return int(seq)
         listed = thread["message_ids"]
-        return listed.index(message["id"]) + 1
+        return list(listed).index(message["id"]) + 1
     seq = int(thread.get("next_seq") or (len(thread["message_ids"]) + 1))
     message["seq"] = seq
     thread["next_seq"] = seq + 1
@@ -150,46 +152,6 @@ def prepare_append(
     return thread, ops, None
 
 
-async def append_message(
-    store: Store,
-    *,
-    thread_id: str,
-    message: dict[str, Any],
-    sender: str,
-    recipient: str,
-    max_messages: Optional[int] = None,
-    keep_ids: Optional[set[str]] = None,
-) -> dict[str, Any]:
-    """Append ``message`` to the Thread transcript if it is not already listed.
-
-    Compare-and-set on the Thread document assigns ``seq``. Two concurrent
-    appends receive distinct values in the order the store accepts them.
-    When ``max_messages`` is set, oldest Messages not in ``keep_ids`` are
-    dropped from the id list on the same write. Bodies are deleted by the
-    caller.
-    """
-    key = thread_key(thread_id)
-    while True:
-        record = await store.get_record(key)
-        thread, ops, error = prepare_append(
-            record,
-            thread_id=thread_id,
-            message=message,
-            sender=sender,
-            recipient=recipient,
-            max_messages=max_messages,
-            keep_ids=keep_ids,
-        )
-        if error == "forbidden":
-            return thread
-        result = await store.apply(ops)
-        if result.ok:
-            return thread
-        if result.reason in {"exists", "cas"}:
-            continue
-        return thread
-
-
 def history_window(
     messages: list[dict[str, Any]],
     *,
@@ -241,24 +203,6 @@ def history_ids_before(
     return window, len(window) == complete_count
 
 
-def history_id_window(
-    messages: list[dict[str, Any]],
-    *,
-    delivered_id: str,
-    limit: int,
-) -> tuple[list[str], bool]:
-    """Return earlier Message ids before ``delivered_id``, capped by ``limit``.
-
-    Ordered by ``seq``. No byte budget; ids are small.
-    """
-    ordered = sorted(messages, key=_sort_key)
-    return history_ids_before(
-        [message["id"] for message in ordered],
-        delivered_id=delivered_id,
-        limit=limit,
-    )
-
-
 def page_history_ids(
     message_ids: list[str],
     *,
@@ -302,29 +246,6 @@ def page_history(
     by_id = {message["id"]: message for message in ordered}
     page = [by_id[item] for item in page_ids if item in by_id]
     return page, has_more
-
-
-def trim_thread_ids(
-    message_ids: list[str],
-    *,
-    keep_ids: set[str],
-    max_messages: int,
-) -> list[str]:
-    """Drop oldest Messages past ``max_messages``, keeping ``keep_ids``.
-
-    ``message_ids`` is seq order, oldest first. Ids in ``keep_ids`` stay
-    even when that leaves the Thread longer than ``max_messages``.
-    """
-    if len(message_ids) <= max_messages:
-        return list(message_ids)
-    kept: list[str] = []
-    drop_budget = max(0, len(message_ids) - max_messages)
-    for message_id in message_ids:
-        if drop_budget > 0 and message_id not in keep_ids:
-            drop_budget -= 1
-            continue
-        kept.append(message_id)
-    return kept
 
 
 async def drop_unprotected_ids(

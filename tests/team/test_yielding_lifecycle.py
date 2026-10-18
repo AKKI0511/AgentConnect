@@ -261,6 +261,8 @@ async def test_abrupt_process_exit_recovers_ticket_and_mailbox(tmp_path: Path):
     import tests.support.crash_worker as crash_worker
 
     prefix = f"ac:test:crash:{uuid.uuid4()}"
+    probe = await connect_redis(prefix=f"{prefix}:probe")
+    await probe.close()
     out_path = tmp_path / "crash.json"
     worker = Path(crash_worker.__file__)
     completed = subprocess.run(

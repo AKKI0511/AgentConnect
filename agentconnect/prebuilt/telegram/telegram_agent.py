@@ -1,20 +1,9 @@
-"""Telegram bot that is also an ``AIAgent``.
+"""Telegram bot that is also an `AIAgent`.
 
-Join a Team like any other Agent, then ``run()`` to poll Telegram. Incoming
-Telegram text goes through the same LiteLLM loop as Team work. Telegram
-operations are extra tools.
-
-    from agentconnect.prebuilt import TelegramAIAgent
-    from agentconnect.team import Team
-
-    agent = TelegramAIAgent(
-        name="telegram-bot",
-        model="gpt-4o-mini",
-        telegram_token="...",
-    )
-    team = await Team("content-squad").start()
-    await agent.join(team)
-    await agent.run()
+Join a Team when teammates should reach this Agent, then `run` to poll.
+Telegram chats keep their own history, separate from `ctx.history`, and
+that history stops at 40 messages. `run` stops polling when cancelled
+and does not call `leave`.
 """
 
 from __future__ import annotations
@@ -23,25 +12,28 @@ import asyncio
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any, Optional
+from typing import Optional
 
 from aiogram import types
 from dotenv import load_dotenv
 
-from agentconnect.agent.tools import ToolLike
+from agentconnect.agent.tools import Tool, ToolLike
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import AgentProfile, Skill
 from agentconnect.prebuilt.ai_agent import AIAgent, CompletionOptions
 from agentconnect.prebuilt.loop import CompletionFn
 from agentconnect.prebuilt.telegram._handlers import HandlerRegistry
+from agentconnect.prebuilt.telegram._handlers.base_handler import _HandlerCallbacks
 from agentconnect.prebuilt.telegram._utils.file_utils import ensure_download_directory
 from agentconnect.prebuilt.telegram.bot_manager import TelegramBotManager
 from agentconnect.prebuilt.telegram.keyboards import (
     GROUP_CHAT_KEYBOARD,
     PRIVATE_CHAT_KEYBOARD,
 )
-from agentconnect.prebuilt.telegram.message_processor import TelegramMessageProcessor
-from agentconnect.prebuilt.tools import Tool
+from agentconnect.prebuilt.telegram.message_processor import (
+    TelegramMessageProcessor,
+    _TelegramPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +41,9 @@ _TELEGRAM_HISTORY_CAP = 40
 
 
 class TelegramAIAgent(AIAgent):
-    """``AIAgent`` with a Telegram bot. Team deliveries use ``handle``.
+    """`AIAgent` that also polls Telegram.
 
-    agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
-    await agent.join(team)
-    await agent.run()
+    Team deliveries use `handle`. Telegram chats keep their own history.
     """
 
     HELP_TEXT = (
@@ -86,7 +76,7 @@ class TelegramAIAgent(AIAgent):
         instructions: str = "You are a helpful Telegram assistant.",
         tools: Optional[Sequence[ToolLike]] = None,
         identity: Optional[AgentIdentity] = None,
-        profile: Any = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         completion: Optional[CompletionOptions] = None,
         api_key: Optional[str] = None,
         complete: Optional[CompletionFn] = None,
@@ -101,9 +91,27 @@ class TelegramAIAgent(AIAgent):
         Args:
             name: Agent name, unique within the Team.
             model: LiteLLM model id.
-            telegram_token: BotFather token. ``TELEGRAM_BOT_TOKEN`` is used
+            telegram_token: BotFather token. `TELEGRAM_BOT_TOKEN` is used
                 when this is omitted.
-            groups_file: Path used to remember registered group chat ids.
+            instructions: System prompt for every model call.
+            tools: Extra tools besides Telegram tools and Session Team tools.
+            identity: Optional Agent identity. Omit to create one.
+            profile: Discovery Profile mapping or `AgentProfile`.
+            completion: Extra LiteLLM kwargs such as `temperature`.
+            api_key: Optional key. LiteLLM also reads provider env vars.
+            complete: Replace LiteLLM with another async callable of the
+                same shape.
+            max_tool_rounds: Cap on model-tool-model cycles per turn.
+            include_team_tools: When True (default), Session Team tools are
+                attached on Team turns and Telegram replies.
+            groups_file: Group ids from `/start` in a group are written
+                here when polling stops.
+            join_token: Token from `Team.issue_join_token`, when required.
+            instance_id: Stable id for this running copy.
+
+        Raises:
+            ValueError: No bot token was given and `TELEGRAM_BOT_TOKEN`
+                is unset.
         """
         token = telegram_token or os.getenv("TELEGRAM_BOT_TOKEN")
         if not token:
@@ -111,8 +119,8 @@ class TelegramAIAgent(AIAgent):
         self.telegram_token = token
         self.groups_file = groups_file
         self.downloads_dir = ensure_download_directory(__file__)
-        self._telegram_history: dict[int, list[dict[str, Any]]] = {}
-        self.telegram_polling_task: Optional[asyncio.Task] = None
+        self._telegram_history: dict[int, list[dict[str, object]]] = {}
+        self.telegram_polling_task: Optional[asyncio.Task[None]] = None
         self.bot_manager = TelegramBotManager(
             token=self.telegram_token,
             groups_file=self.groups_file,
@@ -153,11 +161,15 @@ class TelegramAIAgent(AIAgent):
         self.bot_manager.register_shutdown_handler(self._on_shutdown)
 
     async def start_telegram_bot(self) -> None:
-        """Connect to Telegram and register handlers."""
+        """Connect to Telegram and register handlers.
+
+        Raises:
+            RuntimeError: Polling could not start.
+        """
         if not await self.bot_manager.start_polling():
             raise RuntimeError("Failed to start Telegram bot polling")
         handler_registry = HandlerRegistry()
-        callback_map = {
+        callback_map: _HandlerCallbacks = {
             "handle_start": self._handle_start,
             "handle_help": self._handle_help,
             "handle_about": self._handle_about,
@@ -168,6 +180,7 @@ class TelegramAIAgent(AIAgent):
             "get_help_text": lambda: self.HELP_TEXT,
             "get_bot_user": lambda: self.bot_manager.me,
         }
+        assert self.bot_manager.dp is not None
         await handler_registry.register_all(self.bot_manager.dp, callback_map)
 
     async def stop_telegram_bot(self) -> None:
@@ -175,7 +188,11 @@ class TelegramAIAgent(AIAgent):
         await self.bot_manager.stop_polling()
 
     async def run(self) -> None:
-        """Poll Telegram until cancelled. Join a Team first if teammates should reach you."""
+        """Poll Telegram until cancelled.
+
+        Join a Team first if teammates should reach you. Cancellation
+        stops polling and persists registered group ids.
+        """
         await self.start_telegram_bot()
         logger.info("Telegram agent polling name=%s", self.name)
         try:
@@ -193,7 +210,7 @@ class TelegramAIAgent(AIAgent):
 
     on_shutdown = _on_shutdown
 
-    async def _answer_telegram(self, payload: Mapping[str, Any]) -> None:
+    async def _answer_telegram(self, payload: _TelegramPayload) -> None:
         """Run the model loop for one Telegram payload and send the reply."""
         chat_id = int(payload["chat_id"])
         content = str(payload.get("content") or "")

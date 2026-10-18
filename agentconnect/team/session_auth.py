@@ -30,7 +30,7 @@ class SessionRuntime(Protocol):
     async def ensure_operator_session(self) -> str:
         """Return a live Session token for the loopback operator."""
 
-    async def require_live_session(self, session_token: str) -> str:
+    async def _require_live_session(self, session_token: str) -> str:
         """Return ``session_token`` if the Session is live. Does not renew it."""
 
 
@@ -44,7 +44,9 @@ def host_is_loopback(host: str) -> bool:
         return False
     if addr.is_loopback:
         return True
-    mapped = getattr(addr, "ipv4_mapped", None)
+    if not isinstance(addr, ipaddress.IPv6Address):
+        return False
+    mapped = addr.ipv4_mapped
     return mapped is not None and mapped.is_loopback
 
 
@@ -123,7 +125,7 @@ async def session_token_for_request(
     """
     token = bearer_token(headers)
     if token is not None:
-        await runtime.require_live_session(token)
+        await runtime._require_live_session(token)
         return token
     if allow_loopback_operator(
         headers=headers, peer_host=peer_host, in_process=in_process

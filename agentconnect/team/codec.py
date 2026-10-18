@@ -7,7 +7,6 @@ import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 _DID_KEY = re.compile(r"^did:key:z[1-9A-HJ-NP-Za-km-z]+$")
 _TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
@@ -28,7 +27,7 @@ def format_timestamp(value: datetime) -> str:
     return instant.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def parse_timestamp(value: str) -> datetime:
+def parse_timestamp(value: object) -> datetime:
     """Parse a Runtime timestamp. Raises ValueError when the form is invalid."""
     if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
         raise ValueError("timestamp must be RFC 3339 UTC ending in Z")
@@ -44,7 +43,7 @@ def timestamp_score(value: datetime | str) -> float:
     return value.astimezone(timezone.utc).timestamp()
 
 
-def require_uuid(value: Any, *, field: str = "id") -> str:
+def require_uuid(value: object, *, field: str = "id") -> str:
     """Return ``value`` when it is an RFC 9562 UUID string."""
     if not isinstance(value, str):
         raise ValueError(f"{field} must be a UUID string")
@@ -60,14 +59,14 @@ def new_uuid() -> str:
     return str(uuid.uuid4())
 
 
-def require_did(value: Any) -> str:
+def require_did(value: object) -> str:
     """Return ``value`` when it is a ``did:key`` identifier."""
     if not isinstance(value, str) or _DID_KEY.fullmatch(value) is None:
         raise ValueError("agent_did must be a did:key identifier")
     return value
 
 
-def _normalize_json(value: Any) -> Any:
+def _normalize_json(value: object) -> object:
     if isinstance(value, dict):
         return {str(key): _normalize_json(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -83,7 +82,7 @@ def _normalize_json(value: Any) -> Any:
     return value
 
 
-def canonical_json(value: Any) -> str:
+def canonical_json(value: object) -> str:
     """Return a stable JSON encoding for idempotency comparison.
 
     Object keys are sorted. Numbers that are equal in value (``1``, ``1.0``,
@@ -100,12 +99,12 @@ def canonical_json(value: Any) -> str:
     )
 
 
-def semantic_hash(value: Any) -> str:
-    """SHA-256 of :func:`canonical_json` for cheap idempotency lookup."""
+def semantic_hash(value: object) -> str:
+    """SHA-256 of `canonical_json` for cheap idempotency lookup."""
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def json_size(value: Any) -> int:
+def json_size(value: object) -> int:
     """UTF-8 byte length of JSON encoding, used for payload limits."""
     return len(
         json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")

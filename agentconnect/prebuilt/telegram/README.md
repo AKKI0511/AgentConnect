@@ -1,38 +1,28 @@
-# Telegram Agent
+# Telegram agent
 
-`TelegramAIAgent` is an `AIAgent` with a Telegram bot. Join a Team, then
-`run()` to poll Telegram. Incoming Telegram text uses the same LiteLLM loop
-as Team work. Telegram send and announcement operations are extra tools.
+`TelegramAIAgent` is an `AIAgent` with a Telegram bot. Install
+`agentconnect[telegram]`. Set `TELEGRAM_BOT_TOKEN`, or pass
+`telegram_token`.
 
-Requires `pip install 'agentconnect[telegram]'`.
+Join a Team when teammates should reach this Agent. `run` polls until
+cancelled, then stops polling and writes the group id file. `run` does
+not call `leave`.
 
-## Usage
+Private text, group mentions, and media each go through the model loop.
+Telegram history is kept per chat and stops at 40 messages. Team
+deliveries use `handle` and `ctx.history`. Those two histories are
+separate. With `include_team_tools` left on, a Telegram turn can call
+Session tools after `join`.
+
+`/start` in a group records that chat for announcements. The default
+group file is `groups.txt`.
+
+`team` is started and `TELEGRAM_BOT_TOKEN` is set:
 
 ```python
 from agentconnect.prebuilt import TelegramAIAgent
-from agentconnect.team import Team
 
-agent = TelegramAIAgent(
-    name="telegram-bot",
-    model="gpt-4o-mini",
-    telegram_token="your_telegram_token",
-)
-team = await Team("content-squad").start()
+agent = TelegramAIAgent(name="telegram-bot", model="gpt-4o-mini")
 await agent.join(team)
 await agent.run()
 ```
-
-`TELEGRAM_BOT_TOKEN` is used when `telegram_token` is omitted.
-
-`groups_file` stores registered group chat ids (default `groups.txt`).
-
-## Layout
-
-- `TelegramAIAgent`: model loop plus Telegram polling
-- `TelegramBotManager`: bot lifecycle
-- `TelegramMessageProcessor`: Telegram update to a payload for the loop
-- `HandlerRegistry`: `/start`, `/help`, mentions, media, private text
-- `telegram_tools.py`: `Tool` values the model can call
-
-Team deliveries still go through `handle`. `run()` polls Telegram
-only. The Session already pulls Team work after `join`.

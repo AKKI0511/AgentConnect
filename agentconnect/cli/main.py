@@ -1,9 +1,9 @@
-"""AgentConnect CLI.
+"""Operator commands for one Team.
 
-A person is a Client of the Team. ``up`` starts the Runtime from
-``agentconnect.toml`` or ``[tool.agentconnect]`` in ``pyproject.toml``.
-The other commands talk to that Runtime over loopback HTTP as the
-reserved ``operator`` Membership.
+`up` starts the Runtime from `agentconnect.toml` or
+`[tool.agentconnect]` in `pyproject.toml`, then joins the hosted
+Agents. The other commands call that Runtime over loopback HTTP as the
+reserved `operator` Membership.
 
     agentconnect init
     agentconnect up
@@ -21,17 +21,20 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, NoReturn, Optional, TypedDict
 
 import typer
 
 from agentconnect import __version__
 from agentconnect.cli import doctor as doctor_cmds
+from agentconnect.agent import BaseAgent
+from agentconnect.core.base import JsonValue, dump_public
+from collections.abc import Mapping
+
 from agentconnect.cli.client import RuntimeClient
 from agentconnect.cli.hosting import (
     construct_hosted_agent,
     ensure_import_path,
-    join_hosted_agent,
     team_from_config,
 )
 from agentconnect.cli.origin import resolve_runtime_origin
@@ -68,7 +71,7 @@ app = typer.Typer(
 )
 
 
-def _die(message: str, code: int = 1) -> None:
+def _die(message: str, code: int = 1) -> NoReturn:
     typer.echo(message, err=True)
     raise typer.Exit(code=code)
 
@@ -81,24 +84,30 @@ def _concise(exc: BaseException, *, limit: int = 400) -> str:
     return text
 
 
-def _die_exc(exc: BaseException) -> None:
+def _die_exc(exc: BaseException) -> NoReturn:
     _die(_concise(exc))
 
 
-def _die_startup(config_path: Path, exc: BaseException) -> None:
+def _die_startup(config_path: Path, exc: BaseException) -> NoReturn:
     if os.environ.get("AGENTCONNECT_CLI_TRACE"):
         traceback.print_exc()
     _die(f"{config_path}: {_concise(exc)}")
 
 
-def _emit(data: Any, *, as_json: bool) -> None:
+class _LaunchOptions(TypedDict, total=False):
+    cwd: str
+    creationflags: int
+    start_new_session: bool
+
+
+def _emit(data: object, *, as_json: bool) -> None:
     if as_json:
-        typer.echo(json.dumps(data, indent=2))
+        typer.echo(json.dumps(dump_public(data), indent=2))
         return
     if isinstance(data, str):
         typer.echo(data)
         return
-    typer.echo(json.dumps(data, indent=2))
+    typer.echo(json.dumps(dump_public(data), indent=2))
 
 
 def _resolve_url(
@@ -122,7 +131,7 @@ def _client(
     return RuntimeClient(_resolve_url(url, file=file), timeout=timeout)
 
 
-def _handle_team_error(exc: TeamError) -> None:
+def _handle_team_error(exc: TeamError) -> NoReturn:
     _die(f"{exc.code}: {exc.message}")
 
 
@@ -143,7 +152,17 @@ def init(
         ),
     ] = False,
 ) -> None:
-    """Scaffold agentconnect.toml, one hosted Agent, and a shared MCP tool."""
+    """Scaffold agentconnect.toml, one hosted Agent, and a shared MCP tool.
+
+    Writes `agentconnect.toml`, `agents/assistant.py`, and `tools/shared.py`
+    in the current directory. Existing files are left alone unless
+    `--force` is set.
+
+    Examples:
+        ```bash
+        agentconnect init --name content-squad
+        ```
+    """
     root = Path.cwd()
     try:
         existing = find_config_file(root)
@@ -166,12 +185,11 @@ def init(
             port=9000,
             require_join_auth=True,
             tools=["tools.shared:ping"],
-            agents=[
-                HostedAgentConfig(
-                    class_path="agents.assistant:create_assistant",
-                    name="assistant",
+            agents={
+                "assistant": HostedAgentConfig(
+                    entrypoint="agents.assistant:create_assistant",
                 )
-            ],
+            },
         )
     except Exception as exc:
         _die_exc(exc)
@@ -220,7 +238,19 @@ def up(
         bool, typer.Option("--detach", help="Start in the background.")
     ] = False,
 ) -> None:
-    """Start the Team and its hosted Agents from a Team file."""
+    """Start the Team and its hosted Agents from a Team file.
+
+    Foreground `up` binds loopback HTTP, joins hosted Agents, and blocks
+    until interrupted. `--detach` starts a background process and
+    returns immediately. It does not wait until the Runtime is serving.
+    Run `agentconnect status` after it binds.
+
+    Examples:
+        ```bash
+        agentconnect up
+        agentconnect up --detach
+        ```
+    """
     root = Path.cwd()
     try:
         config_path, config = load_selected_team(file, start=root)
@@ -228,12 +258,6 @@ def up(
         _die("Team file was not found. Run 'agentconnect init'.")
     except (ValueError, OSError) as exc:
         _die_exc(exc)
-    if config_path.suffix.lower() in {".yaml", ".yml"}:
-        typer.echo(
-            f"warning: {config_path} is a legacy YAML Team file; "
-            "migrate to agentconnect.toml",
-            err=True,
-        )
     typer.echo(f"using {config_path}")
     existing = read_state(config_path)
     if existing and is_owned_team_process(existing, config_path):
@@ -258,14 +282,16 @@ async def _run_up(config: TeamConfig, config_path: Path) -> None:
     try:
         ensure_import_path(config_path.parent)
         team = team_from_config(config)
-        agents = [construct_hosted_agent(spec) for spec in config.agents]
+        agents = [
+            construct_hosted_agent(name, spec) for name, spec in config.agents.items()
+        ]
     except (KeyboardInterrupt, SystemExit, typer.Exit):
         raise
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         _die_startup(config_path, exc)
-    joined: list[Any] = []
+    joined: list[BaseAgent] = []
     pid = os.getpid()
     published: Optional[str] = None
     try:
@@ -273,7 +299,7 @@ async def _run_up(config: TeamConfig, config_path: Path) -> None:
         try:
             url = await team.serve(host=config.host, port=config.port)
             for agent in agents:
-                await join_hosted_agent(team, agent)
+                await agent.join(team)
                 joined.append(agent)
         except KeyboardInterrupt:
             raise
@@ -327,7 +353,7 @@ def _spawn_detached(config_path: Path) -> None:
         "--file",
         str(config_path.resolve()),
     ]
-    kwargs: dict[str, Any] = {"cwd": str(config_path.parent)}
+    kwargs: _LaunchOptions = {"cwd": str(config_path.parent)}
     if sys.platform == "win32":
         kwargs["creationflags"] = (
             subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -346,7 +372,17 @@ def down(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Stop the Team started by ``up`` for the selected Team file."""
+    """Stop the process this CLI started for the selected Team file.
+
+    A Runtime you started in Python keeps running. If this CLI cannot
+    confirm that it owns the process, it leaves the process and the
+    saved record alone.
+
+    Examples:
+        ```bash
+        agentconnect down
+        ```
+    """
     root = Path.cwd()
     try:
         config_path, _config = load_selected_team(file, start=root)
@@ -357,7 +393,8 @@ def down(
     state = read_state(config_path)
     if state is None or not isinstance(state.get("pid"), int):
         _die(f"no running Team for {config_path}")
-    pid = int(state["pid"])
+    pid = state["pid"]
+    assert isinstance(pid, int)
     if pid == os.getpid():
         _die("refusing to stop the current process")
     recorded = state.get("created")
@@ -398,7 +435,17 @@ def status(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
-    """Show members, online state, Mailbox depths, and open Tickets."""
+    """Show members, online state, Mailbox depths, and open Tickets.
+
+    Talks to the running Runtime as the reserved `operator` Membership.
+    `--url` overrides `--file`, saved state, and discovery.
+
+    Examples:
+        ```bash
+        agentconnect status
+        agentconnect status --json
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             snapshot = client.status()
@@ -451,7 +498,17 @@ def token_issue(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Issue a join token for a network Agent."""
+    """Issue a join token for a network Agent.
+
+    `--did` binds the token to that identity. `--name` restricts the
+    requested name. Omit both for an invite that any proving Agent can
+    consume. Prints the token secret, then `expires_at`.
+
+    Examples:
+        ```bash
+        agentconnect token issue --name writer
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             issued = client.issue_token(
@@ -475,7 +532,16 @@ def token_revoke(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Revoke a join token and drop Sessions created from it."""
+    """Revoke a join token and drop Sessions created from it.
+
+    A later join with this token fails. Waiting sends from those
+    Sessions return unauthorized.
+
+    Examples:
+        ```bash
+        agentconnect token revoke TOKEN
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             client.revoke_token(token)
@@ -495,7 +561,16 @@ def find(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Search this Team's Directory."""
+    """Search this Team's Directory.
+
+    Prints ranked Addresses and summaries. The operator is excluded from
+    results. Omit `--limit` for every other member, at most 100.
+
+    Examples:
+        ```bash
+        agentconnect find "someone who can draft a summary"
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             result = client.find(query, limit=limit)
@@ -531,8 +606,22 @@ def ask(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Send reply-expected work and wait for the Ticket."""
-    content: Any = question
+    """Send reply-expected work and wait for the Ticket.
+
+    The wait can end with an open Ticket. This command does not send the
+    request again to collect a later reply.
+
+    Content that looks like JSON is parsed as JSON. `--deadline` is
+    seconds until the Ticket expires; omit it to use the Runtime work
+    lifetime. Prints the trace id, Ticket state, and any response then
+    available.
+
+    Examples:
+        ```bash
+        agentconnect ask writer "Draft two paragraphs"
+        ```
+    """
+    content: JsonValue = question
     stripped = question.strip()
     if stripped[:1] in "{[":
         try:
@@ -576,7 +665,16 @@ def trace_cmd(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Print the timeline for one causal operation."""
+    """Print the timeline for one causal operation.
+
+    Pass a `trace_id` from `ask` or a Message. The operator sees every
+    event on that trace.
+
+    Examples:
+        ```bash
+        agentconnect trace TRACE_ID
+        ```
+    """
     try:
         with _client(url, file=file) as client:
             result = client.get_trace(trace_id)
@@ -590,12 +688,13 @@ def trace_cmd(
         _print_trace_event(event)
 
 
-def _print_trace_event(event: dict[str, Any]) -> None:
+def _print_trace_event(event: Mapping[str, object]) -> None:
     at = str(event.get("at") or "")
     stamp = at[11:19] if len(at) >= 19 else at
     kind = event.get("type")
     actor = event.get("actor") or ""
-    detail = event.get("detail") or {}
+    raw_detail = event.get("detail")
+    detail = raw_detail if isinstance(raw_detail, Mapping) else {}
     extra = ""
     if kind == "accepted":
         extra = f"{detail.get('sender')} -> {detail.get('recipient')}"
@@ -621,7 +720,15 @@ def watch(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Print new Trace events until interrupted."""
+    """Print new Trace events until interrupted.
+
+    Streams operator Trace events from the running Runtime until Ctrl-C.
+
+    Examples:
+        ```bash
+        agentconnect watch
+        ```
+    """
     client = RuntimeClient(_resolve_url(url, file=file))
     try:
         for item in client.watch():
@@ -646,7 +753,16 @@ def doctor(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Check the Team file, keys, and whether the Runtime is reachable."""
+    """Check the Team file, selected origin, and Runtime access.
+
+    Does not start or stop the Team. `--url` overrides `--file`, saved
+    state, and discovery.
+
+    Examples:
+        ```bash
+        agentconnect doctor
+        ```
+    """
     doctor_cmds.doctor(url=url, file=file)
 
 

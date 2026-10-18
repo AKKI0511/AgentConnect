@@ -201,10 +201,10 @@ def heavy_profile(label: str) -> dict[str, Any]:
 
 async def http_find(client: Any, origin: str, token: str, query: str) -> dict[str, Any]:
     """POST ``Team.find`` over HTTP. Used by correctness and benchmark tests."""
-    from agentconnect.team.http import HTTP_PREFIX
+    from agentconnect.team.http import _HTTP_PREFIX
 
     response = await client.post(
-        f"{origin}{HTTP_PREFIX}/directory/find",
+        f"{origin}{_HTTP_PREFIX}/directory/find",
         json={"query": query},
         headers={"Authorization": f"Bearer {token}"},
     )

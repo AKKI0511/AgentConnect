@@ -11,7 +11,7 @@ list. A member receives only events that name that Membership.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from agentconnect.team.store.base import Store, StoreRecord
 from agentconnect.team.store.ops import Cas, Insert, SetAdd, StoreOp
@@ -144,7 +144,7 @@ def event_names_member(
 
 
 async def visible_events(
-    store: Store, events: list[Mapping[str, Any]], membership_id: str
+    store: Store, events: Sequence[Mapping[str, Any]], membership_id: str
 ) -> list[dict[str, Any]]:
     """Return the subset of ``events`` that name ``membership_id``, in order."""
     ids = {

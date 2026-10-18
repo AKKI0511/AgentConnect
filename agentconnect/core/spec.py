@@ -1,3 +1,6 @@
-"""Public contract version this implementation speaks."""
+"""Contract version required when clients join a Team."""
 
-SPEC_VERSION = "1.0.0-draft"
+from typing import Final
+
+SPEC_VERSION: Final = "1.0.0-draft"
+"""Exact version string a Client sends on join and a Runtime returns."""

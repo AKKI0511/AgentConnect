@@ -1,8 +1,10 @@
-"""Public error raised by a failed Runtime operation."""
+"""The error raised when a Team operation fails."""
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
+
+from agentconnect.core.base import JsonObject
 
 IDENTITY_MISSING = (
     "Stored Team state is missing Membership identity. "
@@ -11,12 +13,27 @@ IDENTITY_MISSING = (
 
 
 class TeamError(Exception):
-    """A Runtime operation failed with a public error code.
+    """A failed Team operation.
 
-    ``code`` is one of the well-known codes in the AgentConnect Runtime
-    contract (for example ``not_found``, ``busy``, ``wait_limit``,
-    ``id_conflict``). Callers should branch on ``code``, not on the
-    exception message.
+    Read `code` to decide whether to handle or propagate the error.
+
+    Common codes are `not_found`, `unauthorized`, `busy`, and
+    `wait_limit`.
+
+    Examples:
+        `team` is started, and `name` is an agent name. Removing a
+        membership that is already gone is safe. Any other `TeamError`
+        still propagates.
+
+        ```python
+        from agentconnect.team import TeamError
+
+        try:
+            await team.remove_membership(name)
+        except TeamError as exc:
+            if exc.code != "not_found":
+                raise
+        ```
     """
 
     def __init__(
@@ -24,19 +41,26 @@ class TeamError(Exception):
         code: str,
         message: str,
         *,
-        details: Optional[dict[str, Any]] = None,
+        details: Optional[JsonObject] = None,
         retryable: Optional[bool] = None,
     ) -> None:
-        """Set the public ``code`` and ``message`` for this failure."""
         super().__init__(f"{code}: {message}")
-        self.code = code
-        self.message = message
-        self.details = details
-        self.retryable = retryable
+        self.code: str = code
+        """Machine-readable failure code."""
+        self.message: str = message
+        """Explanation of the failure for a person."""
+        self.details: Optional[JsonObject] = details
+        """Additional error fields, or None when unspecified."""
+        self.retryable: Optional[bool] = retryable
+        """Whether the same call may succeed later, or None when unspecified."""
 
-    def to_error_object(self) -> dict[str, Any]:
-        """Return the public ErrorObject for this failure."""
-        error: dict[str, Any] = {"code": self.code, "message": self.message}
+    def to_error_object(self) -> JsonObject:
+        """Serialize this error for a Runtime response.
+
+        Includes `code` and `message`; `details` and `retryable` are omitted
+        when None.
+        """
+        error: JsonObject = {"code": self.code, "message": self.message}
         if self.details is not None:
             error["details"] = self.details
         if self.retryable is not None:

@@ -60,7 +60,7 @@ async def test_present_empty_authorization_is_unauthorized(team: Team):
 @pytest.mark.asyncio
 async def test_in_process_missing_header_is_operator(team: Team):
     token = await session_token_for_request(team, None, in_process=True)
-    address = await team.caller_address(token)
+    address = await team._caller_address(token)
     assert address.startswith("operator@")
 
 

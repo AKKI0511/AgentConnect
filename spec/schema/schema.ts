@@ -637,17 +637,6 @@ export interface DirectoryMatch {
 }
 
 /**
- * Address and Profile without Directory DID bookkeeping. Runtime, HTTP,
- * and Client `get_profile` / `get_entry` still return `DirectoryEntry`.
- */
-export interface ProfileView {
-  /** Canonical qualified Address. */
-  address: QualifiedAddress;
-  /** Full discovery information. */
-  profile: AgentProfile;
-}
-
-/**
  * Found item in `GetProfilesResult`. `address` is the canonical Directory
  * Address, which may differ in qualification from the requested string.
  */
@@ -1495,7 +1484,6 @@ export interface AgentConnectPublicSchema {
   ticket_view?: TicketView;
   directory_entry?: DirectoryEntry;
   directory_match?: DirectoryMatch;
-  profile_view?: ProfileView;
   profile_found?: ProfileFound;
   profile_miss?: ProfileMiss;
   profile_item?: ProfileItem;

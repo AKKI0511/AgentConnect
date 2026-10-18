@@ -1,9 +1,10 @@
 # Hosted Team from a file
 
 `agentconnect.toml` names the Team and the Agents this process hosts.
-`class` is a `BaseAgent` subclass or a function `create(name)` that
-returns an unjoined Agent. `agentconnect up` starts the Runtime and
-joins those Agents.
+`agents` maps canonical names to an `entrypoint`: a `BaseAgent`
+subclass or a synchronous factory `create(name, **kwargs)` that returns
+an unjoined Agent. `agentconnect up` starts the Runtime and joins those
+Agents.
 
 From this directory, using the recipes uv project::
 

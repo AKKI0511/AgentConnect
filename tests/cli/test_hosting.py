@@ -12,7 +12,6 @@ from agentconnect.cli.hosting import (
     construct_hosted_agent,
     ensure_import_path,
     import_symbol,
-    join_hosted_agent,
     team_from_config,
 )
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
@@ -20,7 +19,7 @@ from agentconnect.team import Team
 
 
 class Echo(BaseAgent):
-    """Hosted Agent used to prove ``join_hosted_agent`` opens a Membership."""
+    """Hosted Agent used to prove construction and join."""
 
     profile = {
         "summary": "Echoes a request.",
@@ -36,6 +35,10 @@ class Echo(BaseAgent):
         if msg.kind != "request":
             return None
         return msg.content
+
+
+def _spec(entrypoint: str, **kwargs: Any) -> HostedAgentConfig:
+    return HostedAgentConfig(entrypoint=entrypoint, kwargs=dict(kwargs))
 
 
 def test_import_symbol_and_team_from_config() -> None:
@@ -57,9 +60,7 @@ def test_import_symbol_and_team_from_config() -> None:
 
 
 def test_construct_class_and_factory() -> None:
-    classed = construct_hosted_agent(
-        HostedAgentConfig(class_path=f"{__name__}:Echo", name="echo")
-    )
+    classed = construct_hosted_agent("echo", _spec(f"{__name__}:Echo"))
     assert isinstance(classed, Echo)
     assert classed.name == "echo"
 
@@ -67,11 +68,24 @@ def test_construct_class_and_factory() -> None:
         return Echo(name=name)
 
     globals()["create_echo"] = create_echo
-    built = construct_hosted_agent(
-        HostedAgentConfig(class_path=f"{__name__}:create_echo", name="echo")
-    )
+    built = construct_hosted_agent("echo", _spec(f"{__name__}:create_echo"))
     assert isinstance(built, Echo)
     assert built.name == "echo"
+
+
+def test_construct_forwards_kwargs() -> None:
+    seen: dict[str, object] = {}
+
+    def create_echo(name: str, model: str) -> BaseAgent:
+        seen["model"] = model
+        return Echo(name=name)
+
+    globals()["create_echo_kwargs"] = create_echo
+    built = construct_hosted_agent(
+        "echo", _spec(f"{__name__}:create_echo_kwargs", model="provider/model")
+    )
+    assert isinstance(built, Echo)
+    assert seen["model"] == "provider/model"
 
 
 @pytest.mark.asyncio
@@ -87,9 +101,7 @@ async def test_construct_rejects_joined_agent_without_leaving() -> None:
 
         globals()["already_joined"] = already_joined
         with pytest.raises(ValueError, match="joined Agent"):
-            construct_hosted_agent(
-                HostedAgentConfig(class_path=f"{__name__}:already_joined", name="echo")
-            )
+            construct_hosted_agent("echo", _spec(f"{__name__}:already_joined"))
         assert agent.connected
     finally:
         await agent.leave()
@@ -102,9 +114,7 @@ def test_construct_rejects_async_factory_without_leaking() -> None:
 
     globals()["async_create"] = async_create
     with pytest.raises(ValueError, match="synchronous"):
-        construct_hosted_agent(
-            HostedAgentConfig(class_path=f"{__name__}:async_create", name="echo")
-        )
+        construct_hosted_agent("echo", _spec(f"{__name__}:async_create"))
 
 
 def test_construct_closes_returned_coroutine() -> None:
@@ -122,9 +132,7 @@ def test_construct_closes_returned_coroutine() -> None:
 
     globals()["returns_coro"] = returns_coro
     with pytest.raises(ValueError, match="coroutine"):
-        construct_hosted_agent(
-            HostedAgentConfig(class_path=f"{__name__}:returns_coro", name="echo")
-        )
+        construct_hosted_agent("echo", _spec(f"{__name__}:returns_coro"))
     assert inspect.getcoroutinestate(held[0]) == inspect.CORO_CLOSED
 
 
@@ -134,9 +142,20 @@ def test_construct_wraps_ordinary_factory_errors() -> None:
 
     globals()["boom"] = boom
     with pytest.raises(ValueError, match="model setup failed"):
+        construct_hosted_agent("echo", _spec(f"{__name__}:boom"))
+
+
+def test_construct_preserves_typeerror_cause() -> None:
+    def no_kwargs(name: str) -> BaseAgent:
+        return Echo(name=name)
+
+    globals()["no_kwargs"] = no_kwargs
+    with pytest.raises(ValueError, match="could not construct 'echo' from") as caught:
         construct_hosted_agent(
-            HostedAgentConfig(class_path=f"{__name__}:boom", name="echo")
+            "echo", _spec(f"{__name__}:no_kwargs", model="provider/model")
         )
+    assert "model" in str(caught.value)
+    assert isinstance(caught.value.__cause__, TypeError)
 
 
 def test_construct_rejects_non_agent_and_wrong_name() -> None:
@@ -149,13 +168,9 @@ def test_construct_rejects_non_agent_and_wrong_name() -> None:
     globals()["not_an_agent"] = not_an_agent
     globals()["wrong_name"] = wrong_name
     with pytest.raises(ValueError, match="not a BaseAgent"):
-        construct_hosted_agent(
-            HostedAgentConfig(class_path=f"{__name__}:not_an_agent", name="echo")
-        )
+        construct_hosted_agent("echo", _spec(f"{__name__}:not_an_agent"))
     with pytest.raises(ValueError, match="expected 'echo'"):
-        construct_hosted_agent(
-            HostedAgentConfig(class_path=f"{__name__}:wrong_name", name="echo")
-        )
+        construct_hosted_agent("echo", _spec(f"{__name__}:wrong_name"))
 
 
 def test_selected_project_imports_beat_cwd_and_nested(
@@ -198,18 +213,3 @@ def test_selected_project_imports_beat_cwd_and_nested(
     finally:
         sys.modules.pop("m11probe", None)
         sys.path[:] = saved_path
-
-
-@pytest.mark.asyncio
-async def test_join_hosted_agent_issues_token() -> None:
-    team = await Team("demo-team", require_join_auth=True, embeddings="none").start()
-    agent = Echo(name="echo")
-    try:
-        await join_hosted_agent(team, agent)
-        operator = await team.ensure_operator_session()
-        snapshot = await team.status(operator)
-        names = {row["name"] for row in snapshot["members"]}
-        assert "echo" in names
-    finally:
-        await agent.leave()
-        await team.stop()

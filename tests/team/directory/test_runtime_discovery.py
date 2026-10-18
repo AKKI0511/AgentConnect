@@ -30,7 +30,7 @@ from tests.support.runtime import (
 from tests.team.conftest import deadline, join_member, make_did, profile
 
 from agentconnect.team.directory import HashedEmbedder
-from agentconnect.team.directory.directory import Directory
+from agentconnect.team.directory.directory import _Directory
 from agentconnect.team.store.memory import MemoryStore
 
 pytestmark = pytest.mark.asyncio
@@ -47,9 +47,9 @@ def _member(name: str, member_profile: dict) -> dict[str, Any]:
 
 async def _warm_directory(
     count: int, *, specialist: bool = True
-) -> tuple[Directory, list]:
+) -> tuple[_Directory, list]:
     store = CountingStore(MemoryStore())
-    directory = Directory(store, HashedEmbedder())
+    directory = _Directory(store, HashedEmbedder())
     members = []
     if specialist:
         members.append(_member("reviewer", specialist_profile()))
@@ -160,7 +160,7 @@ async def test_concurrent_searches_share_one_space():
 
 async def test_profile_update_rebuilds_that_vector():
     store = MemoryStore()
-    directory = Directory(store, HashedEmbedder())
+    directory = _Directory(store, HashedEmbedder())
     writer = _member("writer", profile(summary="Writes short drafts from notes."))
     await directory.upsert(writer["name"], writer["profile"])
     updated = _member("writer", specialist_profile())
@@ -190,7 +190,7 @@ async def test_backend_failure_rebuild_stays_responsive():
             return [[1.0, 0.0] for _ in texts]
 
     store = MemoryStore()
-    directory = Directory(store, _FailAfter())
+    directory = _Directory(store, _FailAfter())
     members = [
         _member(f"agent{index:02d}", heavy_profile(f"task{index:02d}"))
         for index in range(20)

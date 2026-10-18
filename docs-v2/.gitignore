@@ -1,0 +1,20 @@
+# Mintlify / Node
+node_modules/
+.mintlify/
+.vercel/
+
+# Python tooling
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Public, site-local agent guidance
+!.agents/
+!.agents/skills/
+!.agents/skills/docs-site-maintenance/
+!.agents/skills/docs-site-maintenance/SKILL.md

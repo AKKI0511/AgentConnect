@@ -22,6 +22,7 @@ from mcp import Client
 from agentconnect import AgentProfile, BaseAgent, Skill
 from agentconnect.agent.errors import SessionError
 from agentconnect.core.ticket import Ticket
+from tests.support.tools import call_team_tool
 
 ROOT = Path(__file__).resolve().parents[2]
 EX = ROOT / "experiments" / "team_tools"
@@ -1063,13 +1064,19 @@ async def test_lab_notes_pair_out_of_order_replies_by_parent_id(
         assert second_done.response is not None
         assert first_done.response.content == {"recorded": True}
         assert second_done.response.content == {"recorded": True}
-        newest = await tools.get_history(thread_id=thread_id, limit=2)
+        newest = await call_team_tool(
+            tools, "get_history", thread_id=thread_id, limit=2
+        )
         assert newest["has_more"] is True
         replies = [turn for turn in newest["messages"] if turn["kind"] == "response"]
         assert {turn["parent_id"] for turn in replies} <= {first.id, second.id}
         assert all(turn["content"] == {"recorded": True} for turn in replies)
-        older = await tools.get_history(
-            thread_id=thread_id, before=newest["next_before"], limit=2
+        older = await call_team_tool(
+            tools,
+            "get_history",
+            thread_id=thread_id,
+            before=newest["next_before"],
+            limit=2,
         )
         requests = [turn for turn in older["messages"] if turn["kind"] == "request"]
         assert {turn["id"] for turn in requests} == {first.id, second.id}
@@ -1085,7 +1092,7 @@ async def test_lab_notes_pair_out_of_order_replies_by_parent_id(
             ),
         )
         assert other_ticket.state == "completed"
-        other_history = await tools.get_history(thread_id=other)
+        other_history = await call_team_tool(tools, "get_history", thread_id=other)
         other_ids = {turn["id"] for turn in other_history["messages"]}
         assert first.id not in other_ids
         assert second.id not in other_ids

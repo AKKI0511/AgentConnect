@@ -13,6 +13,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "python-jose", extra = ["cryptography"] },
+    { name = "tomli-w" },
     { name = "typing-extensions" },
 ]
 
@@ -36,10 +37,9 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.7.1,<3.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.5.0,<4.0.0" },
-    { name = "pyyaml", marker = "extra == 'cli'", specifier = ">=6.0.2,<7.0.0" },
-    { name = "qdrant-client", marker = "extra == 'index'", specifier = ">=1.14.2,<2.0.0" },
     { name = "redis", extras = ["hiredis"], marker = "extra == 'redis'", specifier = ">=5.2.1,<6.0.0" },
     { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.14.0,<1" },
+    { name = "tomli-w", specifier = ">=1.1.0,<2.0.0" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.16.1,<0.17.0" },
     { name = "typing-extensions", specifier = ">=4.12.2,<5.0.0" },
     { name = "uvicorn", marker = "extra == 'index'", specifier = ">=0.34.0,<0.35.0" },
@@ -70,6 +70,7 @@ demo = [
 ]
 dev = [
     { name = "jsonschema", specifier = ">=4.23.0,<5.0.0" },
+    { name = "mypy", specifier = "==2.4.0" },
     { name = "pytest", specifier = ">=8.3.5,<9.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.26.0,<0.27.0" },
 ]
@@ -667,6 +668,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+]
+
+[[package]]
+name = "tomli-w"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184, upload-time = "2025-01-15T12:07:24.262Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675, upload-time = "2025-01-15T12:07:22.074Z" },
 ]
 
 [[package]]

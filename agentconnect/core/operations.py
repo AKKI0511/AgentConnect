@@ -1,8 +1,13 @@
-"""Runtime operation requests and results from the public schema."""
+"""Request and result bodies for advanced Runtime clients.
+
+`BaseAgent` builds these requests for ordinary agent code. Transport authors
+use the wire bodies for admission, delivery and collection. Model-facing
+views keep the same outcomes with less data; use their own parsers.
+"""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Mapping, Optional, Union
+from typing import Annotated, Literal, Mapping, Optional, Union
 
 from pydantic import Field, TypeAdapter, ValidationError
 
@@ -120,7 +125,17 @@ __all__ = [
 
 
 class JoinChallenge(SchemaModel):
-    """Short-lived challenge used to prove Agent DID control."""
+    """Short-lived challenge used to prove Agent DID control.
+
+    A DID is the Agent's `did:key` identity. The Client signs this
+    challenge with `issue_identity_proof` and sends the JWT as
+    `identity_proof` on join.
+
+    Attributes:
+        nonce: At least 128 bits of random data in base64url form.
+        audience: Exact JWT audience required by the Runtime.
+        expires_at: Time after which this challenge cannot authenticate a join.
+    """
 
     nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{22,64}$")
     audience: str = Field(
@@ -130,11 +145,24 @@ class JoinChallenge(SchemaModel):
 
 
 class JoinRequest(SchemaModel):
-    """Input that creates or reconnects a Membership and opens one Instance.
+    """Create or reconnect a Membership and open a Session for one running Instance.
 
-    ``spec_version`` is required on the wire. ``Team.join`` fills it when
-    you pass kwargs. ``delivery_history="ids"`` puts earlier Message ids
-    on each Delivery instead of Message bodies. Omit it to receive bodies.
+    `spec_version` is required on the wire. `Team.join` supplies it for keyword
+    calls. Reconnection needs the retained Agent DID and, on authenticated joins,
+    valid admission credentials and a fresh identity proof.
+
+    Attributes:
+        name: Requested name, canonicalized by the Runtime.
+        agent_did: Identity bound to the Membership; a new key cannot reclaim it.
+        profile: Replaces the Membership's discovery information.
+        instance_id: Omit to allocate an Instance. Reusing it replaces that
+            Instance's Session, invalidating its old token.
+        max_in_flight: Caps active Delivery leases, including deferred replies;
+            omission lets the Runtime use one.
+        join_token: Team invitation required for authenticated admission.
+        identity_proof: Fresh proof of Agent key control for authenticated admission.
+        delivery_history: Omit for Message bodies; ids mode leaves Delivery history
+            bodies empty and supplies earlier Message ids.
     """
 
     spec_version: SpecVersion
@@ -151,23 +179,26 @@ class JoinRequest(SchemaModel):
 class RuntimeLimits(SchemaModel):
     """Fixed operational limits a Runtime reports at join.
 
-    ``max_message_bytes`` bounds ``send``, ``reply``, and HTTP JSON
-    ingress. ``max_held_waits`` caps concurrent ``collect=wait`` sends
-    per Membership. ``max_mailbox_depth`` caps queued plus leased
-    Mailbox items. ``max_open_tickets`` caps open Tickets one
-    Membership may hold as requester. ``work_lifetime_seconds`` is the
-    finite cutoff stamped on a new request whose send omitted
-    ``deadline`` and that has no request parent to inherit from.
-    ``max_deadline_seconds`` is the farthest a new request deadline may
-    be. ``replay_horizon_seconds`` is how long an identical retry still
-    returns the original result after the obligation ends, taken as the
-    later of that interval after close and the Ticket deadline for a
-    request. After the window, reuse of the id is new work only when no
-    remaining owner names it.
-    ``max_retained_bytes`` caps retained Message-body storage.
-
-        result.limits.max_message_bytes
-        result.limits.replay_horizon_seconds
+    Attributes:
+        max_message_bytes: Maximum UTF-8 JSON bytes of a `send` or `reply`
+            body. HTTP applies the same budget to every JSON request body.
+        max_mailbox_depth: Maximum queued plus leased Mailbox items before
+            `send` returns `busy`.
+        delivery_history_limit: Maximum earlier Thread Messages included
+            in a Delivery `history` window.
+        wait_hold_seconds: Seconds a `collect="wait"` send may stay open.
+        max_held_waits: Maximum concurrent `collect="wait"` sends one
+            Membership may hold. Further waits fail with `wait_limit`.
+        work_lifetime_seconds: Cutoff stamped on a new request whose send
+            omitted `deadline` and that has no request parent to inherit from.
+        max_deadline_seconds: Farthest a new request deadline may be from
+            acceptance.
+        max_open_tickets: Maximum open Tickets one Membership may hold as
+            requester. A Ticket is the durable record for one request.
+        replay_horizon_seconds: Seconds after an obligation ends during
+            which an identical retry returns the original result.
+        max_retained_bytes: Maximum UTF-8 JSON bytes of retained Message
+            bodies this Runtime keeps.
     """
 
     max_message_bytes: JsonInt = Field(ge=1)
@@ -183,7 +214,19 @@ class RuntimeLimits(SchemaModel):
 
 
 class JoinResult(SchemaModel):
-    """Result of a successful join."""
+    """Result of a successful join.
+
+    Attributes:
+        session_token: Bearer credential for the new Session.
+        session_expires_at: Current Session expiry.
+        address: Canonical qualified Address assigned to the Membership.
+        team_name: Canonical name of the Team served by this Runtime.
+        agent_did: Verified `did:key` bound to the Membership.
+        instance_id: Instance id for this Session, assigned when omitted.
+        persistence: Runtime restart guarantee, `volatile` or `durable`.
+        limits: Operational limits this Runtime enforces.
+        spec_version: Exact public contract version implemented by the Runtime.
+    """
 
     session_token: SessionToken
     session_expires_at: Timestamp
@@ -197,15 +240,23 @@ class JoinResult(SchemaModel):
 
 
 class HeartbeatResult(SchemaModel):
-    """Result of a successful Session heartbeat."""
+    """Current Session expiry after renewal; Delivery leases are renewed separately."""
 
     session_expires_at: Timestamp
 
 
 class SendBase(SchemaModel):
-    """Fields shared by request and event sends.
+    """Work or information addressed to one teammate.
 
-    ``id`` is Client-generated and becomes the accepted Message id.
+    Attributes:
+        id: Proposed Message id and replay key. Retry the same body under the
+            same id; changing accepted data fails with `id_conflict`.
+        recipient: Local name or qualified Address within this Team.
+        content: Application data, including JSON null.
+        thread_id: Groups conversation history for its fixed participants.
+        parent_id: Authorized Message causing or continued by this send; carries
+            its trace into this work, even across Threads.
+        metadata: Application data that does not control Runtime decisions.
     """
 
     id: Uuid
@@ -217,20 +268,14 @@ class SendBase(SchemaModel):
 
 
 class RequestSendRequest(SendBase):
-    """Send a request. Always opens a Ticket.
+    """Send work that expects a reply and opens a Ticket.
 
-    ``collect`` is ``wait`` or ``ticket``. ``deadline`` may be omitted;
-    the Runtime stamps the effective cutoff on the accepted Message.
-    Fire-and-forget work is :class:`EventSendRequest`.
-
-        RequestSendRequest(
-            id=message_id,
-            recipient="writer",
-            kind="request",
-            content={"task": "draft this"},
-            collect="ticket",
-            deadline="2026-08-18T15:10:00Z",
-        )
+    Attributes:
+        collect: `ticket` returns immediately; `wait` holds until a terminal
+            result or the Runtime wait bound. Either can return an open Ticket.
+        deadline: Future absolute work cutoff. Omit to inherit a request parent's
+            deadline, or receive the Runtime work lifetime when there is no request
+            parent. Ending collection does not cancel accepted work.
     """
 
     kind: Literal["request"]
@@ -239,41 +284,35 @@ class RequestSendRequest(SendBase):
 
 
 class EventSendRequest(SendBase):
-    """Send information without a reply."""
+    """Send information without creating a Ticket or expecting a reply."""
 
     kind: Literal["event"]
 
 
 SendRequest = Union[RequestSendRequest, EventSendRequest]
+"""Input to Runtime `send`, discriminated on `kind`."""
 
 
 class AcceptedSendResult(SchemaModel):
-    """Result for an event."""
+    """Acknowledgement that the event was queued; the recipient may not have handled it yet."""
 
     status: Literal["accepted"]
     message: EventMessage
 
 
 class TellView(SchemaModel):
-    """Model-facing ``tell`` result.
-
-    ``status: accepted`` means the Runtime queued the event, not that
-    the recipient finished processing. No Ticket is created.
-    """
+    """Model-facing acknowledgement that an event was queued, with its Thread id when present."""
 
     status: Literal["accepted"]
     thread_id: Optional[Uuid] = None
 
 
 class TicketedSendResult(SchemaModel):
-    """Result for a request.
+    """Accepted request and its current saved result.
 
-    ``ticket`` is the current Ticket. Immediate ``collect=ticket`` and an
-    elapsed ``wait`` hold both use this wrapper. ``state`` may be ``open``
-    or terminal.
-
-        result.ticket.state
-        result.ticket.id
+    Both collection modes return this wrapper. Branch on `ticket.state` before
+    reading its content or error. Save `ticket.id` to collect open work without
+    sending another request.
     """
 
     status: Literal["ticketed"]
@@ -285,59 +324,61 @@ SendResult = Annotated[
     Union[AcceptedSendResult, TicketedSendResult],
     Field(discriminator="status"),
 ]
+"""Result of Runtime `send`, discriminated on `status`."""
 
 
 class LeaseRequest(SchemaModel):
-    """Input to pull available work."""
+    """Pull available work within the Session's in-flight limit.
+
+    Omitting `max_items` requests one attempt. The Runtime may return fewer,
+    including none, when no work or capacity is available.
+    """
 
     max_items: Optional[JsonInt] = Field(default=None, ge=1, le=100)
 
 
 class LeaseResult(SchemaModel):
-    """Deliveries currently leased to the Session."""
+    """New attempts exclusively leased to this Session; an empty list is a valid result."""
 
     deliveries: list[Delivery]
 
 
 class RenewRequest(SchemaModel):
-    """Input to extend one active Delivery lease.
-
-    RenewRequest(lease_id=delivery.lease_id)
-    """
+    """Extend a still-active Delivery lease owned by the calling Session."""
 
     lease_id: Uuid
 
 
 class RenewResult(SchemaModel):
-    """Result of a successful ``renew``.
-
-    result.lease_expires_at
-    """
+    """Lease handle and its new expiry; the request work deadline is unchanged."""
 
     lease_id: Uuid
     lease_expires_at: Timestamp
 
 
 class CompleteRequest(SchemaModel):
-    """Finish one Delivery without a response.
+    """Finish a Delivery without replying.
 
-    An event just ends. A request is declined.
+    Completing an event ends its attempt. Completing a request declines it:
+    its Ticket becomes terminal with no response or error.
     """
 
     lease_id: Uuid
 
 
 class CompleteResult(SchemaModel):
-    """Result of ``complete``."""
+    """Completion acknowledgement; `ticket` is present only for a declined request."""
 
     ticket: Optional[DeclinedTicket] = None
 
 
 class ReplyBase(SchemaModel):
-    """Fields shared by successful and failed replies.
+    """Reply under an active request lease owned by the Session.
 
-    Replay equality includes ``id``, the target request Message id, and
-    the outcome data. ``lease_id`` authorizes the attempt.
+    Attributes:
+        id: Proposed reply Message id. Identical retries keep this id and outcome.
+        lease_id: Authorizes the current attempt. Replay equality uses the target
+            request and reply data, rather than this lease id.
     """
 
     id: Uuid
@@ -345,14 +386,14 @@ class ReplyBase(SchemaModel):
 
 
 class ReplySuccessRequest(ReplyBase):
-    """Complete a Delivery with successful content."""
+    """Complete a request with successful application content; JSON null is a valid answer."""
 
     outcome: Literal["completed"]
     content: JsonValue
 
 
 class ReplyFailureRequest(ReplyBase):
-    """Complete a Delivery with a safe error."""
+    """Complete a request with failure data safe to reveal to its requester."""
 
     outcome: Literal["failed"]
     error: ErrorObject
@@ -362,16 +403,21 @@ ReplyRequest = Annotated[
     Union[ReplySuccessRequest, ReplyFailureRequest],
     Field(discriminator="outcome"),
 ]
+"""Input to Runtime `reply`, discriminated on `outcome`."""
 
 
 class ReplyResult(SchemaModel):
-    """Result of an accepted reply."""
+    """Terminal Ticket containing the accepted successful or failed reply."""
 
     ticket: Union[CompletedTicket, FailedTicket]
 
 
 class GetResultRequest(SchemaModel):
-    """Collect the current saved request result."""
+    """Collect the current saved request result.
+
+    Pass `ticket_id` from `ask`, equal to the request Message id. Repeat
+    while `state` is `open`. Ending a wait does not cancel work.
+    """
 
     ticket_id: Uuid = Field(
         description=(
@@ -385,8 +431,8 @@ class GetHistoryRequest(SchemaModel):
     """Thread history lookup.
 
     Pages are newest-first, but Messages inside a page are oldest to
-    newest by ``seq``. Pass ``next_before`` from the previous page as
-    ``before``. Stop when ``has_more`` is false.
+    newest by `seq`. Pass `next_before` from the previous page as
+    `before`. Stop when `has_more` is false.
     """
 
     thread_id: Uuid = Field(
@@ -413,9 +459,14 @@ class GetHistoryRequest(SchemaModel):
 class HistoryResult(SchemaModel):
     """One page of retained Thread history.
 
-    ``messages`` are ordered by ``seq`` ascending. The newest page is
-    returned first. When ``has_more`` is true, pass ``next_before`` as
-    the next ``before``.
+    `messages` are ordered by `seq` ascending. The newest page is
+    returned first. When `has_more` is true, pass `next_before` as the
+    next `before`.
+
+    Attributes:
+        messages: Requested page, oldest to newest by `seq`.
+        has_more: True when older retained Messages remain before this page.
+        next_before: Pass as the next `before` to load the older page.
     """
 
     messages: list[Message]
@@ -424,7 +475,14 @@ class HistoryResult(SchemaModel):
 
 
 class HistoryTurnBase(SchemaModel):
-    """Fields shared by every model-facing history turn."""
+    """Fields shared by every model-facing history turn.
+
+    Attributes:
+        id: Message id. `HistoryView.next_before` is the paging cursor.
+        seq: Thread sequence. History is ordered by `seq` ascending inside a page.
+        sender: Address that sent this turn.
+        created_at: When the Runtime accepted this Message.
+    """
 
     id: Uuid
     seq: JsonInt = Field(ge=1)
@@ -433,24 +491,23 @@ class HistoryTurnBase(SchemaModel):
 
 
 class HistoryRequestTurn(HistoryTurnBase):
-    """Request turn on a model-facing history page."""
+    """Work input from a request on a model-facing history page."""
 
     kind: Literal["request"]
     content: JsonValue
 
 
 class HistoryEventTurn(HistoryTurnBase):
-    """Event turn on a model-facing history page."""
+    """Event content on a model-facing history page."""
 
     kind: Literal["event"]
     content: JsonValue
 
 
 class HistoryResponseTurn(HistoryTurnBase):
-    """Successful reply turn on a model-facing history page.
+    """Successful reply content on a model-facing history page.
 
-    ``parent_id`` is the request Message id this reply answers, the same
-    value as that ask's ``ticket_id``.
+    `parent_id` identifies the request it answers, equal to that ask's `ticket_id`.
     """
 
     kind: Literal["response"]
@@ -459,10 +516,10 @@ class HistoryResponseTurn(HistoryTurnBase):
 
 
 class HistoryErrorTurn(HistoryTurnBase):
-    """Failed reply turn on a model-facing history page.
+    """Failed reply on a model-facing history page.
 
-    ``parent_id`` is the request Message id this error answers, the same
-    value as that ask's ``ticket_id``.
+    `parent_id` identifies the request it answers. The error includes only its
+    code and message.
     """
 
     kind: Literal["error"]
@@ -479,10 +536,20 @@ HistoryTurn = Annotated[
     ],
     Field(discriminator="kind"),
 ]
+"""One history turn on a model-facing page, discriminated on `kind`."""
 
 
 class HistoryView(SchemaModel):
-    """Model-facing Thread history page. Same paging as ``HistoryResult``."""
+    """Model-facing Thread history page. Same paging as `HistoryResult`.
+
+    MCP `get_history` and Session-bound tools return this projection.
+    Runtime and HTTP return `HistoryResult`, as does `BaseAgent.get_history`.
+
+    Attributes:
+        messages: Requested page, oldest to newest by `seq`.
+        has_more: True when older retained Messages remain before this page.
+        next_before: Pass as the next `before` to load the older page.
+    """
 
     messages: list[HistoryTurn]
     has_more: bool
@@ -492,10 +559,10 @@ class HistoryView(SchemaModel):
 class AskToolRequest(SchemaModel):
     """Send work that needs a reply.
 
-    Returns the saved request result. ``collect=wait`` (default) may
-    still return ``open``; call ``get_result`` with ``ticket_id``. A
-    Thread is fixed to its original participants; another peer is
-    ``forbidden``.
+    Returns the saved request result as a Ticket view. `collect="wait"`
+    (default) may still return `open`; call `get_result` with
+    `ticket_id`. A Thread is fixed to its original participants; another
+    peer is `forbidden`.
     """
 
     recipient: Address = Field(
@@ -549,8 +616,8 @@ class TellToolRequest(SchemaModel):
     """Send work that does not need a reply.
 
     No Ticket is created. Prefer ask when you need an answer. A Thread
-    is fixed to its original participants; another peer is ``forbidden``.
-    Omit ``thread_id`` for an unthreaded notice; that is the usual path.
+    is fixed to its original participants; another peer is `forbidden`.
+    Omit `thread_id` for an unthreaded notice; that is the usual path.
     """
 
     recipient: Address = Field(
@@ -582,7 +649,7 @@ class TellToolRequest(SchemaModel):
 
 
 class TeamRoster(SchemaModel):
-    """MCP roster resource body. Agent Memberships only; principals omitted."""
+    """Current agent Directory entries for the MCP roster; principal Memberships are omitted."""
 
     team_name: TeamName
     members: list[DirectoryEntry]
@@ -591,10 +658,20 @@ class TeamRoster(SchemaModel):
 class TraceEvent(SchemaModel):
     """One recorded step of a causal operation.
 
-    ``parent_id`` is the parent of ``message_id`` when that Message has
-    one. ``get_trace`` still returns an ordered list.
+    `parent_id` is the parent of `message_id` when that Message has one.
+    `get_trace` returns events in recorded order.
 
-        event.parent_id  # absent on a root Message
+    Attributes:
+        at: When the Runtime recorded the event.
+        type: What happened (`accepted`, `ticket_opened`, `leased`,
+            `completed`, `replied`, or `ticket_closed`).
+        trace_id: Causal id shared with the Messages in this operation.
+        actor: Membership that performed the step, or the requester for
+            accept and open.
+        message_id: Message this step is about, when there is one.
+        parent_id: Parent of `message_id`, copied from that Message.
+        ticket_id: Ticket this step is about, when there is one.
+        detail: Type-specific fields. Unknown keys are ignored by a Client.
     """
 
     at: Timestamp
@@ -608,17 +685,24 @@ class TraceEvent(SchemaModel):
 
 
 class TraceResult(SchemaModel):
-    """Result of ``get_trace``."""
+    """Result of `get_trace`.
+
+    Attributes:
+        trace_id: Requested causal id.
+        events: Recorded events, oldest first.
+    """
 
     trace_id: Uuid
     events: list[TraceEvent]
 
 
 class StatusAgent(SchemaModel):
-    """Agent Membership row in ``status``.
+    """Agent Membership observed by an operator.
 
-    ``online`` is true when this Membership has at least one unexpired
-    Session in the store.
+    Attributes:
+        online: At least one stored Session is unexpired; not proof of handler readiness.
+        mailbox_depth: Queued and leased items together.
+        open_tickets: Open requests addressed to this Membership.
     """
 
     kind: Literal["agent"]
@@ -630,9 +714,10 @@ class StatusAgent(SchemaModel):
 
 
 class StatusPrincipal(SchemaModel):
-    """Principal Membership row in ``status``.
+    """Principal Membership observed by an operator.
 
-    No Mailbox or Ticket counts. ``online`` is read from stored Sessions.
+    `online` means at least one stored Session is unexpired. Principals have no
+    Mailbox or recipient Ticket counts.
     """
 
     kind: Literal["principal"]
@@ -645,10 +730,20 @@ StatusMember = Annotated[
     Union[StatusAgent, StatusPrincipal],
     Field(discriminator="kind"),
 ]
+"""One Membership row in `status`, discriminated on `kind`."""
 
 
 class StatusResult(SchemaModel):
-    """Result of ``status``."""
+    """Result of `status`.
+
+    Attributes:
+        team_name: Canonical Team name.
+        persistence: Runtime restart guarantee.
+        origin: HTTP origin when the Runtime is serving, such as
+            `http://127.0.0.1:9000`. Omitted when it is not serving.
+        open_tickets: Open Tickets in the Team.
+        members: Every Membership, including principals such as `operator`.
+    """
 
     team_name: TeamName
     persistence: PersistenceMode
@@ -658,7 +753,15 @@ class StatusResult(SchemaModel):
 
 
 class IssueJoinTokenRequest(SchemaModel):
-    """Operator input that creates a join token."""
+    """Operator input that creates a join token.
+
+    Attributes:
+        name: Bind the token to this Agent name.
+        agent_did: Bind the token to this Agent DID (`did:key`).
+        ttl_seconds: Lifetime in seconds. Omit to use the Runtime default.
+        single_use: First admission consumes the token. It can then reconnect
+            only the Membership it admitted, while valid and unrevoked.
+    """
 
     name: Optional[AgentName] = None
     agent_did: Optional[AgentDid] = None
@@ -667,7 +770,17 @@ class IssueJoinTokenRequest(SchemaModel):
 
 
 class JoinTokenIssued(SchemaModel):
-    """Operator view of a join token the Runtime just issued."""
+    """Operator view of a join token the Runtime just issued.
+
+    Attributes:
+        token: Secret the Agent sends as `join_token`. Keep it out of
+            logs and Messages.
+        expires_at: Time after which this token cannot authenticate a join.
+        single_use: Whether first admission consumes the token; subsequent use
+            can reconnect only the admitted Membership.
+        name: Bound Agent name, when the operator set one.
+        agent_did: Bound Agent DID, when the operator set one.
+    """
 
     token: str = Field(min_length=1)
     expires_at: Timestamp
@@ -677,13 +790,17 @@ class JoinTokenIssued(SchemaModel):
 
 
 class RevokeJoinTokenRequest(SchemaModel):
-    """Operator input that revokes a join token."""
+    """Revoke admission and invalidate Sessions created from this token at their next auth check."""
 
     token: str = Field(min_length=1)
 
 
 class RuntimeEvent(SchemaModel):
-    """One event pushed on the Session event stream."""
+    """Session event whose `type` selects its data shape.
+
+    Ignore unknown types. `work_available` has empty data and is a hint to lease;
+    `trace` carries a TraceEvent. Receiving a hint is not required for delivery.
+    """
 
     type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     data: JsonObject
@@ -692,8 +809,12 @@ class RuntimeEvent(SchemaModel):
 class ToolErrorResult(SchemaModel):
     """Structured MCP tool result when a Runtime operation fails.
 
-    The MCP error flag is set. ``error`` is the unchanged Runtime
-    ``ErrorObject``. Readable text is ``code: message``.
+    The MCP error flag is set. `error` is the unchanged Runtime
+    `ErrorObject`. Readable text is `code: message`. Malformed arguments
+    and authentication failures stay MCP-level errors, not this object.
+
+    Attributes:
+        error: Runtime failure preserved without reinterpretation.
     """
 
     error: ErrorObject
@@ -703,13 +824,27 @@ SEND_RESULT_ADAPTER: TypeAdapter[SendResult] = TypeAdapter(SendResult)
 REPLY_REQUEST_ADAPTER: TypeAdapter[ReplyRequest] = TypeAdapter(ReplyRequest)
 
 
-def parse_join_request(data: Any) -> JoinRequest:
-    """Parse join input from a mapping. ``spec_version`` is required."""
+def parse_join_request(data: object) -> JoinRequest:
+    """Parse join input from a mapping. `spec_version` is required.
+
+    Args:
+        data: JSON object, or an already parsed `JoinRequest`.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     return parse_schema(JoinRequest, data)
 
 
-def parse_join_result(data: Any) -> JoinResult:
-    """Parse a JoinResult mapping."""
+def parse_join_result(data: object) -> JoinResult:
+    """Parse a `JoinResult` mapping.
+
+    Args:
+        data: JSON object, or an already parsed `JoinResult`.
+
+    Raises:
+        ValueError: Validation fails.
+    """
     if isinstance(data, JoinResult):
         return data
     try:
@@ -718,8 +853,16 @@ def parse_join_result(data: Any) -> JoinResult:
         raise ValueError(validation_message(exc)) from exc
 
 
-def parse_send_request(data: Any) -> SendRequest:
-    """Parse send input. A request requires ``collect``. ``deadline`` may be omitted."""
+def parse_send_request(data: object) -> SendRequest:
+    """Parse send input. A request requires `collect`. `deadline` may be omitted.
+
+    Args:
+        data: JSON object, or an already parsed send request.
+
+    Raises:
+        ValueError: `data` is not an object, `kind` is unknown, or
+            validation fails.
+    """
     if isinstance(data, (RequestSendRequest, EventSendRequest)):
         return data
     if not isinstance(data, Mapping):
@@ -735,8 +878,15 @@ def parse_send_request(data: Any) -> SendRequest:
     raise ValueError("kind must be request or event")
 
 
-def parse_send_result(data: Any) -> SendResult:
-    """Parse a send result, including nested Message and Ticket."""
+def parse_send_result(data: object) -> SendResult:
+    """Parse a send result, including nested Message and Ticket.
+
+    Args:
+        data: JSON object, or an already parsed send result.
+
+    Raises:
+        ValueError: `data` is not an object, or nested validation fails.
+    """
     if isinstance(data, (AcceptedSendResult, TicketedSendResult)):
         return data
     if not isinstance(data, Mapping):
@@ -752,8 +902,15 @@ def parse_send_result(data: Any) -> SendResult:
         raise ValueError(validation_message(exc)) from exc
 
 
-def parse_reply_request(data: Any) -> ReplyRequest:
-    """Parse reply input discriminated on ``outcome``."""
+def parse_reply_request(data: object) -> ReplyRequest:
+    """Parse reply input discriminated on `outcome`.
+
+    Args:
+        data: JSON object, or an already parsed reply request.
+
+    Raises:
+        ValueError: Validation fails.
+    """
     if isinstance(data, (ReplySuccessRequest, ReplyFailureRequest)):
         return data
     try:
@@ -762,8 +919,16 @@ def parse_reply_request(data: Any) -> ReplyRequest:
         raise ValueError(validation_message(exc)) from exc
 
 
-def parse_lease_result(data: Any) -> LeaseResult:
-    """Parse a lease result, including nested Deliveries."""
+def parse_lease_result(data: object) -> LeaseResult:
+    """Parse a lease result, including nested Deliveries.
+
+    Args:
+        data: JSON object, or an already parsed `LeaseResult`.
+
+    Raises:
+        ValueError: `data` is not an object, `deliveries` is not an array,
+            or nested validation fails.
+    """
     if isinstance(data, LeaseResult):
         return data
     if not isinstance(data, Mapping):
@@ -778,42 +943,92 @@ def parse_lease_result(data: Any) -> LeaseResult:
         raise ValueError(validation_message(exc)) from exc
 
 
-def parse_lease_request(data: Any) -> LeaseRequest:
-    """Parse lease input. An empty object is valid."""
+def parse_lease_request(data: object) -> LeaseRequest:
+    """Parse lease input. An empty object is valid.
+
+    Args:
+        data: JSON object, `None` (treated as empty), or a `LeaseRequest`.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     if data is None:
         data = {}
     return parse_schema(LeaseRequest, data)
 
 
-def parse_complete_request(data: Any) -> CompleteRequest:
-    """Parse complete input."""
+def parse_complete_request(data: object) -> CompleteRequest:
+    """Parse complete input.
+
+    Args:
+        data: JSON object, or an already parsed `CompleteRequest`.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     return parse_schema(CompleteRequest, data)
 
 
-def parse_renew_request(data: Any) -> RenewRequest:
-    """Parse renew input."""
+def parse_renew_request(data: object) -> RenewRequest:
+    """Parse renew input.
+
+    Args:
+        data: JSON object, or an already parsed `RenewRequest`.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     return parse_schema(RenewRequest, data)
 
 
-def parse_find_request(data: Any) -> FindRequest:
-    """Parse Directory find input."""
+def parse_find_request(data: object) -> FindRequest:
+    """Parse Directory find input.
+
+    Args:
+        data: JSON object, or an already parsed `FindRequest`.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     return parse_schema(FindRequest, data)
 
 
-def parse_issue_join_token_request(data: Any) -> IssueJoinTokenRequest:
-    """Parse operator token issuance input."""
+def parse_issue_join_token_request(data: object) -> IssueJoinTokenRequest:
+    """Parse operator token issuance input.
+
+    Args:
+        data: JSON object, `None` (treated as empty), or a parsed request.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     if data is None:
         data = {}
     return parse_schema(IssueJoinTokenRequest, data)
 
 
-def parse_revoke_join_token_request(data: Any) -> RevokeJoinTokenRequest:
-    """Parse operator token revoke input."""
+def parse_revoke_join_token_request(data: object) -> RevokeJoinTokenRequest:
+    """Parse operator token revoke input.
+
+    Args:
+        data: JSON object, or an already parsed `RevokeJoinTokenRequest`.
+
+    Raises:
+        ValueError: `data` is not an object, or validation fails.
+    """
     return parse_schema(RevokeJoinTokenRequest, data)
 
 
-def parse_history_result(data: Any) -> HistoryResult:
-    """Parse a history page, including nested Messages."""
+def parse_history_result(data: object) -> HistoryResult:
+    """Parse a history page, including nested Messages.
+
+    Args:
+        data: JSON object, or an already parsed `HistoryResult`.
+
+    Raises:
+        ValueError: `data` is not an object, `messages` is not an array,
+            or nested validation fails.
+    """
     if isinstance(data, HistoryResult):
         return data
     if not isinstance(data, Mapping):
@@ -821,7 +1036,7 @@ def parse_history_result(data: Any) -> HistoryResult:
     messages = data.get("messages") or []
     if not isinstance(messages, list):
         raise ValueError("messages must be an array")
-    body: dict[str, Any] = {
+    body: dict[str, object] = {
         "messages": [parse_message(item) for item in messages],
         "has_more": data.get("has_more"),
     }
@@ -835,15 +1050,19 @@ def parse_history_result(data: Any) -> HistoryResult:
 
 
 def tell_view(result: AcceptedSendResult) -> TellView:
-    """Project an accepted event send into the model-facing TellView."""
+    """Return event acceptance and its Thread id, leaving out the Message envelope."""
     if result.message.thread_id is None:
         return TellView(status="accepted")
     return TellView(status="accepted", thread_id=result.message.thread_id)
 
 
 def history_view(result: HistoryResult) -> HistoryView:
-    """Project wire history Messages into the model-facing HistoryView."""
-    body: dict[str, Any] = {
+    """Return compact history turns with unchanged ordering and paging cursors.
+
+    Keeps reply correlation through `parent_id`; omits wire identity, recipient,
+    metadata and trace fields. Failures retain only code and message.
+    """
+    body: dict[str, object] = {
         "messages": [_history_turn(message) for message in result.messages],
         "has_more": result.has_more,
     }
@@ -855,7 +1074,7 @@ def history_view(result: HistoryResult) -> HistoryView:
 def _history_turn(message: Message) -> HistoryTurn:
     if message.seq is None:
         raise ValueError("history turns require seq")
-    base: dict[str, Any] = {
+    base: JsonObject = {
         "id": message.id,
         "seq": message.seq,
         "sender": message.sender,
@@ -887,7 +1106,7 @@ def _history_turn(message: Message) -> HistoryTurn:
     )
 
 
-_HISTORY_CONTENT = {
+_HISTORY_CONTENT: dict[str, type[HistoryRequestTurn] | type[HistoryEventTurn]] = {
     "request": HistoryRequestTurn,
     "event": HistoryEventTurn,
 }

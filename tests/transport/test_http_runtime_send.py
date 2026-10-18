@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 import pytest
 
+from agentconnect.core.operations import RequestSendRequest, TicketedSendResult
 from agentconnect.transport.agent_http import HttpRuntimeTransport
 from agentconnect.transport.runtime import TransportError
 
@@ -15,15 +16,17 @@ _ID = "15c44926-4c2a-4a01-a13b-95152da9a859"
 _TS = "2026-08-18T15:00:00Z"
 
 
-def _send_body() -> dict[str, Any]:
-    return {
-        "id": _ID,
-        "recipient": "writer",
-        "kind": "request",
-        "content": "draft this",
-        "collect": "wait",
-        "deadline": "2026-08-18T15:10:00Z",
-    }
+def _send_body() -> RequestSendRequest:
+    return RequestSendRequest.model_validate(
+        {
+            "id": _ID,
+            "recipient": "writer",
+            "kind": "request",
+            "content": "draft this",
+            "collect": "wait",
+            "deadline": "2026-08-18T15:10:00Z",
+        }
+    )
 
 
 def _send_result() -> dict[str, Any]:
@@ -67,7 +70,8 @@ async def test_send_retries_same_body_after_timeout():
 
     transport._request = _request  # type: ignore[method-assign]
     result = await transport.send("token", _send_body())
-    assert calls == [_send_body(), _send_body()]
+    assert calls == [_send_body().to_public_dict(), _send_body().to_public_dict()]
+    assert isinstance(result, TicketedSendResult)
     assert result["message"]["sender_did"] == _DID
     assert result["message"]["trace_id"]
     assert result["message"]["content"] == "draft this"
@@ -146,3 +150,21 @@ async def test_send_timeout_covers_wait_hold():
     assert "may already have accepted" in exc.value.message
     assert seen == [15.0, 15.0]
     await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [{}, {"status": "ticketed", "ticket": None}])
+async def test_malformed_send_response_uses_transport_error(payload):
+    transport = HttpRuntimeTransport("http://127.0.0.1:9")
+
+    async def request(method, path, **kwargs):
+        return payload
+
+    transport._request = request
+    try:
+        with pytest.raises(TransportError) as exc:
+            await transport.send("token", _send_body())
+        assert exc.value.code == "internal"
+        assert isinstance(exc.value.__cause__, ValueError)
+    finally:
+        await transport.close()

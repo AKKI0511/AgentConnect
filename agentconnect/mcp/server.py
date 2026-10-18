@@ -1,22 +1,4 @@
-"""Team MCP server: discovery, send, collect, roster, extra tools.
-
-One MCP server per Team, built on the SDK low-level ``Server`` so advertised
-schemas are the public argument and result types. Members point a model at
-it. So does any MCP client, including Cursor, by adding the Team MCP URL.
-
-    from agentconnect import Team
-    from agentconnect.mcp import create_team_mcp
-
-    team = await Team("content-squad").start()
-    url = await team.serve()
-    print(team.mcp_url)  # http://127.0.0.1:<port>/mcp
-
-The SDK's OAuth resource-server helpers need issuer metadata and wrap every
-HTTP method, including initialize. That does not match Session Bearer tokens
-or loopback operator. This server uses SDK ``Server.middleware`` for
-authentication. ``Server`` does not apply ``input_schema`` to calls, so
-``tools/call`` validates public argument types before dispatch.
-"""
+"""Construct the Team MCP Server for an existing hosting application."""
 
 from __future__ import annotations
 
@@ -24,10 +6,11 @@ import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from contextvars import ContextVar
-from typing import Any
+from typing import TYPE_CHECKING
 
 from mcp.server import CacheHint, Server
-from mcp.server.context import ServerRequestContext
+from mcp.server.context import CallNext, HandlerResult, ServerRequestContext
+from mcp.server.caching import CacheableMethod
 from mcp.server.mcpserver.context import Context as SdkContext
 from mcp.server.mcpserver.exceptions import ToolError as SdkToolError
 from mcp.server.mcpserver.exceptions import UnexpectedToolError
@@ -36,6 +19,9 @@ from mcp.shared.exceptions import MCPError
 from mcp_types import (
     INVALID_PARAMS,
     CallToolResult,
+    CallToolRequestParams,
+    PaginatedRequestParams,
+    ReadResourceRequestParams,
     InputRequiredResult,
     ListResourcesResult,
     ListToolsResult,
@@ -48,13 +34,22 @@ from mcp_types import (
 )
 
 from agentconnect.core.base import (
+    JsonValue,
+    SchemaModel,
     dump_public,
     parse_schema,
     public_json_schema,
     public_result_schema,
 )
 from agentconnect.core.error import ErrorObject
-from agentconnect.core.operations import ToolErrorResult
+from agentconnect.core.operations import (
+    AskToolRequest,
+    GetHistoryRequest,
+    GetResultRequest,
+    TellToolRequest,
+    ToolErrorResult,
+)
+from agentconnect.core.directory import FindRequest, GetProfilesRequest
 from agentconnect.core.team_tools import (
     RESERVED_TEAM_TOOL_NAMES,
     TEAM_MCP_INSTRUCTIONS,
@@ -63,7 +58,6 @@ from agentconnect.core.team_tools import (
     TeamToolSpec,
 )
 from agentconnect.mcp.actions import (
-    TeamRuntime,
     ask_action,
     find_action,
     get_history_action,
@@ -74,16 +68,17 @@ from agentconnect.mcp.actions import (
 from agentconnect.team.errors import TeamError
 from agentconnect.team.session_auth import session_token_for_request
 
+if TYPE_CHECKING:
+    from agentconnect.team import Team
+
 logger = logging.getLogger(__name__)
 
-_INSTRUCTIONS = TEAM_MCP_INSTRUCTIONS
 _ROSTER_URI = "agentconnect://team/roster"
-_HISTORY_DEFAULT_LIMIT = 50
 
 # MCP 2026-07-28: omitted ttlMs lets a client apply its own catalog heuristic.
 # ttl_ms=0 is immediately stale. The catalog is built once; there is no
 # list-change publisher, so listChanged follows that static surface.
-_CATALOG_CACHE_HINTS = {
+_CATALOG_CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
     "tools/list": CacheHint(ttl_ms=0),
     "server/discover": CacheHint(ttl_ms=0),
 }
@@ -95,7 +90,9 @@ _resolved_session: ContextVar[str | None] = ContextVar(
 )
 
 
-def _http_peer(ctx: Any) -> tuple[Mapping[str, str] | None, str | None]:
+def _http_peer(
+    ctx: ServerRequestContext[dict[str, object], object],
+) -> tuple[Mapping[str, str] | None, str | None]:
     """Return headers and peer host from the SDK request context, if any."""
     request = getattr(ctx, "request", None)
     headers = getattr(request, "headers", None) if request is not None else None
@@ -107,12 +104,14 @@ def _http_peer(ctx: Any) -> tuple[Mapping[str, str] | None, str | None]:
 class _TeamBoundary:
     """SDK ServerMiddleware: Session auth for tool calls and resource reads."""
 
-    def __init__(self, runtime: TeamRuntime, *, in_process: bool) -> None:
+    def __init__(self, runtime: Team, *, in_process: bool) -> None:
         """Bind the Runtime and hosting mode."""
         self._runtime = runtime
         self._in_process = in_process
 
-    async def __call__(self, ctx: Any, call_next: Any) -> Any:
+    async def __call__(
+        self, ctx: ServerRequestContext[dict[str, object], object], call_next: CallNext
+    ) -> HandlerResult:
         """Authenticate protected methods, then continue the SDK chain."""
         method = getattr(ctx, "method", None)
         if method not in _PROTECTED_METHODS:
@@ -142,7 +141,7 @@ class _TeamBoundary:
 
 
 def _bound_session() -> str:
-    """Return the Session stored by :class:`_TeamBoundary`."""
+    """Return the Session stored by `_TeamBoundary`."""
     token = _resolved_session.get()
     if not token:
         raise MCPError(INVALID_PARAMS, "Session is missing or invalid")
@@ -178,7 +177,7 @@ def _listed_extra_tool(tool: SdkTool) -> Tool:
     )
 
 
-def _sdk_extra_tools(fns: Sequence[Callable[..., Any]]) -> dict[str, SdkTool]:
+def _sdk_extra_tools(fns: Sequence[Callable[..., object]]) -> dict[str, SdkTool]:
     """Build SDK tools for extra callables, rejecting reserved and duplicate names."""
     extras: dict[str, SdkTool] = {}
     for fn in fns:
@@ -191,12 +190,10 @@ def _sdk_extra_tools(fns: Sequence[Callable[..., Any]]) -> dict[str, SdkTool]:
     return extras
 
 
-def _success_result(payload: Any) -> CallToolResult:
+def _success_result(payload: SchemaModel) -> CallToolResult:
     """Return structured content plus JSON text for the model."""
     body = dump_public(payload)
     text = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
-    if not isinstance(body, dict):
-        return CallToolResult(content=[TextContent(type="text", text=text)])
     return CallToolResult(
         content=[TextContent(type="text", text=text)],
         structured_content=body,
@@ -220,55 +217,35 @@ def _tool_error(exc: TeamError) -> CallToolResult:
 
 
 async def _run_team_tool(
-    runtime: TeamRuntime, spec: TeamToolSpec, raw: Mapping[str, Any]
+    runtime: Team, spec: TeamToolSpec, raw: Mapping[str, JsonValue]
 ) -> CallToolResult:
     """Validate ``raw`` as ``spec`` and run the matching Runtime action."""
-    try:
-        parsed = parse_schema(spec.input_model, dict(raw))
-    except ValueError as exc:
-        raise MCPError(INVALID_PARAMS, str(exc)) from exc
     token = _bound_session()
+    payload: SchemaModel
     try:
         if spec.name == "find":
             payload = await find_action(
-                runtime, token, parsed.query, limit=parsed.limit
+                runtime, token, parse_schema(FindRequest, dict(raw))
             )
         elif spec.name == "get_profiles":
-            payload = await get_profiles_action(runtime, token, list(parsed.addresses))
+            payload = await get_profiles_action(
+                runtime, token, parse_schema(GetProfilesRequest, dict(raw))
+            )
         elif spec.name == "ask":
-            address = await runtime.caller_address(token)
-            payload = await ask_action(
-                runtime,
-                token,
-                address,
-                parsed.recipient,
-                parsed.content,
-                deadline_seconds=parsed.deadline_seconds,
-                collect=parsed.collect,
-                thread_id=parsed.thread_id,
-                idempotency_key=parsed.idempotency_key,
-            )
+            request = parse_schema(AskToolRequest, dict(raw))
+            address = await runtime._caller_address(token)
+            payload = await ask_action(runtime, token, address, request)
         elif spec.name == "tell":
-            address = await runtime.caller_address(token)
-            payload = await tell_action(
-                runtime,
-                token,
-                address,
-                parsed.recipient,
-                parsed.content,
-                thread_id=parsed.thread_id,
-                idempotency_key=parsed.idempotency_key,
-            )
+            tell = parse_schema(TellToolRequest, dict(raw))
+            address = await runtime._caller_address(token)
+            payload = await tell_action(runtime, token, address, tell)
         elif spec.name == "get_result":
-            payload = await get_result_action(runtime, token, parsed.ticket_id)
+            payload = await get_result_action(
+                runtime, token, parse_schema(GetResultRequest, dict(raw))
+            )
         elif spec.name == "get_history":
-            limit = _HISTORY_DEFAULT_LIMIT if parsed.limit is None else parsed.limit
             payload = await get_history_action(
-                runtime,
-                token,
-                parsed.thread_id,
-                before=parsed.before,
-                limit=limit,
+                runtime, token, parse_schema(GetHistoryRequest, dict(raw))
             )
         else:
             raise MCPError(INVALID_PARAMS, f"unknown tool {spec.name!r}")
@@ -281,16 +258,19 @@ async def _run_team_tool(
 
 async def _run_extra_tool(
     tool: SdkTool,
-    raw: Mapping[str, Any],
-    ctx: ServerRequestContext[Any],
+    raw: Mapping[str, object],
+    ctx: ServerRequestContext[dict[str, object], object],
 ) -> CallToolResult | InputRequiredResult:
     """Run an extra callable through the SDK tool implementation."""
     try:
-        return await tool.run(
+        result: object = await tool.run(
             dict(raw),
             SdkContext(request_context=ctx),
             convert_result=True,
         )
+        if not isinstance(result, (CallToolResult, InputRequiredResult)):
+            raise TypeError("MCP SDK returned an invalid converted tool result")
+        return result
     except MCPError:
         raise
     except Exception as exc:
@@ -305,31 +285,35 @@ async def _run_extra_tool(
 
 
 def create_team_mcp(
-    runtime: TeamRuntime,
-    extra_tools: Sequence[Callable[..., Any]] | None = None,
+    runtime: Team,
+    extra_tools: Sequence[Callable[..., object]] | None = None,
     *,
     in_process: bool = True,
-) -> Server:
-    """Return the MCP server for ``runtime``.
+) -> Server[dict[str, object]]:
+    """Build an MCP Server backed by a started Team.
 
-    Tools are ``find``, ``ask``, ``tell``, ``get_result``, ``get_history``,
-    and ``get_profiles``. The roster is the resource
-    ``agentconnect://team/roster``. Extra callables are registered by
-    function name and must not reuse a reserved or duplicate name.
+    Publishes `find`, `get_profiles`, `ask`, `tell`, `get_result` and `get_history`,
+    plus the roster resource `agentconnect://team/roster`. Extra callables are
+    registered by function name. The returned Server starts no HTTP listener;
+    the host owns serving and shutting it down, and starting and stopping the Team.
 
-    ``in_process=True`` (the default) is the explicit in-process trust path
-    used by ``Client(server)``. HTTP serving passes ``in_process=False`` so a
-    missing request cannot become operator.
+    Calls and resource reads use a live member Session bearer. A join invitation
+    is not that credential. In-process clients use the operator Membership when
+    no Authorization header is supplied. For HTTP hosting, use `in_process=False`;
+    only a trusted direct loopback path can then omit the bearer. See
+    `create_runtime_app` for the HTTP hosting contract.
 
-        mcp = create_team_mcp(team)
-        async with Client(mcp) as client:
-            found = await client.call_tool("find", {"query": "draft a summary"})
+    Args:
+        extra_tools: Callables to publish alongside the reserved tools. Omit to
+            use tools supplied when the Team was constructed. An explicit empty
+            list publishes no extra tools.
+        in_process: Enables trusted in-process operator access without HTTP
+            context. Disable for any HTTP host.
+
+    Raises:
+        ValueError: An extra tool duplicates a reserved or previously registered name.
     """
-    extras = list(
-        extra_tools
-        if extra_tools is not None
-        else list(getattr(runtime, "_extra_tools", []) or [])
-    )
+    extras = list(extra_tools if extra_tools is not None else runtime._extra_tools)
     extra_by_name = _sdk_extra_tools(extras)
 
     listed_tools = [_listed_team_tool(spec) for spec in TEAM_TOOL_SPECS]
@@ -344,14 +328,16 @@ def create_team_mcp(
     )
 
     async def on_list_tools(
-        ctx: ServerRequestContext[Any], params: Any
+        ctx: ServerRequestContext[dict[str, object], object],
+        params: PaginatedRequestParams | None,
     ) -> ListToolsResult:
         """Return the reserved Team tools, then extras, in stable order."""
         del ctx, params
         return ListToolsResult(tools=listed_tools)
 
     async def on_call_tool(
-        ctx: ServerRequestContext[Any], params: Any
+        ctx: ServerRequestContext[dict[str, object], object],
+        params: CallToolRequestParams,
     ) -> CallToolResult | InputRequiredResult:
         """Dispatch ``tools/call`` after public-schema argument checks."""
         name = str(params.name)
@@ -366,14 +352,16 @@ def create_team_mcp(
         return await _run_extra_tool(extra, raw, ctx)
 
     async def on_list_resources(
-        ctx: ServerRequestContext[Any], params: Any
+        ctx: ServerRequestContext[dict[str, object], object],
+        params: PaginatedRequestParams | None,
     ) -> ListResourcesResult:
         """Return the Team roster resource."""
         del ctx, params
         return ListResourcesResult(resources=[roster])
 
     async def on_read_resource(
-        ctx: ServerRequestContext[Any], params: Any
+        ctx: ServerRequestContext[dict[str, object], object],
+        params: ReadResourceRequestParams,
     ) -> ReadResourceResult:
         """Return roster JSON for the reserved roster URI."""
         del ctx
@@ -391,14 +379,14 @@ def create_team_mcp(
             ]
         )
 
-    def get_tool_input_schema(name: str) -> Mapping[str, Any] | None:
+    def get_tool_input_schema(name: str) -> Mapping[str, object] | None:
         """Return the advertised input schema by tool name."""
         return schemas_by_name.get(name)
 
-    mcp = Server(
+    mcp: Server[dict[str, object]] = Server(
         name=f"agentconnect-{runtime.name}",
         version="1.0.0-draft",
-        instructions=_INSTRUCTIONS,
+        instructions=TEAM_MCP_INSTRUCTIONS,
         cache_hints=_CATALOG_CACHE_HINTS,
         get_tool_input_schema=get_tool_input_schema,
         on_list_tools=on_list_tools,

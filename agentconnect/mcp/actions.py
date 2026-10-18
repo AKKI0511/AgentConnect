@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Optional, Protocol
+from typing import TYPE_CHECKING, Optional
 
-from agentconnect.core.base import dump_public, parse_schema
+from agentconnect.core.base import JsonObject, JsonValue
 from agentconnect.core.directory import (
-    DirectoryEntry,
+    FindResult,
     FindRequest,
     GetProfilesRequest,
     GetProfilesResult,
@@ -27,18 +27,21 @@ from agentconnect.core.operations import (
     AcceptedSendResult,
     AskToolRequest,
     GetHistoryRequest,
+    HistoryView,
+    RequestSendRequest,
+    EventSendRequest,
+    TellView,
+    TicketedSendResult,
+    SendResult,
     GetResultRequest,
     TellToolRequest,
     history_view,
-    parse_history_result,
-    parse_send_result,
     tell_view,
 )
 from agentconnect.core.primitives import CollectMode
-from agentconnect.core.ticket import parse_ticket, ticket_view
+from agentconnect.core.ticket import TicketView, ticket_view
 from agentconnect.mcp.ids import message_id_for_tool, thread_id_for_tool
 from agentconnect.team.errors import TeamError
-from agentconnect.team.session_auth import session_token_for_request
 
 KEYED_ID_CONFLICT_MESSAGE = (
     "The same idempotency_key was used with different arguments. "
@@ -47,52 +50,8 @@ KEYED_ID_CONFLICT_MESSAGE = (
 )
 
 
-class TeamRuntime(Protocol):
-    """Runtime operations the MCP door needs. ``Team`` satisfies this."""
-
-    name: str
-
-    async def ensure_operator_session(self) -> str:
-        """Return a live Session token for the loopback operator."""
-
-    async def send(
-        self, session_token: str, request: Mapping[str, Any]
-    ) -> dict[str, Any]:
-        """Accept one request or event."""
-
-    async def find(
-        self,
-        session_token: str,
-        query: str,
-        *,
-        limit: int | None = None,
-    ) -> dict[str, Any]:
-        """Search this Team's Directory."""
-
-    async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
-        """Return one Directory entry."""
-
-    async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """Return a Ticket this Membership owns."""
-
-    async def get_history(
-        self,
-        session_token: str,
-        thread_id: str,
-        *,
-        before: Optional[str] = None,
-        limit: int = 50,
-    ) -> dict[str, Any]:
-        """Return one page of retained Thread history."""
-
-    async def roster(self) -> dict[str, Any]:
-        """Return every Membership as a DirectoryEntry list."""
-
-    async def require_live_session(self, session_token: str) -> str:
-        """Return ``session_token`` if the Session is live. Does not renew it."""
-
-    async def caller_address(self, session_token: str) -> str:
-        """Return the qualified Address stamped on this Session."""
+if TYPE_CHECKING:
+    from agentconnect.team import Team
 
 
 def deadline_rfc3339(seconds: float) -> str:
@@ -101,79 +60,42 @@ def deadline_rfc3339(seconds: float) -> str:
     return instant.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-async def resolve_session(
-    runtime: TeamRuntime,
-    headers: Mapping[str, str] | None,
-    *,
-    peer_host: str | None = None,
-    in_process: bool = False,
-) -> str:
-    """Return the Session token for this MCP call.
-
-    A Bearer token is checked without renewing expiry. A missing header
-    uses the operator Session only when ``in_process`` is True or the
-    HTTP peer is an explicitly trusted loopback path.
-    """
-    return await session_token_for_request(
-        runtime,
-        headers,
-        peer_host=peer_host,
-        in_process=in_process,
-    )
-
-
 async def _recover_generated_ask(
-    runtime: TeamRuntime,
+    runtime: Team,
     session_token: str,
     message_id: str,
     supplied_thread: Optional[str],
 ) -> Optional[tuple[str, str]]:
     """Return stored Thread id and deadline for an accepted keyed ask."""
     try:
-        ticket = dump_public(await runtime.get_result(session_token, message_id))
+        ticket = await runtime.get_result(session_token, message_id)
     except TeamError as exc:
         if exc.code == "not_found":
             return None
         raise
-    thread_id = supplied_thread or ticket.get("thread_id")
-    deadline = ticket.get("deadline")
-    if not isinstance(thread_id, str) or not isinstance(deadline, str):
+    thread_id = supplied_thread or ticket.thread_id
+    deadline = ticket.deadline
+    if thread_id is None:
         return None
     return thread_id, deadline
 
 
 async def find_action(
-    runtime: TeamRuntime,
-    session_token: str,
-    query: str,
-    *,
-    limit: int | None = None,
-) -> dict[str, Any]:
+    runtime: Team, session_token: str, request: FindRequest
+) -> FindResult:
     """Run Directory ``find`` as ``session_token``."""
-    payload: dict[str, Any] = {"query": query}
-    if limit is not None:
-        payload["limit"] = limit
-    parsed = parse_schema(FindRequest, payload)
-    return dump_public(
-        await runtime.find(
-            session_token,
-            parsed.query,
-            limit=parsed.limit,
-        )
-    )
+    return await runtime.find(session_token, request.query, limit=request.limit)
 
 
 async def get_profiles_action(
-    runtime: TeamRuntime, session_token: str, addresses: list[str]
-) -> dict[str, Any]:
+    runtime: Team, session_token: str, request: GetProfilesRequest
+) -> GetProfilesResult:
     """Return selected teammate Profiles, with per-item errors."""
-    parsed = parse_schema(GetProfilesRequest, {"addresses": addresses})
+    parsed = request
     items: list[ProfileFound | ProfileMiss] = []
     for requested in parsed.unique_requested():
         try:
             entry = await runtime.get_profile(session_token, requested)
-            if not isinstance(entry, DirectoryEntry):
-                entry = DirectoryEntry.model_validate(entry)
             items.append(
                 ProfileFound(
                     status="ok",
@@ -193,21 +115,12 @@ async def get_profiles_action(
                     error=ErrorObject.model_validate(exc.to_error_object()),
                 )
             )
-    return dump_public(GetProfilesResult(items=items))
+    return GetProfilesResult(items=items)
 
 
 async def ask_action(
-    runtime: TeamRuntime,
-    session_token: str,
-    caller_address: str,
-    recipient: str,
-    content: Any,
-    *,
-    deadline_seconds: Optional[int] = None,
-    collect: CollectMode = "wait",
-    thread_id: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
-) -> dict[str, Any]:
+    runtime: Team, session_token: str, caller_address: str, request: AskToolRequest
+) -> TicketView:
     """Send a reply-expected request and return the current TicketView.
 
     ``collect`` matches Runtime ``send``. The wait hold may return an
@@ -222,20 +135,7 @@ async def ask_action(
         )
         ticket["ticket_id"]
     """
-    if not isinstance(recipient, str) or not recipient.strip():
-        raise ValueError("recipient is required")
-    payload: dict[str, Any] = {
-        "recipient": recipient,
-        "content": content,
-        "collect": collect,
-    }
-    if deadline_seconds is not None:
-        payload["deadline_seconds"] = deadline_seconds
-    if thread_id is not None:
-        payload["thread_id"] = thread_id
-    if idempotency_key is not None:
-        payload["idempotency_key"] = idempotency_key
-    parsed = parse_schema(AskToolRequest, payload)
+    parsed = request
     deadline_s = parsed.deadline_seconds
     collect = parsed.collect
     arg_thread = parsed.thread_id
@@ -301,27 +201,26 @@ async def ask_action(
         )
     if result is None:
         raise _keyed_id_conflict(key)
-    ticket = result.get("ticket")
-    if not isinstance(ticket, dict):
+    if not isinstance(result, TicketedSendResult):
         raise TeamError("internal", "ask did not return a Ticket")
-    return dump_public(ticket_view(parse_ticket(ticket)))
+    return ticket_view(result.ticket)
 
 
 async def _send_ask(
-    runtime: TeamRuntime,
+    runtime: Team,
     session_token: str,
     *,
     message_id: str,
     recipient: str,
-    content: Any,
+    content: JsonValue,
     collect: CollectMode,
     deadline: Optional[str],
     thread_id: str,
     reraise_conflict: bool = False,
     idempotency_key: Optional[str] = None,
-) -> dict[str, Any] | None:
+) -> SendResult | None:
     try:
-        body: dict[str, Any] = {
+        body: JsonObject = {
             "id": message_id,
             "recipient": recipient,
             "kind": "request",
@@ -331,7 +230,9 @@ async def _send_ask(
         }
         if deadline is not None:
             body["deadline"] = deadline
-        return dump_public(await runtime.send(session_token, body))
+        return await runtime.send(
+            session_token, RequestSendRequest.model_validate(body)
+        )
     except TeamError as exc:
         if exc.code == "id_conflict" and not reraise_conflict:
             return None
@@ -341,28 +242,14 @@ async def _send_ask(
 
 
 async def tell_action(
-    runtime: TeamRuntime,
-    session_token: str,
-    caller_address: str,
-    recipient: str,
-    content: Any,
-    *,
-    thread_id: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
-) -> dict[str, Any]:
+    runtime: Team, session_token: str, caller_address: str, request: TellToolRequest
+) -> TellView:
     """Send without expecting a reply. Returns ``TellView``.
 
     A keyed retry with the same arguments returns the original accepted
     send. Changed keyed arguments raise ``id_conflict``.
     """
-    if not isinstance(recipient, str) or not recipient.strip():
-        raise ValueError("recipient is required")
-    payload: dict[str, Any] = {"recipient": recipient, "content": content}
-    if thread_id is not None:
-        payload["thread_id"] = thread_id
-    if idempotency_key is not None:
-        payload["idempotency_key"] = idempotency_key
-    parsed = parse_schema(TellToolRequest, payload)
+    parsed = request
     arg_thread = parsed.thread_id
     key = parsed.idempotency_key
     message_id = message_id_for_tool(
@@ -370,7 +257,7 @@ async def tell_action(
         caller_address,
         idempotency_key=key,
     )
-    body: dict[str, Any] = {
+    body: JsonObject = {
         "id": message_id,
         "recipient": parsed.recipient,
         "kind": "event",
@@ -379,50 +266,42 @@ async def tell_action(
     if arg_thread is not None:
         body["thread_id"] = arg_thread
     try:
-        sent = parse_send_result(await runtime.send(session_token, body))
+        sent = await runtime.send(session_token, EventSendRequest.model_validate(body))
     except TeamError as exc:
         if exc.code == "id_conflict" and key:
             raise _keyed_id_conflict(key) from exc
         raise
     if not isinstance(sent, AcceptedSendResult):
         raise TeamError("internal", "tell did not return an accepted event")
-    return dump_public(tell_view(sent))
+    return tell_view(sent)
 
 
 def _keyed_id_conflict(key: str | None = None) -> TeamError:
     """Return tool-facing ``id_conflict`` that names ``idempotency_key``."""
-    details = {"argument": "idempotency_key"}
+    details: JsonObject = {"argument": "idempotency_key"}
     if key:
         details["idempotency_key"] = True
     return TeamError("id_conflict", KEYED_ID_CONFLICT_MESSAGE, details=details)
 
 
 async def get_result_action(
-    runtime: TeamRuntime, session_token: str, ticket_id: str
-) -> dict[str, Any]:
+    runtime: Team, session_token: str, request: GetResultRequest
+) -> TicketView:
     """Return the current TicketView owned by this Membership."""
-    parsed = parse_schema(GetResultRequest, {"ticket_id": ticket_id})
-    ticket = parse_ticket(await runtime.get_result(session_token, parsed.ticket_id))
-    return dump_public(ticket_view(ticket))
+    parsed = request
+    ticket = await runtime.get_result(session_token, parsed.ticket_id)
+    return ticket_view(ticket)
 
 
 async def get_history_action(
-    runtime: TeamRuntime,
-    session_token: str,
-    thread_id: str,
-    *,
-    before: Optional[str] = None,
-    limit: int = 50,
-) -> dict[str, Any]:
+    runtime: Team, session_token: str, request: GetHistoryRequest
+) -> HistoryView:
     """Return one page of retained Thread history."""
-    payload: dict[str, Any] = {"thread_id": thread_id, "limit": limit}
-    if before is not None:
-        payload["before"] = before
-    parsed = parse_schema(GetHistoryRequest, payload)
+    parsed = request
     raw = await runtime.get_history(
         session_token,
         parsed.thread_id,
         before=parsed.before,
         limit=50 if parsed.limit is None else parsed.limit,
     )
-    return dump_public(history_view(parse_history_result(raw)))
+    return history_view(raw)

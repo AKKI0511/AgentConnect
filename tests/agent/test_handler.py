@@ -7,9 +7,11 @@ import asyncio
 import pytest
 from tests.agent.conftest import BoomAgent, DeclineAgent, DeferredAgent, EchoAgent
 
+from agentconnect.agent import BaseAgent
 from agentconnect.agent.context import Context
 from agentconnect.core.base import JsonValue
 from agentconnect.core.message import MailboxMessage
+from agentconnect.core.operations import CompleteResult
 from agentconnect.team import Team
 
 
@@ -98,9 +100,40 @@ async def test_deferred_reply_later(team: Team):
         await researcher.leave()
 
 
+class UnreadEventResult:
+    @property
+    def content(self) -> object:
+        raise AssertionError("event results must not be inspected")
+
+
 @pytest.mark.asyncio
-async def test_event_does_not_open_ticket(team: Team):
-    writer = EchoAgent(name="writer")
+@pytest.mark.parametrize(
+    "event_result",
+    [None, {"not-json"}, UnreadEventResult()],
+    ids=["none", "set", "opaque"],
+)
+async def test_event_does_not_open_ticket(
+    team: Team, monkeypatch: pytest.MonkeyPatch, event_result: object
+):
+    seen: list[str] = []
+    completed: list[str] = []
+    complete = team.complete
+
+    async def track_complete(token: str, lease_id: str) -> CompleteResult:
+        result = await complete(token, lease_id)
+        completed.append(lease_id)
+        return result
+
+    monkeypatch.setattr(team, "complete", track_complete)
+
+    class EventAgent(BaseAgent):
+        async def handle(self, message: MailboxMessage, ctx: Context) -> object:
+            seen.append(message.id)
+            if message.kind == "event":
+                return event_result
+            return {"echo": message.content}
+
+    writer = EventAgent(name="writer", max_in_flight=1)
     researcher = EchoAgent(name="researcher")
     await writer.join(team)
     await researcher.join(team)
@@ -108,6 +141,18 @@ async def test_event_does_not_open_ticket(team: Team):
         sent = await researcher.tell("writer", {"note": "fyi"})
         assert sent.status == "accepted"
         assert "ticket" not in sent
+        session = writer._require_session()
+        async with asyncio.timeout(3):
+            while not completed or session._occupied():
+                await asyncio.sleep(0.01)
+        assert len(completed) == 1
+        assert not session._active
+        assert session._room() == 1
+        ticket = await researcher.ask("writer", "next", deadline_seconds=5)
+        assert ticket.state == "completed"
+        assert ticket.response.content == {"echo": "next"}
+        assert len(seen) == 2
+        assert len(set(seen)) == 2
     finally:
         await writer.leave()
         await researcher.leave()
@@ -156,6 +201,29 @@ async def test_ctx_sender_is_the_requester_address(team: Team):
         assert ticket.state == "completed"
         assert ticket.response.content["sender"] == researcher.address
         assert ticket.response.content["did"] == researcher.agent_did
+    finally:
+        await writer.leave()
+        await researcher.leave()
+
+
+@pytest.mark.asyncio
+async def test_deferred_fail_keeps_caller_message(team: Team):
+    class FailAgent(BaseAgent):
+        async def handle(
+            self, message: MailboxMessage, ctx: Context
+        ) -> JsonValue | None:
+            await ctx.defer().fail("source list was empty")
+            return None
+
+    writer = FailAgent(name="writer")
+    researcher = EchoAgent(name="researcher")
+    await writer.join(team)
+    await researcher.join(team)
+    try:
+        ticket = await researcher.ask("writer", "please", deadline_seconds=5)
+        assert ticket.state == "failed"
+        assert ticket.error.code == "handler_failed"
+        assert ticket.error.message == "source list was empty"
     finally:
         await writer.leave()
         await researcher.leave()

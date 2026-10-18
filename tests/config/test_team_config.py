@@ -1,18 +1,17 @@
-"""Team file models, TOML discovery, and the YAML compatibility path."""
+"""Team file models and TOML discovery."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from agentconnect.config.loaders import (
     dump_team_toml,
     find_config_file,
     load_team_config,
     render_example_toml,
-    save_example_config,
-    validate_config_file,
 )
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
 
@@ -31,19 +30,17 @@ def test_example_toml_matches_models() -> None:
         "\r\n", "\n"
     )
     parsed = load_team_config(Path("agentconnect/config/agentconnect.example.toml"))
-    assert parsed.model_dump(by_alias=True) == TeamConfig.example().model_dump(
-        by_alias=True
-    )
+    assert parsed.model_dump() == TeamConfig.example().model_dump()
 
 
 def test_load_team_config_from_cwd_toml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    save_example_config(tmp_path / "agentconnect.toml")
+    (tmp_path / "agentconnect.toml").write_text(render_example_toml(), encoding="utf-8")
     config = load_team_config()
     assert config.team == "content-squad"
-    assert config.agents[0].class_path.startswith("agents.")
+    assert config.agents["researcher"].entrypoint.startswith("agents.")
     assert find_config_file() == tmp_path / "agentconnect.toml"
 
 
@@ -53,7 +50,7 @@ def test_load_pyproject_tool_table(
     monkeypatch.chdir(tmp_path)
     _write(
         tmp_path / "pyproject.toml",
-        dump_team_toml(TeamConfig(team="from-pyproject")),
+        dump_team_toml(TeamConfig(team="from-pyproject"), pyproject=True),
     )
     config = load_team_config()
     assert config.team == "from-pyproject"
@@ -67,40 +64,38 @@ def test_toml_beats_pyproject_in_same_directory(
     _write(tmp_path / "agentconnect.toml", dump_team_toml(TeamConfig(team="from-toml")))
     _write(
         tmp_path / "pyproject.toml",
-        dump_team_toml(TeamConfig(team="from-pyproject")),
+        dump_team_toml(TeamConfig(team="from-pyproject"), pyproject=True),
     )
     assert load_team_config().team == "from-toml"
     assert find_config_file() == tmp_path / "agentconnect.toml"
 
 
-def test_pyproject_in_parent_beats_cwd_yaml(
+def test_yaml_in_cwd_does_not_hide_parent_pyproject(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    yaml = pytest.importorskip("yaml")
     project = tmp_path / "project"
     nested = project / "nested"
     nested.mkdir(parents=True)
-    _write(project / "pyproject.toml", dump_team_toml(TeamConfig(team="from-parent")))
     _write(
-        nested / "agentconnect.yaml",
-        yaml.safe_dump({"team": "from-yaml"}),
+        project / "pyproject.toml",
+        dump_team_toml(TeamConfig(team="from-parent"), pyproject=True),
     )
+    _write(nested / "agentconnect.yaml", "team: from-yaml\n")
     monkeypatch.chdir(nested)
     assert load_team_config().team == "from-parent"
     assert find_config_file() == project / "pyproject.toml"
 
 
-def test_yaml_fallback_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    yaml = pytest.importorskip("yaml")
+def test_yaml_is_not_a_team_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
-    path = _write(
-        tmp_path / "agentconnect.yaml",
-        yaml.safe_dump({"team": "legacy-yaml", "store": "memory"}),
-    )
-    with pytest.warns(DeprecationWarning, match="legacy YAML"):
-        config = load_team_config()
-    assert config.team == "legacy-yaml"
-    assert find_config_file() == path
+    path = _write(tmp_path / "agentconnect.yml", "team: legacy-yaml\n")
+    with pytest.raises(FileNotFoundError, match="Team file was not found"):
+        load_team_config()
+    assert find_config_file() is None
+    with pytest.raises(ValueError, match="YAML"):
+        load_team_config(path)
 
 
 def test_explicit_file_skips_discovery(
@@ -117,6 +112,16 @@ def test_explicit_file_skips_discovery(
     assert load_team_config(chosen).team == "explicit-team"
 
 
+def test_explicit_missing_file_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write(tmp_path / "agentconnect.toml", dump_team_toml(TeamConfig(team="cwd-team")))
+    missing = tmp_path / "missing.toml"
+    with pytest.raises(FileNotFoundError, match="Team file was not found"):
+        load_team_config(missing)
+
+
 def test_agentconnect_toml_accepts_bare_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -126,6 +131,15 @@ def test_agentconnect_toml_accepts_bare_keys(
         'team = "bare-keys"\nstore = "memory"\n',
     )
     assert load_team_config().team == "bare-keys"
+
+
+def test_standalone_toml_rejects_tool_wrap(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path / "agentconnect.toml",
+        dump_team_toml(TeamConfig(team="wrapped"), pyproject=True),
+    )
+    with pytest.raises(ValueError, match="tool.agentconnect"):
+        load_team_config(path)
 
 
 def test_malformed_toml_is_an_error(tmp_path: Path) -> None:
@@ -144,8 +158,12 @@ def test_pyproject_without_table_is_not_a_hit(
 
 
 def test_unknown_field_is_rejected() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TeamConfig.model_validate({"team": "content-squad", "publish": ["writer"]})
+    with pytest.raises(ValidationError):
+        HostedAgentConfig.model_validate(
+            {"entrypoint": "agents.writer:Writer", "class": "agents.writer:Writer"}
+        )
 
 
 def test_store_and_embeddings_validation() -> None:
@@ -154,22 +172,148 @@ def test_store_and_embeddings_validation() -> None:
         {"team": "demo", "embeddings": "litellm:text-embedding-3-small"}
     )
     TeamConfig.model_validate({"team": "demo", "embeddings": "openai"})
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TeamConfig.model_validate({"team": "demo", "store": "postgres://x"})
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TeamConfig.model_validate({"team": "demo", "embeddings": "torch"})
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TeamConfig.model_validate({"team": "demo", "host": "0.0.0.0"})
 
 
-def test_hosted_agent_class_path() -> None:
-    agent = HostedAgentConfig.model_validate(
-        {"class": "agents.writer:Writer", "name": "Writer"}
+def test_hosted_agent_entrypoint() -> None:
+    config = TeamConfig.model_validate(
+        {
+            "team": "demo",
+            "agents": {"Writer": {"entrypoint": "agents.writer:Writer"}},
+        }
     )
-    assert agent.name == "writer"
-    assert agent.class_path == "agents.writer:Writer"
-    with pytest.raises(Exception):
-        HostedAgentConfig.model_validate({"class": "agents.writer", "name": "writer"})
+    assert list(config.agents) == ["writer"]
+    assert config.agents["writer"].entrypoint == "agents.writer:Writer"
+    with pytest.raises(ValidationError):
+        HostedAgentConfig.model_validate({"entrypoint": "agents.writer"})
+
+
+def test_named_agents_mapping_loads(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path / "agentconnect.toml",
+        (
+            'team = "content-squad"\n'
+            "\n"
+            "[agents.researcher]\n"
+            'entrypoint = "agents.researcher:Researcher"\n'
+            "\n"
+            "[agents.writer]\n"
+            'entrypoint = "agents.writer:Writer"\n'
+            'kwargs.model = "provider/model"\n'
+        ),
+    )
+    config = load_team_config(path)
+    assert list(config.agents) == ["researcher", "writer"]
+    assert config.agents["researcher"].kwargs == {}
+    assert config.agents["writer"].kwargs == {"model": "provider/model"}
+
+
+def test_writer_writer_name_collision_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="collide"):
+        TeamConfig.model_validate(
+            {
+                "team": "demo",
+                "agents": {
+                    "Writer": {"entrypoint": "agents.writer:Writer"},
+                    "writer": {"entrypoint": "agents.other:Other"},
+                },
+            }
+        )
+
+
+def test_invalid_agent_name_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="valid Agent name"):
+        TeamConfig.model_validate(
+            {
+                "team": "demo",
+                "agents": {"bad name": {"entrypoint": "agents.writer:Writer"}},
+            }
+        )
+
+
+def test_agents_array_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="table of Agent names"):
+        TeamConfig.model_validate(
+            {
+                "team": "demo",
+                "agents": [
+                    {"entrypoint": "agents.writer:Writer", "name": "writer"},
+                ],
+            }
+        )
+
+
+def test_competing_kwargs_name_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="kwargs must not include name"):
+        HostedAgentConfig.model_validate(
+            {
+                "entrypoint": "agents.writer:Writer",
+                "kwargs": {"name": "other"},
+            }
+        )
+
+
+def test_dump_rejects_json_null() -> None:
+    config = TeamConfig(
+        team="demo",
+        agents={
+            "writer": HostedAgentConfig(
+                entrypoint="agents.writer:Writer",
+                kwargs={"model": None},
+            )
+        },
+    )
+    with pytest.raises(ValueError, match=r"agents\.writer\.kwargs\.model is null"):
+        dump_team_toml(config)
+
+
+def test_nested_kwargs_roundtrip_through_toml_writer(tmp_path: Path) -> None:
+    config = TeamConfig(
+        team="demo",
+        agents={
+            "writer": HostedAgentConfig(
+                entrypoint="agents.writer:Writer",
+                kwargs={
+                    "model": "provider/model",
+                    "note": 'line1\nline2\tquoted"slash\\end',
+                    "limits": {"max_tokens": 100, "stop": ["END", "STOP"]},
+                },
+            )
+        },
+    )
+    path = tmp_path / "agentconnect.toml"
+    path.write_text(dump_team_toml(config), encoding="utf-8")
+    loaded = load_team_config(path)
+    assert loaded.agents["writer"].kwargs == config.agents["writer"].kwargs
+    text = path.read_text(encoding="utf-8")
+    assert "[tool.agentconnect]" not in text
+    assert "entrypoint" in text
+
+
+def test_pyproject_wrap_roundtrip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = TeamConfig(
+        team="from-pyproject",
+        agents={
+            "writer": HostedAgentConfig(
+                entrypoint="agents.writer:Writer",
+                kwargs={"model": "provider/model"},
+            )
+        },
+    )
+    text = dump_team_toml(config, pyproject=True)
+    assert "[tool.agentconnect]" in text
+    (tmp_path / "pyproject.toml").write_text(text, encoding="utf-8")
+    loaded = load_team_config()
+    assert loaded.team == "from-pyproject"
+    assert loaded.agents["writer"].kwargs["model"] == "provider/model"
 
 
 def test_discovery_walks_beyond_sixteen_parents(
@@ -194,28 +338,10 @@ def test_nearest_pyproject_beats_ancestor_toml(
     nested = project / "nested"
     nested.mkdir(parents=True)
     _write(project / "agentconnect.toml", dump_team_toml(TeamConfig(team="ancestor")))
-    _write(nested / "pyproject.toml", dump_team_toml(TeamConfig(team="nearest")))
+    _write(
+        nested / "pyproject.toml",
+        dump_team_toml(TeamConfig(team="nearest"), pyproject=True),
+    )
     monkeypatch.chdir(nested)
     assert load_team_config().team == "nearest"
     assert find_config_file() == nested / "pyproject.toml"
-
-
-def test_duplicate_agent_names_are_rejected() -> None:
-    with pytest.raises(Exception, match="duplicate Agent name"):
-        TeamConfig.model_validate(
-            {
-                "team": "demo",
-                "agents": [
-                    {"class": "agents.writer:Writer", "name": "writer"},
-                    {"class": "agents.other:Other", "name": "writer"},
-                ],
-            }
-        )
-
-
-def test_validate_config_file(tmp_path: Path) -> None:
-    path = tmp_path / "agentconnect.toml"
-    path.write_text("team = true\n", encoding="utf-8")
-    assert validate_config_file(path) is False
-    save_example_config(path)
-    assert validate_config_file(path) is True

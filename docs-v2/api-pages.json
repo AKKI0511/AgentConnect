@@ -1,0 +1,108 @@
+[
+  "api-reference",
+  "api/cli",
+  {
+    "group": "agent",
+    "pages": [
+      "api/agent",
+      "api/agent-base",
+      "api/agent-context",
+      "api/agent-errors",
+      "api/agent-identity",
+      "api/agent-tools"
+    ]
+  },
+  {
+    "group": "config",
+    "pages": [
+      "api/config",
+      "api/config-loaders",
+      "api/config-models"
+    ]
+  },
+  {
+    "group": "core",
+    "pages": [
+      "api/core",
+      "api/core-address",
+      "api/core-base",
+      "api/core-directory",
+      "api/core-error",
+      "api/core-identity",
+      "api/core-kinds",
+      "api/core-message",
+      "api/core-operations",
+      "api/core-primitives",
+      "api/core-profile",
+      "api/core-spec",
+      "api/core-ticket"
+    ]
+  },
+  {
+    "group": "index",
+    "pages": [
+      "api/index",
+      "api/index-client",
+      "api/index-models",
+      "api/index-service"
+    ]
+  },
+  {
+    "group": "mcp",
+    "pages": [
+      "api/mcp",
+      "api/mcp-server"
+    ]
+  },
+  {
+    "group": "prebuilt",
+    "pages": [
+      "api/prebuilt",
+      "api/prebuilt-ai_agent",
+      "api/prebuilt-human_agent",
+      "api/prebuilt-loop",
+      {
+        "group": "telegram",
+        "pages": [
+          "api/prebuilt-telegram",
+          "api/prebuilt-telegram-telegram_agent"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "team",
+    "pages": [
+      "api/team",
+      {
+        "group": "directory",
+        "pages": [
+          "api/team-directory",
+          "api/team-directory-embedder"
+        ]
+      },
+      "api/team-errors",
+      "api/team-http",
+      "api/team-runtime",
+      {
+        "group": "store",
+        "pages": [
+          "api/team-store",
+          "api/team-store-base",
+          "api/team-store-memory",
+          "api/team-store-ops",
+          "api/team-store-redis"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "transport",
+    "pages": [
+      "api/transport",
+      "api/transport-agent_http",
+      "api/transport-inprocess",
+      "api/transport-runtime"
+    ]
+  }
+]

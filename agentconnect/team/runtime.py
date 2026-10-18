@@ -1,77 +1,24 @@
-"""Team Runtime: mailboxes, tickets, threads, and routing.
-
-A Team is a running process that serves one named Team. Agents stay in
-their own processes and pull work through Runtime operations. This module
-never holds Agent objects and never calls a method on an Agent.
-
-Start, stop, serve, and join are the process API:
-
-    team = await Team("content-squad").start()
-    writer = await team.join(
-        name="writer",
-        agent_did="did:key:z6MkmEtU9Z7p7G6vbULDgMk8DXCVqW8rNyLMtd2RrAHjLD3m",
-        profile={
-            "summary": "Writes short drafts from notes.",
-            "skills": [
-                {
-                    "name": "drafting",
-                    "description": "Turn research notes into a two-paragraph draft.",
-                }
-            ],
-        },
-    )
-
-Embedded joins omit credentials. A Team started with
-``require_join_auth=True`` (or any join that carries credentials) checks a
-join token and an EdDSA identity proof.
-
-    team = await Team("content-squad", require_join_auth=True).start()
-    url = await team.serve()
-    writer = Writer(name="writer")
-    issued = await team.issue_join_token(name="writer", agent_did=writer.agent_did)
-    await writer.join(url, join_token=issued["token"])
-
-``send``, ``lease``, ``renew``, ``complete``, ``reply``, and the other token-taking
-methods are the Session transport. HTTP, MCP, and the in-process Session
-call them by name. Agent code uses ``BaseAgent``.
-
-``send`` and ``reply`` commit as one store transition. A Mailbox item is
-not leaseable until its Message exists, and a request's Ticket is stored
-in that same commit.
-
-Pass ``store="memory"`` (the default) for a process-local Team. Pass a
-Redis URL when Memberships, Sessions, mailboxes, open Tickets, and
-Thread history must survive a Runtime restart.
-
-Open Tickets are retained until at least their deadline. Terminal
-Tickets, replay records, and event send replays last until the later of
-that deadline and ``replay_horizon_seconds`` after the obligation ends.
-``send`` and ``reply`` share ``max_message_bytes``. HTTP JSON bodies use
-the same cap before the Runtime buffers the rest of the request. Thread
-history is trimmed by count once no live Delivery, open Ticket, or
-Ticket replay window still needs an older Message. Dropping an id
-deletes that body only when no remaining owner names it. A
-``collect=wait`` send holds until the Ticket is terminal or
-``wait_hold_seconds`` elapses, then returns the current Ticket. Ending
-that hold does not end accepted work.
-One Membership may hold at most ``max_held_waits`` of those sends at
-once. A request send may omit ``deadline``; the Runtime stamps
-``work_lifetime_seconds`` or inherits a request parent's absolute
-deadline. A new request deadline may not pass ``max_deadline_seconds``.
-
-Expiry is indexed by time. The background sweep pops Sessions, leases,
-Tickets, and join credentials that are due. It does not walk every
-stored id. ``status`` reads presence from stored Sessions, so a durable
-Runtime still reports a live Membership as online after a restart.
-"""
+"""The `Team` you construct, start, and host in this process."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import secrets
-from datetime import timedelta
-from typing import Any, Callable, Mapping, NoReturn, Optional, Sequence, Union
+from datetime import datetime, timedelta
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Mapping,
+    NoReturn,
+    Optional,
+    Sequence,
+    TypedDict,
+    Union,
+)
+from types import TracebackType
+from contextlib import AbstractAsyncContextManager
 
 from pydantic import ValidationError
 
@@ -91,19 +38,27 @@ from agentconnect.core.address import (
     parse_team_name,
     resolve_address,
 )
-from agentconnect.core.base import dump_public, validation_message
-from agentconnect.core.directory import DirectoryEntry
+from agentconnect.core.base import JsonObject, dump_public, validation_message
+from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.operations import (
+    ReplyFailureRequest,
+    ReplySuccessRequest,
+    ReplyRequest,
+    SendRequest,
+    JoinRequest,
     CompleteResult,
     HeartbeatResult,
+    HistoryResult,
     JoinChallenge,
     JoinResult,
     JoinTokenIssued,
+    LeaseResult,
     RenewResult,
     ReplyResult,
     RuntimeLimits,
+    SendResult,
     StatusResult,
     TeamRoster,
     TraceResult,
@@ -114,10 +69,10 @@ from agentconnect.core.operations import (
     parse_send_request,
     parse_send_result,
 )
-from agentconnect.core.primitives import DeliveryHistoryForm
+from agentconnect.core.primitives import DeliveryHistoryForm, PersistenceMode
 from agentconnect.core.profile import AgentProfile
 from agentconnect.core.spec import SPEC_VERSION
-from agentconnect.core.ticket import parse_ticket
+from agentconnect.core.ticket import Ticket, parse_ticket
 from agentconnect.team.codec import (
     canonical_json,
     format_timestamp,
@@ -155,8 +110,8 @@ from agentconnect.team.constants import (
     SWEEP_BATCH,
     SWEEP_INTERVAL_SECONDS,
 )
-from agentconnect.team.directory import MAX_FIND_LIMIT, Directory
-from agentconnect.team.directory.embedder import EmbeddingsArg, resolve_embedder
+from agentconnect.team.directory.directory import _MAX_FIND_LIMIT, _Directory
+from agentconnect.team.directory.embedder import EmbeddingsArg, _resolve_embedder
 from agentconnect.team.directory.tokens import EmbeddingSetupError
 from agentconnect.team.errors import IDENTITY_MISSING, TeamError
 from agentconnect.team.locks import KeyedLock
@@ -181,16 +136,26 @@ from agentconnect.team.transitions.send import (
     load_replay,
 )
 
+if TYPE_CHECKING:
+    from mcp.server import Server
+    from uvicorn import Server as UvicornServer
+
+
+class _HeldWait(TypedDict):
+    acquired: bool
+    name: str
+
+
 logger = logging.getLogger(__name__)
 
-StoreArg = Union[Store, str, None]
+_StoreArg = Union[Store, str, None]
 
 
-def _fail(code: str, message: str, **kwargs: Any) -> NoReturn:
-    raise TeamError(code, message, **kwargs)
+def _fail(code: str, message: str) -> NoReturn:
+    raise TeamError(code, message)
 
 
-def _is_principal(member: Mapping[str, Any] | None) -> bool:
+def _is_principal(member: Mapping[str, object] | None) -> bool:
     """Return True when ``member`` may act but must not be hired."""
     if not isinstance(member, Mapping):
         return False
@@ -199,7 +164,7 @@ def _is_principal(member: Mapping[str, Any] | None) -> bool:
     return member.get("name") == OPERATOR_NAME
 
 
-def _membership_id(record: Mapping[str, Any], field: str = "membership_id") -> str:
+def _membership_id(record: Mapping[str, object], field: str = "membership_id") -> str:
     """Return a required Membership identity field from ``record``."""
     value = record.get(field)
     if not isinstance(value, str) or not value:
@@ -207,7 +172,7 @@ def _membership_id(record: Mapping[str, Any], field: str = "membership_id") -> s
     return value
 
 
-def _session_did(session: Mapping[str, Any]) -> str:
+def _session_did(session: Mapping[str, object]) -> str:
     """Return the DID stamped on this Session at join."""
     value = session.get("agent_did")
     if not isinstance(value, str) or not value:
@@ -220,27 +185,21 @@ def _session_did(session: Mapping[str, Any]) -> str:
 
 
 class Team:
-    """Runtime serving one Team.
+    """The group your agents join to find each other and exchange work.
 
-    Process API: :meth:`start`, :meth:`stop`, :meth:`serve`, :meth:`join`,
-    :meth:`issue_join_token`, :meth:`revoke_join_token`, :meth:`status`,
-    :meth:`get_trace`, :meth:`remove_membership`.
+    Call `start` before agents join. As an async context manager, the
+    Team starts on entry and stops on exit. Agent instances stay in
+    your code.
 
-    Operations that take a Session token are the Session transport. HTTP,
-    MCP, and the in-process Session call them by name.
-
-    The Team owns Memberships, Sessions, Mailboxes, Deliveries, Tickets,
-    Thread history, and the Directory. ``find`` ranks other members from a
-    natural-language query. :meth:`serve` also mounts the Team MCP server
-    at ``{origin}/mcp``. ``status`` reports ``online`` from stored
-    Sessions. Expiry is processed from a time-ordered index.
+    Agents in this process join the object; use `serve` for a loopback
+    origin, or `create_runtime_app` on your server for other hosts.
     """
 
     def __init__(
         self,
         name: str,
         *,
-        store: StoreArg = None,
+        store: Store | str | None = None,
         max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
         max_mailbox_depth: int = DEFAULT_MAX_MAILBOX_DEPTH,
         delivery_history_limit: int = DEFAULT_DELIVERY_HISTORY_LIMIT,
@@ -261,49 +220,64 @@ class Team:
         join_challenge_ttl_seconds: float = DEFAULT_JOIN_CHALLENGE_TTL_SECONDS,
         join_token_ttl_seconds: float = DEFAULT_JOIN_TOKEN_TTL_SECONDS,
         embeddings: EmbeddingsArg = "auto",
-        tools: Sequence[Callable[..., Any]] | None = None,
+        tools: Sequence[Callable[..., object]] | None = None,
     ) -> None:
-        """Create an unstarted Runtime for Team ``name``.
+        """Create a stopped Team.
 
         Args:
-            name: Team name, a lowercase DNS label.
-            store: ``"memory"`` (default), a Redis URL, or a Store.
-            require_join_auth: When True, every join needs a join token and
-                an identity proof, including in-process joins.
-            wait_hold_seconds: How long ``collect=wait`` may keep ``send``
-                open. After this the current Ticket is returned even if it
-                is still open; collect the rest with ``get_result``.
-            max_held_waits: How many ``collect=wait`` sends one Membership
-                may hold at once. Further waits fail with ``wait_limit``.
-            work_lifetime_seconds: Finite work cutoff stamped on a new
-                request whose send omitted ``deadline`` and that has no
-                request parent to inherit from. This is a cutoff, not a
-                completion estimate. Must not exceed
-                ``max_deadline_seconds``.
-            max_deadline_seconds: Farthest a new request deadline may be
-                from acceptance.
-            max_open_tickets: Open Tickets one Membership may hold as
-                requester.
+            name: A lowercase DNS label.
+            store: Omit for process memory, or pass a Redis URL such as
+                `redis://127.0.0.1:6379/0` or a `Store`. Redis needs
+                `agentconnect[redis]`. Use one Runtime with that URL.
+            max_message_bytes: UTF-8 JSON size cap for a Message or reply
+                body. HTTP JSON bodies use the same cap.
+            max_mailbox_depth: Unleased items one mailbox may hold.
+                Further sends fail with `busy`.
+            delivery_history_limit: Earlier Thread Messages included on a
+                Delivery when `delivery_history` is `bodies`. Read older
+                turns with `get_history`.
+            wait_hold_seconds: How long a `collect="wait"` send stays open.
+                It then returns the current Ticket, which may still be open.
+                Accepted work continues; collect it with `get_result`.
+            max_held_waits: Simultaneous `collect="wait"` sends per membership.
+                Further waits fail with `wait_limit`.
+            work_lifetime_seconds: Cutoff for a new request that omitted
+                `deadline` and has no request parent. The Team closes the
+                request at this cutoff even if the agent is still working.
+                Must be at least 1 and not exceed `max_deadline_seconds`.
+            max_deadline_seconds: Farthest a new request deadline may be from
+                acceptance. Must be at least 1.
+            max_open_tickets: Open Tickets per requester membership.
             replay_horizon_seconds: How long an identical send, reply, or
-                complete still returns the original result after the
-                obligation ends.
-            max_retained_bytes: Cap on UTF-8 JSON bytes of retained
-                Message bodies.
-            embeddings: How Profiles are turned into vectors for ``find``.
-                ``"auto"`` uses a local ONNX model when
-                ``agentconnect[embeddings]`` is installed, and hashed
-                n-grams otherwise. An API key in the environment does
-                not select a hosted embedder. ``"openai"`` and
-                ``"litellm"`` are explicit hosted backends and need their
-                extras (tiktoken; LiteLLM only for OpenAI or Azure
-                embedding models). ``"none"``
-                forces hashed n-grams. Pass a callable
-                ``(list[str]) -> list[list[float]]`` to supply your own
-                embeddings. A failed backend is not mixed with leftover
-                vectors; ``find`` rebuilds one space.
-            tools: Extra MCP tools this Team serves beside the reserved Team
-                tools. Each item is a callable whose ``__name__`` is the tool
-                name. Reserved and duplicate names are rejected.
+                complete returns the original result after the obligation
+                ends. Must be at least 1.
+            max_retained_bytes: UTF-8 JSON size cap for retained Message
+                bodies. Must be at least 1.
+            session_ttl_seconds: Idle Session lifetime, refreshed by heartbeat.
+            lease_ttl_seconds: Delivery lease lifetime between renewals.
+            thread_message_limit: Messages kept after no live Delivery or
+                Ticket needs an older one.
+            max_instances: Running copies allowed per membership.
+            max_join_challenges: Unused join challenges allowed at once.
+            sweep_interval_seconds: Time between expiry passes for Sessions,
+                leases, Tickets, and join credentials.
+            require_join_auth: Require a join token and identity proof.
+                `BaseAgent.join` on this object mints a token when the agent
+                has none. A URL join uses one you supply.
+            join_challenge_ttl_seconds: Lifetime of an unused join challenge.
+            join_token_ttl_seconds: Lifetime used when `issue_join_token`
+                omits `ttl_seconds`.
+            embeddings: Search backend or encoder; see
+                `agentconnect.team.directory` for choices. A backend failure
+                makes `find` rebuild one coherent vector space.
+            tools: Extra MCP tools beside the reserved Team tools.
+                Each callable's `__name__` is its tool name; reserved or
+                duplicate names are rejected.
+
+        Raises:
+            ValueError: Invalid name or embedding selection, a numeric bound
+                below its minimum, `work_lifetime_seconds` exceeding
+                `max_deadline_seconds`, or a reserved or duplicate tool name.
         """
         team_name = parse_team_name(name)
         if team_name is None:
@@ -346,7 +320,7 @@ class Team:
         self.join_challenge_ttl_seconds = float(join_challenge_ttl_seconds)
         self.join_token_ttl_seconds = float(join_token_ttl_seconds)
         try:
-            self._embedder = resolve_embedder(embeddings)
+            self._embedder = _resolve_embedder(embeddings)
         except (TypeError, ValueError) as exc:
             raise ValueError(str(exc)) from exc
         extras = list(tools or [])
@@ -361,35 +335,39 @@ class Team:
             seen.add(name)
         self._extra_tools = extras
         self._operator_token: Optional[str] = None
-        self._mcp: Any = None
-        self._mcp_session_cm: Any = None
-        self._directory: Optional[Directory] = None
+        self._mcp: Server[dict[str, object]] | None = None
+        self._mcp_session_cm: AbstractAsyncContextManager[None] | None = None
+        self._directory: Optional[_Directory] = None
         self._identity: Optional[AgentIdentity] = None
         self._keys = KeyedLock()
         self._waiters: dict[str, list[asyncio.Event]] = {}
         self._session_wake: dict[str, list[asyncio.Event]] = {}
         self._work_waiters: dict[str, list[asyncio.Event]] = {}
-        self._sse_subscribers: dict[str, list[asyncio.Queue]] = {}
-        self._trace_subscribers: list[tuple[str, asyncio.Queue]] = []
+        self._sse_subscribers: dict[str, list[asyncio.Queue[JsonObject | None]]] = {}
+        self._trace_subscribers: list[tuple[str, asyncio.Queue[JsonObject | None]]] = []
         self._session_tokens_by_member: dict[str, set[str]] = {}
-        self._sweep_task: Optional[asyncio.Task] = None
-        self._http_server: Any = None
-        self._http_task: Optional[asyncio.Task] = None
+        self._sweep_task: Optional[asyncio.Task[None]] = None
+        self._http_server: UvicornServer | None = None
+        self._http_task: Optional[asyncio.Task[None]] = None
         self._http_url: Optional[str] = None
         self._http_port: Optional[int] = None
         self._started = False
-        self._last_now = None
+        self._last_now: datetime | None = None
 
     @property
-    def persistence(self) -> str:
-        """``volatile`` for memory, ``durable`` for Redis."""
+    def persistence(self) -> PersistenceMode:
+        """`volatile` for the memory store, or `durable` for Redis.
+
+        Before `start`, this reports the built-in store selection. After
+        starting, it reports the opened backend's `Store.persistence`.
+        """
         if self._store is None:
             return "volatile" if not self._is_redis_arg(self._store_arg) else "durable"
         return self._store.persistence
 
     @property
     def limits(self) -> RuntimeLimits:
-        """Runtime limits reported on ``join``."""
+        """Configured bounds reported to clients on join."""
         return RuntimeLimits(
             max_message_bytes=self.max_message_bytes,
             max_mailbox_depth=self.max_mailbox_depth,
@@ -405,24 +383,66 @@ class Team:
 
     @property
     def identity(self) -> AgentIdentity:
-        """Team Ed25519 identity. Available after :meth:`start`."""
+        """Signing key for this Team.
+
+        The value includes the private key. Read `team_did` when you only
+        need the DID. Available after `start`. This key signs records for
+        this Team. It is not a credential for another Team.
+
+        Raises:
+            TeamError: The Team has not been started. `code` is
+                `unavailable`.
+        """
         if self._identity is None:
             raise TeamError("unavailable", "Team has not been started")
         return self._identity
 
     @property
     def team_did(self) -> str:
-        """Team ``did:key``. Available after :meth:`start`."""
+        """`did:key` for this Team, available after `start`.
+
+        Raises:
+            TeamError: The Team has not been started. `code` is
+                `unavailable`.
+        """
         return self.identity.did
 
     async def start(self) -> "Team":
-        """Open the store and start background expiry. Returns this Team."""
+        """Open the store and accept joins.
+
+        Calling this again on a started Team is safe. Invalid store values
+        raise `ValueError`; backend errors propagate.
+
+        Examples:
+            In an async function, `writer` and `researcher` are existing
+            agents. `writer` answers requests. `ask` waits for that reply.
+            Leave each agent and stop the Team after the reply is
+            complete. Keep the Team running while a Ticket you still need
+            is open.
+
+            ```python
+            from agentconnect.team import Team
+
+            team = await Team("content-squad").start()
+            await writer.join(team)
+            await researcher.join(team)
+            ticket = await researcher.ask(
+                "writer",
+                "Draft a release note from these findings: search is faster.",
+            )
+            if ticket.state == "completed":
+                print(ticket.content)
+                await researcher.leave()
+                await writer.leave()
+                await team.stop()
+            ```
+        """
         if self._started:
             return self
         self._store = self._build_store()
         await self._store.open()
         self._started = True
-        self._directory = Directory(self._store, self._embedder)
+        self._directory = _Directory(self._store, self._embedder)
         await self._ensure_identity()
         await self._reserve_operator()
         await self._restore_session_index()
@@ -432,24 +452,32 @@ class Team:
 
     @property
     def url(self) -> Optional[str]:
-        """HTTP origin this Runtime is serving, or None when not serving."""
+        """Origin from `serve`, or None when this Team is not serving.
+
+        Agents pass this value to `BaseAgent.join`. `stop_serving` and
+        `stop` clear it.
+        """
         return self._http_url
 
     @property
     def mcp_url(self) -> Optional[str]:
-        """MCP streamable-HTTP URL, or None when not serving.
+        """Team MCP URL, or None when this Team is not serving.
 
-        Add this URL to Cursor or any MCP client:
-
-            url = await team.serve()
-            team.mcp_url  # http://127.0.0.1:<port>/mcp
+        This is `url` with `/mcp` added. Point an MCP client at it
+        yourself. Attach that client, or `BaseAgent.team_tools`, in the
+        harness. A join token is only for `BaseAgent.join`.
         """
         if self._http_url is None:
             return None
         return f"{self._http_url}/mcp"
 
     async def stop(self) -> None:
-        """Stop HTTP serving, background expiry, and the store connection."""
+        """Stop serving, expiry, and the store connection.
+
+        Calling this again is safe. Redis state remains for a later `start`
+        with the same URL. A memory store selected by name is empty on the
+        next `start`. A supplied `Store` keeps its own state across close/open.
+        """
         await self.stop_serving()
         self._started = False
         if self._sweep_task is not None:
@@ -463,11 +491,16 @@ class Team:
             await self._store.close()
 
     async def __aenter__(self) -> "Team":
-        """Start the Runtime for use as an async context manager."""
+        """Start the Team and return it."""
         return await self.start()
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        """Stop the Runtime when leaving the context manager."""
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Stop the Team, including a listener from `serve`."""
         await self.stop()
 
     def _signal_work(self, membership_name: str) -> None:
@@ -500,7 +533,7 @@ class Team:
             except asyncio.QueueFull:
                 pass
 
-    async def wait_for_work(self, session_token: str, timeout: float = 30.0) -> bool:
+    async def _wait_for_work(self, session_token: str, timeout: float = 30.0) -> bool:
         """Block until this Session's Mailbox has leaseable work, or timeout.
 
         This is an in-process hint, not a Runtime operation. HTTP Clients
@@ -529,20 +562,22 @@ class Team:
                 if not waiters:
                     self._work_waiters.pop(name, None)
 
-    async def subscribe_events(self, session_token: str) -> asyncio.Queue:
+    async def _subscribe_events(
+        self, session_token: str
+    ) -> asyncio.Queue[JsonObject | None]:
         """Attach an SSE queue to this Session. The caller must unsubscribe."""
         session = await self._require_session(session_token)
         self._session_tokens_by_member.setdefault(
             session["membership_name"], set()
         ).add(session_token)
-        queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+        queue: asyncio.Queue[JsonObject | None] = asyncio.Queue(maxsize=32)
         self._sse_subscribers.setdefault(session_token, []).append(queue)
         return queue
 
-    async def unsubscribe_events(
-        self, session_token: str, queue: asyncio.Queue
+    async def _unsubscribe_events(
+        self, session_token: str, queue: asyncio.Queue[JsonObject | None]
     ) -> None:
-        """Detach an SSE queue previously returned by ``subscribe_events``."""
+        """Detach an SSE queue previously returned by ``_subscribe_events``."""
         queues = self._sse_subscribers.get(session_token)
         if queues is None:
             return
@@ -553,11 +588,15 @@ class Team:
         if not queues:
             self._sse_subscribers.pop(session_token, None)
 
-    async def join_challenge(self) -> dict[str, Any]:
+    async def join_challenge(self) -> JoinChallenge:
         """Return a short-lived one-time challenge for an identity proof.
 
         Fetch this, sign it with the Agent key, then pass the JWT as
-        ``identity_proof`` on :meth:`join`.
+        ``identity_proof`` on `join`.
+
+        Raises:
+            TeamError: The Team is stopped (`unavailable`) or has too many
+                unused challenges (`busy`).
         """
         store = self._ensure_started()
         record = await auth_mod.create_join_challenge(
@@ -568,16 +607,18 @@ class Team:
         )
         return JoinChallenge.model_validate(record)
 
-    async def caller_address(self, session_token: str) -> str:
+    async def _caller_address(self, session_token: str) -> str:
         """Return the qualified Address stamped on this Session."""
         session = await self._require_session(session_token)
         return str(session["address"])
 
     async def roster(self) -> TeamRoster:
-        """Return every Agent Membership as a DirectoryEntry list.
+        """Return agent memberships, excluding the reserved operator.
 
-        Principals, including ``operator``, are omitted. Used by the MCP
-        roster resource. Not an HTTP Runtime operation.
+        Memberships without a Profile are omitted.
+
+        Raises:
+            TeamError: The Team has not been started (`unavailable`).
         """
         store = self._ensure_started()
         names = await store.set_members("members")
@@ -601,14 +642,18 @@ class Team:
     async def ensure_operator_session(self) -> str:
         """Return a live Session token for the reserved ``operator`` principal.
 
-        Loopback MCP and HTTP calls with no Authorization header use this
-        Session. The name ``operator`` is reserved when the Runtime starts.
-        An Agent cannot join it.
+        Trusted in-process operator code uses this token for `status` and
+        `get_trace`. Keep it secret: it grants operator access. A started
+        Team reuses its live operator Session, or opens one if needed.
+        The name `operator` is reserved; agents cannot join it.
+
+        Raises:
+            TeamError: The Team has not been started (`unavailable`).
         """
         self._ensure_started()
         if self._operator_token:
             try:
-                await self.require_live_session(self._operator_token)
+                await self._require_live_session(self._operator_token)
                 return self._operator_token
             except TeamError as exc:
                 if exc.code != "unauthorized":
@@ -625,11 +670,41 @@ class Team:
             return await self._open_operator_session()
 
     async def serve(self, host: str = "127.0.0.1", port: int = 0) -> str:
-        """Serve Runtime HTTP and the Team MCP server on a loopback address.
+        """Listen on loopback and return the origin agents join.
 
-        Returns the origin agents pass to ``BaseAgent.join``, for example
-        ``http://127.0.0.1:9000``. The MCP door is ``{origin}/mcp``.
-        Non-loopback hosts are rejected.
+        Pass the origin to `BaseAgent.join`; Team MCP is at `mcp_url`.
+        Issue a join token separately for a URL join. Attach MCP, or
+        `BaseAgent.team_tools`, in the harness yourself.
+
+        Install `agentconnect[serve]` first. An already-serving Team returns
+        its current origin. Agents on other hosts need `create_runtime_app`
+        on your server.
+
+        A request with no Authorization or forwarded-client headers runs
+        as the operator membership. See `create_runtime_app` for Session
+        authorization. A join token is only for `BaseAgent.join`.
+
+        Args:
+            host: Must be loopback.
+            port: Zero lets the OS choose a port.
+
+        Raises:
+            TeamError: Non-loopback host (`invalid_request`), missing serve
+                extra, or listener startup failure (`unavailable`).
+
+        Examples:
+            In an async application, `team` is already started with
+            `require_join_auth=True`, and `writer` is an existing agent.
+
+            ```python
+            origin = await team.serve()
+            issued = await team.issue_join_token(
+                name=writer.name,
+                agent_did=writer.agent_did,
+                single_use=True,
+            )
+            await writer.join(origin, join_token=issued.token)
+            ```
         """
         self._ensure_started()
         async with self._keys.acquire("serve"):
@@ -666,7 +741,6 @@ class Team:
             lifespan="on",
         )
         server = uvicorn.Server(config)
-        server.install_signal_handlers = False
         self._http_server = server
         loop = asyncio.get_running_loop()
         self._http_task = loop.create_task(server.serve())
@@ -691,7 +765,14 @@ class Team:
         return self._http_url
 
     async def stop_serving(self) -> None:
-        """Stop the HTTP listener if one is running."""
+        """Stop the loopback listener and leave the Team started.
+
+        `url` and `mcp_url` become None. Agents that joined this object
+        stay connected. Agents that joined through the origin lose that
+        listener. A later `serve` with port `0` can choose a new port.
+        Pass that origin to those agents yourself. Calling `serve` again
+        does not reconnect them.
+        """
         server = self._http_server
         task = self._http_task
         self._http_server = None
@@ -716,7 +797,7 @@ class Team:
         return self._store
 
     @staticmethod
-    def _is_redis_arg(store: StoreArg) -> bool:
+    def _is_redis_arg(store: _StoreArg) -> bool:
         from agentconnect.team.store.redis import RedisStore
 
         if isinstance(store, RedisStore):
@@ -735,7 +816,7 @@ class Team:
             return RedisStore(store, prefix=f"ac:{self.name}")
         raise ValueError("store must be 'memory', a Redis URL, or a Store")
 
-    def _now_pair(self):
+    def _now_pair(self) -> tuple[datetime, str]:
         now = utc_now()
         if self._last_now is not None and now <= self._last_now:
             now = self._last_now + timedelta(microseconds=1)
@@ -787,7 +868,7 @@ class Team:
                 restored[name] = live
         self._session_tokens_by_member = restored
 
-    async def _member_is_online(self, name: str, now) -> bool:
+    async def _member_is_online(self, name: str, now: datetime) -> bool:
         """Return True when stored Sessions for ``name`` include an unexpired one."""
         store = self._ensure_started()
         for token in await store.set_members(self._member_sessions_key(name)):
@@ -798,27 +879,9 @@ class Team:
                 return True
         return False
 
-    async def _append_thread_message(
-        self,
-        *,
-        thread_id: str,
-        message: dict[str, Any],
-        sender: str,
-        recipient: str,
-    ) -> dict[str, Any]:
-        store = self._ensure_started()
-        return await threads_mod.append_message(
-            store,
-            thread_id=thread_id,
-            message=message,
-            sender=sender,
-            recipient=recipient,
-            max_messages=self.thread_message_limit,
-        )
-
     async def _trim_thread(self, thread_id: str) -> None:
         store = self._ensure_started()
-        from agentconnect.team.store.ops import Cas
+        from agentconnect.team.store.ops import Cas, StoreOp
 
         while True:
             record = await store.get_record(threads_mod.thread_key(thread_id))
@@ -832,7 +895,9 @@ class Team:
             if not dropped:
                 return
             thread["message_ids"] = kept
-            ops = [Cas(threads_mod.thread_key(thread_id), record.version, thread)]
+            ops: list[StoreOp] = [
+                Cas(threads_mod.thread_key(thread_id), record.version, thread)
+            ]
             body_ops, freed = await retention_mod.release_body_deletes(
                 store,
                 dropped,
@@ -857,7 +922,12 @@ class Team:
 
     async def _get_member(self, name: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
-        return await store.get(f"member:{name}")
+        record = await store.get(f"member:{name}")
+        if record is None:
+            return None
+        if not isinstance(record, dict):
+            _fail("internal", "Stored Membership must be an object")
+        return record
 
     async def _get_member_by_did(self, agent_did: str) -> Optional[dict[str, Any]]:
         store = self._ensure_started()
@@ -877,6 +947,8 @@ class Team:
         record = await store.get(f"session:{token}")
         if record is None:
             return None
+        if not isinstance(record, dict):
+            _fail("internal", "Stored Session must be an object")
         return record
 
     async def _save_session(self, session: dict[str, Any]) -> None:
@@ -908,7 +980,7 @@ class Team:
                 queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
-        remaining: list[tuple[str, asyncio.Queue]] = []
+        remaining: list[tuple[str, asyncio.Queue[JsonObject | None]]] = []
         for queued_token, queue in self._trace_subscribers:
             if queued_token == token:
                 try:
@@ -1013,7 +1085,7 @@ class Team:
             team_name=self.name,
             agent_did=member["agent_did"],
             instance_id=session["instance_id"],
-            persistence=self.persistence,  # type: ignore[arg-type]
+            persistence=self.persistence,
             limits=self.limits,
             spec_version=SPEC_VERSION,
         )
@@ -1022,7 +1094,7 @@ class Team:
         self,
         name: str | None = None,
         agent_did: str | None = None,
-        profile: Mapping[str, Any] | None = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         *,
         spec_version: str = SPEC_VERSION,
         instance_id: str | None = None,
@@ -1030,23 +1102,39 @@ class Team:
         join_token: str | None = None,
         identity_proof: str | None = None,
         delivery_history: DeliveryHistoryForm | None = None,
-        request: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        request: JoinRequest | Mapping[str, object] | None = None,
+    ) -> JoinResult:
         """Create or reconnect a Membership and open a Session.
 
-        Embedded Teams accept joins without credentials. Pass
-        ``join_token`` and ``identity_proof`` when the Team was started
-        with ``require_join_auth=True``, or when joining over HTTP with a
-        token the operator issued.
+        Agent code uses `BaseAgent.join`. Authentication is optional when
+        `require_join_auth=False`; otherwise supply both `join_token` and
+        `identity_proof`. Supplying either credential requires a valid pair
+        even when authentication is optional.
 
-        ``name`` is canonicalized to lowercase. A name and DID that already
-        belong together reconnect to that live Membership. After removal,
-        the same spelling is a new Membership. Any other clash fails with
-        ``name_conflict``. ``delivery_history="ids"`` puts earlier Message
-        ids on each Delivery instead of Message bodies.
+        `name` is canonicalized to lowercase. An existing name and DID pair
+        reconnects to that Membership; after removal, the same spelling is a
+        new Membership. Other clashes fail with `name_conflict`.
+        `delivery_history="ids"` supplies earlier Message IDs instead of bodies;
+        None selects bodies. Keep the returned Session token secret.
+
+        Args:
+            agent_did: This agent's `did:key` identity.
+            profile: Discovery fields matching `AgentProfile`.
+            spec_version: Must match the Runtime's contract version.
+            instance_id: UUID for this running copy; omit to generate one.
+            max_in_flight: Simultaneous Deliveries per Session, from 1 to 100.
+            join_token: Credential from `issue_join_token`.
+            identity_proof: EdDSA JWT over a join challenge.
+            request: `JoinRequest` or raw mapping supplying the join arguments.
+
+        Raises:
+            TeamError: Invalid input (`invalid_request`), different contract
+                version (`unsupported_version`), invalid or expired credentials
+                (`unauthorized`), name or DID clash (`name_conflict`), too many
+                instances (`busy`), or stopped Team (`unavailable`).
         """
         if request is not None:
-            if not isinstance(request, Mapping):
+            if not isinstance(request, (JoinRequest, Mapping)):
                 _fail("invalid_request", "join body must be an object")
             version = request.get("spec_version")
             if isinstance(version, str) and version != SPEC_VERSION:
@@ -1059,7 +1147,7 @@ class Team:
                 _fail("invalid_request", str(exc))
             name = parsed.name
             agent_did = parsed.agent_did
-            profile = parsed.profile.to_public_dict()
+            profile = parsed.profile
             spec_version = parsed.spec_version
             instance_id = parsed.instance_id
             if parsed.max_in_flight is not None:
@@ -1080,7 +1168,7 @@ class Team:
             else None
         )
 
-        async def _with_member_locks() -> dict[str, Any]:
+        async def _with_member_locks() -> JoinResult:
             async with self._keys.acquire(f"member:{canonical_name}"):
                 async with self._keys.acquire(f"did:{did}"):
                     return await self._join_locked(
@@ -1105,14 +1193,14 @@ class Team:
         *,
         name: str | None,
         agent_did: str | None,
-        profile: Mapping[str, Any] | None,
+        profile: AgentProfile | Mapping[str, object] | None,
         spec_version: str,
         instance_id: str | None,
         max_in_flight: int,
         join_token: str | None,
         identity_proof: str | None,
         delivery_history: DeliveryHistoryForm | None,
-    ) -> dict[str, Any]:
+    ) -> JoinResult:
         self._ensure_started()
         if spec_version != SPEC_VERSION:
             _fail("unsupported_version", "Client and Runtime contract drafts differ")
@@ -1171,7 +1259,7 @@ class Team:
         if by_name is None and by_did is None:
             created = True
             await mailbox_mod.drop_mailbox(store, f"{canonical_name}@{self.name}")
-            member = {
+            member: dict[str, Any] = {
                 "membership_id": new_uuid(),
                 "name": canonical_name,
                 "address": f"{canonical_name}@{self.name}",
@@ -1274,20 +1362,34 @@ class Team:
         return self._join_result(accepted.session, accepted.member)
 
     async def disconnect(self, session_token: str) -> None:
-        """Close this Session. The Membership and its Mailbox remain."""
+        """Close this Session. The Membership and its Mailbox remain.
+
+        Held Delivery leases are released. The Agent can join again with
+        the same name and DID.
+
+        Raises:
+            TeamError: The Session is missing or expired (`unauthorized`).
+        """
         async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             _, now_ts = self._now_pair()
             await self._release_session_leases(session, now_ts)
             await self._delete_session(session)
 
-    async def require_live_session(self, session_token: str) -> str:
+    async def _require_live_session(self, session_token: str) -> str:
         """Return ``session_token`` if the Session is live. Does not renew it."""
         await self._require_session(session_token)
         return session_token
 
-    async def heartbeat(self, session_token: str) -> dict[str, Any]:
-        """Prove the Client still holds its Session and extend expiry."""
+    async def heartbeat(self, session_token: str) -> HeartbeatResult:
+        """Prove the Client still holds its Session and extend expiry.
+
+        `BaseAgent` heartbeats for you. Idle Sessions expire after
+        `session_ttl_seconds`.
+
+        Raises:
+            TeamError: The Session is missing or expired (`unauthorized`).
+        """
         async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             now = utc_now()
@@ -1304,17 +1406,29 @@ class Team:
         name: str | None = None,
         ttl_seconds: float | None = None,
         single_use: bool = False,
-    ) -> auth_mod.JoinToken:
-        """Issue a join token scoped to this Team.
+    ) -> JoinTokenIssued:
+        """Issue a join token for an agent that will join by URL.
 
-        Bind ``agent_did``, ``name``, or both so a leaked token cannot be
-        used by a different Agent. Omit both for an invite that any
-        proving Agent can consume.
+        Bind `name`, `agent_did`, or both. The join must match every
+        bound value. Omit both when any agent that can prove its identity
+        may use the token. `BaseAgent.join` on this Team object mints its
+        own token when `require_join_auth` is set and the agent has none.
+        Use this method for a token you pass into a URL join.
 
-            issued = await team.issue_join_token(
-                name="writer", agent_did=writer.agent_did
-            )
-            await writer.join(url, join_token=issued["token"])
+        Omitting `ttl_seconds` uses `join_token_ttl_seconds`.
+
+        `single_use=True` admits one name and DID. That membership can
+        reconnect with the same token. Any other agent is rejected with
+        `unauthorized`. After `expires_at`, join fails with
+        `unauthorized`. Keep `token` out of logs and Messages. Pass it to
+        `BaseAgent.join`. After that join, HTTP calls use the Session
+        bearer from the join result.
+
+        Raises:
+            TeamError: The Team has not been started, with `code`
+                `unavailable`. `name` or `agent_did` is invalid, or
+                `ttl_seconds` is not positive, with `code`
+                `invalid_request`.
         """
         store = self._ensure_started()
         canonical_name = None
@@ -1341,10 +1455,15 @@ class Team:
         return JoinTokenIssued.model_validate(issued)
 
     async def revoke_join_token(self, token: str) -> None:
-        """Revoke ``token`` and drop every Session created from it.
+        """Revoke a join token and drop Sessions opened with it.
 
-        A later join with this token fails with ``unauthorized``. Waiting
-        sends return ``unauthorized``. Event streams close.
+        A later join with this token fails with `unauthorized`. Sends
+        waiting on those Sessions fail with `unauthorized`. Blank
+        and unknown tokens are ignored.
+
+        Raises:
+            TeamError: The Team has not been started. `code` is
+                `unavailable`.
         """
         secret = token.strip() if isinstance(token, str) else ""
         if not secret:
@@ -1364,11 +1483,18 @@ class Team:
                     await self._delete_session(session)
 
     async def remove_membership(self, name: str) -> None:
-        """Remove a Membership and drop every Session it holds.
+        """Remove an agent membership and drop its Sessions.
 
-        This is the kill switch. Waiting sends return ``unauthorized``.
-        Held leases stop being completable. Join tokens bound to the
-        name or DID are revoked.
+        Join tokens bound to that name or DID are revoked. Waiting sends
+        fail with `unauthorized`. Leases held by those Sessions can no
+        longer be completed. The reserved operator membership cannot be
+        removed.
+
+        Raises:
+            TeamError: `name` is invalid, with `code` `invalid_request`.
+                `name` is `operator`, with `code` `forbidden`. The
+                membership is missing, with `code` `not_found`. The Team
+                has not been started, with `code` `unavailable`.
         """
         canonical = parse_agent_name(name)
         if canonical is None:
@@ -1415,7 +1541,17 @@ class Team:
                 await self._directory.drop(canonical)
 
     async def membership_attestation(self, name: str) -> Optional[str]:
-        """Return the stored membership attestation JWT for ``name``, if any."""
+        """Return the membership attestation JWT stored for `name`.
+
+        The result is None when this membership has no attestation.
+        The JWT describes membership in this Team. It does not admit
+        the agent to another Team.
+
+        Raises:
+            TeamError: `name` is invalid, with `code` `invalid_request`.
+                The membership is missing, with `code` `not_found`. The
+                Team has not been started, with `code` `unavailable`.
+        """
         canonical = parse_agent_name(name)
         if canonical is None:
             _fail("invalid_request", "Agent name is invalid")
@@ -1537,29 +1673,66 @@ class Team:
     # Session transport. HTTP, MCP, and in-process Session call these by name.
 
     async def send(
-        self, session_token: str, request: Mapping[str, Any]
-    ) -> dict[str, Any]:
+        self, session_token: str, request: SendRequest | Mapping[str, object]
+    ) -> SendResult:
         """Accept one request or event for one recipient in this Team.
+
+        Agent code uses `BaseAgent.ask` or `BaseAgent.tell`.
 
         The Message, Ticket, Thread append, and Mailbox enqueue commit
         together. A recipient cannot lease the item until that commit
-        finishes.
+        finishes. `collect="wait"` holds until the Ticket is terminal or
+        `wait_hold_seconds` elapses, then returns the current Ticket.
+        Ending the wait does not cancel work; collect the rest with
+        `get_result`.
 
-        ``collect=wait`` holds until the Ticket is terminal or
-        ``wait_hold_seconds`` elapses, then returns the current Ticket.
+        Repeating the same ID and send data returns the original result
+        within the replay horizon. Changing data under that ID fails with
+        `id_conflict`. Reuse the ID after an uncertain network outcome.
 
+        Args:
+            session_token: Credential from `join`.
+            request: Send body. Required keys are `id` (client-generated
+                UUID, becomes the Message id), `recipient` (Agent name or
+                Address), `kind` (`"request"` or `"event"`), and
+                `content` (JSON). A request also needs `collect`
+                (`"wait"` or `"ticket"`). `deadline` may be omitted; the
+                Runtime stamps `work_lifetime_seconds` or inherits a
+                request parent's cutoff. An event must omit `collect`
+                and `deadline`.
+
+        Requests return `status="ticketed"` with a Ticket; events return
+        `status="accepted"` with no `ticket` attribute.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`), the body
+                is invalid (`invalid_request`, `invalid_address`,
+                `address_outside_team`, `payload_too_large`), the
+                recipient or parent is missing (`not_found`), the
+                Mailbox is full (`busy`), too many waits are held
+                (`wait_limit`), the ID was reused for different data
+                (`id_conflict`), or the Team has not been started
+                (`unavailable`).
+
+        Examples:
+            For a started `team`, `session_token` from a requester join,
+            and a joined `writer` membership. `message_id` is a new UUID
+            string. Save the Ticket ID to collect this work later:
+
+            ```python
             result = await team.send(
-                token,
+                session_token,
                 {
                     "id": message_id,
                     "recipient": "writer",
                     "kind": "request",
                     "content": {"task": "draft"},
                     "collect": "ticket",
-                    "deadline": "2026-08-18T15:10:00Z",
                 },
             )
-            result["ticket"]["id"]
+            if result.status == "ticketed":
+                ticket_id = result.ticket.id
+            ```
         """
         try:
             parsed_send = parse_send_request(request)
@@ -1569,7 +1742,7 @@ class Team:
         waiter: asyncio.Event | None = None
         ticket_id: str | None = None
         deadline_dt = None
-        hold = {"acquired": False, "name": ""}
+        hold: _HeldWait = {"acquired": False, "name": ""}
         try:
             async with self._keys.acquire(f"session:{session_token}"):
                 result, wait_for = await self._send_locked(session_token, request, hold)
@@ -1604,9 +1777,9 @@ class Team:
     async def _send_locked(
         self,
         session_token: str,
-        request: Mapping[str, Any],
-        hold: dict[str, Any],
-    ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
+        request: Mapping[str, object],
+        hold: _HeldWait,
+    ) -> tuple[dict[str, Any], Optional[tuple[str, datetime]]]:
         session = await self._require_session(session_token)
         if not isinstance(request, Mapping):
             _fail("invalid_request", "send body must be an object")
@@ -1833,6 +2006,7 @@ class Team:
 
         ticket = None
         if deadline_dt is not None:
+            assert isinstance(deadline_raw, str)
             ticket = tickets_mod.new_open_ticket(
                 ticket_id=message_id,
                 requester=sender,
@@ -1923,10 +2097,10 @@ class Team:
         result: dict[str, Any],
         *,
         message_id: str,
-        collect: Any,
+        collect: object,
         membership_id: str,
-        hold: dict[str, Any],
-    ) -> tuple[dict[str, Any], Optional[tuple[str, Any]]]:
+        hold: _HeldWait,
+    ) -> tuple[dict[str, Any], Optional[tuple[str, datetime]]]:
         """Return a stored send result, holding wait only when a slot is free."""
         if result.get("status") == "ticketed":
             current = await self._expire_ticket_if_due(message_id)
@@ -1944,9 +2118,9 @@ class Team:
 
     async def _hold_wait_slot(
         self,
-        collect: Any,
+        collect: object,
         membership_id: str,
-        hold: dict[str, Any],
+        hold: _HeldWait,
         *,
         required: bool,
     ) -> bool:
@@ -1964,7 +2138,11 @@ class Team:
         return False
 
     async def _wait_until_terminal(
-        self, session_token: str, ticket_id: str, deadline_dt, event: asyncio.Event
+        self,
+        session_token: str,
+        ticket_id: str,
+        deadline_dt: datetime,
+        event: asyncio.Event,
     ) -> dict[str, Any]:
         hold_until = utc_now() + timedelta(seconds=self.wait_hold_seconds)
         while True:
@@ -2000,8 +2178,23 @@ class Team:
 
     # --- lease / complete / reply ---
 
-    async def lease(self, session_token: str, max_items: int = 1) -> dict[str, Any]:
-        """Pull available work from the calling Membership's Mailbox."""
+    async def lease(self, session_token: str, max_items: int = 1) -> LeaseResult:
+        """Pull available work from the calling Membership's Mailbox.
+
+        `BaseAgent` leases for the handler. Each Delivery must be finished with `reply` or `complete` before the
+        lease expires, or `renew` it. Empty `deliveries` means there is
+        no ready work, not an error.
+
+        Args:
+            session_token: Live Session token from `join`.
+            max_items: From 1 to 100, capped by remaining `max_in_flight`
+                room on this Session.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`),
+                `max_items` is out of range (`invalid_request`), or the
+                Team has not been started (`unavailable`).
+        """
         async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
             try:
@@ -2112,8 +2305,13 @@ class Team:
     async def renew(self, session_token: str, lease_id: str) -> RenewResult:
         """Extend one active Delivery lease owned by this Session.
 
-        result = await team.renew(session_token, delivery["lease_id"])
-        result.lease_expires_at
+        A request lease cannot extend past the Ticket deadline.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`),
+                `lease_id` is not a UUID (`invalid_request`), the lease
+                is not this Session's (`not_found`), or it is no longer
+                active (`lease_expired`).
         """
         async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
@@ -2149,7 +2347,7 @@ class Team:
                 _fail("lease_expired", "Delivery lease is no longer active")
             return RenewResult(lease_id=lease_id, lease_expires_at=expires_at)
 
-    async def _lease_still_active(self, lease_id: str, now) -> bool:
+    async def _lease_still_active(self, lease_id: str, now: datetime) -> bool:
         store = self._ensure_started()
         record = await mailbox_mod.get_lease(store, lease_id)
         if record is None:
@@ -2201,11 +2399,23 @@ class Team:
             "history_complete": complete and byte_complete and bodies_complete,
         }
 
-    async def complete(self, session_token: str, lease_id: str) -> dict[str, Any]:
+    async def complete(self, session_token: str, lease_id: str) -> CompleteResult:
         """Finish a Delivery without a response Message.
 
-        An event just ends. A request is declined: the Ticket becomes
-        ``declined``, which is not a failure.
+        `BaseAgent` maps a `None` handler return onto this call. An event just ends. A request is declined: the Ticket
+        becomes `declined`, which is not a failure.
+
+        Repeating a successful completion returns its original result
+        within the replay horizon.
+
+        Returns:
+            `ticket` is None for an event. Serialization omits that field.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`),
+                `lease_id` is invalid (`invalid_request` or `not_found`),
+                the lease is no longer active (`lease_expired`), or the
+                Ticket is already terminal (`ticket_closed`).
         """
         async with self._keys.acquire(f"session:{session_token}"):
             session = await self._require_session(session_token)
@@ -2300,29 +2510,43 @@ class Team:
             )
 
     async def reply(
-        self, session_token: str, request: Mapping[str, Any]
-    ) -> dict[str, Any]:
+        self, session_token: str, request: ReplyRequest | Mapping[str, object]
+    ) -> ReplyResult:
         """Finish a reply-expected Delivery with content or an error.
 
-        The response Message, Ticket, Thread append, and lease
-        acknowledgement commit together. A body larger than
-        ``max_message_bytes`` fails with ``payload_too_large`` and leaves
-        the Ticket ``open`` and the lease active.
+        `BaseAgent` maps a handler return onto this call. Valid only for a request. The response Message, Ticket,
+        Thread append, and lease acknowledgement commit together. A body
+        larger than `max_message_bytes` fails with `payload_too_large`
+        and leaves the Ticket `open` and the lease active.
 
-            result = await team.reply(
-                token,
-                {
-                    "id": reply_id,
-                    "lease_id": delivery["lease_id"],
-                    "outcome": "completed",
-                    "content": "Draft complete.",
-                },
-            )
-            result["ticket"]["state"]
+        Repeating the same reply ID, target request, and outcome data
+        returns the original result within the replay horizon. Different
+        data under that ID fails with `id_conflict`. The lease still has
+        to belong to the calling membership.
+
+        Args:
+            session_token: Live Session token from `join`.
+            request: Reply body. Required keys are `id` (client-generated
+                UUID), `lease_id`, and `outcome` (`"completed"` or
+                `"failed"`). Completed replies need `content`. Failed
+                replies need `error` (`code` and `message`).
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`), the body
+                is invalid (`invalid_request` or `payload_too_large`),
+                the reply ID has different data (`id_conflict`),
+                the lease is missing (`not_found`), the lease is no
+                longer active (`lease_expired`), or the Ticket is already
+                terminal (`ticket_closed`).
         """
-        if not isinstance(request, Mapping):
+        if not isinstance(request, (ReplySuccessRequest, ReplyFailureRequest, Mapping)):
             _fail("invalid_request", "reply body must be an object")
-        if json_size(dict(request)) > self.max_message_bytes:
+        size_body = (
+            request.to_public_dict()
+            if isinstance(request, (ReplySuccessRequest, ReplyFailureRequest))
+            else dict(request)
+        )
+        if json_size(size_body) > self.max_message_bytes:
             _fail("payload_too_large", "reply body exceeds max_message_bytes")
         try:
             parsed_reply = parse_reply_request(request)
@@ -2514,7 +2738,7 @@ class Team:
                 projection_mod.public_ticket_result(accepted.result)
             )
 
-    def _validate_error_object(self, error: Mapping[str, Any]) -> dict[str, Any]:
+    def _validate_error_object(self, error: Mapping[str, object]) -> JsonObject:
         try:
             return ErrorObject.model_validate(error).to_public_dict()
         except ValidationError as exc:
@@ -2529,29 +2753,18 @@ class Team:
         session["lease_ids"] = lease_ids
         await self._save_session(session)
 
-    async def _finish_delivery(
-        self, session: dict[str, Any], lease: dict[str, Any], now_ts: str
-    ) -> None:
-        store = self._ensure_started()
-        await mailbox_mod.acknowledge(
-            store, lease["address"], lease["message_id"], lease["lease_id"]
-        )
-        await retention_mod.reclaim_unowned_bodies(
-            store,
-            [str(lease["message_id"])],
-            byte_limit=self.max_retained_bytes,
-        )
-        await mailbox_mod.deactivate_lease(
-            store,
-            lease["lease_id"],
-            retain_until=retention_mod.replay_until(
-                now_ts, horizon_seconds=self.replay_horizon_seconds
-            ),
-        )
-        await self._drop_lease_from_session(session, lease["lease_id"])
+    async def get_result(self, session_token: str, ticket_id: str) -> Ticket:
+        """Return the Ticket owned by the calling Membership.
 
-    async def get_result(self, session_token: str, ticket_id: str) -> dict[str, Any]:
-        """Return the Ticket owned by the calling Membership."""
+        Agent code uses `BaseAgent.get_result`. Pass the Ticket id from `send` (equal to the request Message id).
+        Repeat while `state` is `open`. Ending a `collect="wait"` hold
+        does not cancel work.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`),
+                `ticket_id` is not a UUID (`invalid_request`), or this
+                Membership does not own that Ticket (`not_found`).
+        """
         session = await self._require_session(session_token)
         try:
             ticket_id = require_uuid(ticket_id, field="ticket_id")
@@ -2575,12 +2788,23 @@ class Team:
         *,
         before: str | None = None,
         limit: int = 50,
-    ) -> dict[str, Any]:
-        """Return one page of a Thread's retained history, ordered by ``seq``.
+    ) -> HistoryResult:
+        """Return one page of a Thread's retained history, ordered by `seq`.
 
-        Omit ``before`` for the newest page. A UUID that is not in the
-        retained transcript, including one retention has removed, returns
-        that newest page. A non-UUID ``before`` is ``invalid_request``.
+        Agent code uses `BaseAgent.get_history`. Only a participant may read
+        the Thread. Omit `before` for the newest
+        page. Messages inside a page are oldest to newest. When
+        `has_more` is true, pass `next_before` as the next `before`. A
+        UUID that is not in the retained transcript, including one
+        retention has removed, returns that newest page.
+
+        `limit` must be from 1 to 200. `next_before` is None on the last page.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`), an id is
+                not a UUID (`invalid_request`), `limit` is out of range
+                (`invalid_request`), or this Membership is not a
+                participant (`not_found`).
         """
         session = await self._require_session(session_token)
         try:
@@ -2622,14 +2846,24 @@ class Team:
         query: str,
         *,
         limit: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> FindResult:
         """Search this Team's Directory. The caller is excluded from results.
 
-        Omit ``limit`` to receive every other member, ordered by relevance,
-        at most 100.
+        Agent code uses `BaseAgent.find`. Matches are light cards (Address, summary, Skill names, tags), not full
+        Profiles. Ranked matches are candidates, not proof that someone
+        is suitable. Omit `limit` to receive every other member, ordered
+        by relevance, at most 100.
 
-            found = await team.find(token, "someone who can review a contract")
-            found["matches"][0]["address"]
+        Args:
+            session_token: Live Session token from `join`.
+            query: Natural-language need, 1 to 1000 non-whitespace
+                characters.
+            limit: Must be from 1 to 100 when supplied.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`), `query`
+                or `limit` is invalid (`invalid_request`), or ranking
+                cannot run (`unavailable`).
         """
         session = await self._require_session(session_token)
         if not isinstance(query, str) or not query.strip() or len(query) > 1000:
@@ -2645,10 +2879,10 @@ class Team:
                 cap = int(limit)
             except (TypeError, ValueError):
                 _fail("invalid_request", "limit must be an integer")
-            if cap < 1 or cap > MAX_FIND_LIMIT:
+            if cap < 1 or cap > _MAX_FIND_LIMIT:
                 _fail(
                     "invalid_request",
-                    f"limit must be between 1 and {MAX_FIND_LIMIT}",
+                    f"limit must be between 1 and {_MAX_FIND_LIMIT}",
                 )
         store = self._ensure_started()
         names = await store.set_members("members")
@@ -2677,8 +2911,17 @@ class Team:
             logger.exception("Directory search failed")
             _fail("unavailable", "Directory ranking is unavailable")
 
-    async def get_profile(self, session_token: str, address: str) -> dict[str, Any]:
-        """Return one Directory entry by local or same-Team Address."""
+    async def get_profile(self, session_token: str, address: str) -> DirectoryEntry:
+        """Return one Directory entry by local or same-Team Address.
+
+        Agent code uses `BaseAgent.get_entry`.
+        Principals such as `operator` are not listed.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`), `address`
+                is invalid (`invalid_address` or `address_outside_team`),
+                or no Agent Membership matches (`not_found`).
+        """
         await self._require_session(session_token)
         if not isinstance(address, str):
             _fail("invalid_request", "address is required")
@@ -2699,16 +2942,22 @@ class Team:
             }
         )
 
-    async def status(self, session_token: str) -> dict[str, Any]:
+    async def status(self, session_token: str) -> StatusResult:
         """Return members, online state, and Agent Mailbox depths.
 
         Operator only. Principal rows omit Mailbox and Ticket counts.
-        ``online`` is read from stored Sessions, so a durable restart
-        still reports a live Membership as online.
+        `online` is true when the Membership has at least one unexpired
+        Session, including after a durable restart.
 
-            token = await team.ensure_operator_session()
-            snapshot = await team.status(token)
-            snapshot["members"][0]["kind"]
+        `origin` is None when the Team is not serving.
+
+        Args:
+            session_token: Operator Session token, such as from
+                `ensure_operator_session`.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`) or is not
+                the operator (`forbidden`).
         """
         await self._require_operator(session_token)
         store = self._ensure_started()
@@ -2762,14 +3011,21 @@ class Team:
             result["origin"] = self._http_url
         return StatusResult.model_validate(result)
 
-    async def get_trace(self, session_token: str, trace_id: str) -> dict[str, Any]:
-        """Return the recorded timeline for one ``trace_id``.
+    async def get_trace(self, session_token: str, trace_id: str) -> TraceResult:
+        """Return the recorded timeline for one `trace_id`.
 
-        The operator receives every event. A member receives only events
-        that name that Membership. Anyone else gets ``not_found``.
+        The operator receives every event; members see only events that name
+        their Membership. Anyone else gets
+        `not_found`.
 
-            token = await team.ensure_operator_session()
-            timeline = await team.get_trace(token, message["trace_id"])
+        Args:
+            session_token: Live Session token from `join`.
+            trace_id: Trace UUID from a Message.
+
+        Raises:
+            TeamError: The Session is missing (`unauthorized`),
+                `trace_id` is not a UUID (`invalid_request`), or no
+                visible events exist (`not_found`).
         """
         session = await self._require_session(session_token)
         try:
@@ -2790,17 +3046,19 @@ class Team:
             projection_mod.public_trace_result({"trace_id": trace_id, "events": events})
         )
 
-    async def subscribe_trace_events(self, session_token: str) -> asyncio.Queue:
+    async def _subscribe_trace_events(
+        self, session_token: str
+    ) -> asyncio.Queue[JsonObject | None]:
         """Attach a watch queue for new Trace events. Operator only."""
         await self._require_operator(session_token)
-        queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+        queue: asyncio.Queue[JsonObject | None] = asyncio.Queue(maxsize=64)
         self._trace_subscribers.append((session_token, queue))
         return queue
 
-    async def unsubscribe_trace_events(
-        self, session_token: str, queue: asyncio.Queue
+    async def _unsubscribe_trace_events(
+        self, session_token: str, queue: asyncio.Queue[JsonObject | None]
     ) -> None:
-        """Detach a queue previously returned by ``subscribe_trace_events``."""
+        """Detach a queue previously returned by ``_subscribe_trace_events``."""
         self._trace_subscribers = [
             item
             for item in self._trace_subscribers
@@ -2975,7 +3233,7 @@ def _is_loopback(host: str) -> bool:
     return True
 
 
-def _bound_socket(server: Any) -> tuple[str, int]:
+def _bound_socket(server: UvicornServer) -> tuple[str, int]:
     """Return (host, port) for a started uvicorn Server."""
     servers = getattr(server, "servers", None) or []
     for http_server in servers:

@@ -13,6 +13,7 @@ from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import Session, _TrackedLease
 from agentconnect.team import Team
 from agentconnect.transport.runtime import TransportError
+from tests.support.tools import call_team_tool
 
 
 @pytest.mark.asyncio
@@ -287,7 +288,9 @@ async def test_team_tools_ask_from_handler_inherits_parent():
             seen["writer_id"] = message.id
             seen["writer_trace"] = message.trace_id
             seen["writer_thread"] = message.thread_id
-            ticket = await self.tools.ask(
+            ticket = await call_team_tool(
+                self.tools,
+                "ask",
                 recipient="editor",
                 content="tighten",
             )

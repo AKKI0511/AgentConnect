@@ -1,9 +1,7 @@
-"""CLI diagnostics for a Team file and a running Runtime."""
+"""CLI diagnostics for a Team file, selected origin, and Runtime access."""
 
 from __future__ import annotations
 
-import os
-import platform
 from pathlib import Path
 from typing import Optional
 
@@ -27,32 +25,9 @@ def _short(exc: BaseException, *, limit: int = 400) -> str:
     return text
 
 
-def _has_any_provider_key() -> bool:
-    for var in (
-        "OPENAI_API_KEY",
-        "AZURE_OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GROQ_API_KEY",
-        "GOOGLE_API_KEY",
-    ):
-        if os.environ.get(var):
-            return True
-    return False
-
-
 def doctor(*, url: Optional[str] = None, file: Optional[Path] = None) -> None:
-    """Print a short setup report and hints."""
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv()
-    except Exception:
-        pass
-
+    """Print a short setup report for the Team file and Runtime."""
     root = Path.cwd()
-    typer.echo(f"Python: {platform.python_version()}")
-    has_key = _has_any_provider_key()
-    typer.echo(f"LLM key present: {'yes' if has_key else 'no'}")
 
     config_path: Path | None = None
     try:

@@ -42,6 +42,20 @@ jobs:
           npm --prefix spec/schema ci
           npm --prefix spec/schema run check
 
+  types:
+    name: Framework types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+      - name: Strict framework and runtime conformance
+        run: uv run --locked --all-extras mypy
+
   tests:
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
@@ -112,14 +126,14 @@ jobs:
               uv pip install --python venv/bin/python "$artifact"
               venv/bin/python -c "from agentconnect.agent import BaseAgent; from agentconnect.team import Team"
               uv pip install --python venv/bin/python "$artifact[serve,cli]"
-              venv/bin/python -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli import app"
+              venv/bin/python -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli.main import main"
             )
           done
 
   ci:
     name: CI
     if: always()
-    needs: [checks, tests, windows-imports, package]
+    needs: [checks, types, tests, windows-imports, package]
     runs-on: ubuntu-latest
     steps:
-      - run: test "${{ join(needs.*.result, ',') }}" = "success,success,success,success"
+      - run: test "${{ join(needs.*.result, ',') }}" = "success,success,success,success,success"

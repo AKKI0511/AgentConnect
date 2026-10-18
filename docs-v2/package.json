@@ -1,0 +1,24 @@
+{
+  "name": "agentconnect-docs-v2",
+  "private": true,
+  "description": "Mintlify CLI pin for AgentConnect documentation. Install with npm ci in docs-v2/.",
+  "engines": {
+    "node": ">=20.17.0"
+  },
+  "devDependencies": {
+    "@mdx-js/mdx": "3.1.1",
+    "mint": "4.2.996",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-stringify": "11.0.0",
+    "unified": "11.0.5"
+  },
+  "scripts": {
+    "api": "uv run --locked python scripts/generate_api.py",
+    "predev": "npm run api",
+    "dev": "mint dev --no-open",
+    "check": "uv run --locked python scripts/check.py",
+    "validate": "mint validate",
+    "broken-links": "mint broken-links --check-anchors --check-redirects"
+  }
+}

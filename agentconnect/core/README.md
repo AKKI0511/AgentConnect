@@ -1,55 +1,28 @@
-# Core
+# Core models
 
-Shared nouns for the Runtime and the Agent Client. This package is the Python
-projection of the public schema in ``spec/schema/schema.ts``. It has no I/O
-and does not import other AgentConnect packages.
+Describe an agent with `AgentProfile` and `Skill`, then read the typed Messages
+and results returned by `BaseAgent`. Discovery matches are candidate cards;
+`get_entry` supplies the full Profile and Agent DID when you need them.
 
-```
-core/
-  address.py      Address grammar and same-Team resolution
-  base.py         Frozen pydantic base for public objects
-  primitives.py   Aliases and closed unions (ErrorCode, CollectMode, ...)
-  message.py      Message kinds and Delivery
-  ticket.py       Ticket union discriminated on state
-  profile.py      AgentProfile and Skill
-  directory.py    DirectoryEntry, DirectoryMatch, find types
-  operations.py   Join, send, lease, reply, status, roster, trace
-  error.py        ErrorObject
-  identity.py     AgentIdentity (Ed25519 did:key), join proofs, attestations
-  kinds.py        MessageKind: request, response, error, event
-  projection.py   Name map used by the schema round-trip test
-  types.py        Re-exports of primitives, Profile, and MessageKind
-  exceptions.py   Shared exception types
-```
+A handler receives a request or event Message. A Delivery is the leased attempt
+to handle it. Requests open requester-owned Tickets; Threads group conversation
+history for a fixed set of participants. Read a Ticket's `state` before its
+content or error. Keep an open Ticket's `id` and collect it with `get_result`
+rather than submitting the request again. Declined work has no reply or failure.
 
-Validation belongs at the transport edge. After a body is accepted, the
-Runtime stores and forwards mappings; it does not construct schema models
-from those documents a second time. ``public_json_schema(model)`` is the
-wire JSON Schema for a public type: omit-only optional fields, ``JsonInt``
-bounds, and ``additionalProperties: false``. Unmodified pydantic
-``model_json_schema()`` output still treats omit-only fields as nullable.
+MCP and Session-bound tools return compact views. A TicketView uses `ticket_id`
+and completed content alone; a wire Ticket uses `id` and a response Message.
+History views preserve ordering, reply correlation and cursors.
 
-`BaseAgent` lives in `agentconnect.agent`. The team directory lives in `agentconnect.team.directory`.
+Advanced clients use the operation models, parsers and serialization helpers.
+Models reject extra fields and reassignment. `dump_public` leaves omitted
+optional fields absent while retaining required JSON-null content.
+`public_json_schema` represents those omission rules for wire consumers.
 
-## Address
+An AgentIdentity owns the Agent key. Persist it to reconnect to a retained
+Membership. A fresh identity proof proves key control; a Team join invitation
+authorizes admission. A Team-signed membership attestation is neither an
+invitation nor a Session bearer and does not grant Runtime access.
 
-`parse_address` returns a `ParsedAddress` or `invalid_address`. `resolve_address(value, team_name)` returns a canonical `name@team` string, `invalid_address`, or `address_outside_team`.
-
-Input may contain uppercase ASCII letters. Non-ASCII input is invalid. A valid location that is not this Team is `address_outside_team`.
-
-## Identity
-
-`AgentIdentity.create_key_based()` mints an Ed25519 key pair and a `did:key`.
-`issue_identity_proof(identity, challenge)` builds the EdDSA JWT a network join
-sends as `identity_proof`. `issue_membership_attestation` is the Team-signed
-statement that this Team vouches for an Agent. The Runtime stores that JWT; it
-does not verify inbound attestations in this release.
-
-Filesystem persistence lives in `agentconnect.agent.identity`
-(`save_identity`, `load_identity`, `load_or_create_identity`).
-`BaseAgent(identity_path=...)` uses that path. This package only serializes
-identities to dicts.
-
-## Message kinds
-
-`Message.kind` is one of `request`, `response`, `error`, or `event`. Application typing belongs in `content` or `metadata`. A handler receives a Message with attributes, not a dictionary.
+See the [Python reference](../../docs-v2/api/core.mdx) for individual contracts
+and the [public specification](../../spec/README.md) for wire structures.

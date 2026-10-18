@@ -1,10 +1,13 @@
-"""Core nouns: the Python projection of the public schema, plus Address and identity.
+"""Create discovery Profiles and read the Messages and results your agents exchange.
 
-This package has no I/O and imports no sibling AgentConnect packages.
+`BaseAgent` returns these models and passes request or event Messages to
+handlers. Use `AgentProfile` and `Skill` to describe suitable work; read a
+Ticket's `state` before using its result. Advanced clients use the operation
+models and parsers to work with Runtime JSON.
 
-Public names here are the schema vocabulary: Message, Ticket, Profile, Skill,
-Address, and the operation request and result types. Identity proofs and
-join JWTs live on ``AgentIdentity`` in ``agentconnect.core.identity``.
+The models reject undeclared fields and cannot be reassigned. Use
+`dump_public` to serialize them: omitted optional fields stay absent,
+while required content may be JSON null.
 """
 
 from agentconnect.core.address import (
@@ -36,8 +39,6 @@ from agentconnect.core.directory import (
     ProfileFound,
     ProfileItem,
     ProfileMiss,
-    ProfileView,
-    profile_view,
 )
 from agentconnect.core.error import DeadlineExceededError, ErrorObject
 from agentconnect.core.identity import AgentIdentity
@@ -174,7 +175,6 @@ __all__ = [
     "public_result_schema",
     "DirectoryEntry",
     "DirectoryMatch",
-    "ProfileView",
     "ProfileFound",
     "ProfileMiss",
     "ProfileItem",
@@ -256,7 +256,6 @@ __all__ = [
     "parse_send_request",
     "parse_send_result",
     "history_view",
-    "profile_view",
     "tell_view",
     "Address",
     "AgentDid",

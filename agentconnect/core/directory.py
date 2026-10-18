@@ -1,4 +1,4 @@
-"""Directory entry, ranked match, and find result types."""
+"""Discovery matches and full teammate Profiles."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from agentconnect.core.profile import AgentProfile
 __all__ = [
     "DirectoryEntry",
     "DirectoryMatch",
-    "ProfileView",
     "ProfileFound",
     "ProfileMiss",
     "ProfileItem",
@@ -28,24 +27,17 @@ __all__ = [
     "FindResult",
     "GetProfilesRequest",
     "MAX_GET_PROFILES",
-    "profile_view",
 ]
 
 MAX_GET_PROFILES = 20
 
 
 class DirectoryEntry(SchemaModel):
-    """Full Directory record for one Membership.
+    """Full Profile and identity for one Team Membership.
 
-    Runtime ``get_profile`` returns Address, DID, and Profile together.
-    The Client method is :meth:`~agentconnect.agent.base.BaseAgent.get_entry`.
-    Model-facing tools return :class:`GetProfilesResult` instead.
-
-    .. code-block:: python
-
-        entry = await agent.get_entry("writer")
-        entry.profile.summary
-        entry.profile.description
+    `BaseAgent.get_entry` returns this record. The DID identifies the agent;
+    the Profile describes suitable work. Model-facing `get_profiles` returns
+    per-Address Profile items instead.
     """
 
     address: QualifiedAddress
@@ -54,10 +46,10 @@ class DirectoryEntry(SchemaModel):
 
 
 class DirectoryMatch(SchemaModel):
-    """One ranked discovery result.
+    """A candidate returned by discovery, in ranked order.
 
-    Light on purpose: Address, ``summary``, Skill names, and Profile tags.
-    Read selected Profiles with ``get_profiles``.
+    The card includes a summary, Skill names and Profile tags. Read the full
+    Profile when you need its boundaries or Skill descriptions before choosing.
     """
 
     address: QualifiedAddress
@@ -66,15 +58,8 @@ class DirectoryMatch(SchemaModel):
     tags: Optional[list[Tag]] = None
 
 
-class ProfileView(SchemaModel):
-    """Address and Profile without Directory DID bookkeeping."""
-
-    address: QualifiedAddress
-    profile: AgentProfile
-
-
 class ProfileFound(SchemaModel):
-    """Successful ``get_profiles`` item."""
+    """Full Profile for a successfully resolved Address."""
 
     status: Literal["ok"]
     address: QualifiedAddress
@@ -82,7 +67,11 @@ class ProfileFound(SchemaModel):
 
 
 class ProfileMiss(SchemaModel):
-    """Failed ``get_profiles`` item for one requested Address."""
+    """Failure to read one requested Address.
+
+    Other items in the same batch can succeed. Handle this item's `error`
+    without discarding those Profiles.
+    """
 
     status: Literal["error"]
     address: Address
@@ -96,7 +85,10 @@ ProfileItem = Annotated[
 
 
 class GetProfilesResult(SchemaModel):
-    """Model-facing ``get_profiles`` result."""
+    """Batch Profile results in requested order, with duplicate strings read once.
+
+    Branch on each item's `status` before reading `profile` or `error`.
+    """
 
     items: list[ProfileItem]
 
@@ -128,16 +120,10 @@ class FindRequest(SchemaModel):
 
 
 class FindResult(SchemaModel):
-    """Ordered local Directory search result.
+    """Candidate matches, best first.
 
-    Matches are best-first. The result does not name the embedding
-    backend or a fallback.
-
-    .. code-block:: python
-
-        found = await agent.find("someone who can draft a summary")
-        found.matches[0].address
-        found.matches[0].summary
+    An empty list means no candidates were returned. Ranking does not prove
+    suitability; read a selected teammate's full Profile before assigning work.
     """
 
     matches: list[DirectoryMatch]
@@ -165,8 +151,3 @@ class GetProfilesRequest(SchemaModel):
             seen.add(item)
             ordered.append(item)
         return ordered
-
-
-def profile_view(entry: DirectoryEntry) -> ProfileView:
-    """Project a DirectoryEntry into the model-facing ProfileView."""
-    return ProfileView(address=entry.address, profile=entry.profile)

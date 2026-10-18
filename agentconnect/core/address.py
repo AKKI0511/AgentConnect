@@ -1,9 +1,7 @@
-"""Address grammar and same-Team resolution.
+"""Parse Agent names and resolve Addresses within one Team.
 
-An Address is an Agent name, optionally qualified by a location. The current
-draft resolves a qualified Address only when its location equals the Runtime's
-Team name. Invalid syntax is ``invalid_address``. A valid location that is not
-this Team is ``address_outside_team``.
+Names are case-insensitive ASCII. Qualified Addresses resolve only when their
+location matches this Team; this resolver does not route to other Teams.
 """
 
 from __future__ import annotations
@@ -13,9 +11,12 @@ from dataclasses import dataclass
 from typing import Literal, Optional, Union
 
 INVALID_ADDRESS: Literal["invalid_address"] = "invalid_address"
+"""Returned when an Address string fails the grammar."""
 ADDRESS_OUTSIDE_TEAM: Literal["address_outside_team"] = "address_outside_team"
+"""Returned when a valid location is not this Team."""
 
 AddressErrorCode = Literal["invalid_address", "address_outside_team"]
+"""Error codes `resolve_address` returns instead of a canonical Address."""
 
 # 1 to 63 characters; start and end alphanumeric; middle may include - and _.
 _AGENT_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?$")
@@ -25,28 +26,43 @@ _DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 
 @dataclass(frozen=True)
 class ParsedAddress:
-    """Canonical Agent name and optional location after parse."""
+    """Canonical Agent name and location parsed from an Address.
+
+    Attributes:
+        name: Lowercase name suitable for same-Team lookup.
+        location: Lowercase location for qualified input; None for a local name.
+    """
 
     name: str
     location: Optional[str] = None
 
 
 def parse_agent_name(value: str) -> Optional[str]:
-    """Return the canonical Agent name, or None when the grammar fails."""
+    """Return a lowercase Agent name, or None for invalid syntax.
+
+    Accepts 1 to 63 ASCII characters with alphanumeric ends and `-` or `_` inside.
+    """
     if not value or not value.isascii() or _AGENT_NAME.fullmatch(value) is None:
         return None
     return value.lower()
 
 
 def parse_team_name(value: str) -> Optional[str]:
-    """Return the canonical Team name, or None when the grammar fails."""
+    """Return a lowercase Team name, or None for invalid syntax.
+
+    Accepts a DNS label of 1 to 63 ASCII characters with alphanumeric ends and
+    hyphens inside. Underscores are invalid.
+    """
     if not value or not value.isascii() or _DNS_LABEL.fullmatch(value) is None:
         return None
     return value.lower()
 
 
 def parse_location(value: str) -> Optional[str]:
-    """Return a canonical location, or None when the grammar fails."""
+    """Return a lowercase location, or None for invalid syntax.
+
+    Accepts dot-separated DNS labels, at most 253 characters and no trailing dot.
+    """
     if not value or not value.isascii() or value.endswith(".") or len(value) > 253:
         return None
     labels = value.split(".")
@@ -56,9 +72,9 @@ def parse_location(value: str) -> Optional[str]:
 
 
 def parse_address(value: str) -> Union[ParsedAddress, Literal["invalid_address"]]:
-    """Parse an Address string into a name and optional location.
+    """Split a name or qualified Address, canonicalizing ASCII uppercase.
 
-    Input may contain uppercase ASCII letters. Non-ASCII input is invalid.
+    Returns `invalid_address` for invalid syntax, including non-ASCII input.
     """
     if not isinstance(value, str) or not value or not value.isascii():
         return INVALID_ADDRESS
@@ -78,11 +94,25 @@ def parse_address(value: str) -> Union[ParsedAddress, Literal["invalid_address"]
 
 
 def resolve_address(value: str, team_name: str) -> Union[str, AddressErrorCode]:
-    """Resolve an Address against one Team.
+    """Return a canonical qualified Address within the supplied Team.
 
-    An unqualified name becomes ``name@team_name``. A qualified Address whose
-    location equals ``team_name`` is returned in canonical form. Any other
-    valid location is ``address_outside_team``.
+    Local names gain the Team location. Invalid syntax returns `invalid_address`;
+    a valid different location returns `address_outside_team`.
+
+    Args:
+        team_name: Team against which the input is resolved.
+
+    Raises:
+        ValueError: The Address parses but the Team name is invalid.
+
+    Examples:
+        ```python
+        from agentconnect.core.address import resolve_address
+
+        resolve_address("Writer", "content-squad")  # "writer@content-squad"
+        resolve_address("writer@legal.example.com", "content-squad")
+        # "address_outside_team"
+        ```
     """
     parsed = parse_address(value)
     if not isinstance(parsed, ParsedAddress):

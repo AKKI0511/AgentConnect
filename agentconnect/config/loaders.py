@@ -1,38 +1,29 @@
-"""Load a Team file and generate the example from the models.
+"""Discover and load a Team file.
 
-Discovery is nearest-directory first and never merged. At each directory,
-from the start path toward the filesystem root:
+Discovery walks from the start directory toward the filesystem root and
+stops at the first Team file. In each directory, `agentconnect.toml`
+beats `[tool.agentconnect]` in `pyproject.toml`. Files are never merged.
+An explicit path skips discovery. A missing or invalid explicit path
+fails.
 
-1. `agentconnect.toml`
-2. `[tool.agentconnect]` in `pyproject.toml`
+A standalone `agentconnect.toml` uses the unprefixed tree. Only
+`pyproject.toml` wraps it in `[tool.agentconnect]`.
 
-`agentconnect.yaml` / `agentconnect.yml` is last-resort compatibility,
-considered only after no TOML Team file exists in this directory or any
-ancestor. An explicit path skips discovery and never falls back to
-another file. Relative `module:Name` imports resolve from the chosen
-file's directory.
-
-    from agentconnect.config import load_team_config
-
-    config = load_team_config()
-    config.team
+Relative `module:Name` imports resolve from the chosen file's directory.
 """
 
 from __future__ import annotations
 
-import logging
 import tomllib
-import warnings
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Iterator, Optional
+
+import tomli_w
 
 from agentconnect.config.models import TeamConfig
 
-logger = logging.getLogger(__name__)
-
 TOML_FILENAME = "agentconnect.toml"
 PYPROJECT_FILENAME = "pyproject.toml"
-YAML_FILENAMES = ("agentconnect.yaml", "agentconnect.yml")
 _YAML_SUFFIXES = {".yaml", ".yml"}
 
 _EXAMPLE_HEADER = (
@@ -41,11 +32,12 @@ _EXAMPLE_HEADER = (
     "# Secrets stay in the environment.\n"
     "#\n"
     "# store: memory  or  redis://localhost:6379/0\n"
-    "# embeddings: auto | none | fastembed | openai | litellm:<model>\n"
+    "# embeddings: auto | none | hashed | fastembed | openai | litellm:<model>\n"
     "# auto never sends Profiles or queries to a hosted embedder.\n"
     "#\n"
     "# Agents listed here are constructed by `agentconnect up`.\n"
-    "# `class` is a BaseAgent subclass or create(name) -> BaseAgent.\n"
+    "# `entrypoint` is a BaseAgent subclass or create(name, **kwargs) -> BaseAgent.\n"
+    "# Optional `kwargs` belong to that class or factory. Do not put `name` there.\n"
     "# Agents in other processes join by URL with a token from\n"
     "# `agentconnect token issue` and are not listed here.\n"
     "#\n"
@@ -53,9 +45,7 @@ _EXAMPLE_HEADER = (
     "# a separate step: add the Team MCP URL there.\n"
     "#\n"
     "# Nearest directory wins. In that directory, agentconnect.toml beats\n"
-    "# [tool.agentconnect] in pyproject.toml. YAML is last-resort\n"
-    "# compatibility after no ancestor TOML Team file exists. Files are\n"
-    "# never merged.\n"
+    "# [tool.agentconnect] in pyproject.toml. Files are never merged.\n"
     "\n"
 )
 
@@ -77,7 +67,7 @@ def _read_text(path: Path) -> str:
         raise ValueError(f"could not read {path}: {exc}") from exc
 
 
-def _load_toml(path: Path) -> dict[str, Any]:
+def _load_toml(path: Path) -> dict[str, object]:
     try:
         data = tomllib.loads(_read_text(path))
     except tomllib.TOMLDecodeError as exc:
@@ -87,7 +77,7 @@ def _load_toml(path: Path) -> dict[str, Any]:
     return data
 
 
-def _tool_table(data: dict[str, Any]) -> dict[str, Any] | None:
+def _tool_table(data: dict[str, object]) -> dict[str, object] | None:
     tool = data.get("tool")
     if not isinstance(tool, dict) or "agentconnect" not in tool:
         return None
@@ -97,7 +87,7 @@ def _tool_table(data: dict[str, Any]) -> dict[str, Any] | None:
     return table
 
 
-def _pyproject_team_table(path: Path) -> dict[str, Any] | None:
+def _pyproject_team_table(path: Path) -> dict[str, object] | None:
     data = _load_toml(path)
     try:
         return _tool_table(data)
@@ -105,56 +95,48 @@ def _pyproject_team_table(path: Path) -> dict[str, Any] | None:
         raise ValueError(f"{path}: {exc}") from exc
 
 
-def _mapping_from_toml_file(path: Path) -> dict[str, Any]:
+def _mapping_from_toml_file(path: Path) -> dict[str, object]:
     data = _load_toml(path)
     if path.name == PYPROJECT_FILENAME:
         table = _tool_table(data)
         if table is None:
             raise ValueError(f"{path} has no [tool.agentconnect] table")
         return table
-    table = _tool_table(data)
-    if table is not None:
-        return table
+    try:
+        wrapped = _tool_table(data)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+    if wrapped is not None:
+        raise ValueError(
+            f"{path} must not wrap Team settings in [tool.agentconnect]; "
+            "use that table only in pyproject.toml"
+        )
     return data
 
 
-def _is_yaml_path(path: Path) -> bool:
-    return path.suffix.lower() in _YAML_SUFFIXES
-
-
-def _mapping_from_file(path: Path) -> dict[str, Any]:
-    if _is_yaml_path(path):
-        from agentconnect.compat.yaml import load_yaml_mapping
-
-        warning = (
-            f"Loading legacy YAML Team file {path}. Move this configuration to "
-            "agentconnect.toml or [tool.agentconnect] in pyproject.toml."
+def _mapping_from_file(path: Path) -> dict[str, object]:
+    if path.suffix.lower() in _YAML_SUFFIXES:
+        raise ValueError(
+            f"{path} is a YAML file. Team files are TOML: agentconnect.toml, "
+            "or pyproject.toml with [tool.agentconnect]."
         )
-        warnings.warn(warning, DeprecationWarning, stacklevel=3)
-        logger.warning(warning)
-        return load_yaml_mapping(path)
     if path.suffix.lower() != ".toml":
         raise ValueError(
-            f"{path} is not a Team file. Use agentconnect.toml, "
-            "pyproject.toml with [tool.agentconnect], or a legacy .yaml file."
+            f"{path} is not a Team file. Use agentconnect.toml, or "
+            "pyproject.toml with [tool.agentconnect]."
         )
     return _mapping_from_toml_file(path)
 
 
 def find_config_file(start: Optional[Path] = None) -> Optional[Path]:
-    """Return the nearest Team file from ``start``, or None.
+    """Return the nearest Team file from `start`, or None.
 
-    At each directory, a dedicated TOML file beats ``[tool.agentconnect]``
-    in ``pyproject.toml``. YAML is considered only after the walk finds
-    no TOML Team file.
-
-    Args:
-        start: Directory to walk from. Defaults to the current directory.
+    At each directory, `agentconnect.toml` beats `[tool.agentconnect]`
+    in `pyproject.toml`.
 
     Raises:
-        ValueError: A candidate file exists but cannot be parsed.
+        ValueError: A candidate `pyproject.toml` exists but cannot be parsed.
     """
-    yaml_fallback: Path | None = None
     for directory in _ancestors(start):
         toml_path = directory / TOML_FILENAME
         if toml_path.is_file():
@@ -162,13 +144,7 @@ def find_config_file(start: Optional[Path] = None) -> Optional[Path]:
         pyproject = directory / PYPROJECT_FILENAME
         if pyproject.is_file() and _pyproject_team_table(pyproject) is not None:
             return pyproject
-        if yaml_fallback is None:
-            for name in YAML_FILENAMES:
-                candidate = directory / name
-                if candidate.is_file():
-                    yaml_fallback = candidate
-                    break
-    return yaml_fallback
+    return None
 
 
 def load_team_config(
@@ -176,25 +152,22 @@ def load_team_config(
 ) -> TeamConfig:
     """Load and validate a Team file.
 
-    Args:
-        path: Explicit file. ``.toml`` is parsed with ``tomllib``.
-            ``pyproject.toml`` requires ``[tool.agentconnect]``. ``.yaml``
-            files go through the compatibility shim.
-        start: Directory used when ``path`` is omitted.
-
-    Returns:
-        The validated Team configuration.
+    An explicit path is not replaced with another file. A standalone
+    `agentconnect.toml` must not wrap settings in `[tool.agentconnect]`.
+    `pyproject.toml` must contain that table.
 
     Raises:
         FileNotFoundError: No Team file exists.
         ValueError: The file is malformed or fails validation.
     """
+    config_path: Path | None
     if path is not None:
         config_path = path
         if not config_path.is_file():
             raise FileNotFoundError(f"Team file was not found: {config_path}")
     else:
-        config_path = find_config_file(start)
+        found_path = find_config_file(start)
+        config_path = found_path
         if config_path is None:
             raise FileNotFoundError(
                 "Team file was not found. Create agentconnect.toml, add "
@@ -214,7 +187,7 @@ def load_selected_team(
 ) -> tuple[Path, TeamConfig]:
     """Load an explicit Team file, or the nearest discovered one.
 
-    An explicit `path` must exist and be valid. This never chooses a
+    An explicit path must exist and be valid. This never chooses a
     different Team file.
 
     Returns:
@@ -241,55 +214,58 @@ def load_selected_team(
     return found, load_team_config(found)
 
 
-def _toml_literal(value: object) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int) and not isinstance(value, bool):
-        return str(value)
-    if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    if isinstance(value, list):
-        inner = ", ".join(_toml_literal(item) for item in value)
-        return f"[{inner}]"
-    raise TypeError(f"cannot encode {type(value).__name__} as TOML")
+def _team_toml_data(config: TeamConfig) -> dict[str, object]:
+    data: dict[str, object] = {
+        "team": config.team,
+        "store": config.store,
+        "embeddings": config.embeddings,
+        "host": config.host,
+        "port": config.port,
+        "require_join_auth": config.require_join_auth,
+    }
+    if config.tools:
+        data["tools"] = list(config.tools)
+    if config.agents:
+        agents: dict[str, object] = {}
+        for name, spec in config.agents.items():
+            entry: dict[str, object] = {"entrypoint": spec.entrypoint}
+            if spec.kwargs:
+                entry["kwargs"] = spec.kwargs
+            agents[name] = entry
+        data["agents"] = agents
+    return data
 
 
-def dump_team_toml(config: TeamConfig) -> str:
-    """Serialize ``config`` as a ``[tool.agentconnect]`` table."""
-    data: dict[str, Any] = config.model_dump(by_alias=True, exclude_none=True)
-    lines = ["[tool.agentconnect]"]
-    for key in ("team", "store", "embeddings", "host", "port", "require_join_auth"):
-        lines.append(f"{key} = {_toml_literal(data[key])}")
-    tools = data.get("tools") or []
-    if tools:
-        lines.append(f"tools = {_toml_literal(tools)}")
-    for agent in data.get("agents") or []:
-        lines.append("")
-        lines.append("[[tool.agentconnect.agents]]")
-        lines.append(f"class = {_toml_literal(agent['class'])}")
-        lines.append(f"name = {_toml_literal(agent['name'])}")
-    return "\n".join(lines) + "\n"
+def _reject_toml_nulls(value: object, path: str) -> None:
+    if value is None:
+        label = path if path else "value"
+        raise ValueError(f"{label} is null; TOML cannot represent it")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            child = f"{path}.{key}" if path else str(key)
+            _reject_toml_nulls(item, child)
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _reject_toml_nulls(item, f"{path}[{index}]")
+
+
+def dump_team_toml(config: TeamConfig, *, pyproject: bool = False) -> str:
+    """Serialize a Team file.
+
+    The default is the unprefixed tree for `agentconnect.toml`.
+    `pyproject=True` wraps the same tree under `[tool.agentconnect]`.
+
+    Raises:
+        ValueError: A JSON null appears in the tree. The message names
+            that option. TOML has no null.
+    """
+    data = _team_toml_data(config)
+    payload: dict[str, object] = {"tool": {"agentconnect": data}} if pyproject else data
+    _reject_toml_nulls(payload, "")
+    dumped = tomli_w.dumps(payload)
+    return dumped if dumped.endswith("\n") else dumped + "\n"
 
 
 def render_example_toml() -> str:
-    """Return example TOML generated from `TeamConfig.example`."""
+    """Commented example for a standalone `agentconnect.toml`."""
     return _EXAMPLE_HEADER + dump_team_toml(TeamConfig.example())
-
-
-def save_example_config(path: Optional[Path] = None) -> Path:
-    """Write the generated example TOML to ``path``."""
-    target = path if path is not None else Path.cwd() / TOML_FILENAME
-    target.write_text(render_example_toml(), encoding="utf-8")
-    logger.info("Wrote Team file %s", target)
-    return target
-
-
-def validate_config_file(path: Path) -> bool:
-    """Return True when ``path`` is a valid Team file."""
-    try:
-        load_team_config(path)
-        return True
-    except (ValueError, FileNotFoundError, OSError):
-        logger.error("Configuration validation failed for %s", path, exc_info=True)
-        return False

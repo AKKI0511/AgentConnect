@@ -1,41 +1,22 @@
-"""This Team's member Directory.
+"""Choose how a Team turns Profiles into search vectors.
 
-Semantic ``find`` ranks every Membership except the caller. Vectors live in
-the Team Store. There is no vector database and no setting to turn search on.
+Pass `embeddings` to `Team`. `"auto"` uses a local ONNX model when
+`agentconnect[embeddings]` is installed, and hashed n-grams otherwise.
+An API key does not switch `"auto"` to a hosted backend. `"openai"` and
+`"litellm"` send Profile text to that provider. `"none"` or `"hashed"` uses hashed
+n-grams. A callable or `Embedder` supplies your own vectors.
 
-    team = await Team("content-squad").start()
-    found = await agent.find("someone who can review a contract")
-    found.matches[0].address
-    entry = await agent.get_entry("reviewer")
+Use `"fastembed"` to select the local ONNX backend explicitly.
+`"fastembed:<model>"`, `"openai:<model>"`, and `"litellm:<model>"`
+select a model; omit the suffix to use that backend's default.
 
-Pass ``embeddings=`` to :class:`~agentconnect.team.runtime.Team` only when you
-want a specific backend. ``"auto"`` is the default: local ONNX when the
-embeddings extra is installed, otherwise hashed n-grams. Hosted backends
-need an explicit ``openai`` or ``litellm`` selection and their extras.
+`BaseAgent.find` searches this Team. It does not search other Teams.
 """
 
-from agentconnect.team.directory.directory import (
-    MAX_FIND_LIMIT,
-    Directory,
-    profile_text,
-)
-from agentconnect.team.directory.embedder import (
-    HASHED_DIM,
-    Embedder,
-    EmbeddingsArg,
-    HashedEmbedder,
-    hashed_embedding,
-    resolve_embedder,
-)
+from agentconnect.team.directory.embedder import Embedder, EmbeddingsArg, HashedEmbedder
 
 __all__ = [
-    "Directory",
     "Embedder",
     "EmbeddingsArg",
-    "HASHED_DIM",
     "HashedEmbedder",
-    "MAX_FIND_LIMIT",
-    "hashed_embedding",
-    "profile_text",
-    "resolve_embedder",
 ]

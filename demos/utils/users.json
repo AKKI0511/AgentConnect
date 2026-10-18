@@ -1,8 +1,0 @@
-{
-  "demo": {
-    "username": "demo",
-    "password_hash": "demo123",
-    "role": "user",
-    "is_active": true
-  }
-}

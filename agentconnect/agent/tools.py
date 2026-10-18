@@ -1,37 +1,4 @@
-"""Session-bound callables for frameworks that do not speak MCP.
-
-A model calls tools. ``team_tools()`` is find, ask, tell, get_result,
-get_history, and get_profiles bound to this Agent's Session. Results are
-JSON via :func:`~agentconnect.core.base.dump_public`. Wire them into
-LangGraph, ADK, or any other tool loop. The Team MCP server is the other
-door, for clients that speak MCP.
-
-A developer registers a tool by passing a plain annotated function, or an
-explicit :class:`Tool` when annotations cannot express the schema.
-
-    class Researcher(BaseAgent):
-        def __init__(self, name: str):
-            super().__init__(name=name)
-            self.tools = self.team_tools()
-
-        async def handle(self, msg, ctx):
-            found = await self.tools.find(query=str(msg.content))
-            peer = found["matches"][0]["address"]
-            ticket = await self.tools.ask(
-                recipient=peer,
-                content=msg.content,
-            )
-            if ticket["state"] == "completed":
-                return ticket["content"]
-            ctx.defer()
-            return None
-
-Callables look up the Session at call time, so ``self.team_tools()`` is safe
-in ``__init__`` before ``join``. ``ask`` and ``tell`` share their argument
-names with :meth:`~agentconnect.agent.base.BaseAgent.ask` and
-:meth:`~agentconnect.agent.base.BaseAgent.tell`. Tools also accept
-``idempotency_key`` and mint a Thread when ``thread_id`` is omitted.
-"""
+"""Describe Python callables and Team operations for attachment to a harness."""
 
 from __future__ import annotations
 
@@ -39,18 +6,24 @@ import inspect
 import json
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Optional, Union, get_type_hints
+from typing import Any, Optional, Union, get_type_hints, overload
 
-from pydantic import ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic.json_schema import JsonSchemaValue
 from typing_extensions import Annotated
 
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.session import Session
-from agentconnect.core.base import dump_public, parse_schema, public_json_schema
+from agentconnect.core.base import (
+    JsonObject,
+    JsonValue,
+    dump_public,
+    parse_schema,
+    public_json_schema,
+)
 from agentconnect.core.directory import (
-    DirectoryEntry,
     GetProfilesRequest,
     GetProfilesResult,
     ProfileFound,
@@ -58,7 +31,6 @@ from agentconnect.core.directory import (
 )
 from agentconnect.core.error import ErrorObject
 from agentconnect.core.operations import (
-    AcceptedSendResult,
     history_view,
     tell_view,
 )
@@ -66,8 +38,13 @@ from agentconnect.core.primitives import CollectMode
 from agentconnect.core.team_tools import TEAM_TOOL_SPECS
 from agentconnect.core.ticket import ticket_view
 
-ToolHandler = Callable[..., Union[Any, Awaitable[Any]]]
+ToolHandler = Callable[..., object]
+"""A callable invoked with tool keyword arguments; it may return an awaitable."""
+
 ToolLike = Union["Tool", ToolHandler]
+"""A [`Tool`][agentconnect.agent.tools.Tool] or a callable converted with
+[`Tool.from_callable`][agentconnect.agent.tools.Tool.from_callable].
+"""
 
 _ITEM_ERROR_CODES = frozenset({"not_found", "forbidden", "address_outside_team"})
 
@@ -80,28 +57,25 @@ KEYED_ID_CONFLICT_MESSAGE = (
 
 @dataclass(frozen=True)
 class Tool:
-    """One function the model may call.
+    """A callable exposed to a harness, with its argument schema.
 
-    Pass a plain annotated function to :meth:`from_callable` to derive the
-    JSON Schema from the signature and docstring. Construct ``Tool``
+    Pass a plain annotated function to `from_callable` to derive the
+    JSON Schema from the signature and docstring. Construct `Tool`
     directly when annotations cannot express the schema.
 
-        async def search_docs(query: str) -> str:
-            \"\"\"Search internal docs.
-
-            Args:
-                query: The search text.
-            \"\"\"
-            return f"no hits for {query}"
-
-        Tool.from_callable(search_docs)
+    Attributes:
+        name: Tool name advertised to the host.
+        description: Text the host shows for this tool.
+        parameters: JSON Schema object for keyword arguments.
+        handler: Callable invoked with those keywords.
+        params_model: Optional Pydantic model used to validate arguments.
     """
 
     name: str
     description: str
-    parameters: dict[str, Any]
+    parameters: JsonSchemaValue
     handler: ToolHandler
-    params_model: Any = None
+    params_model: type[BaseModel] | None = None
 
     @classmethod
     def from_callable(
@@ -111,8 +85,31 @@ class Tool:
         name: str | None = None,
         description: str | None = None,
     ) -> Tool:
-        """Build a Tool from an annotated function and its docstring."""
+        """Build a Tool from an annotated function and its docstring.
+
+        Parameter descriptions come from the function's `Args` section.
+        The first paragraph of the docstring becomes `description` unless
+        you pass one.
+
+        Args:
+            fn: Async or sync callable. Each advertised argument needs a
+                type annotation other than `Any`. Keyword-only and
+                positional-or-keyword arguments are supported.
+            name: Tool name. Defaults to `fn.__name__`.
+            description: Tool description. Defaults to the docstring
+                summary.
+
+        Returns:
+            A `Tool` whose `parameters` schema matches the signature.
+
+        Raises:
+            ValueError: The signature cannot be advertised (`*args`,
+                `**kwargs`, positional-only, missing annotation, or
+                `Any`).
+        """
         tool_name = name or getattr(fn, "__name__", "tool")
+        if not isinstance(tool_name, str):
+            raise ValueError("tool name must be a string")
         doc = inspect.getdoc(fn) or ""
         tool_description = (
             description if description is not None else _description_from_doc(doc)
@@ -126,8 +123,12 @@ class Tool:
             params_model=params_model,
         )
 
-    def openai_schema(self) -> dict[str, Any]:
-        """Return the OpenAI/LiteLLM function-tool descriptor for this tool."""
+    def openai_schema(self) -> dict[str, object]:
+        """Return the OpenAI function-tool descriptor for this tool.
+
+        Returns:
+            A mapping with `type` `"function"` and a `function` object holding `name`, `description`, and `parameters`.
+        """
         return {
             "type": "function",
             "function": {
@@ -139,7 +140,7 @@ class Tool:
 
 
 def _ensure_tool(value: ToolLike) -> Tool:
-    """Return ``value`` as a :class:`Tool`, deriving schema from a callable."""
+    """Return ``value`` as a `Tool`, deriving schema from a callable."""
     if isinstance(value, Tool):
         return value
     if callable(value):
@@ -147,7 +148,7 @@ def _ensure_tool(value: ToolLike) -> Tool:
     raise TypeError("tool must be a Tool or a callable")
 
 
-async def _call_tool(tool: Tool, arguments: Mapping[str, Any] | str) -> str:
+async def _call_tool(tool: Tool, arguments: Mapping[str, object] | str) -> str:
     """Call ``tool.handler`` once with the advertised names as keywords.
 
     A callable registered from annotations is validated with its Pydantic
@@ -166,22 +167,30 @@ async def _call_tool(tool: Tool, arguments: Mapping[str, Any] | str) -> str:
 
 
 class TeamTools(Sequence[Tool]):
-    """find, ask, tell, get_result, get_history, and get_profiles for one Session.
+    """The six Team tool descriptors for one Agent.
 
-    ``ask`` matches :meth:`~agentconnect.agent.base.BaseAgent.ask` and the
-    MCP ``ask`` tool. Model-facing ask/get_result results are TicketView JSON.
+    `BaseAgent.team_tools` returns this sequence. Iterate it and pass it
+    to a harness. Each `Tool.handler` returns JSON. `ask` and
+    `get_result` include `ticket_id`. An `open` result has no `content`.
+    A completed result has `content`.
     """
 
     def __init__(self, session_getter: Callable[[], Session]) -> None:
-        """Bind to a getter so tools can be built before ``join``."""
+        """Bind handlers to the Agent connection `team_tools` supplies.
+
+        Args:
+            session_getter: Zero-argument callable that returns the
+                Agent's connection. `BaseAgent.team_tools` supplies this.
+                Handlers fail until that connection exists.
+        """
         self._session_getter = session_getter
-        handlers = {
-            "find": self.find,
-            "ask": self.ask,
-            "tell": self.tell,
-            "get_result": self.get_result,
-            "get_history": self.get_history,
-            "get_profiles": self.get_profiles,
+        handlers: dict[str, ToolHandler] = {
+            "find": self._find,
+            "ask": self._ask,
+            "tell": self._tell,
+            "get_result": self._get_result,
+            "get_history": self._get_history,
+            "get_profiles": self._get_profiles,
         }
         self._items = tuple(
             Tool(
@@ -197,59 +206,100 @@ class TeamTools(Sequence[Tool]):
         return self._session_getter()
 
     def __len__(self) -> int:
-        """Return how many tools this sequence holds."""
+        """Return how many Session-bound tools this sequence holds."""
         return len(self._items)
 
-    def __getitem__(self, index: int) -> Tool:  # type: ignore[override]
-        """Return the tool at ``index``."""
+    @overload
+    def __getitem__(self, index: int) -> Tool: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[Tool, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> Tool | tuple[Tool, ...]:
+        """Return the `Tool` at `index` in catalog order."""
         return self._items[index]
 
     def __iter__(self) -> Iterator[Tool]:
-        """Iterate the Session-bound tools."""
+        """Iterate the six Session-bound tools in catalog order."""
         return iter(self._items)
 
-    async def find(
+    async def _find(
         self,
         query: str,
         *,
         limit: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Search this Team's Directory, excluding this Agent.
 
-        found = await tools.find(query="someone who can draft a summary")
-        found["matches"][0]["address"]
+        Light cards include Address, summary, Skill names, and Profile
+        tags. Ranked matches are candidates, not proof of suitability.
+        Call `get_profiles` for full Profiles.
+
+        Args:
+            query: Natural-language description of the work.
+            limit: Maximum matches from 1 to 100. Omit to receive every
+                other member, at most 100.
+
+        Returns:
+            JSON with a `matches` list, best first.
+
+        Raises:
+            SessionError: The Agent has not joined.
         """
         return dump_public(await self._session().find(query, limit=limit))
 
-    async def ask(
+    async def _ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
         idempotency_key: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Send reply-expected work and return the current TicketView as JSON.
+    ) -> JsonObject:
+        """Send a reply-expected request and return TicketView JSON.
 
-        Same argument names as :meth:`~agentconnect.agent.base.BaseAgent.ask`.
-        ``collect="wait"`` uses the Runtime wait hold and may still return
-        an ``open`` TicketView. Omit ``deadline_seconds`` to inherit a request
-        parent or the Runtime work lifetime. Pass ``idempotency_key`` so a
-        retry reuses the same Ticket. Changed keyed arguments raise
-        ``id_conflict``.
+        `collect="wait"` (default) holds until the Ticket is terminal or
+        the Runtime wait hold elapses, then returns the current view.
+        That view may still be `open`. Ending the wait does not cancel
+        accepted work. `collect="ticket"` returns immediately. Branch on
+        `state`. Keep `ticket_id` and call `get_result`. Do not send
+        another `ask` to collect. A completed view has `content`.
 
-            ticket = await tools.ask(
-                recipient="writer",
-                content={"task": "draft this"},
-            )
-            if ticket["state"] == "open":
-                ticket = await tools.get_result(ticket["ticket_id"])
-            if ticket["state"] == "completed":
-                ticket["content"]
+        Pass `idempotency_key` so a retry reuses the same Ticket. Changed
+        keyed arguments raise `id_conflict`. When `thread_id` is omitted,
+        a key selects a stable Thread, a call from `handle` inherits, and
+        a call outside `handle` starts a new Thread.
+
+        Args:
+            recipient: Local name or same-Team qualified Address, for
+                example `writer` or `writer@content-squad`.
+            content: The work, as text or JSON.
+            deadline_seconds: Work cutoff in seconds. Omit to inherit a
+                request parent or the Runtime work lifetime. This is not
+                how long this call waits.
+            collect: `"wait"` (default) holds this call. `"ticket"`
+                returns immediately. Neither cancels work.
+            thread_id: Continue this conversation with the same
+                recipient. Omit to mint, inherit, or key as described
+                above.
+            parent_id: Message this send answers. From a handler, omit
+                to use the current Message.
+            metadata: Optional JSON object stored on the Message.
+            idempotency_key: Reuse the same Ticket on retry. Use a new
+                key only for new work.
+
+        Returns:
+            TicketView JSON. An `open` view has `ticket_id` and no
+            `content`. A completed view has `content`.
+
+        Raises:
+            SessionError: The Agent has not joined, `collect` is not
+                `wait` or `ticket`, keyed arguments conflict, or the
+                Runtime rejected the send. Branch on `code`.
         """
         session = self._session()
         address = session.address
@@ -323,17 +373,44 @@ class TeamTools(Sequence[Tool]):
             ) from exc
         return dump_public(ticket_view(ticket))
 
-    async def tell(
+    async def _tell(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
         idempotency_key: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Send work with no reply. No Ticket is created."""
+    ) -> JsonObject:
+        """Send an event. No Ticket is created.
+
+        Acceptance means the Runtime queued the event, not that the
+        recipient finished handling it. Pass `idempotency_key` so a retry
+        reuses the same Message. Changed keyed arguments raise
+        `id_conflict`.
+
+        Args:
+            recipient: Local name or same-Team qualified Address.
+            content: The notice, as text or JSON.
+            thread_id: Continue this conversation with a current
+                participant. Omit outside `handle` for an unthreaded
+                notice. From `handle`, omit to inherit or start a
+                Thread the same way as `ask`.
+            parent_id: Message this send answers. From a handler, omit
+                to use the current Message.
+            metadata: Optional JSON object stored on the Message.
+            idempotency_key: Reuse the same Message on retry. Use a new
+                key only for new work.
+
+        Returns:
+            JSON with `status` `"accepted"` and `thread_id` when the
+            event is threaded.
+
+        Raises:
+            SessionError: The Agent has not joined, keyed arguments
+                conflict, or the Runtime rejected the send.
+        """
         session = self._session()
         address = session.address
         if not address:
@@ -361,30 +438,78 @@ class TeamTools(Sequence[Tool]):
                     retryable=exc.retryable,
                 ) from exc
             raise
-        if not isinstance(result, AcceptedSendResult):
-            raise SessionError("internal", "tell did not return an accepted event")
         return dump_public(tell_view(result))
 
-    async def get_result(self, ticket_id: str) -> dict[str, Any]:
-        """Return the current TicketView this Membership opened."""
+    async def _get_result(self, ticket_id: str) -> JsonObject:
+        """Return the current TicketView this Membership opened.
+
+        Repeatable. Does not consume the result. If `state` is `open`,
+        call again with the same `ticket_id`. Do not send another `ask`.
+
+        Args:
+            ticket_id: `ticket_id` from `ask`, equal to the request
+                Message id.
+
+        Returns:
+            TicketView JSON, which may still be `open`.
+
+        Raises:
+            SessionError: The Agent has not joined, or this Membership
+                did not open that Ticket.
+        """
         return dump_public(ticket_view(await self._session().get_result(ticket_id)))
 
-    async def get_history(
+    async def _get_history(
         self,
         thread_id: str,
         *,
         before: Optional[str] = None,
         limit: int = 50,
-    ) -> dict[str, Any]:
-        """Return one page of retained Thread history."""
+    ) -> JsonObject:
+        """Return one page of retained Thread history as JSON.
+
+        The newest page is first; turns inside a page are oldest to
+        newest. Omit `before` for the newest page. When `has_more` is
+        true, pass `next_before` as the next `before`. Only a participant
+        may read the Thread.
+
+        Args:
+            thread_id: Conversation id from a TicketView or Message.
+            before: Return turns older than this id. Prefer
+                `next_before` from the previous page.
+            limit: Page size from 1 to 200. Defaults to 50.
+
+        Returns:
+            JSON with `messages`, `has_more`, and `next_before` when
+            more pages remain.
+
+        Raises:
+            SessionError: The Agent has not joined, or is not a
+                participant.
+        """
         return dump_public(
             history_view(
                 await self._session().get_history(thread_id, before=before, limit=limit)
             )
         )
 
-    async def get_profiles(self, addresses: list[str]) -> dict[str, Any]:
-        """Return selected teammate Profiles by Address."""
+    async def _get_profiles(self, addresses: list[str]) -> JsonObject:
+        """Return selected teammate Profiles by Address.
+
+        Duplicate Addresses are read once. A missing member appears as a
+        per-item error. Other Profiles still return.
+
+        Args:
+            addresses: Member Addresses to read, 1 to 20.
+
+        Returns:
+            JSON with an `items` list. Each item is `status` `"ok"` with
+            a Profile, or `status` `"error"` with an error object.
+
+        Raises:
+            SessionError: The Agent has not joined, `addresses` is
+                invalid, or the Session is unauthorized.
+        """
         try:
             parsed = parse_schema(GetProfilesRequest, {"addresses": addresses})
         except ValueError as exc:
@@ -394,8 +519,6 @@ class TeamTools(Sequence[Tool]):
         for requested in parsed.unique_requested():
             try:
                 entry = await session.get_entry(requested)
-                if not isinstance(entry, DirectoryEntry):
-                    entry = DirectoryEntry.model_validate(entry)
                 items.append(
                     ProfileFound(
                         status="ok",
@@ -408,7 +531,7 @@ class TeamTools(Sequence[Tool]):
                     raise
                 if exc.code not in _ITEM_ERROR_CODES:
                     raise
-                payload: dict[str, Any] = {
+                payload: JsonObject = {
                     "code": exc.code,
                     "message": exc.message,
                 }
@@ -424,11 +547,6 @@ class TeamTools(Sequence[Tool]):
                     )
                 )
         return dump_public(GetProfilesResult(items=items))
-
-
-def bind_team_tools(session: Session) -> TeamTools:
-    """Return Team tools bound to an already-connected Session."""
-    return TeamTools(lambda: session)
 
 
 def _message_id(
@@ -457,12 +575,12 @@ async def _recover_keyed_ask(
         raise
     thread = supplied_thread or ticket.thread_id
     deadline = ticket.deadline
-    if not isinstance(thread, str) or not isinstance(deadline, str):
+    if thread is None:
         return None
     return thread, deadline
 
 
-def _parse_arguments(arguments: Mapping[str, Any] | str) -> dict[str, Any]:
+def _parse_arguments(arguments: Mapping[str, object] | str) -> dict[str, object]:
     if isinstance(arguments, Mapping):
         return dict(arguments)
     raw = arguments.strip() if arguments else ""
@@ -474,7 +592,7 @@ def _parse_arguments(arguments: Mapping[str, Any] | str) -> dict[str, Any]:
     return parsed
 
 
-def _stringify(result: Any) -> str:
+def _stringify(result: object) -> str:
     if result is None:
         return "null"
     if isinstance(result, str):
@@ -556,7 +674,7 @@ def _parse_args_section(doc: str) -> dict[str, str]:
 
 def _parameters_from_callable(
     fn: ToolHandler, doc: str
-) -> tuple[dict[str, Any], type[Any]]:
+) -> tuple[JsonSchemaValue, type[BaseModel]]:
     try:
         sig = inspect.signature(fn)
     except (TypeError, ValueError) as exc:
@@ -597,21 +715,23 @@ def _parameters_from_callable(
         else:
             fields[name] = (annotation, param.default)
     config = ConfigDict(extra="forbid")
+    params_model: type[BaseModel]
     if not fields:
-        model = create_model(f"{_model_name(fn)}_Params", __config__=config)
         return {
             "type": "object",
             "properties": {},
             "additionalProperties": False,
-        }, model
+        }, create_model(f"{_model_name(fn)}_Params", __config__=config)
     try:
-        model = create_model(f"{_model_name(fn)}_Params", __config__=config, **fields)
-        schema = model.model_json_schema()
+        params_model = create_model(
+            f"{_model_name(fn)}_Params", __config__=config, **fields
+        )
+        schema = params_model.model_json_schema()
     except Exception as exc:
         raise ValueError(
             f"cannot build a schema for {getattr(fn, '__name__', 'tool')}: {exc}"
         ) from exc
-    return _parameters_schema(schema), model
+    return _parameters_schema(schema), params_model
 
 
 def _model_name(fn: ToolHandler) -> str:
@@ -621,7 +741,7 @@ def _model_name(fn: ToolHandler) -> str:
     return "tool"
 
 
-def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
+def _parameters_schema(schema: JsonSchemaValue) -> dict[str, object]:
     """Keep constraints and ``$ref`` targets. Do not inline references."""
     defs = dict(schema.get("$defs") or schema.get("definitions") or {})
     _require_resolvable_refs(schema, defs)
@@ -629,7 +749,7 @@ def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
         key: _strip_titles(value)
         for key, value in dict(schema.get("properties") or {}).items()
     }
-    out: dict[str, Any] = {
+    out: JsonSchemaValue = {
         "type": "object",
         "properties": properties,
         "additionalProperties": False,
@@ -642,7 +762,7 @@ def _parameters_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _require_resolvable_refs(node: Any, defs: Mapping[str, Any]) -> None:
+def _require_resolvable_refs(node: object, defs: Mapping[str, object]) -> None:
     if isinstance(node, dict):
         ref = node.get("$ref")
         if isinstance(ref, str):
@@ -658,7 +778,7 @@ def _require_resolvable_refs(node: Any, defs: Mapping[str, Any]) -> None:
             _require_resolvable_refs(item, defs)
 
 
-def _strip_titles(node: Any) -> Any:
+def _strip_titles(node: object) -> object:
     if isinstance(node, dict):
         return {
             key: _strip_titles(value) for key, value in node.items() if key != "title"

@@ -1,7 +1,6 @@
 # Start this Team with `agentconnect up` from this directory.
 # Secrets stay in the environment.
 
-[tool.agentconnect]
 team = "hosted-demo"
 store = "memory"
 embeddings = "auto"
@@ -9,6 +8,5 @@ host = "127.0.0.1"
 port = 9000
 require_join_auth = true
 
-[[tool.agentconnect.agents]]
-class = "agents.writer:Writer"
-name = "writer"
+[agents.writer]
+entrypoint = "agents.writer:Writer"

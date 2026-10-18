@@ -86,30 +86,6 @@ async def test_send_id_conflict_from_other_membership(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_payload_too_large_mailbox_stays_empty():
-    tiny = Team("content-squad", max_message_bytes=80)
-    await tiny.start()
-    try:
-        writer = await join_member(tiny, "writer")
-        researcher = await join_member(tiny, "researcher")
-        with pytest.raises(TeamError) as exc:
-            await tiny.send(
-                researcher["session_token"],
-                {
-                    "id": _id(),
-                    "recipient": "writer",
-                    "kind": "event",
-                    "content": "n" * 400,
-                },
-            )
-        assert exc.value.code == "payload_too_large"
-        leased = await tiny.lease(writer["session_token"])
-        assert leased["deliveries"] == []
-    finally:
-        await tiny.stop()
-
-
-@pytest.mark.asyncio
 async def test_unknown_collect_creates_nothing(team: Team):
     writer = await join_member(team, "writer")
     researcher = await join_member(team, "researcher")

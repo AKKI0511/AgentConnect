@@ -1,36 +1,58 @@
-"""
-AgentConnect is a runtime for Teams of independent AI agents.
+"""AgentConnect connects independent agents, each with its own harness, in one Team.
 
-Install the embedded core, then add extras for serving, Redis, CLI, MCP,
-and model helpers:
+An Agent is an independent participant. A `Team` provides discovery,
+messaging, and work tracking. Agents exchange Messages; a request asks
+for work, and its `Ticket` tracks the result.
 
-    pip install agentconnect
-    pip install 'agentconnect[serve]'
-    pip install 'agentconnect[aiagent]'
+Subclass `BaseAgent` to connect an existing harness. Its `handle` method
+receives a Message from another teammate and decides how to respond.
+A returned value replies to a request; returning `None` declines a
+request or finishes an event.
 
-    from agentconnect import AgentProfile, BaseAgent, Context, MailboxMessage, Skill, Team
+Examples:
+    Assume `writer_agent` is an existing
+    [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/quickstart/)
+    agent configured to take text and produce a draft.
+
+    ```python
+    from agents import Runner
+
+    from agentconnect import BaseAgent
 
     class Writer(BaseAgent):
-        profile = AgentProfile(
-            summary="Writes short drafts from notes.",
-            skills=[
-                Skill(
-                    name="drafting",
-                    description="Turn notes into a two-paragraph draft.",
-                )
-            ],
-        )
-
-        async def handle(self, msg: MailboxMessage, ctx: Context) -> str | None:
-            if msg.kind != "request":
+        async def handle(self, message, ctx):
+            if message.kind != "request":
                 return None
-            return f"Draft complete for {msg.content!r}."
+            result = await Runner.run(writer_agent, input=message.content)
+            return result.final_output
+    ```
 
-    team = await Team("content-squad").start()
-    await Writer(name="writer").join(team)
+    In your async application, `team` is already started. `researcher`
+    and `reviewer` are existing adapters for independent agents with
+    their own harnesses. Join all three to the same Team, then ask the
+    writer for a draft.
+
+    ```python
+    writer = Writer(name="writer")
+    await writer.join(team)
+    await researcher.join(team)
+    await reviewer.join(team)
+
+    ticket = await researcher.ask(
+        "writer",
+        "Draft a release note from these findings: search is faster, "
+        "and request deadlines now appear in the activity log.",
+    )
+    if ticket.state == "completed":
+        print(ticket.content)
+    ```
+
+Call `leave` on each adapter when its connection is no longer needed.
+To let a model initiate collaboration, separately attach `team_tools`
+to its harness or connect the harness through MCP.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 # Only the version is imported by default; names below load on attribute access.
 __all__ = [
@@ -55,6 +77,7 @@ import logging
 logging.getLogger("agentconnect").addHandler(logging.NullHandler())
 
 if TYPE_CHECKING:
+    __version__: str
     from agentconnect.agent.base import BaseAgent
     from agentconnect.agent.context import Context
     from agentconnect.agent.errors import SessionError
@@ -82,7 +105,7 @@ _LAZY_EXPORTS = {
 _version: str | None = None
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     """Load Team and Agent types without importing the whole package tree."""
     global _version
     if name == "__version__":

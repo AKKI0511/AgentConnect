@@ -1,18 +1,19 @@
-"""Handler Context: delivery facts plus verbs to call teammates mid-handling.
-
-A handler receives ``(msg, ctx)``. ``msg`` is the delivered
-:class:`~agentconnect.core.message.MailboxMessage`. ``ctx`` is required
-and carries verified facts about this Delivery plus ``ask``, ``tell``,
-``find``, ``get_entry``, history paging, and :meth:`Context.defer`.
-"""
+"""Delivery context and handles for replies sent after `handle` returns."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Mapping, Optional
 
-from agentconnect.core.directory import DirectoryEntry, FindResult
 from agentconnect.core.message import Delivery, MailboxMessage, Message
-from agentconnect.core.operations import AcceptedSendResult, HistoryResult
+from agentconnect.core.operations import (
+    AcceptedSendResult,
+    CompleteResult,
+    HistoryResult,
+    ReplyResult,
+)
+from agentconnect.core.base import JsonObject, JsonValue
+from agentconnect.agent.errors import SessionError
+from agentconnect.core.error import ErrorObject
 from agentconnect.core.primitives import CollectMode
 from agentconnect.core.ticket import Ticket
 
@@ -21,39 +22,47 @@ if TYPE_CHECKING:
 
 
 class DeferredReply:
-    """Answer a reply-expected Delivery after ``handle`` returns.
+    """Handle that finishes one request after `handle` returns.
 
-    Call :meth:`Context.defer` to obtain this handle, then return from
-    ``handle``. The Delivery stays leased until ``reply``, ``fail``, or
-    ``decline`` succeeds, or the lease expires and another Instance may
-    take it. The Session renews that lease until then, up to the request
-    deadline. The slot still counts toward ``max_in_flight``.
-
-        handle = ctx.defer()
-        asyncio.create_task(self._finish(handle))
-        return None
-
-        await handle.reply({"draft": "..."})
+    Obtain it from `Context.defer`, then finish once with `reply`,
+    `fail`, or `decline`. The Delivery remains leased and counts
+    toward `max_in_flight`. The lease is renewed until completion,
+    the request deadline, a disconnect, or revocation by the Team.
+    If it expires, another running copy may handle the Delivery.
     """
 
     def __init__(self, session: "Session", delivery: Delivery) -> None:
-        """Hold the Session and Delivery this handle will finish."""
+        """Bind one leased Delivery. Call `Context.defer` instead."""
         self._session = session
         self._delivery = delivery
         self._done = False
 
     @property
     def lease_id(self) -> str:
-        """Lease authorizing this attempt."""
+        """Lease that authorizes this attempt."""
         return self._delivery.lease_id
 
     @property
     def message_id(self) -> str:
-        """Id of the delivered Message, and of its Ticket when one exists."""
+        """Id of the delivered Message. For a request, this is also the Ticket id."""
         return self._delivery.message.id
 
-    async def reply(self, content: Any = None) -> dict[str, Any]:
-        """Complete the request with ``content`` (JSON). ``None`` is valid content."""
+    async def reply(self, content: JsonValue = None) -> ReplyResult:
+        """Complete the request with `content`.
+
+        `None` is a valid reply body.
+
+        Args:
+            content: Reply body, as text or JSON. Defaults to `None`.
+
+        Returns:
+            The Team acknowledgement for this reply.
+
+        Raises:
+            RuntimeError: This handle already finished the Delivery.
+            SessionError: The Session is disconnected, the lease expired,
+                or the Ticket is already closed.
+        """
         self._ensure_open()
         result = await self._session.reply_delivery(
             self._delivery, outcome="completed", content=content
@@ -66,22 +75,42 @@ class DeferredReply:
         message: str,
         *,
         code: str = "handler_failed",
-        details: Optional[Mapping[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """Fail the request with a message the requester can see.
+        details: Optional[Mapping[str, JsonValue]] = None,
+    ) -> ReplyResult:
+        """Fail the request with a message the requester can read.
 
-        ``code`` is ``handler_failed`` unless the caller passes another
-        well-known code. An Agent application code belongs in ``details``.
-        This path keeps the given ``message``. Uncaught exceptions in
-        ``handle`` do not; they store ``The handler failed.``
+        The Ticket error code is `handler_failed`. This call stores
+        `message` as the error text. A different `code` is stored under
+        `details`, and the public code stays `handler_failed`. Put an
+        application-specific code in `details` as well. An exception
+        raised from `handle` stores `The handler failed.` instead of
+        the exception text.
+
+        Args:
+            message: Text the requester can read.
+            code: Extra code stored in `details` when it is not
+                `handler_failed`.
+            details: JSON object stored on the error. Omit to store none.
+
+        Returns:
+            The Team acknowledgement for this failed reply.
+
+        Raises:
+            RuntimeError: This handle already finished the Delivery.
+            SessionError: The Session is disconnected, the lease expired,
+                or the Ticket is already closed.
         """
         self._ensure_open()
         extra = dict(details or {})
-        error: dict[str, Any] = {"code": "handler_failed", "message": message}
+        payload: JsonObject = {"code": "handler_failed", "message": message}
         if code != "handler_failed":
             extra.setdefault("code", code)
         if extra:
-            error["details"] = extra
+            payload["details"] = extra
+        try:
+            error = ErrorObject.model_validate(payload)
+        except ValueError as exc:
+            raise SessionError("invalid_request", str(exc)) from exc
         result = await self._session.reply_delivery(
             self._delivery,
             outcome="failed",
@@ -90,25 +119,37 @@ class DeferredReply:
         self._done = True
         return result
 
-    async def decline(self) -> dict[str, Any]:
-        """Decline a request, or finish an event."""
+    async def decline(self) -> CompleteResult:
+        """Decline a request, or finish an event without a reply.
+
+        A declined Ticket is a finished result. It is not a failure, and
+        it has no reply body.
+
+        Returns:
+            The Team acknowledgement for this completion.
+
+        Raises:
+            RuntimeError: This handle already finished the Delivery.
+            SessionError: The Session is disconnected, the lease expired,
+                or the Ticket is already closed.
+        """
         self._ensure_open()
         result = await self._session.complete_delivery(self._delivery)
         self._done = True
         return result
 
     def _ensure_open(self) -> None:
+        """Reject a second finish on this handle."""
         if self._done:
             raise RuntimeError("This Delivery has already been finished")
 
 
 class Context:
-    """Facts about the current Delivery, plus verbs to talk to the Team.
+    """Inspect the incoming Message and contact teammates while handling it.
 
-    When several Instances share one Membership they pull one Mailbox.
-    Working state that lives only in this process is lost if another
-    Instance handles the next turn. Use ``history`` (and ``get_history``
-    for older turns) as the source of conversation state.
+    `handle` receives this object. Use `sender` to identify the teammate,
+    `history` to read recent conversation Messages, and `ask` or `tell`
+    to send related work. `get_history` reads older conversation turns.
     """
 
     def __init__(
@@ -116,7 +157,7 @@ class Context:
         session: "Session",
         delivery: Delivery,
     ) -> None:
-        """Attach delivery facts from one leased attempt."""
+        """Attach one leased Delivery. The Session builds this for `handle`."""
         self._session = session
         self._delivery = delivery
         self._deferred: Optional[DeferredReply] = None
@@ -128,64 +169,65 @@ class Context:
 
     @property
     def sender_did(self) -> str:
-        """Verified DID of the sender, stamped when the Runtime accepted the Message.
+        """DID of the sender, recorded when the Team accepted the Message.
 
-        It does not change if that Agent later leaves or another Agent
-        reuses the Address.
-
-            ctx.sender_did
+        A later leave, or another Agent reusing the Address, leaves this
+        value unchanged.
         """
         return str(self._delivery.message.sender_did)
 
     @property
     def message(self) -> MailboxMessage:
-        """The delivered Runtime Message."""
+        """The delivered request or event."""
         return self._delivery.message
 
     @property
     def attempt(self) -> int:
-        """Delivery attempt number. At-least-once handling can repeat work."""
+        """Delivery attempt number. The first attempt is 1.
+
+        At-least-once delivery can run `handle` more than once for the
+        same Message.
+        """
         return self._delivery.attempt
 
     @property
     def lease_id(self) -> str:
-        """Lease authorizing completion of this attempt."""
+        """Lease that authorizes completion of this attempt."""
         return self._delivery.lease_id
 
     @property
     def deadline(self) -> Optional[str]:
-        """Request deadline, or None for an event."""
+        """Request deadline as an RFC 3339 timestamp. `None` for an event."""
         message = self._delivery.message
         return getattr(message, "deadline", None)
 
     @property
     def trace_id(self) -> str:
-        """Causal id shared by this exchange."""
+        """Id shared by this Message and Messages sent while handling it."""
         return self._delivery.message.trace_id
 
     @property
     def thread_id(self) -> Optional[str]:
-        """Thread grouping id, when the Message belongs to one."""
+        """Thread id when the Message belongs to a conversation. Otherwise `None`."""
         return self._delivery.message.thread_id
 
     @property
     def history(self) -> list[Message]:
-        """Bounded recent Thread window, excluding the delivered Message.
+        """Recent Thread Messages, excluding the Message being handled.
 
-        Use this as conversation state. Older turns are on
-        :meth:`get_history` when ``history_complete`` is False.
+        The list is ordered by `seq`. Use it as the conversation state.
+        When `history_complete` is false, page older turns with
+        `get_history`. After `join` with `delivery_history="ids"`, this
+        list is empty and `history_ids` holds the earlier ids.
         """
         return list(self._delivery.history)
 
     @property
     def history_ids(self) -> Optional[list[str]]:
-        """Earlier Message ids when this Session joined with ``delivery_history="ids"``.
+        """Earlier Message ids when this Session joined with `delivery_history="ids"`.
 
-        ``None`` when the Delivery carries Message bodies. Page those
-        ids with :meth:`get_history` when you need the bodies.
-
-            ctx.history_ids
-            page = await ctx.get_history()
+        `None` when the Delivery already carries Message bodies. Call
+        `get_history` for those bodies.
         """
         ids = self._delivery.history_ids
         if ids is None:
@@ -194,21 +236,33 @@ class Context:
 
     @property
     def history_complete(self) -> bool:
-        """True when ``history`` already contains every earlier retained Message."""
+        """True when `history` already holds every earlier retained Message."""
         return self._delivery.history_complete
 
     def defer(self) -> DeferredReply:
-        """Keep the Delivery leased and answer later.
+        """Keep this Delivery leased and answer after `handle` returns.
 
-        Return from ``handle`` after calling this. Reply with
-        ``handle.reply``, ``handle.fail``, or ``handle.decline``.
-        The Session renews the lease until that reply, the request
-        deadline, disconnect, or revocation. This still counts as one
-        in-flight Delivery.
+        Return from `handle` after this call; its return value is ignored.
+        Give the returned `DeferredReply` to your existing completion
+        workflow, which must finish it with `reply`, `fail`, or `decline`.
 
-            handle = ctx.defer()
-            asyncio.create_task(self._finish(handle))
-            return None
+        Returns:
+            The handle for this Delivery. Another `defer` call returns the same object.
+
+        Examples:
+            Within an existing request handler, `ctx` is the incoming
+            delivery's Context. Save the handle for your completion workflow.
+
+            ```python
+            pending = ctx.defer()
+            ```
+
+            In that workflow's async completion callback, `pending` is
+            the saved handle and `draft` is the finished result.
+
+            ```python
+            await pending.reply(draft)
+            ```
         """
         if self._deferred is None:
             self._deferred = DeferredReply(self._session, self._delivery)
@@ -217,23 +271,66 @@ class Context:
     async def ask(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         deadline_seconds: Optional[float] = None,
         collect: CollectMode = "wait",
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
     ) -> Ticket:
-        """Send a reply-expected request and collect the result.
+        """Send a request from `handle` and return a `Ticket`.
 
-        Same contract as :meth:`agentconnect.agent.base.BaseAgent.ask`.
-        From a handler this inherits the current Message as ``parent_id``.
-        An omitted deadline inherits that request's stamped cutoff. An
-        explicit child cannot exceed the parent. A new Thread starts when
-        ``recipient`` is not already in this conversation.
+        The returned Ticket may still be `open`. Accepted work keeps
+        running after this call returns.
 
-            ticket = await ctx.ask("editor", "tighten this draft")
+        Read `content` only when `state` is `completed`. Call
+        `BaseAgent.get_result` with `id` while `state` is `open`.
+        An open child does not finish the incoming request. Returning
+        `None` from `handle` declines it. Use `defer` if your handler
+        must return before it can reply.
+
+        Args:
+            recipient: Local name or same-Team Address, such as `writer`
+                or `writer@content-squad`.
+            content: The work, as text or JSON.
+            deadline_seconds: Work cutoff in seconds. This does not change
+                how long `collect="wait"` waits. Omit it to inherit the
+                parent request deadline. The Team rejects a later child
+                deadline.
+            collect: `wait` waits until the Ticket is terminal or
+                `wait_hold_seconds` elapses. `ticket` returns the current
+                Ticket without waiting.
+            thread_id: Thread to continue with the same recipient. Omit it
+                to continue the current Thread when `recipient` is the
+                sender and this Message has a `thread_id`. Otherwise a
+                new Thread starts.
+            parent_id: Message this request answers. Omit it to use the
+                current Message id.
+            metadata: JSON object stored on the Message. Omit to store none.
+
+        Returns:
+            The current Ticket. It can still be `open`.
+
+        Raises:
+            SessionError: The Agent has not joined, or the Team rejected
+                the send. Read `code`.
+
+        Examples:
+            Within an existing handler, `ctx` belongs to the incoming
+            request and `draft` is text to review. This fragment inspects
+            a child Ticket; the handler still needs to finish its
+            incoming request.
+
+            ```python
+            ticket = await ctx.ask(
+                "editor",
+                {"task": "Check for unsupported claims.", "draft": draft},
+                collect="ticket",
+            )
+            if ticket.state == "completed":
+                print(ticket.content)
+            ```
         """
         return await self._session.ask(
             recipient,
@@ -249,16 +346,35 @@ class Context:
     async def tell(
         self,
         recipient: str,
-        content: Any,
+        content: JsonValue,
         *,
         thread_id: Optional[str] = None,
         parent_id: Optional[str] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, JsonValue]] = None,
     ) -> AcceptedSendResult:
-        """Send an event.
+        """Send a notice from `handle`. No Ticket is created.
 
-        Same contract as :meth:`agentconnect.agent.base.BaseAgent.tell`.
-        From a handler this inherits the current Message as ``parent_id``.
+        Acceptance means the Team queued the event. It does not mean the
+        recipient finished handling it. Omit `parent_id` to use the
+        current Message id. Omit `thread_id` to continue or start a
+        Thread by the same rule as `ask`.
+
+        Args:
+            recipient: Local name or same-Team Address.
+            content: The notice, as text or JSON.
+            thread_id: Thread to continue with a current participant.
+                Omit it to continue or start a Thread by the same rule
+                as `ask`.
+            parent_id: Message this notice answers. Omit it to use the
+                current Message id.
+            metadata: JSON object stored on the Message. Omit to store none.
+
+        Returns:
+            An acknowledgement that the Team accepted the event.
+
+        Raises:
+            SessionError: The Agent has not joined, or the Team rejected
+                the send. Read `code`.
         """
         return await self._session.tell(
             recipient,
@@ -269,33 +385,26 @@ class Context:
             handling=self._delivery,
         )
 
-    async def find(self, query: str, *, limit: int | None = None) -> FindResult:
-        """Search this Team's Directory, excluding this Agent.
-
-        found = await ctx.find("someone who can review a contract")
-        peer = found.matches[0].address
-        """
-        return await self._session.find(query, limit=limit)
-
-    async def get_entry(self, address: str) -> DirectoryEntry:
-        """Return the Directory entry for ``address`` in this Team.
-
-        The entry includes Address, DID, and Profile.
-
-            entry = await ctx.get_entry("writer")
-            entry.profile.summary
-        """
-        return await self._session.get_entry(address)
-
     async def get_history(
         self, *, before: Optional[str] = None, limit: int = 50
     ) -> HistoryResult:
-        """Page older retained Thread history.
+        """Return one page of this Delivery's Thread history.
 
-        Omit ``before`` for the newest page of this Delivery's Thread.
-        When ``has_more`` is true, pass ``next_before`` as the next
-        ``before``. Returns empty history when the Message has no
-        ``thread_id``.
+        The first page is the newest. Messages inside a page run from
+        oldest to newest. Omit `before` for that newest page. A `before`
+        id missing from the transcript returns that same page. The result
+        is empty when this Message has no `thread_id`.
+
+        Args:
+            before: Return Messages older than this id. Use `next_before`
+                from the previous page.
+            limit: Page size, from 1 to 200. Defaults to 50.
+
+        Returns:
+            One page. Pass `next_before` as `before` when `has_more` is true.
+
+        Raises:
+            SessionError: The Agent has not joined, or is not a participant.
         """
         thread_id = self.thread_id
         if thread_id is None:

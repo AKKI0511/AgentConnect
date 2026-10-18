@@ -1,13 +1,28 @@
-"""Team file loading for AgentConnect.
+"""Load a Team file for `agentconnect.toml` and `[tool.agentconnect]`.
 
-``agentconnect.toml`` or ``[tool.agentconnect]`` in ``pyproject.toml``
-describes a Team the CLI starts. Discovery is nearest-directory first.
-Embedded ``Team("name").start()`` needs no file.
+A Team file names the Team, the store, the embedding choice, the Agents
+this process constructs, and extra MCP tools. [`Team`][agentconnect.team.runtime.Team]
+started in Python needs no file. Secrets stay in the environment.
 
-    from agentconnect.config import TeamConfig, load_team_config
+`agents` maps canonical Agent names to
+[`HostedAgentConfig`][agentconnect.config.models.HostedAgentConfig].
+`entrypoint` is a [`BaseAgent`][agentconnect.agent.base.BaseAgent] subclass
+or a synchronous factory. Both receive `name=<mapping key>` plus optional
+`kwargs`. Independently deployed Agents join by URL and are not listed.
+
+[`load_team_config`][agentconnect.config.loaders.load_team_config] chooses
+the file.
+
+Examples:
+    From a directory that contains a Team file:
+
+    ```python
+    from agentconnect.config import load_team_config
 
     config = load_team_config()
-    print(config.team, config.port)
+    for name, spec in config.agents.items():
+        print(name, spec.entrypoint)
+    ```
 """
 
 from agentconnect.config.loaders import (
@@ -15,20 +30,14 @@ from agentconnect.config.loaders import (
     load_selected_team,
     load_team_config,
     render_example_toml,
-    save_example_config,
-    validate_config_file,
 )
 from agentconnect.config.models import HostedAgentConfig, TeamConfig
-from agentconnect.config.servers import RegistryAPISettings
 
 __all__ = [
     "TeamConfig",
     "HostedAgentConfig",
-    "RegistryAPISettings",
     "load_team_config",
     "load_selected_team",
     "find_config_file",
     "render_example_toml",
-    "save_example_config",
-    "validate_config_file",
 ]

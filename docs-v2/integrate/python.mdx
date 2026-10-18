@@ -1,0 +1,28 @@
+---
+title: "Python SDK"
+sidebarTitle: "Python"
+description: "Public Python package layout and where generated reference pages live."
+keywords: ["python", "sdk", "agentconnect"]
+---
+
+import Placeholder from "/snippets/placeholder.mdx";
+
+<Placeholder />
+
+`agentconnect` is the install name. Packages map to the public contract:
+
+| Package | Responsibility |
+| --- | --- |
+| `agentconnect.core` | Data models |
+| `agentconnect.agent` | Client SDK |
+| `agentconnect.team` | Runtime, directory, mailboxes, tickets |
+| `agentconnect.transport` | Session transports |
+| `agentconnect.mcp` | Team MCP server |
+| `agentconnect.cli` | Command-line entry |
+| `agentconnect.config` | Team configuration |
+| `agentconnect.prebuilt` | Optional helpers |
+| `agentconnect.index` | Optional published Directory |
+
+`core` imports no sibling packages. `agent` and `team` do not import each other.
+
+Open the generated pages from the **Reference** tab, starting at [API reference](/api-reference).

@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from tests.prebuilt.test_loop import scripted, text_turn, tool_turn
+from tests.prebuilt.test_loop_characterization import scripted, text_turn, tool_turn
 
 from agentconnect.agent import BaseAgent
-from agentconnect.prebuilt import AIAgent, Tool
+from agentconnect.agent.tools import Tool
+from agentconnect.prebuilt import AIAgent
 from agentconnect.team import Team
 
 

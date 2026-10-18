@@ -1,12 +1,7 @@
-"""Frozen pydantic base for public schema objects.
+"""Parse and serialize public schema objects.
 
-Validate at the untrusted edge. The Runtime keeps accepted documents as
-mappings after that check; it does not re-parse them as schema models.
-
-    from agentconnect.core.base import parse_schema
-    from agentconnect.core.operations import LeaseRequest
-
-    lease = parse_schema(LeaseRequest, {"max_items": 4})
+`parse_schema` validates untrusted JSON as a schema type. `dump_public`
+returns JSON-ready data. Optional fields that were omitted stay missing.
 """
 
 from __future__ import annotations
@@ -14,28 +9,48 @@ from __future__ import annotations
 import copy
 import math
 from collections.abc import Mapping
-from typing import Any, TypeVar, Union, get_args, get_origin
+from typing import (
+    TYPE_CHECKING,
+    TypeAlias,
+    Any,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    overload,
+)
 
 from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
+    GetJsonSchemaHandler,
     TypeAdapter,
     ValidationError,
     model_validator,
 )
 from typing_extensions import Annotated, TypeAliasType
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
-JsonValue = TypeAliasType(  # type: ignore[misc]
-    "JsonValue",
-    Union[str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]],  # type: ignore[misc]
-)
-JsonObject = dict[str, JsonValue]  # type: ignore[misc]
+if TYPE_CHECKING:
+    JsonValue: TypeAlias = Union[
+        str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]
+    ]
+    """Application JSON content, including null and nested arrays or objects."""
+else:
+    JsonValue = TypeAliasType(
+        "JsonValue",
+        Union[str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]],
+    )
+"""Application JSON content, including null and nested arrays or objects."""
+JsonObject = dict[str, JsonValue]
+"""Application JSON object with string keys."""
 
 TSchema = TypeVar("TSchema", bound="SchemaModel")
 
 
-def _json_int(value: Any) -> Any:
+def _json_int(value: object) -> int:
     """Accept JSON numbers that are finite whole values. Reject bool and str."""
     if isinstance(value, bool):
         raise ValueError("must be an integer")
@@ -48,7 +63,7 @@ def _json_int(value: Any) -> Any:
     raise ValueError("must be an integer")
 
 
-def _json_float(value: Any) -> Any:
+def _json_float(value: object) -> float:
     """Accept JSON numbers, including integers. Reject bool, str, and inf."""
     if isinstance(value, bool):
         raise ValueError("must be a number")
@@ -61,7 +76,7 @@ def _json_float(value: Any) -> Any:
     raise ValueError("must be a number")
 
 
-def _promote_numeric_bounds(node: dict[str, Any]) -> None:
+def _promote_numeric_bounds(node: JsonSchemaValue) -> None:
     """Rewrite pydantic ``ge``/``le`` to JSON Schema minimum/maximum."""
     mapping = (
         ("ge", "minimum"),
@@ -79,8 +94,8 @@ class _JsonIntJsonSchema:
 
     @classmethod
     def __get_pydantic_json_schema__(
-        cls, core_schema: Any, handler: Any
-    ) -> dict[str, Any]:
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
         """Emit a JSON number with ``multipleOf: 1``."""
         schema = handler(core_schema)
         schema["type"] = "number"
@@ -90,10 +105,12 @@ class _JsonIntJsonSchema:
 
 
 JsonInt = Annotated[int, BeforeValidator(_json_int), _JsonIntJsonSchema()]
+"""Whole JSON number; booleans and numeric strings are rejected."""
 JsonFloat = Annotated[float, BeforeValidator(_json_float)]
+"""Finite JSON number; booleans and numeric strings are rejected."""
 
 
-def _annotation_allows_json_null(annotation: Any) -> bool:
+def _annotation_allows_json_null(annotation: object) -> bool:
     """Return True when the field's JSON type includes null, such as content."""
     candidates = [annotation, *get_args(annotation)]
     origin = get_origin(annotation)
@@ -108,27 +125,31 @@ def _annotation_allows_json_null(annotation: Any) -> bool:
 
 
 class SchemaModel(BaseModel):
-    """Public schema object. Undeclared fields are rejected. Instances are frozen.
+    """Frozen public schema object. Undeclared fields are rejected.
 
-    Wire input is strict: a string is not an integer, ``true`` is not ``1``,
-    and an optional field must be omitted rather than sent as JSON null.
+    Parse untrusted JSON with `parse_schema`. Serialize with `dump_public`
+    or `to_public_dict`. Wire input is strict: a string is not an integer,
+    `true` is not `1`, and an optional field must be omitted rather than
+    sent as JSON null.
+
+    Mapping-style access (`result["ticket"]`, `.get`, `in`) works on
+    operation results and Messages. An omitted optional field is absent.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     @model_validator(mode="before")
     @classmethod
-    def reject_json_null_on_omitted_fields(cls, data: Any) -> Any:
+    def reject_json_null_on_omitted_fields(cls, data: object) -> object:
         """Reject JSON null on fields that JSON Schema treats as omit-only."""
         return _reject_null_for_omitted_fields(cls, data)
 
-    def to_public_dict(self) -> dict[str, Any]:
-        """JSON-ready mapping. Optional fields that were omitted stay missing.
+    def to_public_dict(self) -> JsonObject:
+        """Return JSON-ready fields, omitting optional values that are absent.
 
-        Required fields whose JSON value is ``null`` are kept. That matters
-        for Message ``content``, which may be null.
+        Required JSON-null content is kept. Nested models are serialized recursively.
         """
-        out: dict[str, Any] = {}
+        out: JsonObject = {}
         for name, field in type(self).model_fields.items():
             value = getattr(self, name)
             if value is None and not field.is_required():
@@ -137,7 +158,11 @@ class SchemaModel(BaseModel):
         return out
 
     def __getitem__(self, key: str) -> Any:
-        """Allow ``result["ticket"]`` on operation results and Messages."""
+        """Read a declared field by name.
+
+        Raises:
+            KeyError: The field is undeclared or was omitted.
+        """
         if key not in type(self).model_fields:
             raise KeyError(key)
         value = getattr(self, key)
@@ -146,14 +171,14 @@ class SchemaModel(BaseModel):
         return value
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Return ``self[key]`` or ``default`` when the field is absent."""
+        """Read a field, using `default` when it is undeclared or omitted."""
         try:
             return self[key]
         except KeyError:
             return default
 
     def __contains__(self, key: object) -> bool:
-        """Return True when ``self[key]`` succeeds."""
+        """Return whether a declared field is present rather than omitted."""
         if not isinstance(key, str):
             return False
         try:
@@ -163,7 +188,7 @@ class SchemaModel(BaseModel):
         return True
 
 
-def _reject_null_for_omitted_fields(cls: type[SchemaModel], data: Any) -> Any:
+def _reject_null_for_omitted_fields(cls: type[SchemaModel], data: object) -> object:
     """Reject JSON null on fields that JSON Schema treats as omit-only."""
     if not isinstance(data, Mapping):
         return data
@@ -176,7 +201,7 @@ def _reject_null_for_omitted_fields(cls: type[SchemaModel], data: Any) -> Any:
     return data
 
 
-def _unwrap_optional_annotation(annotation: Any) -> Any:
+def _unwrap_optional_annotation(annotation: object) -> object:
     """Return the non-None member of ``Optional[T]``, else ``annotation``."""
     origin = get_origin(annotation)
     if origin is Union:
@@ -186,12 +211,12 @@ def _unwrap_optional_annotation(annotation: Any) -> Any:
     return annotation
 
 
-def _annotation_is_json_int(annotation: Any) -> bool:
+def _annotation_is_json_int(annotation: object) -> bool:
     """Return True when the field is ``JsonInt`` or ``Optional[JsonInt]``."""
     return _unwrap_optional_annotation(annotation) is JsonInt
 
 
-def _is_null_type_schema(node: Mapping[str, Any]) -> bool:
+def _is_null_type_schema(node: Mapping[str, object]) -> bool:
     """Return True when ``node`` is a JSON Schema that only accepts null."""
     if node.get("type") == "null" and set(node) <= {"type", "title"}:
         return True
@@ -199,7 +224,7 @@ def _is_null_type_schema(node: Mapping[str, Any]) -> bool:
     return isinstance(types, list) and types == ["null"]
 
 
-def _unwrap_omit_only(node: dict[str, Any]) -> dict[str, Any]:
+def _unwrap_omit_only(node: JsonSchemaValue) -> JsonSchemaValue:
     """Replace ``T | null`` with ``T`` for omit-only optional fields."""
     types = node.get("type")
     if isinstance(types, list) and "null" in types:
@@ -233,7 +258,7 @@ def _unwrap_omit_only(node: dict[str, Any]) -> dict[str, Any]:
     return unwrapped
 
 
-def _schema_allows_json_null(node: Mapping[str, Any]) -> bool:
+def _schema_allows_json_null(node: Mapping[str, object]) -> bool:
     """Return True when this schema node accepts JSON null."""
     if _is_null_type_schema(node):
         return True
@@ -250,7 +275,7 @@ def _schema_allows_json_null(node: Mapping[str, Any]) -> bool:
     return False
 
 
-def _rewrite_json_schema(node: Any) -> Any:
+def _rewrite_json_schema(node: object) -> object:
     """Walk a pydantic JSON Schema and encode omit-only optional fields."""
     if isinstance(node, list):
         return [_rewrite_json_schema(item) for item in node]
@@ -265,7 +290,7 @@ def _rewrite_json_schema(node: Any) -> Any:
     return rewritten
 
 
-def _as_json_int_schema(node: dict[str, Any]) -> dict[str, Any]:
+def _as_json_int_schema(node: JsonSchemaValue) -> JsonSchemaValue:
     """Apply the public ``JsonInt`` wire shape to one property schema."""
     node = dict(node)
     node["type"] = "number"
@@ -276,7 +301,7 @@ def _as_json_int_schema(node: dict[str, Any]) -> dict[str, Any]:
     return node
 
 
-def _apply_json_int_fields(model: type[SchemaModel], schema: dict[str, Any]) -> None:
+def _apply_json_int_fields(model: type[SchemaModel], schema: JsonSchemaValue) -> None:
     """Force ``JsonInt`` properties to number + multipleOf after omit-only unwrap."""
     properties = schema.get("properties")
     if not isinstance(properties, dict):
@@ -289,7 +314,7 @@ def _apply_json_int_fields(model: type[SchemaModel], schema: dict[str, Any]) -> 
             properties[name] = _as_json_int_schema(prop)
 
 
-def public_json_schema(model: type[SchemaModel]) -> dict[str, Any]:
+def public_json_schema(model: type[SchemaModel]) -> JsonSchemaValue:
     """JSON Schema for ``model`` as sent on the wire.
 
     Optional fields are omit-only: JSON null is not in the type, and
@@ -307,18 +332,16 @@ def public_json_schema(model: type[SchemaModel]) -> dict[str, Any]:
     return schema
 
 
-def public_result_schema(model: Any) -> dict[str, Any]:
-    """JSON Schema for a tool success result, including tagged unions.
+def public_result_schema(model: object) -> JsonSchemaValue:
+    """Return a JSON Schema for a Team tool success result.
 
-    MCP structuredContent may be any JSON value. Team tool results are
-    JSON objects, so this projection advertises ``type: object``. Tagged
-    unions of public objects keep ``oneOf``/``anyOf``; the wrapper does
-    not set ``additionalProperties``, which would make variants
-    uninhabitable.
+    Tagged object unions keep their variants and advertise an object result.
+    Omit-only optional fields do not accept JSON null.
     """
     if isinstance(model, type) and issubclass(model, SchemaModel):
         return public_json_schema(model)
-    schema = _rewrite_json_schema(copy.deepcopy(TypeAdapter(model).json_schema()))
+    adapter: TypeAdapter[object] = TypeAdapter(model)
+    schema = _rewrite_json_schema(copy.deepcopy(adapter.json_schema()))
     if not isinstance(schema, dict):
         raise TypeError("result JSON Schema must be an object")
     if schema.get("type") == "object" or "properties" in schema:
@@ -330,12 +353,29 @@ def public_result_schema(model: Any) -> dict[str, Any]:
     return schema
 
 
-def dump_public(value: Any) -> Any:
-    """Convert schema models to JSON-ready data.
+@overload
+def dump_public(value: SchemaModel) -> JsonObject: ...
 
-    MCP tools and Session-bound tools serialize through this helper so
-    omit-only optional fields stay missing. Session and ``BaseAgent``
-    methods return typed objects.
+
+@overload
+def dump_public(value: Any) -> Any: ...
+
+
+def dump_public(value: Any) -> Any:
+    """Serialize public models, nested dicts and lists to JSON-ready data.
+
+    Omit-only optional fields stay missing; required JSON-null content stays null.
+    Use this for wire or tool output rather than a model dump that adds absent keys.
+
+    Examples:
+        For `profile`, an existing AgentProfile with no description:
+
+        ```python
+        from agentconnect.core.base import dump_public
+
+        body = dump_public(profile)
+        assert "description" not in body
+        ```
     """
     if isinstance(value, SchemaModel):
         return value.to_public_dict()
@@ -346,10 +386,11 @@ def dump_public(value: Any) -> Any:
     return value
 
 
-def parse_schema(model: type[TSchema], data: Any) -> TSchema:
-    """Parse a mapping as ``model`` at an untrusted edge.
+def parse_schema(model: type[TSchema], data: object) -> TSchema:
+    """Validate a mapping as a public model; return an existing instance unchanged.
 
-    lease = parse_schema(LeaseRequest, {"max_items": 2})
+    Raises:
+        ValueError: Input is not an object or fails the model's validation.
     """
     if isinstance(data, model):
         return data
@@ -362,7 +403,14 @@ def parse_schema(model: type[TSchema], data: Any) -> TSchema:
 
 
 def validation_message(exc: ValidationError) -> str:
-    """Short ``invalid_request`` text from a pydantic error."""
+    """Short `invalid_request` text from a pydantic error.
+
+    Args:
+        exc: Pydantic validation failure.
+
+    Returns:
+        One-line text naming the first field and its problem.
+    """
     errors = exc.errors()
     if not errors:
         return "request is invalid"

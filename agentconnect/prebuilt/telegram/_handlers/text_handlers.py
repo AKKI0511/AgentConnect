@@ -4,11 +4,12 @@ Text message handlers for the Telegram agent.
 This module contains handlers for Telegram text messages in private chats.
 """
 
-from typing import Callable, Dict
-
 from aiogram import Dispatcher, F, types
 
-from agentconnect.prebuilt.telegram._handlers.base_handler import BaseHandler
+from agentconnect.prebuilt.telegram._handlers.base_handler import (
+    BaseHandler,
+    _HandlerCallbacks,
+)
 
 
 class TextHandler(BaseHandler):
@@ -18,7 +19,7 @@ class TextHandler(BaseHandler):
     This handler registers handlers for text messages in private chats.
     """
 
-    async def register(self, dp: Dispatcher, callback_map: Dict[str, Callable]) -> None:
+    async def register(self, dp: Dispatcher, callback_map: _HandlerCallbacks) -> None:
         """
         Register text message handlers with the Telegram dispatcher.
 
@@ -29,6 +30,6 @@ class TextHandler(BaseHandler):
 
         # Catch-all for text messages in private chats
         @dp.message(F.chat.type == "private")
-        async def handle_private_text(message: types.Message):
+        async def handle_private_text(message: types.Message) -> None:
             """Handle text messages in private chats."""
             await callback_map["handle_message"](message)

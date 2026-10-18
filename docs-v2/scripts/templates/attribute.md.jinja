@@ -1,0 +1,7 @@
+{{ ('`' ~ attribute.name ~ '`')|heading(heading_level) }}{{ attribute|symbol_meta }}
+
+{{ attribute|field_widget }}
+
+{% with docstring_sections = attribute|attribute_sections %}
+{% include 'docstring.md.jinja' %}
+{% endwith %}

@@ -1,21 +1,22 @@
-"""In-process Store. State survives Client disconnects, not process exit."""
+"""The Store backend that keeps Team state in process memory."""
 
 from __future__ import annotations
 
 import asyncio
 import bisect
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
+
+from agentconnect.core.primitives import PersistenceMode
 
 from agentconnect.team.store.apply import Overlay, apply_ops
 from agentconnect.team.store.base import Store, StoreRecord
-from agentconnect.team.store.ops import ApplyResult, StoreOp
+from agentconnect.team.store.ops import _integer_document, ApplyResult, StoreOp
 
 
-class SortedIndex:
+class _SortedIndex:
     """Membership scores with range reads that skip unrelated members.
 
-    ``index_range`` walks only the requested score window. Add and remove
-    are ``O(log n)``.
+    `index_range` walks only the requested score window.
     """
 
     def __init__(self) -> None:
@@ -28,16 +29,21 @@ class SortedIndex:
         return len(self._score)
 
     def __contains__(self, member: str) -> bool:
-        """Return True when ``member`` is in the index."""
+        """Return True when `member` is in the index."""
         return member in self._score
 
     def score_of(self, member: str) -> float | None:
-        """Return the score for ``member``, or None."""
+        """Return the score for `member`, or None."""
         value = self._score.get(member)
         return None if value is None else float(value)
 
     def add(self, member: str, score: float) -> None:
-        """Insert or replace ``member`` at ``score``."""
+        """Insert or replace `member` at `score`.
+
+        Args:
+            member: Indexed member.
+            score: Sort score.
+        """
         previous = self._score.get(member)
         if previous is not None:
             self._remove_order(previous, member)
@@ -46,7 +52,7 @@ class SortedIndex:
         bisect.insort(self._order, (numbered, member))
 
     def remove(self, member: str) -> None:
-        """Drop ``member`` if present."""
+        """Drop `member` if present."""
         previous = self._score.pop(member, None)
         if previous is None:
             return
@@ -59,7 +65,13 @@ class SortedIndex:
         max_score: float,
         limit: Optional[int] = None,
     ) -> list[str]:
-        """Return members with scores in ``[min_score, max_score]``, lowest first."""
+        """Return members with scores in `[min_score, max_score]`, lowest first.
+
+        Args:
+            min_score: Inclusive lower bound.
+            max_score: Inclusive upper bound.
+            limit: Maximum members to return. Omit for the full window.
+        """
         start = bisect.bisect_left(self._order, (min_score,))
         out: list[str] = []
         for index in range(start, len(self._order)):
@@ -79,21 +91,22 @@ class SortedIndex:
 
 
 class MemoryStore(Store):
-    """Volatile document store backed by dicts in this process.
+    """Keep Team state in process memory, following the `Store` contract.
 
-    ``insert``, ``compare_and_set``, and ``apply`` are atomic with
-    respect to other MemoryStore operations. Mailbox index updates use
-    the same lock.
+    `insert`, `compare_and_set`, and `apply` are atomic with respect to
+    other MemoryStore operations. Values are copied on reads and writes.
+    State survives `close` and client disconnects, but not process exit.
+    TTL hints are ignored.
     """
 
-    persistence = "volatile"
+    persistence: PersistenceMode = "volatile"
+    """State lasts only within this process."""
 
     def __init__(self) -> None:
-        """Create an empty in-process store."""
         self._lock = asyncio.Lock()
-        self._docs: dict[str, tuple[Any, int]] = {}
+        self._docs: dict[str, tuple[object, int]] = {}
         self._sets: dict[str, set[str]] = {}
-        self._indexes: dict[str, SortedIndex] = {}
+        self._indexes: dict[str, _SortedIndex] = {}
 
     async def open(self) -> None:
         """No-op. The store is ready after construction."""
@@ -103,8 +116,8 @@ class MemoryStore(Store):
         """No-op. Memory is not wiped on close."""
         return None
 
-    async def get(self, key: str) -> Any | None:
-        """Return a copy of the value at ``key``, or None."""
+    async def get(self, key: str) -> object:
+        """Return a copy of the stored value, or None when the key is missing."""
         async with self._lock:
             record = self._docs.get(key)
             snapshot = None if record is None else record[0]
@@ -112,19 +125,18 @@ class MemoryStore(Store):
             return None
         return _clone(snapshot)
 
-    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
-        """Return copied values for ``keys``.
+    async def get_many(self, keys: Sequence[str]) -> list[object]:
+        """Return copied values for `keys` in the same order.
 
-        The lock covers only the snapshot. Cloning happens afterwards and
-        yields so a large Directory read cannot freeze the event loop or
-        hold send/lease behind vector copies.
+        Missing keys are None. The read captures all values together;
+        copies are independent of subsequent writes.
         """
         async with self._lock:
             snapshots = [
                 None if (record := self._docs.get(key)) is None else record[0]
                 for key in keys
             ]
-        out: list[Any | None] = []
+        out: list[object] = []
         large = len(snapshots) >= 16
         for index, value in enumerate(snapshots):
             out.append(None if value is None else _clone(value))
@@ -133,7 +145,7 @@ class MemoryStore(Store):
         return out
 
     async def get_record(self, key: str) -> StoreRecord | None:
-        """Return a copied value and its version, or None."""
+        """Return a copied value and its version, or None when the key is missing."""
         async with self._lock:
             record = self._docs.get(key)
             if record is None:
@@ -142,7 +154,10 @@ class MemoryStore(Store):
         return StoreRecord(value=_clone(value), version=version)
 
     async def apply(self, ops: Sequence[StoreOp]) -> ApplyResult:
-        """Apply ``ops`` under the store lock, or leave every key unchanged."""
+        """Apply the batch atomically, or leave every key unchanged.
+
+        See `Store.apply` for ordering and conflict rules.
+        """
         batch = tuple(ops)
         if not batch:
             return ApplyResult(ok=True)
@@ -197,35 +212,35 @@ class MemoryStore(Store):
         for key, scores in overlay.index_add.items():
             if not scores:
                 continue
-            index = self._indexes.setdefault(key, SortedIndex())
+            index = self._indexes.setdefault(key, _SortedIndex())
             for member, score in scores.items():
                 index.add(member, score)
         for key, members in overlay.index_rem.items():
-            index = self._indexes.get(key)
-            if index is None:
+            removed_index = self._indexes.get(key)
+            if removed_index is None:
                 continue
             for member in members:
-                index.remove(member)
-            if not index:
+                removed_index.remove(member)
+            if not removed_index:
                 self._indexes.pop(key, None)
 
-    async def put(self, key: str, value: Any) -> None:
-        """Write a copied value at ``key``, bumping the version."""
+    async def put(self, key: str, value: object) -> None:
+        """Write a copied value at `key`, bumping the version."""
         async with self._lock:
             previous = self._docs.get(key)
             version = 1 if previous is None else previous[1] + 1
             self._docs[key] = (_clone(value), version)
 
-    async def insert(self, key: str, value: Any) -> bool:
-        """Write ``value`` only if ``key`` is absent."""
+    async def insert(self, key: str, value: object) -> bool:
+        """Write `value` only if `key` is absent. True when inserted."""
         async with self._lock:
             if key in self._docs:
                 return False
             self._docs[key] = (_clone(value), 1)
             return True
 
-    async def compare_and_set(self, key: str, version: int, value: Any) -> bool:
-        """Replace ``key`` when the stored version matches."""
+    async def compare_and_set(self, key: str, version: int, value: object) -> bool:
+        """Replace `key` when the stored version matches."""
         async with self._lock:
             record = self._docs.get(key)
             if record is None or record[1] != version:
@@ -234,19 +249,19 @@ class MemoryStore(Store):
             return True
 
     async def delete(self, key: str) -> None:
-        """Remove ``key`` from documents, sets, and indexes."""
+        """Remove `key` from documents, sets, and indexes."""
         async with self._lock:
             self._docs.pop(key, None)
             self._sets.pop(key, None)
             self._indexes.pop(key, None)
 
     async def set_add(self, key: str, member: str) -> None:
-        """Add ``member`` to the set at ``key``."""
+        """Add `member` to the set at `key`."""
         async with self._lock:
             self._sets.setdefault(key, set()).add(member)
 
     async def set_remove(self, key: str, member: str) -> None:
-        """Remove ``member`` from the set at ``key``."""
+        """Remove `member` from the set at `key`."""
         async with self._lock:
             members = self._sets.get(key)
             if members is None:
@@ -256,7 +271,7 @@ class MemoryStore(Store):
                 self._sets.pop(key, None)
 
     async def set_members(self, key: str) -> list[str]:
-        """Return the sorted members of the set at ``key``."""
+        """Return the sorted members of the set at `key`."""
         async with self._lock:
             members = self._sets.get(key)
             if not members:
@@ -264,18 +279,18 @@ class MemoryStore(Store):
             return sorted(members)
 
     async def set_is_member(self, key: str, member: str) -> bool:
-        """Return True when ``member`` is in the set at ``key``."""
+        """Return True when `member` is in the set at `key`."""
         async with self._lock:
             bucket = self._sets.get(key)
             return bool(bucket and member in bucket)
 
     async def index_add(self, key: str, score: float, member: str) -> None:
-        """Add or update ``member`` in the sorted index at ``key``."""
+        """Add or update `member` in the sorted index at `key`."""
         async with self._lock:
-            self._indexes.setdefault(key, SortedIndex()).add(member, float(score))
+            self._indexes.setdefault(key, _SortedIndex()).add(member, float(score))
 
     async def index_remove(self, key: str, member: str) -> None:
-        """Remove ``member`` from the sorted index at ``key``."""
+        """Remove `member` from the sorted index at `key`."""
         async with self._lock:
             index = self._indexes.get(key)
             if index is None:
@@ -292,7 +307,7 @@ class MemoryStore(Store):
         min_score: float = float("-inf"),
         limit: Optional[int] = None,
     ) -> list[str]:
-        """Return members with scores in ``[min_score, max_score]``, lowest first."""
+        """Return members with scores in `[min_score, max_score]`, lowest first."""
         async with self._lock:
             index = self._indexes.get(key)
             if index is None:
@@ -300,7 +315,7 @@ class MemoryStore(Store):
             return index.range(min_score=min_score, max_score=max_score, limit=limit)
 
     async def index_card(self, key: str) -> int:
-        """Return the number of members in the sorted index at ``key``."""
+        """Return the number of members in the sorted index at `key`."""
         async with self._lock:
             index = self._indexes.get(key)
             return 0 if not index else len(index)
@@ -308,9 +323,9 @@ class MemoryStore(Store):
     async def index_add_if_card_below(
         self, key: str, score: float, member: str, max_card: int
     ) -> bool:
-        """Add ``member`` when the index has fewer than ``max_card`` members."""
+        """Add `member` when the index has fewer than `max_card` members."""
         async with self._lock:
-            index = self._indexes.setdefault(key, SortedIndex())
+            index = self._indexes.setdefault(key, _SortedIndex())
             if member in index:
                 index.add(member, float(score))
                 return True
@@ -326,11 +341,11 @@ class MemoryStore(Store):
         *,
         ttl_seconds: Optional[float] = None,
     ) -> bool:
-        """Increment an integer document when it is below ``limit``."""
+        """Increment an integer document when it is below `limit`. Memory ignores `ttl_seconds`."""
         del ttl_seconds
         async with self._lock:
             record = self._docs.get(key)
-            current = 0 if record is None else int(record[0] or 0)
+            current = 0 if record is None else _integer_document(record[0] or 0)
             if current >= limit:
                 return False
             version = 1 if record is None else record[1] + 1
@@ -343,11 +358,11 @@ class MemoryStore(Store):
         *,
         ttl_seconds: Optional[float] = None,
     ) -> int:
-        """Decrement an integer document, not below ``0``."""
+        """Decrement an integer document, not below `0`. Memory ignores `ttl_seconds`."""
         del ttl_seconds
         async with self._lock:
             record = self._docs.get(key)
-            current = 0 if record is None else int(record[0] or 0)
+            current = 0 if record is None else _integer_document(record[0] or 0)
             nxt = max(0, current - 1)
             if record is None and nxt == 0:
                 return 0
@@ -367,7 +382,7 @@ class MemoryStore(Store):
             self._indexes.clear()
 
 
-def _is_numeric_vector(value: list) -> bool:
+def _is_numeric_vector(value: list[object]) -> bool:
     """True when every item is an int or float, never a bool or nested value."""
     for item in value:
         kind = type(item)
@@ -376,7 +391,7 @@ def _is_numeric_vector(value: list) -> bool:
     return True
 
 
-def _clone(value: Any) -> Any:
+def _clone(value: object) -> object:
     if isinstance(value, dict):
         return {key: _clone(item) for key, item in value.items()}
     if isinstance(value, list):

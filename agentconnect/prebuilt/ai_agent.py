@@ -1,46 +1,27 @@
-"""Model-backed Agent on a LiteLLM tool loop.
+"""Model-backed `BaseAgent` that calls LiteLLM for you.
 
-``AIAgent`` is a convenience on :class:`~agentconnect.agent.base.BaseAgent`.
-It is not the product. Subclass ``BaseAgent`` when you already have a model
-loop. Use this helper when you want a model string, Team tools, and optional
-custom tools without wiring LiteLLM yourself.
+Use `AIAgent` when you have a model id and want that model to answer
+Team requests. Subclass `BaseAgent` when your harness already does.
+`model` is a LiteLLM model id. Provider keys stay in the environment.
+Pass your own functions as `tools`. Pass `complete` to replace LiteLLM.
 
-Install the extra first::
+Examples:
+    `team` is started and `researcher` has joined it. After
+    `pip install 'agentconnect[aiagent]'`:
 
-    pip install 'agentconnect[aiagent]'
-
+    ```python
     from agentconnect.prebuilt import AIAgent
-    from agentconnect.core.profile import AgentProfile, Skill
-    from agentconnect.team import Team
 
-    class Writer(AIAgent):
-        profile = AgentProfile(
-            summary="Writes short drafts from notes.",
-            skills=[
-                Skill(
-                    name="drafting",
-                    description="Turn notes into a two-paragraph draft.",
-                )
-            ],
-        )
-
-        def __init__(self, name: str = "writer"):
-            super().__init__(
-                name=name,
-                model="gpt-4o-mini",
-                instructions="Write short, plain drafts.",
-            )
-
-    team = await Team("content-squad").start()
-    await Writer().join(team)
-
-Conversation state for Team work comes from ``ctx.history``. Team tools
-(``find``, ``ask``, ``tell``, ``get_result``, ``get_history``,
-``get_profiles``) are attached from the Session. Extra tools are yours:
-pass a plain annotated function or an explicit ``Tool``.
-
-``model`` is a LiteLLM model id, for example ``gpt-4o-mini`` or
-``gemini/gemini-2.0-flash``. Provider keys stay in the environment.
+    writer = AIAgent(
+        name="writer",
+        model="gpt-4o-mini",
+        instructions="Draft short release notes from the request.",
+    )
+    await writer.join(team)
+    ticket = await researcher.ask("writer", "Draft a release note: search is faster.")
+    if ticket.state == "completed":
+        print(ticket.response.content)
+    ```
 """
 
 from __future__ import annotations
@@ -54,7 +35,7 @@ from agentconnect.agent.context import Context
 from agentconnect.agent.errors import SessionError
 from agentconnect.agent.tools import Tool, ToolLike, _ensure_tool
 from agentconnect.core.identity import AgentIdentity
-from agentconnect.core.message import MailboxMessage
+from agentconnect.core.message import MailboxMessage, Message
 from agentconnect.core.profile import AgentProfile
 from agentconnect.prebuilt.loop import (
     DEFAULT_MAX_ROUNDS,
@@ -65,13 +46,9 @@ from agentconnect.prebuilt.loop import (
 
 
 class CompletionOptions(TypedDict, total=False):
-    """Keyword arguments forwarded to LiteLLM ``acompletion``.
+    """Keyword arguments forwarded to LiteLLM `acompletion`.
 
-    Common fields:
-
-    - ``temperature``
-    - ``max_tokens``
-    - ``top_p``
+    Common fields: `temperature`, `max_tokens`, `top_p`.
     """
 
     temperature: float
@@ -81,11 +58,12 @@ class CompletionOptions(TypedDict, total=False):
 
 
 class AIAgent(BaseAgent):
-    """``BaseAgent`` that answers with a LiteLLM model and a short tool loop.
+    """`BaseAgent` that answers with a LiteLLM model and a short tool loop.
 
-    agent = AIAgent(name="assistant", model="gpt-4o-mini")
-    await agent.join(team)
-    reply = await agent.chat("What does this Team do?")
+    `handle` reads `ctx.history` and can call Session tools. `chat` keeps
+    a local history and does not attach those tools. Pass `complete` to
+    replace LiteLLM with another callable of the same shape. `ToolLoopExhausted`
+    propagates from `handle`, `chat`, and `complete`.
     """
 
     def __init__(
@@ -93,7 +71,7 @@ class AIAgent(BaseAgent):
         name: str,
         *,
         model: str,
-        profile: AgentProfile | Mapping[str, Any] | None = None,
+        profile: AgentProfile | Mapping[str, object] | None = None,
         identity: Optional[AgentIdentity] = None,
         instructions: str = (
             "You are a helpful teammate. Use tools when they help you do the work."
@@ -112,19 +90,26 @@ class AIAgent(BaseAgent):
 
         Args:
             name: Agent name, unique within the Team.
-            model: LiteLLM model id, for example ``gpt-4o-mini``.
-            profile: Discovery Profile mapping or ``AgentProfile``. A class
-                attribute named ``profile`` is used when this is omitted.
+            model: LiteLLM model id, for example `gpt-4o-mini`.
+            profile: Discovery Profile mapping or `AgentProfile`. A class
+                attribute named `profile` is used when this is omitted.
+            identity: Optional Agent identity. Omit to create one.
             instructions: System prompt for every model call.
             tools: Extra tools besides the Session Team tools. Each item is a
-                plain annotated function or an explicit ``Tool``.
-            max_tool_rounds: Cap on model→tool→model cycles per turn.
-            completion: Extra LiteLLM kwargs such as ``temperature``.
+                plain annotated function or an explicit `Tool`.
+            max_tool_rounds: Cap on model-tool-model cycles per turn.
+            completion: Extra LiteLLM kwargs such as `temperature`.
             api_key: Optional key. LiteLLM also reads provider env vars.
-            complete: Advanced. Replace LiteLLM with another async callable
-                of the same shape. Tests use this for a recorded model.
+            complete: Replace LiteLLM with another async callable of the
+                same shape.
             include_team_tools: When True (default), Session Team tools are
-                attached on Team turns. ``chat()`` never attaches them.
+                attached on Team turns. `chat()` never attaches them.
+            instance_id: Stable id for this running copy.
+            max_in_flight: How many Deliveries this Session handles at once.
+            join_token: Token from `Team.issue_join_token`, when required.
+
+        Raises:
+            ValueError: `model` is empty or `max_tool_rounds` is below 1.
         """
         if not model or not str(model).strip():
             raise ValueError("model is required")
@@ -141,19 +126,19 @@ class AIAgent(BaseAgent):
         self.model = str(model).strip()
         self.instructions = instructions
         self.max_tool_rounds = int(max_tool_rounds)
-        self.completion: dict[str, Any] = dict(completion or {})
+        self.completion: dict[str, object] = dict(completion or {})
         self.api_key = api_key
         self.include_team_tools = include_team_tools
         self.tools: list[Tool] = [_ensure_tool(item) for item in tools or ()]
         self._complete: CompletionFn = complete or _litellm_complete
-        self._chats: dict[str, list[dict[str, Any]]] = {}
+        self._chats: dict[str, list[dict[str, object]]] = {}
 
     async def handle(self, message: MailboxMessage, ctx: Context) -> str:
-        """Answer one Delivery with the model loop.
+        """Answer one Team delivery with the model.
 
-        Thread history comes from ``ctx.history``. Team tools attach when a
-        Session exists and ``include_team_tools`` is True.
-        ``ToolLoopExhausted`` is not caught here.
+        Prior Thread messages come from `ctx.history`. Session tools are
+        included when `include_team_tools` is true. `ToolLoopExhausted`
+        reaches the caller.
         """
         address = self.address
         user_text = _message_text(message)
@@ -169,14 +154,31 @@ class AIAgent(BaseAgent):
         self,
         text: str,
         *,
-        history: Optional[Sequence[Any]] = None,
-        current: Optional[Any] = None,
+        history: Optional[Sequence[Message | Mapping[str, object]]] = None,
+        current: Message | Mapping[str, object] | str | None = None,
         include_team_tools: Optional[bool] = None,
         self_address: Optional[str] = None,
     ) -> str:
-        """Run one model turn. Used by ``handle``, ``chat``, and Telegram.
+        """Run one model turn. Used by `handle`, `chat`, and Telegram.
 
-        reply = await agent.complete("Summarize the notes.")
+        Args:
+            text: User turn when `current` is omitted.
+            history: Prior Messages or chat dicts. Defaults to empty.
+            current: This turn as a Message, chat dict, or string.
+            include_team_tools: Override the constructor flag for this call.
+            self_address: Address treated as this Agent in history.
+
+        Returns:
+            Model text after the tool loop.
+
+        Raises:
+            ToolLoopExhausted: The model was still calling tools after
+                `max_tool_rounds`.
+
+        Examples:
+            ```python
+            reply = await agent.complete("Summarize the notes.")
+            ```
         """
         attach = (
             self.include_team_tools
@@ -189,7 +191,7 @@ class AIAgent(BaseAgent):
             self_address=self_address or self.address,
             instructions=self.instructions,
         )
-        kwargs: dict[str, Any] = dict(self.completion)
+        kwargs: dict[str, object] = dict(self.completion)
         if self.api_key:
             kwargs["api_key"] = self.api_key
         return await run_tool_loop(
@@ -207,10 +209,17 @@ class AIAgent(BaseAgent):
         *,
         conversation_id: str = "chat",
     ) -> str:
-        """Talk to this Agent without a Team. History is local to ``conversation_id``.
+        """Talk to this Agent without a Team.
 
-        reply = await agent.chat("What is a Ticket?")
-        follow = await agent.chat("Give an example.", conversation_id="chat")
+        History stays on this object, under `conversation_id`, and is
+        not a Team Thread. Session tools are not included.
+        `ToolLoopExhausted` reaches the caller.
+
+        Examples:
+            ```python
+            reply = await agent.chat("What is a Ticket?")
+            follow = await agent.chat("Give an example.", conversation_id="chat")
+            ```
         """
         prior = self._chats.setdefault(conversation_id, [])
         reply = await self.complete(
@@ -235,7 +244,7 @@ class AIAgent(BaseAgent):
         return list(by_name.values())
 
 
-def _message_text(message: Any) -> str:
+def _message_text(message: object) -> str:
     if isinstance(message, str):
         return message
     content = getattr(message, "content", None)
@@ -244,7 +253,7 @@ def _message_text(message: Any) -> str:
     return _stringify(content)
 
 
-def _stringify(content: Any) -> str:
+def _stringify(content: object) -> str:
     if content is None:
         return ""
     if isinstance(content, str):
@@ -254,7 +263,7 @@ def _stringify(content: Any) -> str:
     return str(content)
 
 
-async def _litellm_complete(**kwargs: Any) -> Any:
+async def _litellm_complete(**kwargs: Any) -> object:
     try:
         import litellm
     except ImportError as exc:

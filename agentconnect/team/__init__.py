@@ -1,14 +1,13 @@
-"""Team runtime: routing, mailboxes, tickets, threads, and directory.
+"""Run the Team your agents use to work together.
 
-The public type is :class:`~agentconnect.team.runtime.Team`. Start a Team,
-join as a member, then talk through ``BaseAgent``. Token-taking methods on
-``Team`` are the Session transport.
+Agents on a Team find teammates, ask them for work, and collect replies.
+Each agent keeps its own harness. Start a `Team` before they join.
 
-Hosting adapters (HTTP ASGI, Redis store) are imported from their modules
-when you need them:
+An agent in this process joins the Team object. An agent on the same
+machine joins the loopback origin from `Team.serve`. An agent on another
+host needs the app from `create_runtime_app`, on a server you run.
 
-    from agentconnect.team.http import create_runtime_app
-    from agentconnect.team.store import RedisStore
+A failed Team operation raises `TeamError`. Read its `code`.
 """
 
 from agentconnect.team.errors import TeamError

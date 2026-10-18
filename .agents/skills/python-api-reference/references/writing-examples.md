@@ -1,6 +1,6 @@
 # Writing examples
 
-These counterexamples are generalized from rejected SDK edits, not verbatim quotations. `workkit` and `reportkit` are fictional APIs used to illustrate writing choices. Their behavior is stipulated here; real documentation must use verified public APIs. The OpenAI Agents SDK calls in the adapter pair are real.
+Generalized rejected edits, not quotations. `workkit`/`reportkit` are fictional, with stipulated behavior; OpenAI Agents SDK calls are real. Verify actual APIs before using these patterns in documentation.
 
 ## Package hierarchy and tone
 
@@ -12,7 +12,7 @@ These counterexamples are generalized from rejected SDK edits, not verbatim quot
 
 > Let your agents ask other agents for help from Python. A workspace is a shared group of workers; each worker handles requests using your existing harness.
 
-The purpose comes first. Only two local nouns need explaining. Keep feature catalogs, low-level machinery and duplicated generated symbol lists out of the introduction.
+Purpose first; explain only essential local nouns.
 
 **DON'T, subpackage:**
 
@@ -22,7 +22,7 @@ The purpose comes first. Only two local nouns need explaining. Keep feature cata
 
 > Run reports against your saved datasets. You need an open `ReportClient` and a dataset ID. Use `client.reports` to request a report and retrieve its result when it finishes.
 
-This gives the area a purpose, names prerequisites locally and explains how to use it without a method inventory. A conceptual or setup-guide link can help, but another page's example must not be a hidden prerequisite.
+Name prerequisites locally; another page's example must not be hidden setup.
 
 **DON'T, leaf module:**
 
@@ -31,8 +31,6 @@ This gives the area a purpose, names prerequisites locally and explains how to u
 **DO, leaf module:**
 
 > Report records returned by the reporting service.
-
-Keep state and field details on the relevant types unless the module needs them to explain its role.
 
 ## Class role and ownership
 
@@ -44,7 +42,7 @@ Keep state and field details on the relevant types unless the module needs them 
 
 > A request your worker is handling. The SDK passes it to your handler; use it to send progress or return a result. It remains valid until the handler returns.
 
-For a class callers instantiate, explain creation and cleanup instead. For a base class, name the method to implement and explain how the SDK uses its return value. Document lifecycle restrictions that affect the caller.
+For caller-created objects, explain creation/cleanup. For base classes, name the method to implement, result use and lifecycle restrictions.
 
 ## Show the real framework boundary
 
@@ -62,7 +60,7 @@ class SupportWorker(Worker):
         return result.final_output
 ```
 
-The fictional `Worker` contract accepts the harness output as its handler result. This fragment shows how an existing harness handles SDK requests without teaching how to build that harness. A root page can omit the example entirely when its purpose is already clear.
+The fictional `Worker` accepts harness output as its result. The fragment assumes a configured harness; a clear root page can omit it.
 
 `Runner.run` and `final_output` were checked in the pinned official [runner source](https://github.com/openai/openai-agents-python/blob/125efa029b4bfd84238bd2c4fd69c3406f802663/src/agents/run.py) and [result source](https://github.com/openai/openai-agents-python/blob/125efa029b4bfd84238bd2c4fd69c3406f802663/src/agents/result.py). This mixed fictional/real illustration was not executed. Verify the relevant version and actual adapter contract before publishing an integration example.
 
@@ -80,7 +78,7 @@ result = await Runner.run(agent, "Ask a billing worker to review invoice INV-42.
 print(result.final_output)
 ```
 
-Here the fictional adapter returns tools accepted by the framework. The real `tools` field and `clone` call are documented in the pinned [agent source](https://github.com/openai/openai-agents-python/blob/125efa029b4bfd84238bd2c4fd69c3406f802663/src/agents/agent.py). Explicit installation teaches the integration boundary. Different SDKs install capabilities differently; describe the actual contract. Put credentials, service startup and full lifecycle setup in a guide unless they are the API under discussion.
+The fictional adapter returns framework-compatible tools. The real `tools` field and `clone` call appear in the pinned [agent source](https://github.com/openai/openai-agents-python/blob/125efa029b4bfd84238bd2c4fd69c3406f802663/src/agents/agent.py). Show the actual capability-installation boundary; credentials/startup belong in guides unless that setup is the API being taught.
 
 ## Useful inputs and results
 
@@ -94,7 +92,7 @@ client.history(request_id)
 client.get_result(request_id)
 ```
 
-These snippets show call syntax without a useful selection, request or result. A canned miss also hides what successful discovery returns.
+These calls teach no useful selection or result; the canned miss hides successful discovery.
 
 **DO:** For an open fictional `client` with workers registered for billing:
 
@@ -105,7 +103,7 @@ if matches:
     print(request.id)  # Save this ID to retrieve the review later.
 ```
 
-The fictional `submit_request` returns a request handle for later result retrieval. For a lookup or history call with no non-obvious choice to teach, keep the contract and omit the example. Each fragment names its own assumptions. Keep branches required for safe result access, even when trimming, as in `Reports.wait` below. Use illustrative output only when its content explains something; never promise an exact model answer.
+`submit_request` returns a handle for later retrieval. Omit examples with no choice to teach; preserve safe-result branches as in `Reports.wait` below. Never promise exact model output.
 
 ## Method contract without an application
 
@@ -143,7 +141,7 @@ Examples:
 """
 ````
 
-The signature carries the default. The prose and sections explain distinct parts of the contract. Keep argument constraints, errors and result states that change how callers use the method.
+The signature carries the default; sections explain distinct constraints, errors and result states.
 
 ## Deferred callbacks
 
@@ -161,19 +159,16 @@ pending = context.defer()
 await pending.reply(review)
 ```
 
-The stipulated contract requires the workflow to finish the deferred request with a reply, failure or rejection; saving the handle alone does not complete it. Describe the actual completion and error operations in real documentation. Keep this semantic requirement in the method contract. Show scheduling or a loop when the API itself requires callers to manage it. Test setup can supply the workflow; reference pages need not recreate it.
+The workflow must finish the request with reply, failure or rejection; saving the handle alone is insufficient. Document actual completion/error operations. Show scheduling only when callers must manage it; test setup can supply the surrounding workflow.
 
 ## Keep the deployment boundary and verify the claim
-
-These pairs generalize additional reference-review failures.
 
 **DON'T:** “Workers elsewhere connect to the URL from `serve`.”
 
 **DO:** “Workers on the same machine connect to the loopback URL from `serve`. To accept workers on other hosts, run the returned ASGI app on your server.”
 
-Use that wording only for an API with those actual boundaries. Keep the caller's
-choice visible; put detailed authentication rules beside the hosting contract,
-without repeating the whole explanation on the module and class introductions.
+Keep authentication details beside the hosting contract rather than repeated
+across module/class introductions.
 
 **DON'T:** Present a start/connect/immediate-stop fragment as a useful collaboration example, while its test fixture silently closes the connected client afterward.
 
@@ -189,8 +184,6 @@ without repeating the whole explanation on the module and class introductions.
 
 ## Assume the signature has been read
 
-Generalized from redundant constructor and storage docstrings found in review:
-
 | DON'T | DO |
 | --- | --- |
 | `port: TCP port. 0 when omitted.` | `port: Zero lets the OS choose an available port.` |
@@ -203,10 +196,6 @@ For `get(key: str) -> Any | None`, “Return a copy of the stored value; None me
 the key is missing” adds ownership and missing-value semantics. A second Returns
 section repeating that sentence does not. For batch reads, order, duplicates and
 snapshot guarantees matter; the implementation's loop does not.
-
-Keep meaningful extension contracts even when they are technical. Being an
-advanced API is not a reason to narrate its implementation or repeat its signature.
-
 
 ## Do not repair a weak contract with prose
 
@@ -224,9 +213,8 @@ signature verification, expiry or ownership checks.
 
 ## Outcomes instead of implementation narration
 
-These pairs generalize rejected reference text. The DO examples assume the stated
-behavior is true; verify it before publishing. Link named public symbols using the
-site's supported syntax and inspect the resulting links.
+The DO examples assume verified behavior; link public symbols using supported
+syntax and inspect their targets.
 
 | DON'T | DO |
 | --- | --- |
@@ -243,7 +231,5 @@ site's supported syntax and inspect the resulting links.
 | A three-column command table repeating `--url`, `--file`, and `--json` on every row. | Copyable commands, outcomes, and shared selection rules once. Point to `--help` for the rest. |
 | “A cancelled HTTP write leaves the previous snapshot.” | State what this client can actually observe. An interrupted HTTP write may already have committed; call `get` to check. Writes are not retried. |
 
-Self-contained does not mean exhaustive. A method using a product-specific result
-must identify what that result means and link its public type; it need not repeat
-that type's complete field list. Keep errors, destructive effects and required
-setup beside the operation. A leaf module can still be one useful sentence.
+Identify product-specific results and link their types without repeating every
+field. Keep errors, destructive effects and required setup beside the operation.

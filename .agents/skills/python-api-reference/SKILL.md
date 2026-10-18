@@ -5,120 +5,66 @@ description: Write and review public Python SDK references, docstrings and examp
 
 # Python API reference writing
 
-Help a caller choose an API, use it correctly and understand the result. Write an API reference, not an application walkthrough. Assume Python and relevant domain knowledge, such as agents, harnesses, memory or MCP, but no product vocabulary.
+Help callers choose an API, use it and understand the result. Assume Python and relevant domain knowledge, but no product vocabulary. Read [writing examples](references/writing-examples.md) when editing overviews or examples; read the relevant [source comparison](references/sdk-reference-research.md) when choosing a structure.
 
-Read [writing examples](references/writing-examples.md) when editing overviews or examples. Its paired examples explain the intended scope and tone.
+## Keep what changes a caller's decision
 
-## Keep only what helps the caller
+For each sentence, name the action or expectation it changes. Retain inputs, results, prerequisites, errors and relevant ownership, timeout, persistence or subclass contracts. Describe observable outcomes: “Closing the client leaves accepted jobs running,” rather than its internal shutdown sequence. State guarantees at the documented boundary: an internal store's rollback is not an HTTP client's rollback.
 
-Keep a detail if it changes what the caller chooses, writes, expects or handles. Otherwise leave it out.
+Remove internal call chains, import tricks, storage algorithms, development history and maintainer instructions. Do not replace them with lists of what the API does not do. Report weak APIs as design findings; a reference edit does not authorize redesign. Distinguish everyday APIs, extension contracts and internal plumbing, and trace callers before proposing removal.
 
-- Explain inputs, results, required setup and relevant errors.
-- Explain resource ownership, timeouts or persistence only where they affect use.
-- For subclass authors, explain what to implement and how its result is used.
-- Leave out internal call chains, import tricks, storage algorithms, development history and maintainer instructions.
-- Separate everyday APIs, supported extension contracts and internal plumbing when reviewing the delivered surface. Trace callers before proposing removal; a reference edit does not authorize API redesign.
-- Describe the visible effect. For example, say “Closing the client leaves accepted jobs running.” The caller does not need the internal shutdown sequence.
-- State guarantees at the documented client boundary. An internal store's rollback is not an HTTP client's rollback.
+Every public symbol must work for a direct-arrival reader. Usually a purpose sentence plus essential prerequisites and consequences is enough; self-contained does not mean a tutorial or glossary. Review overview, module, class and methods together. Give each fact one primary owner, repeating only what prevents misuse when a method is read alone. Preserve meaningful history isolation, data loss, authority limits and failure behavior.
 
-Apply a sentence-level decision test: name the caller action or expectation that
-would change if the sentence were removed. If there is none, delete it. Rewriting
-an internal step in simpler English does not make it useful. Do not replace removed
-implementation narration with lists of what the API does not do. Report weak or
-unnecessary APIs as design findings instead of explaining away their complexity.
-
-Every public docstring must work for a reader arriving directly at that symbol.
-Keep this lean: usually one short purpose sentence and only the context needed
-to use the API safely. Self-contained is not a request for a tutorial or glossary.
-Assume no product vocabulary or prior page reading, while retaining ordinary Python
-and domain knowledge. Explain essential prerequisites and consequences locally.
-For dependent product types or operations, use the site's supported clickable
-symbol reference and verify its rendered target. Plain backticks denote literal code. Use an explicit symbol reference for a
-link, such as ``[`Record`][package.models.Record]`` when the site supports that syntax.
-Use this established LangChain-style explicit form; plain backticks remain literal.
-For a portable href, use a normal Markdown link to a verified published URL.
-Do not infer hyperlinks from code formatting. Website reference resolution does
-not prove IDE hover clickability; verify the target editor separately. Prefer the precise public class/method over an internal module or “example
-on page X.” A link supplements essential call-site context; it does not replace it.
-
-Review overview, module, class and methods together. Give a fact one primary owner;
-repeat it only where omission could cause misuse for a direct-arrival reader.
-Implementation details such as cache maps, internal Sessions, serialization steps,
-per-hit fetches and process bookkeeping belong outside the public reference unless
-they change a supported user choice. Keep observable history isolation, data loss,
-authority limits and failure behavior, expressed as outcomes at the relevant API.
-
-Authoring rules and research belong in this skill. Published reference pages contain only user guidance.
+Use the site's explicit symbol syntax, such as ``[`Record`][package.models.Record]``, and verify rendered targets. Plain backticks are literal code. Use verified absolute Markdown URLs for portable links. Prefer the relevant public class/method over an internal module or “example on page X.” Links supplement local prerequisites; they do not replace them. Website links do not prove IDE hover support.
 
 ## Give each level a job
 
 | Level | Reader's question |
 | --- | --- |
-| Root package / landing page | What is this SDK for, and which local concepts do I need? |
-| Subpackage `__init__.py` | What is this area for, what does it need, and how do I use it? |
-| Leaf module | What does this particular file provide? |
+| Root / landing page | What is this SDK for, and which local concepts do I need? |
+| Subpackage initializer | What is this area for, what does it need, and how do I use it? |
+| Leaf module | What does this file provide? |
 | Class / constructor | What does this object represent, and how do I obtain or subclass it? |
-| Method / function | What is the contract, and when does this call help? |
+| Method / function | What is the call's contract? |
 | Field / property | What does this value mean? |
 
-Check which source becomes each page. Some initializers only export names; another page supplies the overview. Follow the actual site structure.
+Check which source owns each rendered page: some initializers only export names. Start the root with a plain purpose sentence and essential local nouns; an integration fragment is optional. Avoid feature catalogs and generated symbol inventories. Subpackage introductions explain purpose, prerequisites and entry points without enumerating methods. Leaf modules can be one specific sentence. Classes explain acquisition and relevant lifecycle/subclass obligations; factory- or handler-supplied objects rarely need constructor internals.
 
-Start the root with one plain sentence stating the benefit or purpose. Introduce only the local nouns needed to understand the entry point. An optional short fragment can show why the SDK exists around an existing framework or resource. Avoid feature catalogs and symbol lists already supplied by navigation or generated reference pages.
+## Write for lookup
 
-Make each subpackage introduction self-contained and conversational. Explain its purpose, prerequisites and use without enumerating methods. Give leaf modules a sentence specific to their contents. For classes, explain the object's role, how callers obtain it and any relevant subclass or lifecycle contract. Objects supplied by a factory or handler rarely need constructor internals.
+- Lead with the useful action or result, using everyday words and exact API names. Keep one idea per paragraph.
+- Treat the signature as read. Omit Args/Returns entries that repeat types, defaults, obvious names or the return annotation. Explain domain meaning, constraints, authority, ownership, side effects and special values; retain units/bounds when names and types are insufficient.
+- Explain non-obvious omission consequences, such as an inherited deadline, without repeating the default value.
+- Keep scope exact: another process is not necessarily another host; stopping a listener is not restarting clients. Preserve reachability and resource-ownership conditions when shortening.
+- Use lists for alternatives/steps and tables for useful comparisons. CLI tables show copyable commands and outcomes; put shared selection rules/flags once and link `--help` for complete options.
+- Keep extended workflows in guides, retaining advanced facts beside calls when they change choices or results. Remove marketing, meta prose, contrived contrasts and Python tutorials.
 
-Keep shared explanations in one place and link to useful concepts or guides. Name assumed objects locally; do not make a fragment depend on an example on another reference page. Repeat a short prerequisite or state check when a method needs it to make sense on its own.
-
-## Write for quick reading
-
-- Lead with the useful action or result. Use everyday words and exact API names.
-- Prefer one idea per paragraph, usually one to three short sentences.
-- Use a short list for alternatives or steps. Use a table only when comparison is easier that way. A command table shows copyable commands and outcomes. Put shared flags and selection rules once; do not repeat them in every row. Point to `--help` for the complete option list.
-- Treat the signature as already read. Do not restate types, default values, obvious parameter names or the return annotation. Omit Args/Returns entries that add nothing; no section is mandatory merely because a parameter exists. Explain only domain meaning, constraints, authority, ownership, side effects or special-value behavior the signature cannot express.
-- Use plain, conversational, direct prose. Remove marketing, feature pitches, meta prose, implementation narration, contrived contrasts and Python tutorials.
-- Keep scope words exact: another process is not necessarily another host, and stopping a listener is not restarting its clients. Preserve reachability, authority and resource-ownership conditions when shortening prose.
-- Explain the consequence of omission only when it is non-obvious (for example, inheriting a deadline or selecting memory storage). Do not repeat the literal default. Keep units or bounds only when names/types do not fully convey them.
-- Link extended workflows to guides. Keep advanced details here when they change caller choices or results.
-
-Keep essential facts even when they take more space. Shorter text must still explain how to use the API correctly.
-
-Generated pages show async, property, classmethod, and staticmethod on a muted line below the symbol name. Do not put those labels in headings or repeat them as badges in prose.
-
-Index callers own canonical `DirectoryEntry` models. Use a caller snapshot such as `BaseAgent.get_entry` in examples; do not reconstruct identity or registration shapes.
+Do not repeat async/property/classmethod/staticmethod labels in prose or headings when the renderer supplies metadata. Keep authoring policy and research out of public pages; repository commands and publishing policy belong in project-local guidance.
 
 ## Choose examples by need
 
-Use an example to clarify a choice, a difficult input or a result. Simple accessors often need none.
+Use examples for a practical choice, difficult input or meaningful result. Simple accessors and obvious calls often need none.
 
-| Example | Include |
+| Form | Required context |
 | --- | --- |
-| Complete program, when needed | Imports, stated setup, real calls, a useful result and cleanup. |
-| Focused fragment | A short caption naming the existing client, resource or async context. |
-| Input/output shape | The relevant value, labelled as input or output. |
+| Complete program | Imports, setup, real calls, useful result and cleanup. |
+| Focused fragment | Caption naming the existing client/resource and async context. |
+| Input/output shape | Relevant value, labelled as input or output. |
 
-- Prefer focused fragments with named assumptions. Complete runners, provider authentication, startup, polling loops and background scheduling usually belong in guides. Include them here when the specific API being taught requires them; async code and loops are not inherently too much.
-- Include imports for newly introduced types. Use real public calls, not invented helpers.
-- For framework adapters, assume an existing configured harness when that keeps the integration clear. Verify the framework's real public API and result access. Explain integration boundaries accurately; connecting a resource does not necessarily install its tools or capabilities in a model.
-- Do not fabricate model response schemas or implement a toy harness to make a reference example executable. Keep test doubles and setup in tests. Disclose limits on verification in the author report.
-- Check result states before reading fields that may be absent. Distinguish returned failures from exceptions.
-- Show output when it adds meaning. Label variable output as illustrative.
-- Use familiar sample data and the smallest example that teaches a practical choice, input or result. An obvious call or a canned miss teaches little. Not every symbol needs an example.
-- Illustrative configuration must still be valid syntax for that format. Do not extend an inline table with a later header, or invent aliases the schema does not accept.
+Prefer focused fragments. Provider authentication, startup, polling and scheduling usually belong in guides, unless they teach the API itself; async code and loops are not inherently excessive.
 
-## Verify before publishing
+- Import newly introduced types and use real public calls. Prefer canonical caller-owned models/snapshots over reconstructing identity or registration shapes.
+- For adapters, assume a configured harness when useful. Verify its real API and result access; a connection does not necessarily install tools into a model.
+- Do not invent response schemas, helpers or toy harnesses to make examples executable. Keep test doubles/setup in tests and disclose verification limits.
+- Check result states before reading optional fields; distinguish returned failures from exceptions. Label variable/model output as illustrative and show it only when informative.
+- Illustrative configuration must parse: do not extend a TOML inline table with a later header or invent unsupported aliases.
 
-These steps are for the author; keep them out of user-facing prose.
+## Verify the delivered reference
 
-1. Read signatures and behavior. Check inherited docs and overloads before calling something undocumented. Preserve runtime behavior, exports and tested tool/schema text. A docstring naming a specific result does not repair an Any/dict annotation. Compare interface annotations with real implementations and flag mismatches separately from prose. Model docstrings may become schema descriptions delivered to tools; inspect that output too.
-2. Edit the source. Follow the configured docstring format and link syntax. Avoid duplicating constructor parameters when the renderer merges them into the class.
-3. Regenerate the affected pages. Inspect the whole delivered page, including unchanged members: blank attribute sections, repeated parameter prose and internal helpers can overwhelm a concise introduction. Report pre-existing surface problems separately from new writing defects. Inspect signatures, links, code blocks and result descriptions. Keep site markup out of Python snippets.
-4. Follow the user's verification scope. For prose-only changes, inspect source and regenerated output; do not add or run tests by habit. When executable examples or implementation change and testing is authorized, exercise representative behavior with setup off-page. Distinguish reported checks from checks you ran, and never call a fragment verified solely because it compiles.
-5. Read the main user journey and one method in isolation. Remove anything neither reader needs. Review all public symbols in scope; retain good existing text.
+1. Read signatures, behavior, inherited docs and overloads. Preserve runtime behavior, exports and tested tool/schema text. Compare annotations with implementations: prose naming a model does not repair an `Any`/`dict` contract. Report mismatches separately. Inspect schema descriptions when model docstrings feed tools.
+2. Edit authoritative sources using the configured docstring/link format. Avoid duplicating constructor parameters when the renderer merges them into the class.
+3. Regenerate and inspect whole pages, including unchanged members. Check signatures, links, code blocks, results, empty attribute sections and accidental internal helpers. Keep site markup out of Python snippets; distinguish existing surface problems from new defects.
+4. Follow the user's verification scope. For prose-only edits, inspect source and output; do not add or run tests by habit. Exercise representative executable behavior when testing is authorized; compilation alone does not verify a fragment. Distinguish observed results from reported checks.
+5. Read the main journey and one method alone. Review all public symbols in scope, retaining good text and supported extension contracts. Preserve tool catalogs/prompts during reference-only work.
 
-Keep repository commands and publishing policy in project-local instructions. Preserve tool catalogs and prompts during a reference-only edit.
-
-## Research when choosing a pattern
-
-The [source comparison](references/sdk-reference-research.md) records examples from Prime Intellect, Anthropic, OpenAI, LangChain and Cursor. Read the relevant section when choosing a structure; ordinary edits need not reload the whole report.
-
-To refresh it, compare root, subpackage and leaf-module docs with the published reference. Record the revision, exact sources, example setup and any gaps. Separate observed practice from your recommendation. Borrow only what helps the reader.
+To refresh the source comparison, pin official revisions, compare source levels with published pages, record example setup and verification gaps, and separate observed practice from recommendations.

@@ -126,7 +126,7 @@ jobs:
               uv pip install --python venv/bin/python "$artifact"
               venv/bin/python -c "from agentconnect.agent import BaseAgent; from agentconnect.team import Team"
               uv pip install --python venv/bin/python "$artifact[serve,cli]"
-              venv/bin/python -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli import app"
+              venv/bin/python -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli.main import main"
             )
           done
 

@@ -1,5 +1,5 @@
 ---
-title: "team.runtime"
+title: "runtime"
 sidebarTitle: "runtime"
 ---
 
@@ -136,7 +136,9 @@ Create a stopped Team.
 
 <a id="agentconnect-team-runtime-team-persistence"></a>
 
-### `persistence` `property`
+### `persistence`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 persistence: PersistenceMode
@@ -151,7 +153,9 @@ starting, it reports the opened backend's `Store.persistence`.
 
 <a id="agentconnect-team-runtime-team-limits"></a>
 
-### `limits` `property`
+### `limits`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 limits: RuntimeLimits
@@ -163,7 +167,9 @@ Configured bounds reported to clients on join.
 
 <a id="agentconnect-team-runtime-team-identity"></a>
 
-### `identity` `property`
+### `identity`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 identity: AgentIdentity
@@ -184,7 +190,9 @@ this Team. It is not a credential for another Team.
 
 <a id="agentconnect-team-runtime-team-team-did"></a>
 
-### `team_did` `property`
+### `team_did`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 team_did: str
@@ -199,8 +207,9 @@ team_did: str
 
 <a id="agentconnect-team-runtime-team-start"></a>
 
-### `start` `async`
+### `start`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 start() -> 'Team'
 ```
@@ -239,7 +248,9 @@ if ticket.state == "completed":
 
 <a id="agentconnect-team-runtime-team-url"></a>
 
-### `url` `property`
+### `url`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 url: Optional[str]
@@ -252,7 +263,9 @@ Agents pass this value to `BaseAgent.join`. `stop_serving` and
 
 <a id="agentconnect-team-runtime-team-mcp-url"></a>
 
-### `mcp_url` `property`
+### `mcp_url`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 mcp_url: Optional[str]
@@ -266,8 +279,9 @@ harness. A join token is only for `BaseAgent.join`.
 
 <a id="agentconnect-team-runtime-team-stop"></a>
 
-### `stop` `async`
+### `stop`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 stop() -> None
 ```
@@ -280,8 +294,9 @@ next `start`. A supplied `Store` keeps its own state across close/open.
 
 <a id="agentconnect-team-runtime-team-roster"></a>
 
-### `roster` `async`
+### `roster`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 roster() -> TeamRoster
 ```
@@ -298,8 +313,9 @@ Memberships without a Profile are omitted.
 
 <a id="agentconnect-team-runtime-team-serve"></a>
 
-### `serve` `async`
+### `serve`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 serve(host: str = '127.0.0.1', port: int = 0) -> str
 ```
@@ -346,8 +362,9 @@ await writer.join(origin, join_token=issued.token)
 
 <a id="agentconnect-team-runtime-team-stop-serving"></a>
 
-### `stop_serving` `async`
+### `stop_serving`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 stop_serving() -> None
 ```
@@ -362,8 +379,9 @@ does not reconnect them.
 
 <a id="agentconnect-team-runtime-team-issue-join-token"></a>
 
-### `issue_join_token` `async`
+### `issue_join_token`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 issue_join_token(
     *,
@@ -402,8 +420,9 @@ bearer from the join result.
 
 <a id="agentconnect-team-runtime-team-revoke-join-token"></a>
 
-### `revoke_join_token` `async`
+### `revoke_join_token`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 revoke_join_token(token: str) -> None
 ```
@@ -421,8 +440,9 @@ and unknown tokens are ignored.
 
 <a id="agentconnect-team-runtime-team-remove-membership"></a>
 
-### `remove_membership` `async`
+### `remove_membership`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 remove_membership(name: str) -> None
 ```
@@ -447,8 +467,9 @@ removed.
 
 <a id="agentconnect-team-runtime-team-ensure-operator-session"></a>
 
-### `ensure_operator_session` `async`
+### `ensure_operator_session`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 ensure_operator_session() -> str
 ```
@@ -466,8 +487,9 @@ The name `operator` is reserved; agents cannot join it.
 
 <a id="agentconnect-team-runtime-team-membership-attestation"></a>
 
-### `membership_attestation` `async`
+### `membership_attestation`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 membership_attestation(name: str) -> Optional[str]
 ```
@@ -486,8 +508,9 @@ the agent to another Team.
 
 <a id="agentconnect-team-runtime-team-status"></a>
 
-### `status` `async`
+### `status`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 status(session_token: str) -> StatusResult
 ```
@@ -514,8 +537,9 @@ Session, including after a durable restart.
 
 <a id="agentconnect-team-runtime-team-get-trace"></a>
 
-### `get_trace` `async`
+### `get_trace`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_trace(session_token: str, trace_id: str) -> TraceResult
 ```
@@ -546,8 +570,9 @@ HTTP, MCP, and the in-process transport call these methods. Agent code uses `Bas
 
 <a id="agentconnect-team-runtime-team-join-challenge"></a>
 
-### `join_challenge` `async`
+### `join_challenge`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join_challenge() -> JoinChallenge
 ```
@@ -566,8 +591,9 @@ Fetch this, sign it with the Agent key, then pass the JWT as
 
 <a id="agentconnect-team-runtime-team-join"></a>
 
-### `join` `async`
+### `join`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join(
     name: str | None = None,
@@ -626,8 +652,9 @@ None selects bodies. Keep the returned Session token secret.
 
 <a id="agentconnect-team-runtime-team-disconnect"></a>
 
-### `disconnect` `async`
+### `disconnect`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 disconnect(session_token: str) -> None
 ```
@@ -643,8 +670,9 @@ the same name and DID.
 
 <a id="agentconnect-team-runtime-team-heartbeat"></a>
 
-### `heartbeat` `async`
+### `heartbeat`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 heartbeat(session_token: str) -> HeartbeatResult
 ```
@@ -662,8 +690,9 @@ Prove the Client still holds its Session and extend expiry.
 
 <a id="agentconnect-team-runtime-team-send"></a>
 
-### `send` `async`
+### `send`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 send(session_token: str, request: SendRequest | Mapping[str, object]) -> SendResult
 ```
@@ -735,8 +764,9 @@ if result.status == "ticketed":
 
 <a id="agentconnect-team-runtime-team-lease"></a>
 
-### `lease` `async`
+### `lease`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 lease(session_token: str, max_items: int = 1) -> LeaseResult
 ```
@@ -764,8 +794,9 @@ no ready work, not an error.
 
 <a id="agentconnect-team-runtime-team-renew"></a>
 
-### `renew` `async`
+### `renew`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 renew(session_token: str, lease_id: str) -> RenewResult
 ```
@@ -785,8 +816,9 @@ A request lease cannot extend past the Ticket deadline.
 
 <a id="agentconnect-team-runtime-team-complete"></a>
 
-### `complete` `async`
+### `complete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 complete(session_token: str, lease_id: str) -> CompleteResult
 ```
@@ -812,8 +844,9 @@ within the replay horizon.
 
 <a id="agentconnect-team-runtime-team-reply"></a>
 
-### `reply` `async`
+### `reply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 reply(session_token: str, request: ReplyRequest | Mapping[str, object]) -> ReplyResult
 ```
@@ -852,8 +885,9 @@ to belong to the calling membership.
 
 <a id="agentconnect-team-runtime-team-get-result"></a>
 
-### `get_result` `async`
+### `get_result`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_result(session_token: str, ticket_id: str) -> Ticket
 ```
@@ -874,8 +908,9 @@ does not cancel work.
 
 <a id="agentconnect-team-runtime-team-get-history"></a>
 
-### `get_history` `async`
+### `get_history`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_history(
     session_token: str,
@@ -908,8 +943,9 @@ retention has removed, returns that newest page.
 
 <a id="agentconnect-team-runtime-team-find"></a>
 
-### `find` `async`
+### `find`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 find(session_token: str, query: str, *, limit: int | None = None) -> FindResult
 ```
@@ -940,8 +976,9 @@ by relevance, at most 100.
 
 <a id="agentconnect-team-runtime-team-get-profile"></a>
 
-### `get_profile` `async`
+### `get_profile`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_profile(session_token: str, address: str) -> DirectoryEntry
 ```

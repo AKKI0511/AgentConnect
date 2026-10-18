@@ -152,12 +152,14 @@ def check_example_fences() -> None:
 
 
 def check_nav_shape() -> None:
-    """Ensure nav uses short labels and package roots (no __init__ entries)."""
+    """Ensure Overview is the first child of package groups; no clickable roots."""
     if not NAV_FILE.exists():
         _fail(f"missing {NAV_FILE.relative_to(ROOT)}; run npm run api (in docs-v2)")
     nav = json.loads(NAV_FILE.read_text(encoding="utf-8"))
     if not nav or nav[0] != "api-reference":
         _fail("api-pages.json must start with api-reference (package __init__)")
+    if "api/cli" not in nav:
+        _fail("cli must remain a top-level leaf page")
 
     def walk(entry: object) -> None:
         if isinstance(entry, str):
@@ -170,14 +172,19 @@ def check_nav_shape() -> None:
             group = entry.get("group", "")
             if isinstance(group, str) and group.startswith("agentconnect"):
                 _fail(f"group label still prefixed: {group}")
-            if "root" in entry and "__init__" in str(entry["root"]):
-                _fail(f"root still points at __init__ path: {entry['root']}")
-            for page in entry.get("pages", []):
+            if "root" in entry:
+                _fail(
+                    f"group {group!r} must not use root; Overview is the first page"
+                )
+            pages = entry.get("pages") or []
+            if not pages or not isinstance(pages[0], str):
+                _fail(f"group {group!r} first child must be the Overview page")
+            for page in pages:
                 walk(page)
 
     for item in nav:
         walk(item)
-    print("ok: API navigation shape (roots, short labels, no __init__ pages)")
+    print("ok: API navigation shape (Overview first, short labels, no __init__ pages)")
 
 
 def _snapshot(dest: Path) -> None:

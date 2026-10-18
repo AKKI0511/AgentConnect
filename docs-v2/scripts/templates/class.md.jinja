@@ -13,8 +13,8 @@
 
 {%- filter heading(heading_level) -%}
 `{{ class_name }}`
-{% endfilter -%}
-
+{% endfilter %}
+{{- class|symbol_meta -}}
 {%- if config.separate_signature and config.merge_init_into_class and "__init__" in class.members -%}
 {%- with function = class.members["__init__"] -%}
 {{ function|native_signature(class.name) }}

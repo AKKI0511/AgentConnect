@@ -1,12 +1,14 @@
-"""Team file loading for `agentconnect.toml` and `[tool.agentconnect]`.
+"""Load a Team file for `agentconnect.toml` and `[tool.agentconnect]`.
 
 A Team file names the Team, the store, the embedding choice, the Agents
-this process constructs, and extra MCP tools. `Team("name").start()`
-needs no file. Secrets stay in the environment.
+this process constructs, and extra MCP tools. [`Team`][agentconnect.team.runtime.Team]
+started in Python needs no file. Secrets stay in the environment.
 
-`class` is a `BaseAgent` subclass or `create(name) -> BaseAgent` that
-returns an unjoined Agent. `agentconnect up` constructs the listed
-Agents. Agents in other processes join by URL and are not listed.
+`agents` maps canonical Agent names to
+[`HostedAgentConfig`][agentconnect.config.models.HostedAgentConfig].
+`entrypoint` is a [`BaseAgent`][agentconnect.agent.base.BaseAgent] subclass
+or a synchronous factory. Both receive `name=<mapping key>` plus optional
+`kwargs`. Independently deployed Agents join by URL and are not listed.
 
 [`load_team_config`][agentconnect.config.loaders.load_team_config] chooses
 the file.
@@ -18,8 +20,8 @@ Examples:
     from agentconnect.config import load_team_config
 
     config = load_team_config()
-    for spec in config.agents:
-        print(spec.name, spec.class_path)
+    for name, spec in config.agents.items():
+        print(name, spec.entrypoint)
     ```
 """
 

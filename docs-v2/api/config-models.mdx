@@ -1,5 +1,5 @@
 ---
-title: "config.models"
+title: "models"
 sidebarTitle: "models"
 ---
 
@@ -7,7 +7,8 @@ sidebarTitle: "models"
 
 Team file models for `agentconnect.toml` and `[tool.agentconnect]`.
 
-`Team("name").start()` needs no file. Secrets stay in the environment.
+[`Team`](/api/team-runtime#agentconnect-team-runtime-team) started in Python needs no file.
+Secrets stay in the environment.
 
 ## Public API
 
@@ -20,41 +21,40 @@ Team file models for `agentconnect.toml` and `[tool.agentconnect]`.
 
 One Agent this Team process constructs and joins.
 
-`class` is `module:Name`. That name is a `BaseAgent` subclass, or a
-function `create(name) -> BaseAgent` that returns an unjoined Agent.
-`name` is unique within the Team.
+`entrypoint` is `module:Name`: a [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent)
+subclass or a synchronous factory. Both receive `name=<mapping key>` plus
+optional `kwargs`. `kwargs` is owned by that class or factory; do not put
+`name` there.
 
 ```toml
-[[tool.agentconnect.agents]]
-class = "agents.writer:Writer"
-name = "writer"
+[agents.writer]
+entrypoint = "agents.writer:Writer"
+kwargs.model = "provider/model"
 ```
 
-<a id="agentconnect-config-models-hostedagentconfig-class-path"></a>
+<a id="agentconnect-config-models-hostedagentconfig-entrypoint"></a>
 
-### `class_path`
+### `entrypoint`
 
 ```python
-class_path: str
+entrypoint: str
 ```
 
-Import path module:Name of a BaseAgent subclass or a function create(name) that returns an unjoined BaseAgent.
+Import path `module:Name` of a BaseAgent subclass or a synchronous factory create(name, \*\*kwargs) that returns an unjoined BaseAgent.
 
-* `alias`: `'class'`
 * `min_length`: `1`
 
-<a id="agentconnect-config-models-hostedagentconfig-name"></a>
+<a id="agentconnect-config-models-hostedagentconfig-kwargs"></a>
 
-### `name`
+### `kwargs`
 
 ```python
-name: str
+kwargs: JsonObject = {}
 ```
 
-Agent name, unique within the Team.
+**Types:** [`JsonObject`](/api/core-base#agentconnect-core-base-jsonobject).
 
-* `min_length`: `1`
-* `max_length`: `63`
+Arguments passed to your class or factory.
 
 <a id="agentconnect-config-models-teamconfig"></a>
 
@@ -62,18 +62,18 @@ Agent name, unique within the Team.
 
 Contents of a Team file.
 
-```toml
-[tool.agentconnect]
-team = "content-squad"
-store = "memory"
-embeddings = "auto"
-host = "127.0.0.1"
-port = 9000
-require_join_auth = true
+A standalone `agentconnect.toml` uses this tree. `pyproject.toml` prefixes
+the same tree with `[tool.agentconnect]`.
 
-[[tool.agentconnect.agents]]
-class = "agents.writer:Writer"
-name = "writer"
+```toml
+team = "content-squad"
+
+[agents.researcher]
+entrypoint = "agents.researcher:Researcher"
+
+[agents.writer]
+entrypoint = "agents.writer:Writer"
+kwargs.model = "provider/model"
 ```
 
 <a id="agentconnect-config-models-teamconfig-team"></a>
@@ -144,12 +144,12 @@ When true, every join needs a join token and identity proof.
 ### `agents`
 
 ```python
-agents: List[HostedAgentConfig] = []
+agents: dict[str, HostedAgentConfig] = {}
 ```
 
 **Types:** [`HostedAgentConfig`](/api/config-models#agentconnect-config-models-hostedagentconfig).
 
-Agents this process constructs and joins. Each class is a `BaseAgent` subclass or a function `create(name) -> BaseAgent`. Independently deployed Agents join by URL and are not listed.
+Agents this process constructs and joins, keyed by canonical Agent name. Independently deployed Agents join by URL and are not listed.
 
 <a id="agentconnect-config-models-teamconfig-tools"></a>
 
@@ -163,12 +163,13 @@ Extra MCP tools as `module:function` import paths.
 
 <a id="agentconnect-config-models-teamconfig-example"></a>
 
-### `example` `classmethod`
+### `example`
 
+<p className="ac-symbol-meta">classmethod</p>
 ```python
 example() -> 'TeamConfig'
 ```
 
 **Types:** [`TeamConfig`](/api/config-models#agentconnect-config-models-teamconfig).
 
-Canonical example used to generate `agentconnect.example.toml`.
+Canonical example for a standalone Team file.

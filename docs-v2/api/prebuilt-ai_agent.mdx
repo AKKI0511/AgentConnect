@@ -1,5 +1,5 @@
 ---
-title: "prebuilt.ai_agent"
+title: "ai_agent"
 sidebarTitle: "ai_agent"
 ---
 
@@ -119,8 +119,9 @@ Inherits from [`BaseAgent`](/api/agent-base#agentconnect-agent-base-baseagent).
 
 <a id="agentconnect-prebuilt-ai-agent-aiagent-handle"></a>
 
-### `handle` `async`
+### `handle`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 handle(message: MailboxMessage, ctx: Context) -> str
 ```
@@ -135,8 +136,9 @@ reaches the caller.
 
 <a id="agentconnect-prebuilt-ai-agent-aiagent-complete"></a>
 
-### `complete` `async`
+### `complete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 complete(
     text: str,
@@ -179,8 +181,9 @@ reply = await agent.complete("Summarize the notes.")
 
 <a id="agentconnect-prebuilt-ai-agent-aiagent-chat"></a>
 
-### `chat` `async`
+### `chat`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 chat(query: str, *, conversation_id: str = 'chat') -> str
 ```

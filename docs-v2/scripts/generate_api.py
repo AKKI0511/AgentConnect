@@ -32,6 +32,7 @@ from api_surface import (
     PUBLIC_MEMBERS,
     PUBLIC_MODULES,
     _build_nav,
+    _is_package_group,
     _module_to_relpath,
 )
 
@@ -445,6 +446,18 @@ def _doc_type(annotation, owner=None):
     return _render_type(expr)
 
 
+_SYMBOL_LABELS = frozenset({"async", "property", "classmethod", "staticmethod"})
+
+
+def _symbol_meta(obj) -> str:
+    """Muted labels immediately below the heading; never part of the heading."""
+    labels = sorted(set(obj.labels) & _SYMBOL_LABELS)
+    if not labels:
+        return ""
+    shown = " / ".join(labels)
+    return f'\n<p className="ac-symbol-meta">{shown}</p>\n'
+
+
 def create_environment():
     env = prepare_env()
     env.loader = ChoiceLoader(
@@ -457,6 +470,7 @@ def create_environment():
     env.filters["attribute_sections"] = _attribute_sections
     env.filters["field_widget"] = _field_widget
     env.filters["doc_type"] = _doc_type
+    env.filters["symbol_meta"] = _symbol_meta
     return env
 
 
@@ -500,11 +514,7 @@ def render_object(env, obj) -> str:
         config["merge_init_into_class"] = False
     context = prepare_context(obj, config)
     text = env.get_template(f"{obj.kind.value}.md.jinja").render(**context)
-    labels = sorted(obj.labels & {"async", "property", "classmethod", "staticmethod"})
     prefix = f'<a id="{anchor(obj)}"></a>\n\n'
-    if labels:
-        title = f"`{obj.name}`"
-        text = text.replace(title, title + " " + " / ".join(f"`{label}`" for label in labels), 1)
     text = prefix + text
     if "pydantic-field" in obj.labels:
         constraints = obj.extra.get("griffe_pydantic", {}).get("constraints", {})
@@ -566,11 +576,16 @@ def generate(output: Path, *, root: Path = ROOT) -> None:
         title = (
             "API reference"
             if name == "agentconnect"
-            else name.removeprefix("agentconnect.")
+            else name.rsplit(".", 1)[-1]
+        )
+        sidebar = (
+            "Overview"
+            if _is_package_group(name, set(modules))
+            else title.split(".")[-1]
         )
         meta = (
             f"---\ntitle: {json.dumps(title)}\n"
-            f"sidebarTitle: {json.dumps(title.split('.')[-1])}\n---\n\n"
+            f"sidebarTitle: {json.dumps(sidebar)}\n---\n\n"
         )
         # Render module prose only; imported objects are links, never duplicate docs.
         context = prepare_context(module, {**CONFIG, "show_root_heading": False})

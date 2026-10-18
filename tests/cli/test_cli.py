@@ -46,7 +46,8 @@ def test_init_writes_team_file_and_agent(tmp_path: Path) -> None:
     assert toml_path.exists()
     text = toml_path.read_text(encoding="utf-8")
     assert "demo-team" in text
-    assert "[tool.agentconnect]" in text
+    assert "[tool.agentconnect]" not in text
+    assert "entrypoint" in text
     assert "agents.assistant:create_assistant" in text
     assert "tools.shared:ping" in text
     assistant = tmp_path / "agents" / "assistant.py"
@@ -90,7 +91,7 @@ def test_init_preserves_existing_pyproject_team(tmp_path: Path) -> None:
     from agentconnect.config.models import TeamConfig
 
     (tmp_path / "pyproject.toml").write_text(
-        dump_team_toml(TeamConfig(team="existing")),
+        dump_team_toml(TeamConfig(team="existing"), pyproject=True),
         encoding="utf-8",
     )
     p = run_cli("init", cwd=tmp_path)
@@ -128,11 +129,11 @@ def test_factory_runtime_error_is_concise(tmp_path: Path) -> None:
             TeamConfig(
                 team="demo",
                 embeddings="none",
-                agents=[
-                    HostedAgentConfig(
-                        class_path="agents.broken:create_broken", name="broken"
+                agents={
+                    "broken": HostedAgentConfig(
+                        entrypoint="agents.broken:create_broken",
                     )
-                ],
+                },
             )
         ),
         encoding="utf-8",

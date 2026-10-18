@@ -1,34 +1,37 @@
 """HTTP client for one Index process.
 
 [`IndexClient`][agentconnect.index.client.IndexClient] stores and searches
-records on a running Index. Same-Team discovery is
+[`DirectoryEntry`][agentconnect.core.directory.DirectoryEntry] snapshots on a
+running Index. Same-Team discovery is
 [`BaseAgent.find`][agentconnect.agent.base.BaseAgent.find].
 
 `close` closes this HTTP connection and leaves Index records in place.
 Reads may retry a dropped connection or HTTP 502, 503, or 504. Writes
-are not retried. `get_registration` returns None when the id is absent.
-Any other missing route or a body that is not the expected record raises.
+are not retried. `get` returns None when that Address is absent.
+Any other missing route or a body that is not the expected snapshot raises.
 """
 
 from __future__ import annotations
 
 import asyncio
 from types import TracebackType
+from urllib.parse import quote
 
 import httpx
 from pydantic import TypeAdapter
 
-from agentconnect.index.models import (
-    AgentRegistration,
-    IndexQuery,
-    IndexSearchHit,
-    RegistrationUpdate,
-    _canonical_agent_id,
-)
+from agentconnect.core.base import dump_public, parse_schema
+from agentconnect.core.directory import DirectoryEntry
+from agentconnect.index.models import IndexSearchHit
 
-_REGISTRATIONS = TypeAdapter(list[AgentRegistration])
+_ENTRIES = TypeAdapter(list[DirectoryEntry])
 _SEARCH_HITS = TypeAdapter(list[IndexSearchHit])
 _RETRY_STATUS = frozenset({502, 503, 504})
+_MISSING_ENTRY = {"detail": "entry not found"}
+
+
+def _entry_path(address: str) -> str:
+    return f"entries/{quote(str(address), safe='')}"
 
 
 class IndexClient:
@@ -61,71 +64,72 @@ class IndexClient:
     ) -> None:
         await self.close()
 
-    async def register(self, registration: AgentRegistration) -> AgentRegistration:
-        """Store `registration` and return the stored copy.
+    async def put(self, entry: DirectoryEntry) -> DirectoryEntry:
+        """Insert or replace `entry` and return the stored copy.
 
-        A repeated id is HTTP 409. An id that cannot go in a URL path,
-        or a DID that does not match its public key, is rejected before
-        a record is stored.
+        The snapshot is keyed by its canonical qualified Address. A cancelled
+        or interrupted HTTP write may already have committed; call `get` to
+        check. Writes are not retried.
         """
         response = await self._request(
-            "POST",
-            "agents/register",
-            json_body=registration.model_dump(mode="json"),
-            ok=201,
+            "PUT",
+            _entry_path(entry.address),
+            json_body=dump_public(entry),
+            ok=200,
         )
-        return AgentRegistration.model_validate(response.json())
+        return parse_schema(DirectoryEntry, response.json())
 
-    async def get_registration(self, agent_id: str) -> AgentRegistration | None:
-        """Return the stored record, or None when that id is absent."""
+    async def get(self, address: str) -> DirectoryEntry | None:
+        """Return the stored snapshot, or None when that Address is absent."""
         try:
             response = await self._request(
                 "GET",
-                f"agents/{_canonical_agent_id(agent_id)}",
+                _entry_path(address),
                 ok=200,
                 retry=True,
             )
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 404:
                 try:
-                    if exc.response.json() == {"detail": "registration not found"}:
+                    if exc.response.json() == _MISSING_ENTRY:
                         return None
                 except ValueError:
                     pass
             raise
-        return AgentRegistration.model_validate(response.json())
+        return parse_schema(DirectoryEntry, response.json())
 
-    async def list_registrations(self) -> list[AgentRegistration]:
-        """Return every record the process is holding."""
-        response = await self._request("GET", "agents", ok=200, retry=True)
-        return _REGISTRATIONS.validate_python(response.json())
+    async def delete(self, address: str) -> None:
+        """Remove the snapshot at `address`. A missing Address is not an error."""
+        await self._request("DELETE", _entry_path(address), ok=204)
 
-    async def update_registration(
-        self, agent_id: str, updates: RegistrationUpdate
-    ) -> AgentRegistration:
-        """Replace the fields set on `updates`. An unknown id is HTTP 404."""
-        response = await self._request(
-            "PUT",
-            f"agents/{_canonical_agent_id(agent_id)}",
-            json_body=updates.model_dump(mode="json", exclude_unset=True),
-            ok=200,
-        )
-        return AgentRegistration.model_validate(response.json())
+    async def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        tags: list[str] | None = None,
+    ) -> list[IndexSearchHit]:
+        """Return ranked hits for `query`.
 
-    async def unregister(self, agent_id: str) -> None:
-        """Remove `agent_id`. An unknown id is HTTP 404."""
-        await self._request("DELETE", f"agents/{_canonical_agent_id(agent_id)}", ok=200)
-
-    async def search(self, query: IndexQuery) -> list[IndexSearchHit]:
-        """Return ranked hits. Each hit has the record and its score."""
+        Each hit has the snapshot and its score. `limit` is 1 to 50. When
+        `tags` is set, every listed tag must be on the Profile.
+        """
+        body: dict[str, object] = {"query": query, "limit": limit}
+        if tags is not None:
+            body["tags"] = tags
         response = await self._request(
             "POST",
-            "agents/search",
-            json_body=query.model_dump(mode="json"),
+            "search",
+            json_body=body,
             ok=200,
             retry=True,
         )
         return _SEARCH_HITS.validate_python(response.json())
+
+    async def list(self) -> list[DirectoryEntry]:
+        """Return every snapshot the process is holding."""
+        response = await self._request("GET", "entries", ok=200, retry=True)
+        return _ENTRIES.validate_python(response.json())
 
     async def _request(
         self,

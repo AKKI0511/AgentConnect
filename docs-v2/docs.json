@@ -107,8 +107,11 @@
   "search": {
     "prompt": "Search"
   },
+  "interaction": {
+    "drilldown": true
+  },
   "styling": {
-    "eyebrows": "breadcrumbs",
+    "eyebrows": "section",
     "codeblocks": {
       "theme": {
         "light": "light-plus",
@@ -125,9 +128,6 @@
       "grok"
     ],
     "display": "toc"
-  },
-  "interaction": {
-    "drilldown": false
   },
   "markdown": {
     "instructions": [
@@ -215,9 +215,14 @@
       },
       {
         "tab": "Reference",
-        "pages": {
-          "$ref": "./api-pages.json"
-        }
+        "groups": [
+          {
+            "group": "Libraries",
+            "pages": {
+              "$ref": "./api-pages.json"
+            }
+          }
+        ]
       }
     ]
   }

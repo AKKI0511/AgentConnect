@@ -32,10 +32,9 @@ class Assistant(BaseAgent):
 def create_assistant(name: str) -> BaseAgent:
     """Build the hosted Assistant and return it unjoined.
 
-    `agentconnect up` calls `create_assistant(name)`. Use a factory when
-    the Agent needs constructor arguments the Team file cannot supply.
-    Independently deployed Agents skip this file and join by URL with a
-    token from `agentconnect token issue`.
+    `agentconnect up` calls `create(name, **kwargs)`. Independently
+    deployed Agents skip this file and join by URL with a token from
+    `agentconnect token issue`.
     """
     return Assistant(name=name)
 '''

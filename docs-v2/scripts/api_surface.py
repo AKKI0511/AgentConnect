@@ -42,7 +42,6 @@ PUBLIC_MODULES = frozenset(
         "agentconnect.prebuilt.loop",
         "agentconnect.prebuilt.telegram",
         "agentconnect.prebuilt.telegram.telegram_agent",
-        "agentconnect.prebuilt.tools",
         "agentconnect.team",
         "agentconnect.team.directory",
         "agentconnect.team.directory.embedder",
@@ -117,8 +116,15 @@ def _module_to_relpath(module: str) -> str:
     )
 
 
+def _is_package_group(module: str, modules: set[str]) -> bool:
+    """True for a documented package that has documented child modules."""
+    return module != PACKAGE and any(
+        name.rpartition(".")[0] == module for name in modules
+    )
+
+
 def _build_nav(modules: set[str]) -> list[Any]:
-    """Keep package pages as group roots and leaf labels short."""
+    """Package groups list Overview first; leaf labels stay short."""
 
     def children(parent: str) -> list[str]:
         return sorted(name for name in modules if name.rpartition(".")[0] == parent)
@@ -130,8 +136,7 @@ def _build_nav(modules: set[str]) -> list[Any]:
             return path
         return {
             "group": module.rsplit(".", 1)[-1],
-            "root": path,
-            "pages": [entry(child) for child in nested],
+            "pages": [path, *[entry(child) for child in nested]],
         }
 
     top = [entry(module) for module in children(PACKAGE)]

@@ -1,31 +1,29 @@
-"""Console entry agentconnect: start a Team and talk to it as the operator.
+"""Start a Team and talk to it as the operator.
 
-`app` is the Typer application installed as the agentconnect script.
-Commands call the Team over loopback HTTP as the reserved `operator`
-Membership.
+Install the CLI extra (`agentconnect[cli]`). Use the `agentconnect` script
+or `python -m agentconnect.cli`.
 
-Commands: `init`, `up`, `down`, `status`, `token issue`, `token revoke`,
-`find`, `ask`, `trace`, `watch`, `doctor`, `version`. Hosted Agents in
-the Team file are constructed only at `up`. `up --detach` starts the
-process and returns before the Runtime is ready. `down` stops the
-process this CLI started. Revoking a join token does not stop an Agent
-process you did not start.
+Foreground `up` occupies the terminal until interrupted. Run other commands
+from a second terminal, or use `up --detach`, which returns before the
+Runtime is ready.
 
-Origin selection is `--url`, then `--file`, then saved `up` state,
-then the nearest Team file, then loopback port 9000. A missing or
-invalid `--file` fails rather than choosing another Team.
+Origin selection is `--url`, then `--file`, then saved `up` state, then a
+discovered Team file, then loopback port 9000. A missing or invalid `--file`
+fails. Revoking a join token drops Sessions created from it; it does not
+stop an OS process. Run `--help` on a command for complete options.
 
-Examples:
-    Scaffold and start from a shell:
-
-    ```bash
-    agentconnect init
-    agentconnect up
-    agentconnect status
-    agentconnect down
-    ```
+| Command | Outcome |
+| --- | --- |
+| `agentconnect init` | Writes `agentconnect.toml`, `agents/assistant.py`, and `tools/shared.py`. |
+| `agentconnect up` | Starts the Runtime and hosted Agents. |
+| `agentconnect down` | Stops the process this CLI started for that Team file. |
+| `agentconnect status` | Members, online state, Mailbox depths, and open Tickets. |
+| `agentconnect token issue` | Prints a join token secret, then `expires_at`. |
+| `agentconnect token revoke TOKEN` | Revokes the token and drops Sessions created from it. |
+| `agentconnect find QUERY` | Ranked Directory matches. |
+| `agentconnect ask ADDRESS QUESTION` | Sends reply-expected work and waits. The wait can end with an open Ticket. |
+| `agentconnect trace TRACE_ID` | Timeline for one causal operation. |
+| `agentconnect watch` | Prints new Trace events until interrupted. |
+| `agentconnect doctor` | Checks the Team file, selected origin, and Runtime access. |
+| `agentconnect version` | Prints the installed package version. |
 """
-
-from .main import app
-
-__all__ = ["app"]

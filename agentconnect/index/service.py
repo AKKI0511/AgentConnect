@@ -19,18 +19,25 @@ from typing import Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
-from agentconnect.core.address import parse_agent_name
-from agentconnect.core.base import JsonObject
-from agentconnect.index._registry import DuplicateRegistration, Registry
-from agentconnect.index.models import (
-    AgentRegistration,
-    IndexQuery,
-    IndexSearchHit,
-    IndexSettings,
-    RegistrationUpdate,
-)
+from agentconnect.core.base import dump_public
+from agentconnect.core.directory import DirectoryEntry
+from agentconnect.core.primitives import QualifiedAddress
+from agentconnect.index._registry import Registry
+from agentconnect.index.models import IndexSearchHit, IndexSettings
+
+_QUALIFIED_ADDRESS = TypeAdapter(QualifiedAddress)
+_MISSING_ENTRY = "entry not found"
+
+
+class _SearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", title="SearchRequest")
+
+    query: str = Field(min_length=1)
+    limit: int = Field(default=10, ge=1, le=50)
+    tags: list[str] | None = None
 
 
 def _loopback(host: str) -> bool:
@@ -42,20 +49,30 @@ def _loopback(host: str) -> bool:
         return False
 
 
-def _identifier(agent_id: str) -> str:
-    canonical = parse_agent_name(agent_id)
-    if canonical is None:
+def _address(value: str) -> str:
+    try:
+        return _QUALIFIED_ADDRESS.validate_python(value)
+    except ValidationError:
         raise HTTPException(
             status_code=400,
-            detail="agent_id must be 1-63 ASCII letters, digits, '_' or '-'",
-        )
-    return canonical
+            detail="address must be a canonical qualified Address",
+        ) from None
+
+
+def _entry_json(entry: DirectoryEntry, *, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(dump_public(entry), status_code=status_code)
+
+
+def _hits_json(hits: list[IndexSearchHit]) -> JSONResponse:
+    return JSONResponse(
+        [{"entry": dump_public(hit.entry), "score": hit.score} for hit in hits]
+    )
 
 
 def create_index_app(settings: Optional[IndexSettings] = None) -> FastAPI:
     """Return an ASGI app that owns one Index roster.
 
-    Each app has its own records. Closing the app drops that roster.
+    Each app has its own snapshots. Closing the app drops that roster.
     Install `agentconnect[index]` before serving.
     """
 
@@ -105,62 +122,52 @@ def _routes() -> APIRouter:
         _registry(request)
         return {"status": "ok"}
 
-    @router.post("/agents/register", status_code=201)
-    async def register(
-        registration: AgentRegistration, request: Request
-    ) -> AgentRegistration:
-        """Store one record. A repeated id is HTTP 409."""
+    @router.put("/entries/{address}", response_model=DirectoryEntry)
+    async def put_entry(
+        address: str, entry: DirectoryEntry, request: Request
+    ) -> JSONResponse:
+        """Insert or replace one snapshot. A repeated Address overwrites."""
+        path_address = _address(address)
+        if entry.address != path_address:
+            raise HTTPException(
+                status_code=400,
+                detail="path address must match entry.address",
+            )
         try:
-            return await _registry(request).register(registration)
-        except DuplicateRegistration as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except ValidationError as exc:
-            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+            stored = await _registry(request).put(entry)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return _entry_json(stored)
 
-    @router.get("/agents/{agent_id}")
-    async def get_agent(agent_id: str, request: Request) -> AgentRegistration:
-        """Return one stored record. An unknown id is HTTP 404."""
-        found = await _registry(request).get_registration(_identifier(agent_id))
+    @router.get("/entries/{address}", response_model=DirectoryEntry)
+    async def get_entry(address: str, request: Request) -> JSONResponse:
+        """Return one stored snapshot. An unknown Address is HTTP 404."""
+        found = await _registry(request).get(_address(address))
         if found is None:
-            raise HTTPException(status_code=404, detail="registration not found")
-        return found
+            raise HTTPException(status_code=404, detail=_MISSING_ENTRY)
+        return _entry_json(found)
 
-    @router.get("/agents")
-    async def list_agents(request: Request) -> list[AgentRegistration]:
-        """Return every record this app is holding."""
-        return await _registry(request).list_registrations()
+    @router.get("/entries", response_model=list[DirectoryEntry])
+    async def list_entries(request: Request) -> JSONResponse:
+        """Return every snapshot this app is holding."""
+        return JSONResponse(dump_public(await _registry(request).list()))
 
-    @router.put("/agents/{agent_id}")
-    async def update_agent(
-        agent_id: str, updates: RegistrationUpdate, request: Request
-    ) -> AgentRegistration:
-        """Replace the listed fields. An unknown id is HTTP 404."""
+    @router.delete("/entries/{address}", status_code=204)
+    async def delete_entry(address: str, request: Request) -> Response:
+        """Remove one snapshot. A missing Address still succeeds."""
+        await _registry(request).delete(_address(address))
+        return Response(status_code=204)
+
+    @router.post("/search", response_model=list[IndexSearchHit])
+    async def search(body: _SearchRequest, request: Request) -> JSONResponse:
+        """Rank current snapshots. Unknown body fields are HTTP 422."""
         try:
-            updated = await _registry(request).update(_identifier(agent_id), updates)
+            hits = await _registry(request).search(
+                body.query, limit=body.limit, tags=body.tags
+            )
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        except ValidationError as exc:
-            raise HTTPException(status_code=422, detail=exc.errors()) from exc
-        if updated is None:
-            raise HTTPException(status_code=404, detail="registration not found")
-        return updated
-
-    @router.delete("/agents/{agent_id}")
-    async def delete_agent(agent_id: str, request: Request) -> JsonObject:
-        """Remove one record. An unknown id is HTTP 404."""
-        if not await _registry(request).unregister(_identifier(agent_id)):
-            raise HTTPException(status_code=404, detail="registration not found")
-        return {"agent_id": _identifier(agent_id)}
-
-    @router.post("/agents/search")
-    async def search(query: IndexQuery, request: Request) -> list[IndexSearchHit]:
-        """Rank current records. Unknown body fields are HTTP 422."""
-        try:
-            return await _registry(request).search(query)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return _hits_json(hits)
 
     return router
 

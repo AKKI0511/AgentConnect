@@ -3,17 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Protocol
 
-from agentconnect.index.models import (
-    AgentRegistration,
-    IndexQuery,
-    IndexSearchHit,
-    RegistrationUpdate,
-)
+from agentconnect.core.directory import DirectoryEntry
+from agentconnect.index.models import IndexSearchHit
 from agentconnect.team.directory.embedder import FastEmbedEmbedder, HashedEmbedder
 
 
@@ -21,26 +16,22 @@ class _Embedder(Protocol):
     async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
-class DuplicateRegistration(Exception):
-    """A record with this agent_id is already stored."""
-
-
 @dataclass
 class _Slot:
-    registration: AgentRegistration
+    entry: DirectoryEntry
     vector: list[float]
 
 
-def _search_text(registration: AgentRegistration) -> str:
-    parts = [
-        registration.name or "",
-        registration.summary or "",
-        registration.description or "",
-    ]
-    for skill in registration.skills:
+def _search_text(entry: DirectoryEntry) -> str:
+    profile = entry.profile
+    parts = [profile.summary, profile.description or ""]
+    for skill in profile.skills:
         parts.append(skill.name)
         parts.append(skill.description)
-    parts.extend(registration.tags)
+        if skill.tags:
+            parts.extend(skill.tags)
+    if profile.tags:
+        parts.extend(profile.tags)
     return "\n".join(part for part in parts if part)
 
 
@@ -55,15 +46,12 @@ def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
     return float(dot / (left_norm * right_norm))
 
 
-def _detach(registration: AgentRegistration, *, drop_secret: bool) -> AgentRegistration:
-    cloned = registration.model_copy(deep=True)
-    if drop_secret and cloned.identity.private_key is not None:
-        cloned.identity = replace(cloned.identity, private_key=None)
-    return cloned
+def _detach(entry: DirectoryEntry) -> DirectoryEntry:
+    return entry.model_copy(deep=True)
 
 
 class Registry:
-    """Records and vectors owned by one Index process."""
+    """Snapshots and vectors owned by one Index process."""
 
     def __init__(self, model_name: str = "hashed") -> None:
         name = model_name.strip()
@@ -77,83 +65,57 @@ class Registry:
     async def open(self) -> None:
         await self._embedder.embed([""])
 
-    async def get_registration(self, agent_id: str) -> AgentRegistration | None:
+    async def get(self, address: str) -> DirectoryEntry | None:
         async with self._lock:
-            slot = self._slots.get(agent_id)
+            slot = self._slots.get(address)
             if slot is None:
                 return None
-            return _detach(slot.registration, drop_secret=False)
+            return _detach(slot.entry)
 
-    async def list_registrations(self) -> list[AgentRegistration]:
+    async def put(self, entry: DirectoryEntry) -> DirectoryEntry:
+        stored = _detach(entry)
+        vector = await self._vector_for(stored)
         async with self._lock:
-            return [
-                _detach(slot.registration, drop_secret=False)
-                for slot in self._slots.values()
-            ]
+            self._slots[stored.address] = _Slot(stored, vector)
+            return _detach(stored)
 
-    async def register(self, registration: AgentRegistration) -> AgentRegistration:
+    async def delete(self, address: str) -> None:
         async with self._lock:
-            if registration.agent_id in self._slots:
-                raise DuplicateRegistration(registration.agent_id)
-            stored = _detach(registration, drop_secret=True)
-            vector = await self._vector_for(stored)
-            self._slots[stored.agent_id] = _Slot(stored, vector)
-            return _detach(stored, drop_secret=False)
+            self._slots.pop(address, None)
 
-    async def update(
-        self, agent_id: str, updates: RegistrationUpdate
-    ) -> AgentRegistration | None:
-        async with self._lock:
-            slot = self._slots.get(agent_id)
-            if slot is None:
-                return None
-            candidate = _apply(slot.registration, updates)
-            vector = await self._vector_for(candidate)
-            self._slots[agent_id] = _Slot(candidate, vector)
-            return _detach(candidate, drop_secret=False)
-
-    async def unregister(self, agent_id: str) -> bool:
-        async with self._lock:
-            if agent_id not in self._slots:
-                return False
-            del self._slots[agent_id]
-            return True
-
-    async def search(self, query: IndexQuery) -> list[IndexSearchHit]:
+    async def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        tags: Sequence[str] | None = None,
+    ) -> list[IndexSearchHit]:
         async with self._lock:
             snapshot = [
-                (
-                    _detach(slot.registration, drop_secret=False),
-                    list(slot.vector),
-                )
+                (_detach(slot.entry), list(slot.vector))
                 for slot in self._slots.values()
             ]
-        required = set(query.tags)
+        required = set(tags or ())
         if required:
-            snapshot = [item for item in snapshot if required.issubset(item[0].tags)]
+            snapshot = [
+                item
+                for item in snapshot
+                if required.issubset(set(item[0].profile.tags or ()))
+            ]
         if not snapshot:
             return []
-        (query_vector,) = await self._embedder.embed([query.query])
+        (query_vector,) = await self._embedder.embed([query])
         ranked = [
-            IndexSearchHit(
-                registration=registration,
-                score=_cosine(query_vector, vector),
-            )
-            for registration, vector in snapshot
+            IndexSearchHit(entry=entry, score=_cosine(query_vector, vector))
+            for entry, vector in snapshot
         ]
         ranked.sort(key=lambda hit: hit.score, reverse=True)
-        return ranked[: query.limit]
+        return ranked[:limit]
 
-    async def _vector_for(self, registration: AgentRegistration) -> list[float]:
-        (vector,) = await self._embedder.embed([_search_text(registration)])
+    async def _vector_for(self, entry: DirectoryEntry) -> list[float]:
+        (vector,) = await self._embedder.embed([_search_text(entry)])
         return [float(value) for value in vector]
 
-
-def _apply(
-    current: AgentRegistration, updates: RegistrationUpdate
-) -> AgentRegistration:
-    patch = updates.model_dump(exclude_unset=True)
-    data = current.model_dump()
-    data.update(patch)
-    data["identity"] = copy.deepcopy(current.identity)
-    return AgentRegistration.model_validate(data)
+    async def list(self) -> list[DirectoryEntry]:
+        async with self._lock:
+            return [_detach(slot.entry) for slot in self._slots.values()]

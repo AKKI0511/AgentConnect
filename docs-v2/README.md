@@ -16,6 +16,12 @@ The preview command generates the Python reference from the local SDK before sta
 
 After editing Python source, run `npm run api` and reload the browser. Mintlify watches handwritten pages during preview.
 
+On Windows, stop the preview before regenerating or editing pages, then restart
+with `npm run dev`. The pinned Mintlify CLI's incremental watcher passes Windows
+backslashes into page URLs, breaking native selection and folder matching. A
+fresh launch generates the reference first and scans URLs correctly. Linux/macOS
+previews do not need this restart workaround.
+
 ## Check changes
 
 ```bash

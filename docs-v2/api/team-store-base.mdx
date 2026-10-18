@@ -1,5 +1,5 @@
 ---
-title: "team.store.base"
+title: "base"
 sidebarTitle: "base"
 ---
 
@@ -80,8 +80,9 @@ persistence: PersistenceMode
 
 <a id="agentconnect-team-store-base-store-open"></a>
 
-### `open` `async`
+### `open`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 open() -> None
 ```
@@ -90,8 +91,9 @@ Connect and prepare the backend.
 
 <a id="agentconnect-team-store-base-store-close"></a>
 
-### `close` `async`
+### `close`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 close() -> None
 ```
@@ -100,8 +102,9 @@ Release backend resources.
 
 <a id="agentconnect-team-store-base-store-get"></a>
 
-### `get` `async`
+### `get`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get(key: str) -> Any
 ```
@@ -110,8 +113,9 @@ Return a copy of the stored value, or None when the key is missing.
 
 <a id="agentconnect-team-store-base-store-get-many"></a>
 
-### `get_many` `async`
+### `get_many`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_many(keys: Sequence[str]) -> list[Any]
 ```
@@ -123,8 +127,9 @@ snapshot across all keys.
 
 <a id="agentconnect-team-store-base-store-get-record"></a>
 
-### `get_record` `async`
+### `get_record`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_record(key: str) -> StoreRecord | None
 ```
@@ -135,8 +140,9 @@ Return a copied value and its version, or None when the key is missing.
 
 <a id="agentconnect-team-store-base-store-put"></a>
 
-### `put` `async`
+### `put`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 put(key: str, value: object) -> None
 ```
@@ -145,8 +151,9 @@ Write a copy of `value`, starting at version 1 or incrementing it.
 
 <a id="agentconnect-team-store-base-store-insert"></a>
 
-### `insert` `async`
+### `insert`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 insert(key: str, value: object) -> bool
 ```
@@ -157,8 +164,9 @@ Return True if inserted, or False with the existing value unchanged.
 
 <a id="agentconnect-team-store-base-store-compare-and-set"></a>
 
-### `compare_and_set` `async`
+### `compare_and_set`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 compare_and_set(key: str, version: int, value: object) -> bool
 ```
@@ -170,8 +178,9 @@ missing or the version does not match.
 
 <a id="agentconnect-team-store-base-store-delete"></a>
 
-### `delete` `async`
+### `delete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 delete(key: str) -> None
 ```
@@ -180,8 +189,9 @@ Remove `key` if it exists, including set and index data.
 
 <a id="agentconnect-team-store-base-store-set-add"></a>
 
-### `set_add` `async`
+### `set_add`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_add(key: str, member: str) -> None
 ```
@@ -190,8 +200,9 @@ Add `member` to the set at `key`.
 
 <a id="agentconnect-team-store-base-store-set-remove"></a>
 
-### `set_remove` `async`
+### `set_remove`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_remove(key: str, member: str) -> None
 ```
@@ -200,8 +211,9 @@ Remove `member` from the set at `key`.
 
 <a id="agentconnect-team-store-base-store-set-members"></a>
 
-### `set_members` `async`
+### `set_members`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_members(key: str) -> list[str]
 ```
@@ -212,8 +224,9 @@ A missing set returns an empty list.
 
 <a id="agentconnect-team-store-base-store-set-is-member"></a>
 
-### `set_is_member` `async`
+### `set_is_member`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_is_member(key: str, member: str) -> bool
 ```
@@ -222,8 +235,9 @@ Return whether the set contains `member`; a missing set returns False.
 
 <a id="agentconnect-team-store-base-store-index-add"></a>
 
-### `index_add` `async`
+### `index_add`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_add(key: str, score: float, member: str) -> None
 ```
@@ -232,8 +246,9 @@ Add or update `member` in the sorted index at `key`.
 
 <a id="agentconnect-team-store-base-store-index-remove"></a>
 
-### `index_remove` `async`
+### `index_remove`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_remove(key: str, member: str) -> None
 ```
@@ -242,8 +257,9 @@ Remove `member` from the sorted index at `key`.
 
 <a id="agentconnect-team-store-base-store-index-range"></a>
 
-### `index_range` `async`
+### `index_range`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_range(
     key: str,
@@ -262,8 +278,9 @@ the whole window.
 
 <a id="agentconnect-team-store-base-store-index-card"></a>
 
-### `index_card` `async`
+### `index_card`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_card(key: str) -> int
 ```
@@ -272,8 +289,9 @@ Count index members; a missing index returns zero.
 
 <a id="agentconnect-team-store-base-store-index-add-if-card-below"></a>
 
-### `index_add_if_card_below` `async`
+### `index_add_if_card_below`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_add_if_card_below(key: str, score: float, member: str, max_card: int) -> bool
 ```
@@ -285,8 +303,9 @@ change cardinality. True when the member is in the index afterwards.
 
 <a id="agentconnect-team-store-base-store-apply"></a>
 
-### `apply` `async`
+### `apply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
@@ -332,8 +351,9 @@ members = await store.set_members("sample:notes")  # ["release"]
 
 <a id="agentconnect-team-store-base-store-increment-if-below"></a>
 
-### `increment_if_below` `async`
+### `increment_if_below`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 increment_if_below(key: str, limit: int, *, ttl_seconds: Optional[float] = None) -> bool
 ```
@@ -349,8 +369,9 @@ A rejected increment changes neither value, version, nor TTL.
 
 <a id="agentconnect-team-store-base-store-decrement-floor"></a>
 
-### `decrement_floor` `async`
+### `decrement_floor`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 decrement_floor(key: str, *, ttl_seconds: Optional[float] = None) -> int
 ```
@@ -364,8 +385,9 @@ operation always writes, even at zero.
 
 <a id="agentconnect-team-store-base-store-exists"></a>
 
-### `exists` `async`
+### `exists`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 exists(key: str) -> bool
 ```
@@ -374,8 +396,9 @@ Return True when `key` has a value.
 
 <a id="agentconnect-team-store-base-store-ping"></a>
 
-### `ping` `async`
+### `ping`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 ping() -> None
 ```
@@ -384,8 +407,9 @@ Confirm the backend is reachable. Memory stores no-op.
 
 <a id="agentconnect-team-store-base-store-clear"></a>
 
-### `clear` `async`
+### `clear`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 clear() -> None
 ```

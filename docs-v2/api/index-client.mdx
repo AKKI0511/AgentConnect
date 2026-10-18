@@ -1,5 +1,5 @@
 ---
-title: "index.client"
+title: "client"
 sidebarTitle: "client"
 ---
 
@@ -8,13 +8,14 @@ sidebarTitle: "client"
 HTTP client for one Index process.
 
 [`IndexClient`](/api/index-client#agentconnect-index-client-indexclient) stores and searches
-records on a running Index. Same-Team discovery is
+[`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry) snapshots on a
+running Index. Same-Team discovery is
 [`BaseAgent.find`](/api/agent-base#agentconnect-agent-base-baseagent-find).
 
 `close` closes this HTTP connection and leaves Index records in place.
 Reads may retry a dropped connection or HTTP 502, 503, or 504. Writes
-are not retried. `get_registration` returns None when the id is absent.
-Any other missing route or a body that is not the expected record raises.
+are not retried. `get` returns None when that Address is absent.
+Any other missing route or a body that is not the expected snapshot raises.
 
 ## Public API
 
@@ -36,84 +37,86 @@ HTTP client for one running Index.
 
 <a id="agentconnect-index-client-indexclient-close"></a>
 
-### `close` `async`
+### `close`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 close() -> None
 ```
 
 Close this HTTP connection. Stored Index records stay.
 
-<a id="agentconnect-index-client-indexclient-register"></a>
+<a id="agentconnect-index-client-indexclient-put"></a>
 
-### `register` `async`
+### `put`
 
+<p className="ac-symbol-meta">async</p>
 ```python
-register(registration: AgentRegistration) -> AgentRegistration
+put(entry: DirectoryEntry) -> DirectoryEntry
 ```
 
-**Types:** [`AgentRegistration`](/api/index-models#agentconnect-index-models-agentregistration).
+**Types:** [`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry).
 
-Store `registration` and return the stored copy.
+Insert or replace `entry` and return the stored copy.
 
-A repeated id is HTTP 409. An id that cannot go in a URL path,
-or a DID that does not match its public key, is rejected before
-a record is stored.
+The snapshot is keyed by its canonical qualified Address. A cancelled
+or interrupted HTTP write may already have committed; call `get` to
+check. Writes are not retried.
 
-<a id="agentconnect-index-client-indexclient-get-registration"></a>
+<a id="agentconnect-index-client-indexclient-get"></a>
 
-### `get_registration` `async`
+### `get`
 
+<p className="ac-symbol-meta">async</p>
 ```python
-get_registration(agent_id: str) -> AgentRegistration | None
+get(address: str) -> DirectoryEntry | None
 ```
 
-**Types:** [`AgentRegistration`](/api/index-models#agentconnect-index-models-agentregistration).
+**Types:** [`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry).
 
-Return the stored record, or None when that id is absent.
+Return the stored snapshot, or None when that Address is absent.
 
-<a id="agentconnect-index-client-indexclient-list-registrations"></a>
+<a id="agentconnect-index-client-indexclient-delete"></a>
 
-### `list_registrations` `async`
+### `delete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
-list_registrations() -> list[AgentRegistration]
+delete(address: str) -> None
 ```
 
-**Types:** [`AgentRegistration`](/api/index-models#agentconnect-index-models-agentregistration).
-
-Return every record the process is holding.
-
-<a id="agentconnect-index-client-indexclient-update-registration"></a>
-
-### `update_registration` `async`
-
-```python
-update_registration(agent_id: str, updates: RegistrationUpdate) -> AgentRegistration
-```
-
-**Types:** [`RegistrationUpdate`](/api/index-models#agentconnect-index-models-registrationupdate), [`AgentRegistration`](/api/index-models#agentconnect-index-models-agentregistration).
-
-Replace the fields set on `updates`. An unknown id is HTTP 404.
-
-<a id="agentconnect-index-client-indexclient-unregister"></a>
-
-### `unregister` `async`
-
-```python
-unregister(agent_id: str) -> None
-```
-
-Remove `agent_id`. An unknown id is HTTP 404.
+Remove the snapshot at `address`. A missing Address is not an error.
 
 <a id="agentconnect-index-client-indexclient-search"></a>
 
-### `search` `async`
+### `search`
 
+<p className="ac-symbol-meta">async</p>
 ```python
-search(query: IndexQuery) -> list[IndexSearchHit]
+search(
+    query: str,
+    *,
+    limit: int = 10,
+    tags: list[str] | None = None,
+) -> list[IndexSearchHit]
 ```
 
-**Types:** [`IndexQuery`](/api/index-models#agentconnect-index-models-indexquery), [`IndexSearchHit`](/api/index-models#agentconnect-index-models-indexsearchhit).
+**Types:** [`list`](/api/index-client#agentconnect-index-client-indexclient-list), [`IndexSearchHit`](/api/index-models#agentconnect-index-models-indexsearchhit).
 
-Return ranked hits. Each hit has the record and its score.
+Return ranked hits for `query`.
+
+Each hit has the snapshot and its score. `limit` is 1 to 50. When
+`tags` is set, every listed tag must be on the Profile.
+
+<a id="agentconnect-index-client-indexclient-list"></a>
+
+### `list`
+
+<p className="ac-symbol-meta">async</p>
+```python
+list() -> list[DirectoryEntry]
+```
+
+**Types:** [`list`](/api/index-client#agentconnect-index-client-indexclient-list), [`DirectoryEntry`](/api/core-directory#agentconnect-core-directory-directoryentry).
+
+Return every snapshot the process is holding.

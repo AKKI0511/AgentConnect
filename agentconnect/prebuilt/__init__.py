@@ -38,7 +38,6 @@ from typing import TYPE_CHECKING
 
 from .ai_agent import AIAgent, CompletionOptions
 from .loop import CompletionFn
-from .tools import Tool
 
 if TYPE_CHECKING:
     from .human_agent import HumanAgent
@@ -50,7 +49,6 @@ __all__ = [
     "CompletionOptions",
     "HumanAgent",
     "TelegramAIAgent",
-    "Tool",
 ]
 
 

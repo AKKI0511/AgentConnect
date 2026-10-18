@@ -1,9 +1,10 @@
-"""Optional Index of agent records you submit yourself.
+"""Optional catalog of Directory entries you submit yourself.
 
-A Team Directory lists members of one Team. Submit an
-[`AgentRegistration`][agentconnect.index.models.AgentRegistration] to an
-Index, then search the records that process is holding. A search hit
-is not a Team address.
+A Team Directory lists members of one Team. Put a
+[`DirectoryEntry`][agentconnect.core.directory.DirectoryEntry] snapshot
+in an Index, then search the records that process is holding. A search
+hit is not a Team address. Obtain an entry with
+[`BaseAgent.get_entry`][agentconnect.agent.base.BaseAgent.get_entry].
 
 Install `agentconnect[index]`. Start
 [`create_index_app`][agentconnect.index.service.create_index_app] with
@@ -13,47 +14,27 @@ disappear when the process stops. `model_name` is `hashed` unless you
 set a fastembed model id. A model that cannot load stops the process.
 
 Examples:
-    The Index is already running at `http://127.0.0.1:8000`.
+    For a joined `writer` and connected Index client `index`:
 
     ```python
-    from agentconnect.core.identity import AgentIdentity
-    from agentconnect.index import AgentRegistration, IndexClient, IndexQuery
-
-    registration = AgentRegistration(
-        agent_id="writer",
-        name="writer",
-        summary="Drafts release notes from findings.",
-        identity=AgentIdentity.create_key_based(),
-    )
-    async with IndexClient("http://127.0.0.1:8000") as client:
-        await client.register(registration)
-        hits = await client.search(IndexQuery(query="release notes"))
-        if hits:
-            print(hits[0].registration.name, hits[0].score)
+    entry = await writer.get_entry(writer.name)
+    await index.put(entry)
+    hits = await index.search("draft release notes")
     ```
 """
 
 from typing import TYPE_CHECKING
 
-from agentconnect.index.models import (
-    AgentRegistration,
-    IndexQuery,
-    IndexSearchHit,
-    IndexSettings,
-    RegistrationUpdate,
-)
+from agentconnect.index.models import IndexSearchHit, IndexSettings
 
 if TYPE_CHECKING:
     from agentconnect.index.client import IndexClient
     from agentconnect.index.service import create_index_app
 
 __all__ = [
-    "AgentRegistration",
     "IndexClient",
-    "IndexQuery",
     "IndexSearchHit",
     "IndexSettings",
-    "RegistrationUpdate",
     "create_index_app",
 ]
 

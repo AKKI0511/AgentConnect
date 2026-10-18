@@ -19,6 +19,7 @@ Keep a detail if it changes what the caller chooses, writes, expects or handles.
 - Leave out internal call chains, import tricks, storage algorithms, development history and maintainer instructions.
 - Separate everyday APIs, supported extension contracts and internal plumbing when reviewing the delivered surface. Trace callers before proposing removal; a reference edit does not authorize API redesign.
 - Describe the visible effect. For example, say “Closing the client leaves accepted jobs running.” The caller does not need the internal shutdown sequence.
+- State guarantees at the documented client boundary. An internal store's rollback is not an HTTP client's rollback.
 
 Apply a sentence-level decision test: name the caller action or expectation that
 would change if the sentence were removed. If there is none, delete it. Rewriting
@@ -72,7 +73,7 @@ Keep shared explanations in one place and link to useful concepts or guides. Nam
 
 - Lead with the useful action or result. Use everyday words and exact API names.
 - Prefer one idea per paragraph, usually one to three short sentences.
-- Use a short list for alternatives or steps. Use a table only when comparison is easier that way.
+- Use a short list for alternatives or steps. Use a table only when comparison is easier that way. A command table shows copyable commands and outcomes. Put shared flags and selection rules once; do not repeat them in every row. Point to `--help` for the complete option list.
 - Treat the signature as already read. Do not restate types, default values, obvious parameter names or the return annotation. Omit Args/Returns entries that add nothing; no section is mandatory merely because a parameter exists. Explain only domain meaning, constraints, authority, ownership, side effects or special-value behavior the signature cannot express.
 - Use plain, conversational, direct prose. Remove marketing, feature pitches, meta prose, implementation narration, contrived contrasts and Python tutorials.
 - Keep scope words exact: another process is not necessarily another host, and stopping a listener is not restarting its clients. Preserve reachability, authority and resource-ownership conditions when shortening prose.
@@ -80,6 +81,10 @@ Keep shared explanations in one place and link to useful concepts or guides. Nam
 - Link extended workflows to guides. Keep advanced details here when they change caller choices or results.
 
 Keep essential facts even when they take more space. Shorter text must still explain how to use the API correctly.
+
+Generated pages show async, property, classmethod, and staticmethod on a muted line below the symbol name. Do not put those labels in headings or repeat them as badges in prose.
+
+Index callers own canonical `DirectoryEntry` models. Use a caller snapshot such as `BaseAgent.get_entry` in examples; do not reconstruct identity or registration shapes.
 
 ## Choose examples by need
 
@@ -98,6 +103,7 @@ Use an example to clarify a choice, a difficult input or a result. Simple access
 - Check result states before reading fields that may be absent. Distinguish returned failures from exceptions.
 - Show output when it adds meaning. Label variable output as illustrative.
 - Use familiar sample data and the smallest example that teaches a practical choice, input or result. An obvious call or a canned miss teaches little. Not every symbol needs an example.
+- Illustrative configuration must still be valid syntax for that format. Do not extend an inline table with a later header, or invent aliases the schema does not accept.
 
 ## Verify before publishing
 

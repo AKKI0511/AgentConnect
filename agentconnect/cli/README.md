@@ -28,10 +28,10 @@ agentconnect trace <trace-id>
 - `status` — members, kind, online state, Agent mailbox depths, open tickets
 - `token issue` / `token revoke` — join credentials
 - `find` — Directory search
-- `ask` — send reply-expected work and wait
+- `ask` — send reply-expected work and wait; the wait can end with an open Ticket
 - `trace` — print the timeline for one causal operation
 - `watch` — print new Trace events
-- `doctor` — Team file, keys, and whether the Runtime is reachable
+- `doctor` — Team file, selected origin, and Runtime access
 - `version` — package version
 
 `up --detach` starts the process and returns before the Runtime is
@@ -75,20 +75,17 @@ await Researcher(name="researcher").join(
 
 ## Hosted Agents
 
-Each `[[tool.agentconnect.agents]]` entry is constructed by `up`.
-`class` is a `BaseAgent` subclass, or a function
-`create(name) -> BaseAgent` that returns an unjoined Agent. The starter
-uses the factory:
+`agents` maps canonical Agent names to hosted entries. `up` constructs
+each `entrypoint`: a `BaseAgent` subclass or a synchronous factory
+`create(name, **kwargs) -> BaseAgent`. The starter uses the factory:
 
 ```toml
-[[tool.agentconnect.agents]]
-class = "agents.assistant:create_assistant"
-name = "assistant"
+[agents.assistant]
+entrypoint = "agents.assistant:create_assistant"
 ```
 
-Use a factory when the Agent needs constructor arguments the Team file
-cannot supply, such as a model id. The Team file is not a generic
-constructor language.
+Optional `kwargs` belong to that class or factory. Do not put `name`
+there. The Team file is not a generic constructor language.
 
 `up` and `Team.serve` bind loopback only. To serve an authenticated Team
 behind your own HTTP server, build the ASGI app with

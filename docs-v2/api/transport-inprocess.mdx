@@ -1,5 +1,5 @@
 ---
-title: "transport.inprocess"
+title: "inprocess"
 sidebarTitle: "inprocess"
 ---
 
@@ -35,8 +35,9 @@ Use an existing started Team; construction does not start it.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-join-challenge"></a>
 
-### `join_challenge` `async`
+### `join_challenge`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join_challenge() -> JoinChallenge
 ```
@@ -47,8 +48,9 @@ Obtain a fresh challenge from the embedded Team.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-join"></a>
 
-### `join` `async`
+### `join`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join(request: JoinRequest) -> JoinResult
 ```
@@ -59,8 +61,9 @@ Open a Session on the embedded Team using the public JoinRequest body.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-disconnect"></a>
 
-### `disconnect` `async`
+### `disconnect`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 disconnect(session_token: SessionToken) -> None
 ```
@@ -71,8 +74,9 @@ End the Session on the embedded Team; its Membership and accepted work remain.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-heartbeat"></a>
 
-### `heartbeat` `async`
+### `heartbeat`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 heartbeat(session_token: SessionToken) -> HeartbeatResult
 ```
@@ -83,8 +87,9 @@ Renew Session expiry on the embedded Team, leaving Delivery leases unchanged.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-send"></a>
 
-### `send` `async`
+### `send`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 send(session_token: SessionToken, request: SendRequest) -> SendResult
 ```
@@ -95,8 +100,9 @@ Submit work directly to the Team; an ended wait does not cancel accepted work.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-lease"></a>
 
-### `lease` `async`
+### `lease`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 lease(session_token: SessionToken, max_items: int = 1) -> LeaseResult
 ```
@@ -107,8 +113,9 @@ Lease available attempts from the embedded Team within Session capacity.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-renew"></a>
 
-### `renew` `async`
+### `renew`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 renew(session_token: SessionToken, lease_id: Uuid) -> RenewResult
 ```
@@ -119,8 +126,9 @@ Renew an active attempt owned by the Session.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-complete"></a>
 
-### `complete` `async`
+### `complete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 complete(session_token: SessionToken, lease_id: Uuid) -> CompleteResult
 ```
@@ -131,8 +139,9 @@ Complete an event or decline a request under an active Session-owned lease.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-reply"></a>
 
-### `reply` `async`
+### `reply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 reply(session_token: SessionToken, request: ReplyRequest) -> ReplyResult
 ```
@@ -143,8 +152,9 @@ Submit a successful or failed reply under an active Session-owned request lease.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-get-result"></a>
 
-### `get_result` `async`
+### `get_result`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_result(session_token: SessionToken, ticket_id: Uuid) -> Ticket
 ```
@@ -155,8 +165,9 @@ Read a retained Ticket owned by this Membership from the embedded Team.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-get-history"></a>
 
-### `get_history` `async`
+### `get_history`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_history(
     session_token: SessionToken,
@@ -173,8 +184,9 @@ Read a retained history page for a Thread this Membership participates in.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-find"></a>
 
-### `find` `async`
+### `find`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 find(session_token: SessionToken, query: str, *, limit: int | None = None) -> FindResult
 ```
@@ -185,8 +197,9 @@ Read ranked discovery candidates from the embedded Team.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-get-profile"></a>
 
-### `get_profile` `async`
+### `get_profile`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_profile(session_token: SessionToken, address: Address) -> DirectoryEntry
 ```
@@ -197,8 +210,9 @@ Read a full Directory entry for a same-Team Address.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-events"></a>
 
-### `events` `async`
+### `events`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 events(session_token: SessionToken) -> AsyncIterator[RuntimeEvent]
 ```
@@ -212,8 +226,9 @@ can yield nothing; callers still lease work. Cancellation propagates.
 
 <a id="agentconnect-transport-inprocess-inprocesstransport-close"></a>
 
-### `close` `async`
+### `close`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 close() -> None
 ```

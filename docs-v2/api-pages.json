@@ -3,8 +3,8 @@
   "api/cli",
   {
     "group": "agent",
-    "root": "api/agent",
     "pages": [
+      "api/agent",
       "api/agent-base",
       "api/agent-context",
       "api/agent-errors",
@@ -14,16 +14,16 @@
   },
   {
     "group": "config",
-    "root": "api/config",
     "pages": [
+      "api/config",
       "api/config-loaders",
       "api/config-models"
     ]
   },
   {
     "group": "core",
-    "root": "api/core",
     "pages": [
+      "api/core",
       "api/core-address",
       "api/core-base",
       "api/core-directory",
@@ -40,8 +40,8 @@
   },
   {
     "group": "index",
-    "root": "api/index",
     "pages": [
+      "api/index",
       "api/index-client",
       "api/index-models",
       "api/index-service"
@@ -49,36 +49,35 @@
   },
   {
     "group": "mcp",
-    "root": "api/mcp",
     "pages": [
+      "api/mcp",
       "api/mcp-server"
     ]
   },
   {
     "group": "prebuilt",
-    "root": "api/prebuilt",
     "pages": [
+      "api/prebuilt",
       "api/prebuilt-ai_agent",
       "api/prebuilt-human_agent",
       "api/prebuilt-loop",
       {
         "group": "telegram",
-        "root": "api/prebuilt-telegram",
         "pages": [
+          "api/prebuilt-telegram",
           "api/prebuilt-telegram-telegram_agent"
         ]
-      },
-      "api/prebuilt-tools"
+      }
     ]
   },
   {
     "group": "team",
-    "root": "api/team",
     "pages": [
+      "api/team",
       {
         "group": "directory",
-        "root": "api/team-directory",
         "pages": [
+          "api/team-directory",
           "api/team-directory-embedder"
         ]
       },
@@ -87,8 +86,8 @@
       "api/team-runtime",
       {
         "group": "store",
-        "root": "api/team-store",
         "pages": [
+          "api/team-store",
           "api/team-store-base",
           "api/team-store-memory",
           "api/team-store-ops",
@@ -99,8 +98,8 @@
   },
   {
     "group": "transport",
-    "root": "api/transport",
     "pages": [
+      "api/transport",
       "api/transport-agent_http",
       "api/transport-inprocess",
       "api/transport-runtime"

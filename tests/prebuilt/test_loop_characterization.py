@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from agentconnect.agent.tools import Tool
 from agentconnect.prebuilt.loop import messages_from_thread, run_tool_loop
-from agentconnect.prebuilt.tools import Tool
 
 
 def scripted(*turns):

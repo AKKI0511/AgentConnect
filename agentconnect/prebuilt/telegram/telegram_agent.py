@@ -17,7 +17,7 @@ from typing import Optional
 from aiogram import types
 from dotenv import load_dotenv
 
-from agentconnect.agent.tools import ToolLike
+from agentconnect.agent.tools import Tool, ToolLike
 from agentconnect.core.identity import AgentIdentity
 from agentconnect.core.profile import AgentProfile, Skill
 from agentconnect.prebuilt.ai_agent import AIAgent, CompletionOptions
@@ -34,7 +34,6 @@ from agentconnect.prebuilt.telegram.message_processor import (
     TelegramMessageProcessor,
     _TelegramPayload,
 )
-from agentconnect.prebuilt.tools import Tool
 
 logger = logging.getLogger(__name__)
 

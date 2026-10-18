@@ -35,7 +35,6 @@ from agentconnect.cli.client import RuntimeClient
 from agentconnect.cli.hosting import (
     construct_hosted_agent,
     ensure_import_path,
-    join_hosted_agent,
     team_from_config,
 )
 from agentconnect.cli.origin import resolve_runtime_origin
@@ -186,12 +185,11 @@ def init(
             port=9000,
             require_join_auth=True,
             tools=["tools.shared:ping"],
-            agents=[
-                HostedAgentConfig(
-                    class_path="agents.assistant:create_assistant",
-                    name="assistant",
+            agents={
+                "assistant": HostedAgentConfig(
+                    entrypoint="agents.assistant:create_assistant",
                 )
-            ],
+            },
         )
     except Exception as exc:
         _die_exc(exc)
@@ -284,7 +282,9 @@ async def _run_up(config: TeamConfig, config_path: Path) -> None:
     try:
         ensure_import_path(config_path.parent)
         team = team_from_config(config)
-        agents = [construct_hosted_agent(spec) for spec in config.agents]
+        agents = [
+            construct_hosted_agent(name, spec) for name, spec in config.agents.items()
+        ]
     except (KeyboardInterrupt, SystemExit, typer.Exit):
         raise
     except asyncio.CancelledError:
@@ -299,7 +299,7 @@ async def _run_up(config: TeamConfig, config_path: Path) -> None:
         try:
             url = await team.serve(host=config.host, port=config.port)
             for agent in agents:
-                await join_hosted_agent(team, agent)
+                await agent.join(team)
                 joined.append(agent)
         except KeyboardInterrupt:
             raise
@@ -500,9 +500,9 @@ def token_issue(
 ) -> None:
     """Issue a join token for a network Agent.
 
-    Bind `--name`, `--did`, or both so a leaked token cannot be used by
-    a different Agent. Omit both for an invite that any proving Agent
-    can consume. Prints the token secret, then `expires_at`.
+    `--did` binds the token to that identity. `--name` restricts the
+    requested name. Omit both for an invite that any proving Agent can
+    consume. Prints the token secret, then `expires_at`.
 
     Examples:
         ```bash
@@ -608,9 +608,13 @@ def ask(
 ) -> None:
     """Send reply-expected work and wait for the Ticket.
 
+    The wait can end with an open Ticket. This command does not send the
+    request again to collect a later reply.
+
     Content that looks like JSON is parsed as JSON. `--deadline` is
     seconds until the Ticket expires; omit it to use the Runtime work
-    lifetime. Prints the trace id, Ticket state, and response.
+    lifetime. Prints the trace id, Ticket state, and any response then
+    available.
 
     Examples:
         ```bash
@@ -749,7 +753,7 @@ def doctor(
         typer.Option("--file", help="Team file. Overrides saved state and discovery."),
     ] = None,
 ) -> None:
-    """Check the Team file, keys, and whether the Runtime is reachable.
+    """Check the Team file, selected origin, and Runtime access.
 
     Does not start or stop the Team. `--url` overrides `--file`, saved
     state, and discovery.

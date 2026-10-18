@@ -1,6 +1,7 @@
 """Team file models for `agentconnect.toml` and `[tool.agentconnect]`.
 
-`Team("name").start()` needs no file. Secrets stay in the environment.
+[`Team`][agentconnect.team.runtime.Team] started in Python needs no file.
+Secrets stay in the environment.
 """
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from agentconnect.core.base import JsonObject
+
 _IMPORT_REF = re.compile(r"^([A-Za-z_][\w.]*)\:([A-Za-z_]\w*)$")
 _EMBEDDING_KEYS = {"auto", "none", "hashed", "fastembed", "openai", "litellm"}
 
@@ -18,72 +21,70 @@ _EMBEDDING_KEYS = {"auto", "none", "hashed", "fastembed", "openai", "litellm"}
 class HostedAgentConfig(BaseModel):
     """One Agent this Team process constructs and joins.
 
-    `class` is `module:Name`. That name is a `BaseAgent` subclass, or a
-    function `create(name) -> BaseAgent` that returns an unjoined Agent.
-    `name` is unique within the Team.
+    `entrypoint` is `module:Name`: a [`BaseAgent`][agentconnect.agent.base.BaseAgent]
+    subclass or a synchronous factory. Both receive `name=<mapping key>` plus
+    optional `kwargs`. `kwargs` is owned by that class or factory; do not put
+    `name` there.
 
     ```toml
-    [[tool.agentconnect.agents]]
-    class = "agents.writer:Writer"
-    name = "writer"
+    [agents.writer]
+    entrypoint = "agents.writer:Writer"
+    kwargs.model = "provider/model"
     ```
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(extra="forbid")
 
-    class_path: str = Field(
-        alias="class",
+    entrypoint: str = Field(
         min_length=1,
         description=(
-            "Import path module:Name of a BaseAgent subclass or a "
-            "function create(name) that returns an unjoined BaseAgent."
+            "Import path `module:Name` of a BaseAgent subclass or a "
+            "synchronous factory create(name, **kwargs) that returns an "
+            "unjoined BaseAgent."
         ),
     )
-    name: str = Field(
-        min_length=1,
-        max_length=63,
-        description="Agent name, unique within the Team.",
+    kwargs: JsonObject = Field(
+        default_factory=dict,
+        description="Arguments passed to your class or factory.",
     )
 
-    @field_validator("class_path")
+    @field_validator("entrypoint")
     @classmethod
-    def validate_class_path(cls, value: str) -> str:
+    def validate_entrypoint(cls, value: str) -> str:
         """Require `module:Name` form."""
         if _IMPORT_REF.fullmatch(value.strip()) is None:
-            raise ValueError("class must be module:Name")
+            raise ValueError("entrypoint must be module:Name")
         return value.strip()
 
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, value: str) -> str:
-        """Require an Agent name the Runtime will accept."""
-        from agentconnect.core.address import parse_agent_name
-
-        canonical = parse_agent_name(value)
-        if canonical is None:
-            raise ValueError("name is not a valid Agent name")
-        return canonical
+    @model_validator(mode="after")
+    def reject_kwargs_name(self) -> "HostedAgentConfig":
+        """The mapping key is the Agent name."""
+        if "name" in self.kwargs:
+            raise ValueError(
+                "kwargs must not include name; the mapping key is the Agent name"
+            )
+        return self
 
 
 class TeamConfig(BaseModel):
     """Contents of a Team file.
 
-    ```toml
-    [tool.agentconnect]
-    team = "content-squad"
-    store = "memory"
-    embeddings = "auto"
-    host = "127.0.0.1"
-    port = 9000
-    require_join_auth = true
+    A standalone `agentconnect.toml` uses this tree. `pyproject.toml` prefixes
+    the same tree with `[tool.agentconnect]`.
 
-    [[tool.agentconnect.agents]]
-    class = "agents.writer:Writer"
-    name = "writer"
+    ```toml
+    team = "content-squad"
+
+    [agents.researcher]
+    entrypoint = "agents.researcher:Researcher"
+
+    [agents.writer]
+    entrypoint = "agents.writer:Writer"
+    kwargs.model = "provider/model"
     ```
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     team: str = Field(description="Team name, a lowercase DNS label.")
     store: str = Field(
@@ -114,12 +115,12 @@ class TeamConfig(BaseModel):
         default=True,
         description="When true, every join needs a join token and identity proof.",
     )
-    agents: List[HostedAgentConfig] = Field(
-        default_factory=list,
+    agents: dict[str, HostedAgentConfig] = Field(
+        default_factory=dict,
         description=(
-            "Agents this process constructs and joins. Each class is a "
-            "`BaseAgent` subclass or a function `create(name) -> BaseAgent`. "
-            "Independently deployed Agents join by URL and are not listed."
+            "Agents this process constructs and joins, keyed by canonical "
+            "Agent name. Independently deployed Agents join by URL and are "
+            "not listed."
         ),
     )
     tools: List[str] = Field(
@@ -192,19 +193,35 @@ class TeamConfig(BaseModel):
             cleaned.append(text)
         return cleaned
 
-    @model_validator(mode="after")
-    def unique_agent_names(self) -> "TeamConfig":
-        """Reject two hosted Agents that share a name."""
-        seen: set[str] = set()
-        for spec in self.agents:
-            if spec.name in seen:
-                raise ValueError(f"duplicate Agent name {spec.name!r}")
-            seen.add(spec.name)
-        return self
+    @field_validator("agents", mode="before")
+    @classmethod
+    def canonical_agent_names(cls, value: object) -> object:
+        """Require a name mapping and reject invalid or colliding names."""
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("agents must be a table of Agent names, not an array")
+        from agentconnect.core.address import parse_agent_name
+
+        remapped: dict[str, object] = {}
+        original_for: dict[str, str] = {}
+        for key, spec in value.items():
+            if not isinstance(key, str):
+                raise ValueError("Agent names must be strings")
+            canonical = parse_agent_name(key)
+            if canonical is None:
+                raise ValueError(f"{key!r} is not a valid Agent name")
+            if canonical in remapped:
+                raise ValueError(
+                    f"Agent names {original_for[canonical]!r} and {key!r} collide"
+                )
+            remapped[canonical] = spec
+            original_for[canonical] = key
+        return remapped
 
     @classmethod
     def example(cls) -> "TeamConfig":
-        """Canonical example used to generate `agentconnect.example.toml`."""
+        """Canonical example for a standalone Team file."""
         return cls(
             team="content-squad",
             store="memory",
@@ -212,16 +229,15 @@ class TeamConfig(BaseModel):
             host="127.0.0.1",
             port=9000,
             require_join_auth=True,
-            agents=[
-                HostedAgentConfig(
-                    class_path="agents.researcher:Researcher",
-                    name="researcher",
+            agents={
+                "researcher": HostedAgentConfig(
+                    entrypoint="agents.researcher:Researcher",
                 ),
-                HostedAgentConfig(
-                    class_path="agents.writer:Writer",
-                    name="writer",
+                "writer": HostedAgentConfig(
+                    entrypoint="agents.writer:Writer",
+                    kwargs={"model": "provider/model"},
                 ),
-            ],
+            },
             tools=["tools.docs:search_our_docs"],
         )
 

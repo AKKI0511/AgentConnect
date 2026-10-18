@@ -13,8 +13,8 @@
 
 {%- filter heading(heading_level) -%}
 `{{ function_name }}`
-{% endfilter -%}
-
+{% endfilter %}
+{{- function|symbol_meta -}}
 {%- if 'property' in function.labels -%}
 {{ function|property_signature }}
 {%- elif config.separate_signature -%}

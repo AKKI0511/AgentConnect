@@ -1,6 +1,7 @@
 """Semantic regressions for static API extraction and Markdown conversion."""
 
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -142,7 +143,14 @@ raise RuntimeError("Documentation must never execute this module")
         self.assertNotIn("inherited()", text)
         text = render_object(self.env, widget["run"])
         self.assertIn("*values: int, flag: bool = False, **options: str", text)
-        self.assertIn("`run` `async`", text)
+        heading = re.search(r"^### `run`\s*$", text, re.M)
+        self.assertIsNotNone(heading)
+        self.assertNotIn("`run` `async`", text)
+        after = text[heading.end() :]
+        meta = re.search(r'<p className="ac-symbol-meta">async</p>', after)
+        self.assertIsNotNone(meta)
+        self.assertIsNone(re.search(r"^#+", after[: meta.start()], re.M))
+        self.assertIsNone(re.search(r"^#+\s+`?async`?", text, re.M))
         self.assertIn("```python", text)
         self.assertNotIn("SdkSignature", text)
         for section in ("Parameters", "Returns", "Raises", "Examples"):
@@ -187,6 +195,14 @@ raise RuntimeError("Documentation must never execute this module")
         text = render_object(self.env, widget["value"])
         self.assertIn("value: str", text)
         self.assertNotIn("value(", text)
+        heading = re.search(r"^### `value`\s*$", text, re.M)
+        self.assertIsNotNone(heading)
+        self.assertNotIn("`value` `property`", text)
+        after = text[heading.end() :]
+        meta = re.search(r'<p className="ac-symbol-meta">property</p>', after)
+        self.assertIsNotNone(meta)
+        self.assertIsNone(re.search(r"^#+", after[: meta.start()], re.M))
+        self.assertIsNone(re.search(r"^#+\s+`?property`?", text, re.M))
         self.assertNotIn("str(name)", render_object(self.env, widget["name"]))
         self.assertIn(
             "Literal['a', 'b']", render_object(self.env, self.module["Choice"])
@@ -254,6 +270,7 @@ raise RuntimeError("Documentation must never execute this module")
         )
         text = json.loads(process.stdout)["page"]
         self.assertIn('payload = {"path": "{origin}/mcp"}', text)
+        self.assertIn('className="ac-symbol-meta"', text)
         self.assertIn("`{origin}/mcp`", text)
         self.assertIn("`Widget`", text)
         self.assertEqual(text.count("[`Widget`](/widget#widget)"), 1)

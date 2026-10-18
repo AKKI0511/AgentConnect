@@ -1,4 +1,4 @@
-"""Load a symbol from a ``module:Name`` reference and join hosted Agents."""
+"""Load a symbol from a ``module:Name`` reference and construct hosted Agents."""
 
 from __future__ import annotations
 
@@ -40,51 +40,52 @@ def import_symbol(ref: str) -> object:
         raise ValueError(f"{ref} was not found") from exc
 
 
-def construct_hosted_agent(spec: HostedAgentConfig) -> BaseAgent:
-    """Build an unjoined Agent from a Team-file ``class`` entry.
+def construct_hosted_agent(name: str, spec: HostedAgentConfig) -> BaseAgent:
+    """Build an unjoined Agent from a Team-file ``entrypoint``.
 
-    ``class`` is a ``BaseAgent`` subclass, or a function
-    ``create(name) -> BaseAgent``. The result must be an unjoined
-    ``BaseAgent`` whose ``name`` matches the file.
+    ``entrypoint`` is a ``BaseAgent`` subclass or a synchronous factory.
+    Both are called as ``target(name=name, **kwargs)``. The result must be
+    an unjoined ``BaseAgent`` whose ``name`` matches ``name``.
     """
-    target = import_symbol(spec.class_path)
+    target = import_symbol(spec.entrypoint)
     if inspect.iscoroutinefunction(target) or inspect.isasyncgenfunction(target):
         raise ValueError(
-            f"{spec.class_path} must be synchronous; create(name) cannot be async"
+            f"{spec.entrypoint} must be synchronous; create(name, **kwargs) "
+            "cannot be async"
         )
     if not callable(target):
         raise ValueError(
-            f"{spec.class_path} must be a BaseAgent subclass or a function "
-            "create(name) that returns an unjoined BaseAgent"
+            f"{spec.entrypoint} must be a BaseAgent subclass or a function "
+            "create(name, **kwargs) that returns an unjoined BaseAgent"
         )
     try:
-        agent = target(name=spec.name)
+        agent = target(name=name, **dict(spec.kwargs))
     except TypeError as exc:
         raise ValueError(
-            f"{spec.class_path} must accept name={spec.name!r} and return an "
-            f"unjoined BaseAgent ({exc})"
+            f"could not construct {name!r} from {spec.entrypoint}: {exc}"
         ) from exc
     except BaseException as exc:
         if _is_control_flow(exc):
             raise
-        raise ValueError(f"{spec.class_path}: {exc}") from exc
+        raise ValueError(f"{spec.entrypoint}: {exc}") from exc
     if inspect.iscoroutine(agent):
         agent.close()
         raise ValueError(
-            f"{spec.class_path} must be synchronous; create(name) returned a coroutine"
+            f"{spec.entrypoint} must be synchronous; create(name, **kwargs) "
+            "returned a coroutine"
         )
     if not isinstance(agent, BaseAgent):
         raise ValueError(
-            f"{spec.class_path} returned {type(agent).__name__}, not a BaseAgent"
+            f"{spec.entrypoint} returned {type(agent).__name__}, not a BaseAgent"
         )
     if getattr(agent, "_session", None) is not None:
         raise ValueError(
-            f"{spec.class_path} returned a joined Agent; create(name) must "
-            "return an unjoined BaseAgent"
+            f"{spec.entrypoint} returned a joined Agent; create(name, **kwargs) "
+            "must return an unjoined BaseAgent"
         )
-    if agent.name != spec.name:
+    if agent.name != name:
         raise ValueError(
-            f"{spec.class_path} built Agent {agent.name!r}, expected {spec.name!r}"
+            f"{spec.entrypoint} built Agent {agent.name!r}, expected {name!r}"
         )
     return agent
 
@@ -113,11 +114,3 @@ def team_from_config(config: TeamConfig) -> Team:
         tools=extras or None,
         require_join_auth=config.require_join_auth,
     )
-
-
-async def join_hosted_agent(team: Team, agent: BaseAgent) -> None:
-    """Join ``agent`` to this process's ``team``.
-
-    An authenticated Team provisions the join token inside ``BaseAgent.join``.
-    """
-    await agent.join(team)

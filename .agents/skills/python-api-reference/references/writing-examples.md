@@ -238,6 +238,10 @@ site's supported syntax and inspect the resulting links.
 | “This stores payment and authentication text but does not pay or authenticate.” | Report whether those fields belong in the supported API. Do not preserve unused features by adding disclaimers. |
 | “It uses ctx.history” as the complete explanation of conversation state. | “Replies use the current conversation's earlier messages.” Link the public context/history API if callers can use it. |
 | “Use the class shown on the package page.” | Name and link the public class; state the local prerequisite, such as “Join a running Team before sending a request.” |
+| Build an Index record from a new identity, agent id, summary, skills and tags. | Put a canonical `DirectoryEntry` from `get_entry` (or an equivalent caller snapshot). The catalog does not take reconstructed identity or registration shapes. |
+| An inline `writer = { entrypoint = "..." }` table, then a later `[agents.writer.kwargs]` header. | One `[agents.writer]` section with `kwargs.model = "..."`. Illustrative config must parse. |
+| A three-column command table repeating `--url`, `--file`, and `--json` on every row. | Copyable commands, outcomes, and shared selection rules once. Point to `--help` for the rest. |
+| “A cancelled HTTP write leaves the previous snapshot.” | State what this client can actually observe. An interrupted HTTP write may already have committed; call `get` to check. Writes are not retried. |
 
 Self-contained does not mean exhaustive. A method using a product-specific result
 must identify what that result means and link its public type; it need not repeat

@@ -7,7 +7,8 @@
 # auto never sends Profiles or queries to a hosted embedder.
 #
 # Agents listed here are constructed by `agentconnect up`.
-# `class` is a BaseAgent subclass or create(name) -> BaseAgent.
+# `entrypoint` is a BaseAgent subclass or create(name, **kwargs) -> BaseAgent.
+# Optional `kwargs` belong to that class or factory. Do not put `name` there.
 # Agents in other processes join by URL with a token from
 # `agentconnect token issue` and are not listed here.
 #
@@ -17,19 +18,21 @@
 # Nearest directory wins. In that directory, agentconnect.toml beats
 # [tool.agentconnect] in pyproject.toml. Files are never merged.
 
-[tool.agentconnect]
 team = "content-squad"
 store = "memory"
 embeddings = "auto"
 host = "127.0.0.1"
 port = 9000
 require_join_auth = true
-tools = ["tools.docs:search_our_docs"]
+tools = [
+    "tools.docs:search_our_docs",
+]
 
-[[tool.agentconnect.agents]]
-class = "agents.researcher:Researcher"
-name = "researcher"
+[agents.researcher]
+entrypoint = "agents.researcher:Researcher"
 
-[[tool.agentconnect.agents]]
-class = "agents.writer:Writer"
-name = "writer"
+[agents.writer]
+entrypoint = "agents.writer:Writer"
+
+[agents.writer.kwargs]
+model = "provider/model"

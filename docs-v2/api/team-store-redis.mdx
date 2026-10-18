@@ -1,5 +1,5 @@
 ---
-title: "team.store.redis"
+title: "redis"
 sidebarTitle: "redis"
 ---
 
@@ -57,8 +57,9 @@ State survives a Runtime restart while Redis retains its data.
 
 <a id="agentconnect-team-store-redis-redisstore-open"></a>
 
-### `open` `async`
+### `open`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 open() -> None
 ```
@@ -71,8 +72,9 @@ Prepare the Redis client. Use `ping` to check reachability.
 
 <a id="agentconnect-team-store-redis-redisstore-close"></a>
 
-### `close` `async`
+### `close`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 close() -> None
 ```
@@ -81,8 +83,9 @@ Close the Redis client. The next `open` reconnects.
 
 <a id="agentconnect-team-store-redis-redisstore-ping"></a>
 
-### `ping` `async`
+### `ping`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 ping() -> None
 ```
@@ -91,8 +94,9 @@ Confirm Redis is reachable, reconnecting after a dropped link.
 
 <a id="agentconnect-team-store-redis-redisstore-get"></a>
 
-### `get` `async`
+### `get`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get(key: str) -> object
 ```
@@ -101,8 +105,9 @@ Return the stored JSON value, or None when the key is missing.
 
 <a id="agentconnect-team-store-redis-redisstore-get-many"></a>
 
-### `get_many` `async`
+### `get_many`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_many(keys: Sequence[str]) -> list[object]
 ```
@@ -114,8 +119,9 @@ span several batches and do not promise one snapshot.
 
 <a id="agentconnect-team-store-redis-redisstore-get-record"></a>
 
-### `get_record` `async`
+### `get_record`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_record(key: str) -> StoreRecord | None
 ```
@@ -126,8 +132,9 @@ Return the stored value and version, or None when the key is missing.
 
 <a id="agentconnect-team-store-redis-redisstore-apply"></a>
 
-### `apply` `async`
+### `apply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 apply(ops: Sequence[StoreOp]) -> ApplyResult
 ```
@@ -143,8 +150,9 @@ may be unknown. See `Store.apply` for ordering and conflict rules.
 
 <a id="agentconnect-team-store-redis-redisstore-put"></a>
 
-### `put` `async`
+### `put`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 put(key: str, value: object) -> None
 ```
@@ -153,8 +161,9 @@ Write a JSON value at `key`, bumping the version.
 
 <a id="agentconnect-team-store-redis-redisstore-insert"></a>
 
-### `insert` `async`
+### `insert`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 insert(key: str, value: object) -> bool
 ```
@@ -163,8 +172,9 @@ Write `value` only if `key` is absent. True when inserted.
 
 <a id="agentconnect-team-store-redis-redisstore-compare-and-set"></a>
 
-### `compare_and_set` `async`
+### `compare_and_set`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 compare_and_set(key: str, version: int, value: object) -> bool
 ```
@@ -173,8 +183,9 @@ Replace `key` when the stored version matches.
 
 <a id="agentconnect-team-store-redis-redisstore-delete"></a>
 
-### `delete` `async`
+### `delete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 delete(key: str) -> None
 ```
@@ -183,8 +194,9 @@ Remove the document, set, and index at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-add"></a>
 
-### `set_add` `async`
+### `set_add`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_add(key: str, member: str) -> None
 ```
@@ -193,8 +205,9 @@ Add `member` to the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-remove"></a>
 
-### `set_remove` `async`
+### `set_remove`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_remove(key: str, member: str) -> None
 ```
@@ -203,8 +216,9 @@ Remove `member` from the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-members"></a>
 
-### `set_members` `async`
+### `set_members`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_members(key: str) -> list[str]
 ```
@@ -213,8 +227,9 @@ Return the sorted members of the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-set-is-member"></a>
 
-### `set_is_member` `async`
+### `set_is_member`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 set_is_member(key: str, member: str) -> bool
 ```
@@ -223,8 +238,9 @@ Return True when `member` is in the Redis set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-add"></a>
 
-### `index_add` `async`
+### `index_add`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_add(key: str, score: float, member: str) -> None
 ```
@@ -233,8 +249,9 @@ Add or update `member` in the Redis sorted set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-remove"></a>
 
-### `index_remove` `async`
+### `index_remove`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_remove(key: str, member: str) -> None
 ```
@@ -243,8 +260,9 @@ Remove `member` from the Redis sorted set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-range"></a>
 
-### `index_range` `async`
+### `index_range`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_range(
     key: str,
@@ -259,8 +277,9 @@ Return members with scores in `[min_score, max_score]`, lowest first.
 
 <a id="agentconnect-team-store-redis-redisstore-index-card"></a>
 
-### `index_card` `async`
+### `index_card`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_card(key: str) -> int
 ```
@@ -269,8 +288,9 @@ Return the number of members in the Redis sorted set at `key`.
 
 <a id="agentconnect-team-store-redis-redisstore-index-add-if-card-below"></a>
 
-### `index_add_if_card_below` `async`
+### `index_add_if_card_below`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 index_add_if_card_below(key: str, score: float, member: str, max_card: int) -> bool
 ```
@@ -279,8 +299,9 @@ Add `member` when the sorted set has fewer than `max_card` members.
 
 <a id="agentconnect-team-store-redis-redisstore-increment-if-below"></a>
 
-### `increment_if_below` `async`
+### `increment_if_below`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 increment_if_below(key: str, limit: int, *, ttl_seconds: Optional[float] = None) -> bool
 ```
@@ -289,8 +310,9 @@ Increment an integer document when it is below `limit`.
 
 <a id="agentconnect-team-store-redis-redisstore-decrement-floor"></a>
 
-### `decrement_floor` `async`
+### `decrement_floor`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 decrement_floor(key: str, *, ttl_seconds: Optional[float] = None) -> int
 ```
@@ -299,8 +321,9 @@ Decrement an integer document, not below `0`.
 
 <a id="agentconnect-team-store-redis-redisstore-clear"></a>
 
-### `clear` `async`
+### `clear`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 clear() -> None
 ```

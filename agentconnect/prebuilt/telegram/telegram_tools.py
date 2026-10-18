@@ -11,15 +11,15 @@ import logging
 import os
 import uuid
 from typing import List, Optional, Set, TypedDict
-from agentconnect.core.base import JsonObject, JsonValue
-from pydantic.json_schema import JsonSchemaValue
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, URLInputFile
 from pydantic import BaseModel, Field
+from pydantic.json_schema import JsonSchemaValue
 
-from agentconnect.prebuilt.tools import Tool
+from agentconnect.agent.tools import Tool
+from agentconnect.core.base import JsonObject, JsonValue
 
 logger = logging.getLogger(__name__)
 

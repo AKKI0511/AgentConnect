@@ -20,7 +20,6 @@ from agentconnect.agent import BaseAgent
 from agentconnect.cli.hosting import (
     construct_hosted_agent,
     ensure_import_path,
-    join_hosted_agent,
     team_from_config,
 )
 from agentconnect.cli.main import _run_up
@@ -87,8 +86,8 @@ async def test_init_up_mcp_shared_tool_two_members(
     )
     monkeypatch.chdir(tmp_path)
     config_path, config = load_selected_team(start=tmp_path)
-    assert [spec.name for spec in config.agents] == ["assistant"]
-    assert "guest" not in {spec.name for spec in config.agents}
+    assert list(config.agents) == ["assistant"]
+    assert "guest" not in config.agents
     assert config.tools == ["tools.shared:ping"]
 
     for name in ("agents", "agents.assistant", "tools", "tools.shared"):
@@ -96,12 +95,12 @@ async def test_init_up_mcp_shared_tool_two_members(
 
     ensure_import_path(config_path.parent)
     team = team_from_config(config)
-    hosted = construct_hosted_agent(config.agents[0])
+    hosted = construct_hosted_agent("assistant", config.agents["assistant"])
     guest = Guest(name="guest")
     try:
         await team.start()
         origin = await team.serve(host=config.host, port=0)
-        await join_hosted_agent(team, hosted)
+        await hosted.join(team)
         issued = await team.issue_join_token(name="guest", agent_did=guest.agent_did)
         await guest.join(origin, join_token=issued["token"])
 
@@ -232,6 +231,15 @@ async def test_cli_up_serves_init_mcp(
             listed = {item.name for item in (await operator.list_tools()).tools}
             assert "ping" in listed
             assert "find" in listed
+            found = _body(
+                await operator.call_tool(
+                    "find", {"query": "someone who can answer a short request"}
+                )
+            )
+            assert isinstance(found, dict)
+            assert any(
+                match["address"].startswith("assistant@") for match in found["matches"]
+            )
     finally:
         task.cancel()
         with suppress(asyncio.CancelledError):

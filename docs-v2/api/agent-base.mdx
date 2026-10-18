@@ -1,5 +1,5 @@
 ---
-title: "agent.base"
+title: "base"
 sidebarTitle: "base"
 ---
 
@@ -166,7 +166,9 @@ delivery_history: DeliveryHistoryForm
 
 <a id="agentconnect-agent-base-baseagent-address"></a>
 
-### `address` `property`
+### `address`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 address: Optional[str]
@@ -176,7 +178,9 @@ Qualified Address after `join`, or `None` before it.
 
 <a id="agentconnect-agent-base-baseagent-connected"></a>
 
-### `connected` `property`
+### `connected`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 connected: bool
@@ -186,8 +190,9 @@ True while this copy has a live Session.
 
 <a id="agentconnect-agent-base-baseagent-join"></a>
 
-### `join` `async`
+### `join`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join(
     team_or_url: RuntimeOperations | str,
@@ -232,8 +237,9 @@ for a token you want to hand out.
 
 <a id="agentconnect-agent-base-baseagent-leave"></a>
 
-### `leave` `async`
+### `leave`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 leave() -> None
 ```
@@ -247,8 +253,9 @@ Ticket. `leave` does not remove the Membership. Use
 
 <a id="agentconnect-agent-base-baseagent-ask"></a>
 
-### `ask` `async`
+### `ask`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 ask(
     recipient: str,
@@ -327,8 +334,9 @@ if ticket.state == "completed":
 
 <a id="agentconnect-agent-base-baseagent-tell"></a>
 
-### `tell` `async`
+### `tell`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 tell(
     recipient: str,
@@ -378,8 +386,9 @@ Message id.
 
 <a id="agentconnect-agent-base-baseagent-find"></a>
 
-### `find` `async`
+### `find`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 find(query: str, *, limit: int | None = None) -> FindResult
 ```
@@ -424,8 +433,9 @@ if found.matches:
 
 <a id="agentconnect-agent-base-baseagent-get-entry"></a>
 
-### `get_entry` `async`
+### `get_entry`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_entry(address: str) -> DirectoryEntry
 ```
@@ -449,8 +459,9 @@ The entry includes Address, DID, and Profile.
 
 <a id="agentconnect-agent-base-baseagent-get-result"></a>
 
-### `get_result` `async`
+### `get_result`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_result(ticket_id: str) -> Ticket
 ```
@@ -489,8 +500,9 @@ if ticket.state == "completed":
 
 <a id="agentconnect-agent-base-baseagent-get-history"></a>
 
-### `get_history` `async`
+### `get_history`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_history(
     thread_id: str,
@@ -550,8 +562,9 @@ documents extra `Tool` callables.
 
 <a id="agentconnect-agent-base-baseagent-handle"></a>
 
-### `handle` `async`
+### `handle`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 handle(message: MailboxMessage, ctx: Context) -> object
 ```

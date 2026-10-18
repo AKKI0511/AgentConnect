@@ -1,5 +1,5 @@
 ---
-title: "agent.context"
+title: "context"
 sidebarTitle: "context"
 ---
 
@@ -24,7 +24,9 @@ to send related work. `get_history` reads older conversation turns.
 
 <a id="agentconnect-agent-context-context-sender"></a>
 
-### `sender` `property`
+### `sender`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 sender: str
@@ -34,7 +36,9 @@ Address of the Membership that sent this Message.
 
 <a id="agentconnect-agent-context-context-sender-did"></a>
 
-### `sender_did` `property`
+### `sender_did`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 sender_did: str
@@ -47,7 +51,9 @@ value unchanged.
 
 <a id="agentconnect-agent-context-context-message"></a>
 
-### `message` `property`
+### `message`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 message: MailboxMessage
@@ -59,7 +65,9 @@ The delivered request or event.
 
 <a id="agentconnect-agent-context-context-attempt"></a>
 
-### `attempt` `property`
+### `attempt`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 attempt: int
@@ -72,7 +80,9 @@ same Message.
 
 <a id="agentconnect-agent-context-context-lease-id"></a>
 
-### `lease_id` `property`
+### `lease_id`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 lease_id: str
@@ -82,7 +92,9 @@ Lease that authorizes completion of this attempt.
 
 <a id="agentconnect-agent-context-context-deadline"></a>
 
-### `deadline` `property`
+### `deadline`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 deadline: Optional[str]
@@ -92,7 +104,9 @@ Request deadline as an RFC 3339 timestamp. `None` for an event.
 
 <a id="agentconnect-agent-context-context-trace-id"></a>
 
-### `trace_id` `property`
+### `trace_id`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 trace_id: str
@@ -102,7 +116,9 @@ Id shared by this Message and Messages sent while handling it.
 
 <a id="agentconnect-agent-context-context-thread-id"></a>
 
-### `thread_id` `property`
+### `thread_id`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 thread_id: Optional[str]
@@ -112,7 +128,9 @@ Thread id when the Message belongs to a conversation. Otherwise `None`.
 
 <a id="agentconnect-agent-context-context-history"></a>
 
-### `history` `property`
+### `history`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 history: list[Message]
@@ -129,7 +147,9 @@ list is empty and `history_ids` holds the earlier ids.
 
 <a id="agentconnect-agent-context-context-history-ids"></a>
 
-### `history_ids` `property`
+### `history_ids`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 history_ids: Optional[list[str]]
@@ -142,7 +162,9 @@ Earlier Message ids when this Session joined with `delivery_history="ids"`.
 
 <a id="agentconnect-agent-context-context-history-complete"></a>
 
-### `history_complete` `property`
+### `history_complete`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 history_complete: bool
@@ -186,8 +208,9 @@ await pending.reply(draft)
 
 <a id="agentconnect-agent-context-context-ask"></a>
 
-### `ask` `async`
+### `ask`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 ask(
     recipient: str,
@@ -266,8 +289,9 @@ if ticket.state == "completed":
 
 <a id="agentconnect-agent-context-context-tell"></a>
 
-### `tell` `async`
+### `tell`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 tell(
     recipient: str,
@@ -312,8 +336,9 @@ Thread by the same rule as `ask`.
 
 <a id="agentconnect-agent-context-context-get-history"></a>
 
-### `get_history` `async`
+### `get_history`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_history(*, before: Optional[str] = None, limit: int = 50) -> HistoryResult
 ```
@@ -354,7 +379,9 @@ If it expires, another running copy may handle the Delivery.
 
 <a id="agentconnect-agent-context-deferredreply-lease-id"></a>
 
-### `lease_id` `property`
+### `lease_id`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 lease_id: str
@@ -364,7 +391,9 @@ Lease that authorizes this attempt.
 
 <a id="agentconnect-agent-context-deferredreply-message-id"></a>
 
-### `message_id` `property`
+### `message_id`
+
+<p className="ac-symbol-meta">property</p>
 
 ```python
 message_id: str
@@ -374,8 +403,9 @@ Id of the delivered Message. For a request, this is also the Ticket id.
 
 <a id="agentconnect-agent-context-deferredreply-reply"></a>
 
-### `reply` `async`
+### `reply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 reply(content: JsonValue = None) -> ReplyResult
 ```
@@ -401,8 +431,9 @@ Complete the request with `content`.
 
 <a id="agentconnect-agent-context-deferredreply-fail"></a>
 
-### `fail` `async`
+### `fail`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 fail(
     message: str,
@@ -443,8 +474,9 @@ the exception text.
 
 <a id="agentconnect-agent-context-deferredreply-decline"></a>
 
-### `decline` `async`
+### `decline`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 decline() -> CompleteResult
 ```

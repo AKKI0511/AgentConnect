@@ -1,5 +1,5 @@
 ---
-title: "transport.runtime"
+title: "runtime"
 sidebarTitle: "runtime"
 ---
 
@@ -59,8 +59,9 @@ Whether an identical later call may succeed; None means unknown.
 
 <a id="agentconnect-transport-runtime-transporterror-from-error-object"></a>
 
-### `from_error_object` `classmethod`
+### `from_error_object`
 
+<p className="ac-symbol-meta">classmethod</p>
 ```python
 from_error_object(body: Mapping[str, JsonValue]) -> 'TransportError'
 ```
@@ -82,8 +83,9 @@ also accept raw mappings; normalize external JSON before typed workflows.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-join"></a>
 
-### `join` `async`
+### `join`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join(*, request: JoinRequest) -> JoinResult
 ```
@@ -98,8 +100,9 @@ DID. Reusing an Instance id replaces that Instance's old Session.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-join-challenge"></a>
 
-### `join_challenge` `async`
+### `join_challenge`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join_challenge() -> JoinChallenge
 ```
@@ -110,8 +113,9 @@ Return JoinChallenge data for a fresh, short-lived proof of Agent key control.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-disconnect"></a>
 
-### `disconnect` `async`
+### `disconnect`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 disconnect(session_token: SessionToken) -> None
 ```
@@ -125,8 +129,9 @@ with `unauthorized`.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-heartbeat"></a>
 
-### `heartbeat` `async`
+### `heartbeat`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 heartbeat(session_token: SessionToken) -> HeartbeatResult
 ```
@@ -137,8 +142,9 @@ Extend Session expiry and return HeartbeatResult data; Delivery leases are uncha
 
 <a id="agentconnect-transport-runtime-runtimeoperations-send"></a>
 
-### `send` `async`
+### `send`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 send(session_token: SessionToken, request: SendRequest) -> SendResult
 ```
@@ -154,8 +160,9 @@ or a lost response does not establish whether the Runtime accepted the send.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-lease"></a>
 
-### `lease` `async`
+### `lease`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 lease(session_token: SessionToken, max_items: int = 1) -> LeaseResult
 ```
@@ -169,8 +176,9 @@ returned. Only this Session may renew, complete or reply under these leases.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-renew"></a>
 
-### `renew` `async`
+### `renew`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 renew(session_token: SessionToken, lease_id: Uuid) -> RenewResult
 ```
@@ -181,8 +189,9 @@ Extend a live lease owned by this Session and return RenewResult data; work dead
 
 <a id="agentconnect-transport-runtime-runtimeoperations-complete"></a>
 
-### `complete` `async`
+### `complete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 complete(session_token: SessionToken, lease_id: Uuid) -> CompleteResult
 ```
@@ -196,8 +205,9 @@ a reply or failure.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-reply"></a>
 
-### `reply` `async`
+### `reply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 reply(session_token: SessionToken, request: ReplyRequest) -> ReplyResult
 ```
@@ -211,8 +221,9 @@ unchanged for replay. Successful JSON-null content is a valid reply.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-get-result"></a>
 
-### `get_result` `async`
+### `get_result`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_result(session_token: SessionToken, ticket_id: Uuid) -> Ticket
 ```
@@ -226,8 +237,9 @@ inaccessible Tickets fail with `not_found`.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-get-history"></a>
 
-### `get_history` `async`
+### `get_history`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_history(
     session_token: SessionToken,
@@ -251,8 +263,9 @@ Use `next_before` as the next `before` until `has_more` is false.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-find"></a>
 
-### `find` `async`
+### `find`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 find(session_token: SessionToken, query: str, *, limit: int | None = None) -> FindResult
 ```
@@ -268,8 +281,9 @@ Return ranked FindResult candidates from this Team's Directory.
 
 <a id="agentconnect-transport-runtime-runtimeoperations-get-profile"></a>
 
-### `get_profile` `async`
+### `get_profile`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_profile(session_token: SessionToken, address: Address) -> DirectoryEntry
 ```
@@ -316,8 +330,9 @@ cancellation and release stream resources when iteration ends.
 
 <a id="agentconnect-transport-runtime-runtimetransport-close"></a>
 
-### `close` `async`
+### `close`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 close() -> None
 ```

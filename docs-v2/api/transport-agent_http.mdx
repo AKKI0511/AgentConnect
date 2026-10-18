@@ -1,5 +1,5 @@
 ---
-title: "transport.agent_http"
+title: "agent_http"
 sidebarTitle: "agent_http"
 ---
 
@@ -55,8 +55,9 @@ hold plus five seconds. This changes waiting, rather than a work deadline.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-join-challenge"></a>
 
-### `join_challenge` `async`
+### `join_challenge`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join_challenge() -> JoinChallenge
 ```
@@ -67,8 +68,9 @@ Fetch a fresh identity-proof challenge over HTTP without Session authentication.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-join"></a>
 
-### `join` `async`
+### `join`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 join(request: JoinRequest) -> JoinResult
 ```
@@ -79,8 +81,9 @@ Open a Session over HTTP with admission credentials in the JoinRequest body.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-disconnect"></a>
 
-### `disconnect` `async`
+### `disconnect`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 disconnect(session_token: SessionToken) -> None
 ```
@@ -91,8 +94,9 @@ End the Session over HTTP; its Membership and accepted work remain.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-heartbeat"></a>
 
-### `heartbeat` `async`
+### `heartbeat`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 heartbeat(session_token: SessionToken) -> HeartbeatResult
 ```
@@ -103,8 +107,9 @@ Renew Session expiry over HTTP; ordinary authenticated calls do not renew it.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-send"></a>
 
-### `send` `async`
+### `send`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 send(session_token: SessionToken, request: SendRequest) -> SendResult
 ```
@@ -120,8 +125,9 @@ Other connection failures are surfaced without this timeout retry.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-lease"></a>
 
-### `lease` `async`
+### `lease`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 lease(session_token: SessionToken, max_items: int = 1) -> LeaseResult
 ```
@@ -132,8 +138,9 @@ Fetch available Delivery attempts over HTTP within Session capacity.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-renew"></a>
 
-### `renew` `async`
+### `renew`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 renew(session_token: SessionToken, lease_id: Uuid) -> RenewResult
 ```
@@ -144,8 +151,9 @@ Renew an active attempt owned by the Session.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-complete"></a>
 
-### `complete` `async`
+### `complete`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 complete(session_token: SessionToken, lease_id: Uuid) -> CompleteResult
 ```
@@ -156,8 +164,9 @@ Complete an event or decline a request under an active Session-owned lease.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-reply"></a>
 
-### `reply` `async`
+### `reply`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 reply(session_token: SessionToken, request: ReplyRequest) -> ReplyResult
 ```
@@ -168,8 +177,9 @@ Submit a successful or failed reply under an active Session-owned request lease.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-get-result"></a>
 
-### `get_result` `async`
+### `get_result`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_result(session_token: SessionToken, ticket_id: Uuid) -> Ticket
 ```
@@ -180,8 +190,9 @@ Fetch retained wire Ticket data over HTTP under its owning Membership.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-get-history"></a>
 
-### `get_history` `async`
+### `get_history`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_history(
     session_token: SessionToken,
@@ -198,8 +209,9 @@ Fetch a retained history page over HTTP for a Thread the caller participates in.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-find"></a>
 
-### `find` `async`
+### `find`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 find(session_token: SessionToken, query: str, *, limit: int | None = None) -> FindResult
 ```
@@ -210,8 +222,9 @@ Fetch ranked Directory candidates over HTTP.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-get-profile"></a>
 
-### `get_profile` `async`
+### `get_profile`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 get_profile(session_token: SessionToken, address: Address) -> DirectoryEntry
 ```
@@ -222,8 +235,9 @@ Fetch a full Directory entry over HTTP for a same-Team Address.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-events"></a>
 
-### `events` `async`
+### `events`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 events(session_token: SessionToken) -> AsyncIterator[RuntimeEvent]
 ```
@@ -238,8 +252,9 @@ are yielded for the client to ignore.
 
 <a id="agentconnect-transport-agent-http-httpruntimetransport-close"></a>
 
-### `close` `async`
+### `close`
 
+<p className="ac-symbol-meta">async</p>
 ```python
 close() -> None
 ```

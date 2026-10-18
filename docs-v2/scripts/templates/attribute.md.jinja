@@ -1,4 +1,4 @@
-{{ ('`' ~ attribute.name ~ '`')|heading(heading_level) }}
+{{ ('`' ~ attribute.name ~ '`')|heading(heading_level) }}{{ attribute|symbol_meta }}
 
 {{ attribute|field_widget }}
 

@@ -1,0 +1,123 @@
+name: Release
+
+# Consume the exact distributions installed by successful main CI; never rebuild.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: "Successful main push CI run ID to publish or retry"
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      publish: ${{ steps.verify.outputs.publish }}
+      version: ${{ steps.verify.outputs.version }}
+      sha: ${{ steps.verify.outputs.sha }}
+      run_id: ${{ steps.plan.outputs.run_id }}
+      artifact_id: ${{ steps.plan.outputs.artifact_id }}
+      skip_pypi: ${{ steps.pypi.outputs.skip_pypi }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate source CI run
+        id: plan
+        env:
+          CI_RUN_ID: ${{ github.event.workflow_run.id || inputs.ci_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release_plan.py plan
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ steps.plan.outputs.artifact_id }}
+          merge-multiple: true
+          run-id: ${{ steps.plan.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify tested commit and artifact hashes
+        id: verify
+        env:
+          CI_RUN_ID: ${{ steps.plan.outputs.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release_plan.py verify
+      - name: Check existing PyPI hashes
+        if: steps.verify.outputs.publish == 'true'
+        id: pypi
+        env:
+          VERSION: ${{ steps.verify.outputs.version }}
+        run: python3 .github/scripts/release_plan.py pypi-status
+
+  publish-pypi:
+    needs: verify
+    if: needs.verify.outputs.publish == 'true' && needs.verify.outputs.skip_pypi != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi-prod
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          merge-multiple: true
+          run-id: ${{ needs.verify.outputs.run_id }}
+          github-token: ${{ github.token }}
+      # Existing files have already passed exact SHA256 comparison. This permits
+      # recovery if PyPI accepted only one file before a previous run failed.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
+  github-release:
+    needs: [verify, publish-pypi]
+    if: >-
+      !cancelled() && needs.verify.result == 'success' &&
+      needs.verify.outputs.publish == 'true' &&
+      (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          merge-multiple: true
+          run-id: ${{ needs.verify.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Create or complete release from verified artifacts
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          SHA: ${{ needs.verify.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release_plan.py github-release

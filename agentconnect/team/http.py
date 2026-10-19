@@ -128,8 +128,7 @@ def create_runtime_app(team: Team) -> FastAPI:
 
     Session routes are under `/agentconnect/v1`. Team MCP is at `/mcp`.
     Call `start` before you pass `team` in. Stop `team` when your server
-    shuts down. Install `agentconnect[serve]` before calling this, then
-    pass `app` to your ASGI server.
+    shuts down. Pass `app` to your ASGI server.
 
     `POST /agentconnect/v1/join` and `GET /agentconnect/v1/join/challenge`
     need no Session bearer. Every other Session route needs the bearer

@@ -7,7 +7,7 @@ Pass your own functions as `tools`. Pass `complete` to replace LiteLLM.
 
 Examples:
     `team` is started and `researcher` has joined it. After
-    `pip install 'agentconnect[aiagent]'`:
+    `pip install 'agentconnect[prebuilt]'`:
 
     ```python
     from agentconnect.prebuilt import AIAgent
@@ -268,7 +268,7 @@ async def _litellm_complete(**kwargs: Any) -> object:
         import litellm
     except ImportError as exc:
         raise ImportError(
-            "AIAgent requires the aiagent extra. "
-            "Install with: pip install 'agentconnect[aiagent]'"
+            "AIAgent requires the prebuilt extra. "
+            "Install with: pip install 'agentconnect[prebuilt]'"
         ) from exc
     return await litellm.acompletion(**kwargs)

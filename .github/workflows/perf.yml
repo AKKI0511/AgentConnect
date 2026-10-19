@@ -52,56 +52,51 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
+      # Benchmark groups stay sequential: they compete for CPU and Redis.
       - id: dependencies
-        run: uv sync --locked --group benchmark --extra serve --extra cli --extra embeddings --extra redis
+        run: uv sync --locked --group benchmark --extra embeddings --extra redis
       - name: Create result directory
         run: mkdir -p benchmarks/runtime/results
       - name: Cold, Profile update, fallback
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/test_phases.py
           --benchmark-json=benchmarks/runtime/results/phases.json
           --junitxml=benchmarks/runtime/results/phases.xml
       - name: Hashed warm find
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/test_warm_find.py
           --benchmark-json=benchmarks/runtime/results/warm.json
           --junitxml=benchmarks/runtime/results/warm.xml
       - name: Overlap send, renew, expiry
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/test_overlap.py
           --benchmark-json=benchmarks/runtime/results/overlap.json
           --junitxml=benchmarks/runtime/results/overlap.xml
       - name: Neural FastEmbed
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/test_neural.py
           --benchmark-json=benchmarks/runtime/results/neural.json
           --junitxml=benchmarks/runtime/results/neural.xml
       - name: Hashed stress
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/test_stress.py
           --benchmark-json=benchmarks/runtime/results/stress.json
           --junitxml=benchmarks/runtime/results/stress.xml
       - name: Request/reply exchange
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/request_reply
           --benchmark-json=benchmarks/runtime/results/exchange.json
           --junitxml=benchmarks/runtime/results/exchange.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: runtime-bench

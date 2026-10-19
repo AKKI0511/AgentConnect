@@ -22,6 +22,45 @@ from agentconnect.team.retention import RETAINED_BYTES_KEY
 pytestmark = pytest.mark.asyncio
 
 
+async def test_stop_finishes_when_store_consumes_sweep_cancellation(
+    runtime_store, monkeypatch
+):
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+    calls = 0
+
+    async def sweep():
+        nonlocal calls
+        calls += 1
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            if cancelled.is_set():
+                raise
+            # Python 3.11 wait_for can consume cancellation when the
+            # Redis socket write completes at the same time as stop().
+            cancelled.set()
+
+    team = await start_team(runtime_store, sweep_interval_seconds=0.001)
+    monkeypatch.setattr(team, "_sweep_once", sweep)
+    stop = None
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        stop = asyncio.create_task(team.stop())
+        done, _pending = await asyncio.wait({stop}, timeout=1)
+        assert cancelled.is_set()
+        assert stop in done, "stop continued sweeping after cancellation was consumed"
+        await stop
+        assert calls == 1
+        assert team._sweep_task is None
+    finally:
+        if stop is not None and not stop.done():
+            stop.cancel()
+            await asyncio.gather(stop, return_exceptions=True)
+        await team.stop()
+
+
 async def _join_with_proof(team: Team, identity: AgentIdentity, name: str, token: str):
     challenge = await team.join_challenge()
     proof = issue_identity_proof(identity, challenge)

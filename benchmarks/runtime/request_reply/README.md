@@ -30,7 +30,7 @@ work hints are not shared. Empty-lease retries cover cross-process delay.
 Start the dedicated test Redis from [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ```powershell
-uv sync --locked --group benchmark --extra serve --extra redis
+uv sync --locked --group benchmark --extra redis
 uv run --no-sync pytest benchmarks/runtime/request_reply -q --benchmark-warmup=off --benchmark-json=benchmarks/runtime/results/exchange.json
 ```
 

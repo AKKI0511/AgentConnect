@@ -8,7 +8,7 @@ sidebarTitle: "human_agent"
 Terminal human on a Team.
 
 `HumanAgent` is a `BaseAgent` that prints incoming work and reads a
-reply from stdin. It needs the `cli` extra (`aioconsole`).
+reply from stdin. It needs the `prebuilt` extra (`aioconsole`).
 
 `read_line` replaces stdin when another UI should supply the text.
 Empty input, `exit`, `quit`, and `bye` decline a request. Call `leave`
@@ -17,7 +17,7 @@ when the Session should close.
 **Examples:**
 
 `team` is started and `assistant` has joined. After
-`pip install 'agentconnect[cli]'`:
+`pip install 'agentconnect[prebuilt]'`:
 
 ```python
 from agentconnect.prebuilt import HumanAgent

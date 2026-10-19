@@ -73,7 +73,6 @@ def create_index_app(settings: Optional[IndexSettings] = None) -> FastAPI:
     """Return an ASGI app that owns one Index roster.
 
     Each app has its own snapshots. Closing the app drops that roster.
-    Install `agentconnect[index]` before serving.
     """
 
     resolved = settings or IndexSettings()

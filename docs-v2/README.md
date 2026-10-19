@@ -1,6 +1,6 @@
 # AgentConnect documentation website
 
-This directory contains the Mintlify website and Python API reference. The existing site in `../docs/` remains separate until migration.
+This directory is the AgentConnect documentation site and Python API reference. Hosted publishing is not configured by the repository workflows.
 
 ## Local preview
 

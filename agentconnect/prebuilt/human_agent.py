@@ -1,7 +1,7 @@
 """Terminal human on a Team.
 
 `HumanAgent` is a `BaseAgent` that prints incoming work and reads a
-reply from stdin. It needs the `cli` extra (`aioconsole`).
+reply from stdin. It needs the `prebuilt` extra (`aioconsole`).
 
 `read_line` replaces stdin when another UI should supply the text.
 Empty input, `exit`, `quit`, and `bye` decline a request. Call `leave`
@@ -9,7 +9,7 @@ when the Session should close.
 
 Examples:
     `team` is started and `assistant` has joined. After
-    `pip install 'agentconnect[cli]'`:
+    `pip install 'agentconnect[prebuilt]'`:
 
     ```python
     from agentconnect.prebuilt import HumanAgent
@@ -134,13 +134,13 @@ class HumanAgent(BaseAgent):
 
 
 async def _ainput(prompt: str) -> str:
-    """Read one line from stdin. Requires ``agentconnect[cli]``."""
+    """Read one line from stdin. Requires ``agentconnect[prebuilt]``."""
     try:
         import aioconsole  # type: ignore[import-untyped]  # aioconsole does not publish typing metadata.
     except ImportError as exc:
         raise ImportError(
-            "HumanAgent requires the cli extra. "
-            "Install with: pip install 'agentconnect[cli]'"
+            "HumanAgent requires the prebuilt extra. "
+            "Install with: pip install 'agentconnect[prebuilt]'"
         ) from exc
     value: object = await aioconsole.ainput(prompt)
     if not isinstance(value, str):

@@ -1,8 +1,5 @@
 """Start a Team and talk to it as the operator.
 
-Install the CLI extra (`agentconnect[cli]`). Use the `agentconnect` script
-or `python -m agentconnect.cli`.
-
 Foreground `up` occupies the terminal until interrupted. Run other commands
 from a second terminal, or use `up --detach`, which returns before the
 Runtime is ready.

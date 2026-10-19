@@ -119,7 +119,7 @@ await team.serve()
 print(team.mcp_url)
 ```
 
-Install the `agentconnect[serve]` extra and point your MCP clients at the printed URL. Connected, authorized agents can use `style_guide` alongside the collaboration tools.
+Point your MCP clients at the printed URL. Connected, authorized agents can use `style_guide` alongside the collaboration tools.
 
 Use shared tools to give your team access to project information, services, or guidelines. Your harness can also keep using its existing MCP servers.
 

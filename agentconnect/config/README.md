@@ -45,8 +45,9 @@ the directory that contains the chosen file.
   ``fastembed:<model>``, ``openai``, ``openai:<model>``, ``litellm``, or
   ``litellm:<model>``. ``auto`` uses local ONNX when installed, otherwise
   hashed n-grams. Ambient API keys do not select hosted embeddings.
-  ``openai`` needs ``agentconnect[openai]`` (tiktoken). ``litellm`` needs
-  ``agentconnect[aiagent,openai]`` and only OpenAI or Azure embedding models.
+  ``openai`` needs ``agentconnect[embeddings]`` (tiktoken). ``litellm``
+  needs ``agentconnect[embeddings,prebuilt]`` and only OpenAI or Azure
+  embedding models.
 - ``host`` / ``port``: loopback address ``agentconnect up`` binds
 - ``require_join_auth``: when true, every join needs a token and proof
 - ``agents``: mapping of canonical Agent names to hosted entries

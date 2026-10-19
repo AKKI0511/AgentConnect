@@ -676,9 +676,8 @@ class Team:
         Issue a join token separately for a URL join. Attach MCP, or
         `BaseAgent.team_tools`, in the harness yourself.
 
-        Install `agentconnect[serve]` first. An already-serving Team returns
-        its current origin. Agents on other hosts need `create_runtime_app`
-        on your server.
+        An already-serving Team returns its current origin. Agents on
+        other hosts need `create_runtime_app` on your server.
 
         A request with no Authorization or forwarded-client headers runs
         as the operator membership. See `create_runtime_app` for Session
@@ -689,8 +688,8 @@ class Team:
             port: Zero lets the OS choose a port.
 
         Raises:
-            TeamError: Non-loopback host (`invalid_request`), missing serve
-                extra, or listener startup failure (`unavailable`).
+            TeamError: Non-loopback host (`invalid_request`) or listener
+                startup failure (`unavailable`).
 
         Examples:
             In an async application, `team` is already started with
@@ -728,8 +727,7 @@ class Team:
         except ImportError:
             _fail(
                 "unavailable",
-                "HTTP serving requires the serve extra. "
-                "Install with: pip install 'agentconnect[serve]'",
+                "HTTP serving requires FastAPI and uvicorn",
             )
 
         app = create_runtime_app(self)
@@ -3112,7 +3110,9 @@ class Team:
 
     async def _sweep_loop(self) -> None:
         try:
-            while True:
+            # Python 3.11 wait_for can consume cancellation when a Redis
+            # write completes concurrently. stop() also clears this flag.
+            while self._started:
                 await asyncio.sleep(self.sweep_interval_seconds)
                 try:
                     await self._sweep_once()

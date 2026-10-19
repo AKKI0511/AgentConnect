@@ -5,13 +5,13 @@ Use `AIAgent` for a LiteLLM model id. Use `HumanAgent` when a person
 types the reply. Use `TelegramAIAgent` when Telegram chats should use
 that same model.
 
-`AIAgent` needs `agentconnect[aiagent]`. `HumanAgent` needs
-`agentconnect[cli]`. `TelegramAIAgent` needs `agentconnect[telegram]`.
-Provider keys and `TELEGRAM_BOT_TOKEN` stay in the environment.
+`AIAgent`, `HumanAgent`, and `TelegramAIAgent` need
+`agentconnect[prebuilt]`. Provider keys and `TELEGRAM_BOT_TOKEN` stay in
+the environment.
 
 Examples:
     `team` is started and `researcher` has joined. After
-    `pip install 'agentconnect[aiagent]'`:
+    `pip install 'agentconnect[prebuilt]'`:
 
     ```python
     from agentconnect.prebuilt import AIAgent
@@ -58,8 +58,8 @@ def __getattr__(name: str) -> object:
             from .human_agent import HumanAgent
         except ImportError as exc:
             raise ImportError(
-                "HumanAgent requires the cli extra. "
-                "Install with: pip install 'agentconnect[cli]'"
+                "HumanAgent requires the prebuilt extra. "
+                "Install with: pip install 'agentconnect[prebuilt]'"
             ) from exc
         return HumanAgent
     if name == "TelegramAIAgent":
@@ -67,8 +67,8 @@ def __getattr__(name: str) -> object:
             from .telegram import TelegramAIAgent
         except ImportError as exc:
             raise ImportError(
-                "TelegramAIAgent requires the telegram extra. "
-                "Install with: pip install 'agentconnect[telegram]'"
+                "TelegramAIAgent requires the prebuilt extra. "
+                "Install with: pip install 'agentconnect[prebuilt]'"
             ) from exc
         return TelegramAIAgent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -5,7 +5,7 @@ description = "Foreground ship-desk Team for qualitative Team MCP tool-use resea
 readme = "README.md"
 requires-python = ">=3.11,<4"
 dependencies = [
-    "agentconnect[serve]",
+    "agentconnect",
 ]
 
 [tool.uv]

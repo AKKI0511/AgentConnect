@@ -6,7 +6,7 @@ Team Directory. A search hit is not a Team address. Obtain an entry with
 [`BaseAgent.get_entry`][agentconnect.agent.base.BaseAgent.get_entry].
 
 ```bash
-uv sync --extra index
+uv sync
 python -m agentconnect.index.service
 ```
 

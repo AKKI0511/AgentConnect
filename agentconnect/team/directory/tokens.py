@@ -24,8 +24,8 @@ OPENAI_INPUT_TOKENS = 8191
 OPENAI_REQUEST_TOKENS = 300_000
 DEFAULT_LOCAL_INPUT_TOKENS = 512
 _TIKTOKEN_PROVIDERS = frozenset({"openai", "azure"})
-_OPENAI_INSTALL = "pip install 'agentconnect[openai]'"
-_LITELLM_INSTALL = "pip install 'agentconnect[aiagent,openai]'"
+_OPENAI_INSTALL = "pip install 'agentconnect[embeddings]'"
+_LITELLM_INSTALL = "pip install 'agentconnect[embeddings,prebuilt]'"
 
 
 class EmbeddingSetupError(RuntimeError):

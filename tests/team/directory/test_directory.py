@@ -1342,18 +1342,18 @@ async def test_hosted_setup_error_does_not_switch_to_hashed():
         async def embed(self, texts):
             raise EmbeddingSetupError(
                 "OpenAI Directory embeddings require tiktoken. "
-                "Install it with pip install 'agentconnect[openai]'."
+                "Install it with pip install 'agentconnect[embeddings]'."
             )
 
     directory = _Directory(MemoryStore(), _SetupBoom())
-    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
+    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[embeddings\]"):
         await directory.upsert("writer", _writer())
     assert not directory.using_fallback
 
     runtime = Team("content-squad", embeddings=_SetupBoom())
     await runtime.start()
     try:
-        with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
+        with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[embeddings\]"):
             await join_member(runtime, "writer", profile=_writer())
         assert runtime._directory is not None
         assert not runtime._directory.using_fallback
@@ -1368,12 +1368,12 @@ async def test_hosted_setup_error_does_not_switch_to_hashed():
         async def boom(*_args, **_kwargs):
             raise EmbeddingSetupError(
                 "OpenAI Directory embeddings require tiktoken. "
-                "Install it with pip install 'agentconnect[openai]'."
+                "Install it with pip install 'agentconnect[embeddings]'."
             )
 
         assert hashed._directory is not None
         hashed._directory.search = boom  # type: ignore[method-assign]
-        with pytest.raises(TeamError, match=r"agentconnect\[openai\]") as exc:
+        with pytest.raises(TeamError, match=r"agentconnect\[embeddings\]") as exc:
             await hashed.find(caller["session_token"], "writer")
         assert exc.value.code == "unavailable"
         assert not hashed._directory.using_fallback

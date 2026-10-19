@@ -1,6 +1,6 @@
 ---
 title: "Install"
-description: "Add AgentConnect to a Python project and choose extras for serving, CLI, Redis, and models."
+description: "Add AgentConnect with pip or uv. Optional extras add Redis, embeddings, and prebuilt agents."
 keywords: ["install", "pip", "uv", "extras"]
 ---
 
@@ -24,19 +24,17 @@ uv add agentconnect
 
 ## Extras
 
-Install only what the process needs. Core works without model providers or server packages.
-
 | Extra | Use |
 | --- | --- |
-| `serve` | HTTP Runtime |
-| `cli` | Command-line entry point |
-| `redis` | Redis-backed stores |
-| `openai` | OpenAI model helper |
-| `index` | Published-directory Index |
+| `redis` | Redis-backed store |
+| `embeddings` | Local FastEmbed and hosted OpenAI/Azure tokenizers |
+| `prebuilt` | `AIAgent`, `HumanAgent`, `TelegramAIAgent`, LiteLLM hosted embeddings |
 
 ```bash
-pip install 'agentconnect[serve,cli]'
+pip install 'agentconnect[redis,embeddings,prebuilt]'
 ```
+
+Hosted embeddings still need an explicit Team selection. An API key in the environment is not permission to send Profile text.
 
 ## Check
 

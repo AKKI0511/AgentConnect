@@ -63,6 +63,24 @@ def test_failed_stop_keeps_state_and_is_nonzero(tmp_path: Path, monkeypatch) -> 
     assert state_path(config).is_file()
 
 
+def _dead_pid() -> int:
+    """Return a PID that inspect_process has proven gone.
+
+    Hardcoded PIDs such as 4242 are often live and unreadable on Windows
+    (OpenProcess ACCESS_DENIED), so they are not a dead-process fixture.
+    """
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import sys; sys.exit(0)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    pid = proc.pid
+    proc.wait(timeout=10)
+    status, _token = inspect_process(pid)
+    assert status == "dead", f"expected dead pid, inspect_process({pid})={status!r}"
+    return pid
+
+
 def test_reused_pid_is_not_killed(tmp_path: Path) -> None:
     config = _toml(tmp_path / "agentconnect.toml", team="demo")
     write_state(
@@ -83,7 +101,7 @@ def test_reused_pid_is_not_killed(tmp_path: Path) -> None:
 def test_dead_pid_clears_state(tmp_path: Path) -> None:
     config = _toml(tmp_path / "agentconnect.toml", team="demo")
     write_state(
-        config, pid=4242, url="http://127.0.0.1:9000", team="demo", created="t0"
+        config, pid=_dead_pid(), url="http://127.0.0.1:9000", team="demo", created="t0"
     )
     result = run_cli("down", cwd=tmp_path)
     assert result.returncode == 0
@@ -94,14 +112,17 @@ def test_dead_pid_clears_state(tmp_path: Path) -> None:
 def test_two_configs_have_separate_state(tmp_path: Path) -> None:
     first = _toml(tmp_path / "one.toml", team="one", port=9001)
     second = _toml(tmp_path / "two.toml", team="two", port=9002)
-    write_state(first, pid=4242, url="http://127.0.0.1:9001", team="one", created="a")
-    write_state(second, pid=4243, url="http://127.0.0.1:9002", team="two", created="b")
+    kept = _dead_pid()
+    write_state(
+        first, pid=_dead_pid(), url="http://127.0.0.1:9001", team="one", created="a"
+    )
+    write_state(second, pid=kept, url="http://127.0.0.1:9002", team="two", created="b")
     result = run_cli("down", "--file", str(first), cwd=tmp_path)
     assert result.returncode == 0
     assert read_state(first) is None
     leftover = read_state(second)
     assert leftover is not None
-    assert leftover["pid"] == 4243
+    assert leftover["pid"] == kept
 
 
 def test_nested_directory_stop_uses_parent_config(tmp_path: Path) -> None:
@@ -110,7 +131,7 @@ def test_nested_directory_stop_uses_parent_config(tmp_path: Path) -> None:
     nested.mkdir(parents=True)
     config = _toml(project / "agentconnect.toml", team="demo")
     write_state(
-        config, pid=4242, url="http://127.0.0.1:9000", team="demo", created="t0"
+        config, pid=_dead_pid(), url="http://127.0.0.1:9000", team="demo", created="t0"
     )
     result = run_cli("down", cwd=nested)
     assert result.returncode == 0

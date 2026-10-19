@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -23,26 +23,63 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
       - uses: actions/setup-node@v7
         with:
           node-version: "lts/*"
-      - name: Lint and formatting
+      - parallel:
+          - name: Lint
+            run: uvx ruff@latest check agentconnect tests examples experiments benchmarks .github/scripts
+          - name: Formatting
+            run: uvx ruff@latest format --check agentconnect tests examples experiments benchmarks .github/scripts
+          - name: Lockfiles
+            run: |
+              uv lock --check
+              uv lock --check --directory examples/quickstart
+              uv lock --check --directory examples/recipes
+              uv lock --check --directory experiments/team_tools
+          - name: Generated schema
+            run: |
+              npm --prefix spec/schema ci
+              npm --prefix spec/schema run check
+          - name: Release flow tests
+            run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+  version-bump:
+    name: Release branch version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Allow version bumps only on release/* branches
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          uvx ruff@latest check agentconnect tests examples experiments benchmarks docs/generate_docs.py
-          uvx ruff@latest format --check agentconnect tests examples experiments benchmarks docs/generate_docs.py
-      - name: Lockfiles and generated schema
-        run: |
-          uv lock --check
-          uv lock --check --directory examples/quickstart
-          uv lock --check --directory examples/recipes
-          uv lock --check --directory experiments/team_tools
-          npm --prefix spec/schema ci
-          npm --prefix spec/schema run check
+          python3 - <<'PY'
+          import os, subprocess, sys, tomllib
+          if os.environ["EVENT_NAME"] != "pull_request":
+              sys.exit(0)
+          if os.environ["BRANCH_NAME"].startswith("release/"):
+              sys.exit(0)
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", f"origin/{os.environ['BASE_REF']}"], text=True
+          ).strip()
+          def version(rev):
+              raw = subprocess.check_output(["git", "show", f"{rev}:pyproject.toml"])
+              return tomllib.loads(raw.decode("utf-8"))["project"]["version"]
+          if version(base) != version("HEAD"):
+              sys.exit("Version changes in pyproject.toml belong on a release/* branch.")
+          PY
 
   types:
+    needs: [checks, version-bump]
     name: Framework types
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -50,13 +87,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
       - name: Strict framework and runtime conformance
         run: uv run --locked --all-extras mypy
 
   tests:
+    needs: [checks, version-bump]
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -76,20 +114,21 @@ jobs:
           --health-retries 20
         command: redis-server --enable-debug-command yes --appendonly yes
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync --locked --extra serve --extra cli --extra index --extra openai --extra redis
+      - run: uv sync --locked --extra redis --extra embeddings --extra prebuilt
       - run: uv run --no-sync pytest tests/ -q
 
   windows-imports:
+    needs: [checks, version-bump]
     name: Windows imports
     runs-on: windows-latest
     timeout-minutes: 15
@@ -97,43 +136,164 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
-      - run: uv sync --locked --extra serve --extra cli --extra index --extra openai
+      - run: uv sync --locked
       - run: uv run --no-sync pytest tests/imports/ -q
 
   package:
+    needs: [checks, version-bump]
     name: Distribution install
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
       - run: uv build
-      - name: Install wheel and sdist outside the checkout
+      - name: Check wheel and sdist contents
+        run: |
+          python3 - <<'PY'
+          import sys, tarfile, zipfile
+          from pathlib import Path
+
+          dist = Path("dist")
+          wheels = list(dist.glob("*.whl"))
+          sdists = list(dist.glob("*.tar.gz"))
+          if len(wheels) != 1 or len(sdists) != 1:
+              sys.exit(f"expected one wheel and one sdist, got {wheels} {sdists}")
+
+          with zipfile.ZipFile(wheels[0]) as zf:
+              names = zf.namelist()
+          required = (
+              "agentconnect/py.typed",
+              "agentconnect/config/agentconnect.example.toml",
+          )
+          missing = [item for item in required if item not in names]
+          if missing:
+              sys.exit(f"wheel missing {missing}")
+          prefixes = ("req/", "internal/", "tests/", "experiments/")
+          leaked = [
+              name
+              for name in names
+              if name.startswith(prefixes)
+              or name == "example.env"
+              or name.rsplit("/", 1)[-1] == ".env"
+          ]
+          if leaked:
+              sys.exit(f"wheel contains private or extra paths: {leaked[:20]}")
+
+          with tarfile.open(sdists[0], "r:gz") as tf:
+              members = [member.name.replace("\\", "/") for member in tf.getmembers()]
+          leaked = [
+              name
+              for name in members
+              if "/req/" in f"/{name}/"
+              or "/internal/" in f"/{name}/"
+              or name.rsplit("/", 1)[-1] == ".env"
+          ]
+          if leaked:
+              sys.exit(f"sdist contains private material: {leaked[:20]}")
+          print("wheel and sdist contents ok")
+          PY
+      - name: Install wheel, sdist, and sdist-rebuilt wheel outside the checkout
         run: |
           set -euo pipefail
-          for artifact in "$GITHUB_WORKSPACE"/dist/*.whl "$GITHUB_WORKSPACE"/dist/*.tar.gz; do
-            work="$(mktemp -d "$RUNNER_TEMP/ac-package.XXXXXX")"
-            uv venv "$work/venv"
-            (
-              cd "$work"
-              uv pip install --python venv/bin/python "$artifact"
-              venv/bin/python -c "from agentconnect.agent import BaseAgent; from agentconnect.team import Team"
-              uv pip install --python venv/bin/python "$artifact[serve,cli]"
-              venv/bin/python -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli.main import main"
-            )
-          done
+          inspect() {
+            local python="$1"
+            "$python" -c "from agentconnect.agent import BaseAgent; from agentconnect.team import Team"
+            "$python" -c "from agentconnect.team.http import create_runtime_app; from agentconnect.mcp import create_team_mcp; from agentconnect.cli.main import main; from agentconnect.index.service import create_index_app"
+            "$python" -c "import agentconnect, importlib.metadata as m; assert agentconnect.__version__ == m.version('agentconnect')"
+            "$python" -c "import pathlib, agentconnect; root = pathlib.Path(agentconnect.__file__).resolve().parent; assert (root / 'py.typed').is_file()"
+          }
+
+          wheel="$(echo "$GITHUB_WORKSPACE"/dist/*.whl)"
+          sdist="$(echo "$GITHUB_WORKSPACE"/dist/*.tar.gz)"
+
+          work="$(mktemp -d "$RUNNER_TEMP/ac-uv-wheel.XXXXXX")"
+          uv venv "$work/venv"
+          (
+            cd "$work"
+            uv pip install --python venv/bin/python "$wheel"
+            inspect venv/bin/python
+            venv/bin/agentconnect version
+            uv pip install --python venv/bin/python "$wheel[redis,embeddings,prebuilt]"
+            venv/bin/python -c "import redis, tiktoken, aioconsole"
+          )
+
+          work="$(mktemp -d "$RUNNER_TEMP/ac-pip-wheel.XXXXXX")"
+          uv venv "$work/venv"
+          uv pip install --python "$work/venv/bin/python" pip
+          (
+            cd "$work"
+            venv/bin/python -m pip install "$wheel"
+            inspect venv/bin/python
+            venv/bin/python -m pip install "$wheel[redis]"
+          )
+
+          work="$(mktemp -d "$RUNNER_TEMP/ac-uv-sdist.XXXXXX")"
+          uv venv "$work/venv"
+          (
+            cd "$work"
+            uv pip install --python venv/bin/python "$sdist"
+            inspect venv/bin/python
+          )
+
+          src_root="$(mktemp -d "$RUNNER_TEMP/ac-sdist-src.XXXXXX")"
+          tar -xzf "$sdist" -C "$src_root"
+          src="$(find "$src_root" -maxdepth 1 -mindepth 1 -type d | head -n1)"
+          rebuilt="$(mktemp -d "$RUNNER_TEMP/ac-rebuilt.XXXXXX")"
+          uv build --directory "$src" --out-dir "$rebuilt"
+          rebuilt_wheel="$(echo "$rebuilt"/*.whl)"
+          work="$(mktemp -d "$RUNNER_TEMP/ac-sdist-wheel.XXXXXX")"
+          uv venv "$work/venv"
+          (
+            cd "$work"
+            uv pip install --python venv/bin/python "$rebuilt_wheel"
+            inspect venv/bin/python
+            venv/bin/agentconnect version
+          )
+
+      - name: Record release metadata for the tested distributions
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: python3 .github/scripts/release_plan.py record
+      - uses: actions/upload-artifact@v7
+        with:
+          name: distributions
+          path: |
+            dist/
+            release-intent.json
+          if-no-files-found: error
+          retention-days: 90
 
   ci:
     name: CI
     if: always()
-    needs: [checks, types, tests, windows-imports, package]
+    needs: [checks, version-bump, types, tests, windows-imports, package]
     runs-on: ubuntu-latest
     steps:
-      - run: test "${{ join(needs.*.result, ',') }}" = "success,success,success,success,success"
+      - name: Require successful jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS"])
+          required = ["checks", "version-bump", "types", "tests", "windows-imports", "package"]
+          failed = [
+              name
+              for name, job in needs.items()
+              if job["result"] not in ("success", "skipped")
+          ]
+          missing = [name for name in required if needs[name]["result"] != "success"]
+          if failed or missing:
+              print("failed:", failed)
+              print("required missing:", missing)
+              sys.exit(1)
+          PY

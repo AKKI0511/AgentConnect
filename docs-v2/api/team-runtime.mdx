@@ -326,9 +326,8 @@ Pass the origin to `BaseAgent.join`; Team MCP is at `mcp_url`.
 Issue a join token separately for a URL join. Attach MCP, or
 `BaseAgent.team_tools`, in the harness yourself.
 
-Install `agentconnect[serve]` first. An already-serving Team returns
-its current origin. Agents on other hosts need `create_runtime_app`
-on your server.
+An already-serving Team returns its current origin. Agents on
+other hosts need `create_runtime_app` on your server.
 
 A request with no Authorization or forwarded-client headers runs
 as the operator membership. See `create_runtime_app` for Session
@@ -342,8 +341,8 @@ authorization. A join token is only for `BaseAgent.join`.
 
 **Raises:**
 
-* [`TeamError`](/api/team-errors#agentconnect-team-errors-teamerror): Non-loopback host (`invalid_request`), missing serve
-  extra, or listener startup failure (`unavailable`).
+* [`TeamError`](/api/team-errors#agentconnect-team-errors-teamerror): Non-loopback host (`invalid_request`) or listener
+  startup failure (`unavailable`).
 
 **Examples:**
 

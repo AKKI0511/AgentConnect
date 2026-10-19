@@ -318,10 +318,9 @@ def _max_batch(embedder: object) -> int:
 class HashedEmbedder:
     """Local embeddings based on shared words and character trigrams.
 
-    Requires no extra packages or network access. Select this with
-    `embeddings="none"` or pass an instance to `Team`. Search also uses
-    this backend if a configured encoder fails. Neural embeddings can
-    match related meanings that share few words.
+    Select this with `embeddings="none"` or pass an instance to `Team`.
+    Search also uses this backend if a configured encoder fails. Neural
+    embeddings can match related meanings that share few words.
     """
 
     name = "hashed"
@@ -405,7 +404,7 @@ class _CallableEmbedder:
 class OpenAIEmbedder:
     """Send Profile and query text to OpenAI for embeddings.
 
-    Requires `agentconnect[openai]`. Missing tiktoken raises a setup
+    Requires `agentconnect[embeddings]`. Missing tiktoken raises a setup
     error without switching to hashed search.
     """
 
@@ -483,8 +482,8 @@ class OpenAIEmbedder:
 class LiteLLMEmbedder:
     """Send Profile and query text to OpenAI or Azure through LiteLLM.
 
-    Requires `agentconnect[aiagent,openai]`. Other embedding providers
-    are refused.
+    Requires `agentconnect[embeddings,prebuilt]`. Other embedding
+    providers are refused.
     """
 
     input_char_limit: int | None = None

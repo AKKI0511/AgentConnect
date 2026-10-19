@@ -99,9 +99,9 @@ def test_missing_tiktoken_is_setup_error(monkeypatch):
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", blocked)
-    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
+    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[embeddings\]"):
         OpenAIEmbedder()
-    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[openai\]"):
+    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[embeddings\]"):
         Team("content-squad", embeddings="openai")
 
 
@@ -118,9 +118,13 @@ def test_missing_litellm_is_setup_error(monkeypatch):
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", blocked)
-    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[aiagent,openai\]"):
+    with pytest.raises(
+        EmbeddingSetupError, match=r"agentconnect\[embeddings,prebuilt\]"
+    ):
         LiteLLMEmbedder("azure/text-embedding-3-small")
-    with pytest.raises(EmbeddingSetupError, match=r"agentconnect\[aiagent,openai\]"):
+    with pytest.raises(
+        EmbeddingSetupError, match=r"agentconnect\[embeddings,prebuilt\]"
+    ):
         Team("content-squad", embeddings="litellm:azure/text-embedding-3-small")
 
 
@@ -164,7 +168,10 @@ def test_litellm_live_metadata_matches_support_decision():
     azure = dict(get_model_info("azure/text-embedding-3-small"))
     assert azure["mode"] == "embedding"
     assert azure["litellm_provider"] == "azure"
-    assert int(azure["max_input_tokens"]) == 8191
+    # Locked LiteLLM 1.106.0 publishes this Azure cap as 8192. OpenAI
+    # windows still use OPENAI_INPUT_TOKENS (8191) so packing stays
+    # strictly inside that limit; LiteLLMEmbedder follows this metadata.
+    assert int(azure["max_input_tokens"]) == 8192
     cohere = dict(get_model_info("embed-english-v3.0"))
     assert cohere["litellm_provider"] == "cohere"
     tokenizer = _select_tokenizer("embed-english-v3.0")

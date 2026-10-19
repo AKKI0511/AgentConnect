@@ -4,7 +4,7 @@ version = "0.0.0"
 description = "Typed AgentConnect recipes run with uv."
 requires-python = ">=3.11,<4"
 dependencies = [
-    "agentconnect[serve,cli]",
+    "agentconnect",
 ]
 
 [tool.uv]

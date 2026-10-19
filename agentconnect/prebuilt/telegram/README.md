@@ -1,7 +1,7 @@
 # Telegram agent
 
 `TelegramAIAgent` is an `AIAgent` with a Telegram bot. Install
-`agentconnect[telegram]`. Set `TELEGRAM_BOT_TOKEN`, or pass
+`agentconnect[prebuilt]`. Set `TELEGRAM_BOT_TOKEN`, or pass
 `telegram_token`.
 
 Join a Team when teammates should reach this Agent. `run` polls until

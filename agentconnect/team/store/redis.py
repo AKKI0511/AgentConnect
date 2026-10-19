@@ -258,7 +258,7 @@ class RedisStore(Store):
         batch = 128
         out: list[object] = []
         loop = asyncio.get_running_loop()
-        pending: asyncio.Future[list[str | None]] | None = None
+        pending: asyncio.Future[list[bytes | str | None]] | None = None
         try:
             for start in range(0, len(physical), batch):
                 if pending is None:
@@ -478,25 +478,25 @@ class RedisStore(Store):
     async def set_add(self, key: str, member: str) -> None:
         """Add `member` to the Redis set at `key`."""
         client = await self._client()
-        await client.sadd(self._set_key(key), member)  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
+        await client.sadd(self._set_key(key), member)
 
     async def set_remove(self, key: str, member: str) -> None:
         """Remove `member` from the Redis set at `key`."""
         client = await self._client()
-        await client.srem(self._set_key(key), member)  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
+        await client.srem(self._set_key(key), member)
 
     @_retry_read
     async def set_members(self, key: str) -> list[str]:
         """Return the sorted members of the Redis set at `key`."""
         client = await self._client()
-        members = await client.smembers(self._set_key(key))  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
+        members = await client.smembers(self._set_key(key))
         return sorted(str(item) for item in members)
 
     @_retry_read
     async def set_is_member(self, key: str, member: str) -> bool:
         """Return True when `member` is in the Redis set at `key`."""
         client = await self._client()
-        return bool(await client.sismember(self._set_key(key), member))  # type: ignore[misc]  # Async Redis inherits a sync-or-awaitable SDK signature.
+        return bool(await client.sismember(self._set_key(key), member))
 
     async def index_add(self, key: str, score: float, member: str) -> None:
         """Add or update `member` in the Redis sorted set at `key`."""
@@ -620,14 +620,20 @@ def _wrap(value: object, version: int) -> str:
     )
 
 
-def _unwrap(raw: str) -> StoreRecord:
-    payload = json.loads(raw)
+def _payload_text(raw: bytes | str) -> str:
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8")
+    return raw
+
+
+def _unwrap(raw: bytes | str) -> StoreRecord:
+    payload = json.loads(_payload_text(raw))
     if isinstance(payload, dict) and "v" in payload and "d" in payload:
         return StoreRecord(value=payload["d"], version=int(payload["v"]))
     return StoreRecord(value=payload, version=1)
 
 
-def _decode_mget(raws: Sequence[str | None]) -> list[object]:
+def _decode_mget(raws: Sequence[bytes | str | None]) -> list[object]:
     out: list[object] = []
     for raw in raws:
         if raw is None:

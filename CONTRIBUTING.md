@@ -2,22 +2,22 @@
 
 ## Development setup
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and use Python 3.11 through 3.14.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and use Python 3.11 through 3.14. CI installs the latest stable uv.
 
 ```bash
 git clone https://github.com/AKKI0511/AgentConnect.git
 cd AgentConnect
-uv sync --extra serve --extra cli --extra index --extra openai --extra redis
+uv sync --extra redis --extra embeddings --extra prebuilt
 ```
 
-Use your fork's URL if contributing through a fork. Pull requests target `main`. The test suite covers HTTP, CLI, Index, and hosted Directory tokenizer behavior, so the setup includes those extras.
+Use your fork's URL if contributing through a fork. Pull requests target `main`. The extras add Redis persistence, local/hosted embedding tokenizers, and prebuilt agents, which the test suite also exercises.
 
 ## Tests and code style
 
 ```bash
-uv run --extra serve --extra cli --extra index --extra openai --extra redis pytest tests/ -q
-uvx ruff@latest check agentconnect tests examples experiments benchmarks docs/generate_docs.py
-uvx ruff@latest format --check agentconnect tests examples experiments benchmarks docs/generate_docs.py
+uv run --extra redis --extra embeddings --extra prebuilt pytest tests/ -q
+uvx ruff@latest check agentconnect tests examples experiments benchmarks
+uvx ruff@latest format --check agentconnect tests examples experiments benchmarks
 ```
 
 A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Remove `--check` from the format command to apply formatting. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
@@ -98,7 +98,26 @@ Package boundaries and generated-file locations are listed in [AGENTS.md](AGENTS
 
 ## Documentation
 
-[docs/README.md](docs/README.md) covers website changes, local preview, and API docstrings. The website includes the root [CHANGELOG.md](CHANGELOG.md), so release notes only need one edit.
+The public site lives in [`docs-v2/`](docs-v2/README.md). From that directory: `uv sync --locked`, `npm ci`, then `npm run dev` to preview or `npm run check` to validate. After SDK docstring edits, regenerate the Python reference with `npm run api`. The website includes the root [CHANGELOG.md](CHANGELOG.md), so release notes only need one edit. Hosted publishing is not configured by this repository's workflows. Handwritten pages remaining under `docs/source/` are an inactive migration reference.
+
+## Releases
+
+Version bumps belong on `release/*` pull requests. CI rejects version changes from other PR branches. Protect `main` with required pull requests and the `CI` check to enforce this policy; direct pushes bypass the PR branch check.
+
+After a version change reaches `main`, Release waits for successful CI on that exact push commit. CI builds the wheel and sdist, installs both outside the checkout, and retains those distributions with their commit, version, and SHA256 hashes for 90 days. Release downloads those tested artifacts without rebuilding. To retry, dispatch Release from `main` with the original successful **CI run ID**. An expired or missing artifact fails publication; recover the original files before retrying. Release pins the numeric artifact ID before verification and uses that same ID in every publication job, even if a later CI attempt uploads another artifact with the same name. Re-running failed CI jobs can reuse distributions from the successful package job.
+
+Release verifies the source workflow, push event, repository, main branch, successful conclusion, commit, version, filenames, hashes, and existing tag. Matching partial PyPI or GitHub uploads can be completed; conflicting files fail. Main CI runs have separate concurrency groups so later pushes cannot discard a pending version bump. Release runs queue serially.
+
+One-time setup before an authorized publication:
+
+1. Protect `main` with required pull requests and required `CI` status.
+2. Create GitHub Environment `pypi-prod`, limited to `main`, with required reviewers.
+3. Configure the PyPI Trusted Publisher for project `agentconnect`: GitHub organization `AKKI0511`, repository `AgentConnect`, workflow `release.yml`, environment `pypi-prod`.
+4. Claim the PyPI project name if it is still unclaimed.
+
+Contributor pull requests need no publish credentials. Publication requires this setup and separate authorization.
+
+Workflows use verified moving major Action refs where upstream provides them. `astral-sh/setup-uv@v10.3.0` is the current stable exception because upstream publishes no `v10` alias; weekly Dependabot updates cover it. Its omitted `version` input selects latest stable uv. Independent checks and docs dependency installs use native parallel steps. Runtime benchmark phases share CPU and Redis, so they run sequentially, stop after failure, and upload any collected evidence even on failure.
 
 ## Pull requests
 

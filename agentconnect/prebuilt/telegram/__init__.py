@@ -7,7 +7,7 @@ Telegram text keeps a separate history per chat, capped at 40 messages.
 Call `leave` when the Team Session should close. `run` does not call it.
 
 Set `TELEGRAM_BOT_TOKEN`, or pass `telegram_token`. Install
-`agentconnect[telegram]`.
+`agentconnect[prebuilt]`.
 
 Examples:
     `team` is started and `TELEGRAM_BOT_TOKEN` is set:

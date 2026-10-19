@@ -6,7 +6,7 @@ terminal reply, or a Telegram bot.
 
 ## AIAgent
 
-Install `agentconnect[aiagent]`. `model` is a LiteLLM model id. Provider
+Install `agentconnect[prebuilt]`. `model` is a LiteLLM model id. Provider
 keys stay in the environment.
 
 `handle` answers a Team delivery from `ctx.history` and can call the
@@ -34,7 +34,7 @@ Call `leave` when the Session should close.
 
 ## HumanAgent
 
-Install `agentconnect[cli]`. Incoming work is printed. The reply is a
+Install `agentconnect[prebuilt]`. Incoming work is printed. The reply is a
 line from stdin, or from `read_line` when you supply one. Empty input
 declines a request. `exit`, `quit`, or `bye` stops `start_interaction`.
 
@@ -50,7 +50,7 @@ await human.start_interaction("assistant")
 
 ## TelegramAIAgent
 
-Install `agentconnect[telegram]`. Set `TELEGRAM_BOT_TOKEN`, or pass
+Install `agentconnect[prebuilt]`. Set `TELEGRAM_BOT_TOKEN`, or pass
 `telegram_token`. Join a Team when teammates should reach the bot, then
 `run` to poll. `run` stops polling when cancelled and does not call
 `leave`.

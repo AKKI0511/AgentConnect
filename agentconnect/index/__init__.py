@@ -6,7 +6,7 @@ in an Index, then search the records that process is holding. A search
 hit is not a Team address. Obtain an entry with
 [`BaseAgent.get_entry`][agentconnect.agent.base.BaseAgent.get_entry].
 
-Install `agentconnect[index]`. Start
+Start
 [`create_index_app`][agentconnect.index.service.create_index_app] with
 `python -m agentconnect.index.service`. It listens on loopback and reads
 [`IndexSettings`][agentconnect.index.models.IndexSettings]. Records

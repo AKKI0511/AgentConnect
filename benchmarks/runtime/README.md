@@ -12,7 +12,7 @@ Start the dedicated test Redis described in [CONTRIBUTING.md](../../CONTRIBUTING
 Install the benchmark dependencies, then choose a group:
 
 ```bash
-uv sync --locked --group benchmark --extra serve --extra embeddings --extra redis
+uv sync --locked --group benchmark --extra embeddings --extra redis
 uv run --no-sync pytest benchmarks/runtime/test_warm_find.py -q --benchmark-json=benchmarks/runtime/results/warm.json
 ```
 

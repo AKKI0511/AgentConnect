@@ -92,7 +92,7 @@ def test_human_agent_imports_without_aioconsole():
 
 
 def test_prebuilt_aiagent_imports_without_optional_helpers():
-    for name in ["aiogram", "aioconsole", "cdp"]:
+    for name in ["aiogram", "aioconsole", "litellm"]:
         sys.modules.pop(name, None)
 
     mod = importlib.import_module("agentconnect.prebuilt")

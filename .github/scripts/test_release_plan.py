@@ -55,6 +55,23 @@ class ReleaseTests(unittest.TestCase):
             release.plan()
         output.assert_called_once_with(run_id="1", artifact_id="20")
 
+    def test_local_dists_ignores_non_distribution_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            dist = Path(directory) / "dist"
+            dist.mkdir()
+            (dist / "pkg-1.0.0-py3-none-any.whl").write_bytes(b"wheel")
+            (dist / "pkg-1.0.0.tar.gz").write_bytes(b"sdist")
+            (dist / ".gitignore").write_text("*\n")
+            original = Path.cwd()
+            try:
+                os.chdir(directory)
+                files = release.local_dists()
+            finally:
+                os.chdir(original)
+            self.assertEqual(
+                set(files), {"pkg-1.0.0-py3-none-any.whl", "pkg-1.0.0.tar.gz"}
+            )
+
     def test_source_toml_decodes_bytes(self):
         with patch.object(
             release.subprocess,

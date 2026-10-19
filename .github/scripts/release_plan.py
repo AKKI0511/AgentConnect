@@ -101,13 +101,14 @@ def digest(path: Path) -> str:
 
 def local_dists() -> dict[str, str]:
     files = {
-        path.name: digest(path) for path in Path("dist").iterdir() if path.is_file()
+        path.name: digest(path)
+        for path in Path("dist").iterdir()
+        if path.is_file()
+        and (path.name.endswith(".whl") or path.name.endswith(".tar.gz"))
     }
-    if (
-        len(files) != 2
-        or not any(n.endswith(".whl") for n in files)
-        or not any(n.endswith(".tar.gz") for n in files)
-    ):
+    wheels = [name for name in files if name.endswith(".whl")]
+    sdists = [name for name in files if name.endswith(".tar.gz")]
+    if len(wheels) != 1 or len(sdists) != 1:
         fail("expected exactly one wheel and one sdist")
     return files
 

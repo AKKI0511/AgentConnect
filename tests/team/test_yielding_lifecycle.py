@@ -89,6 +89,7 @@ async def test_concurrent_send_accepts_one_mailbox_item(runtime_store):
             team.send(researcher["session_token"], body),
         )
         assert first["message"]["id"] == second["message"]["id"]
+        assert first["message"]["created_at"] == second["message"]["created_at"]
         leased = await team.lease(writer["session_token"], max_items=10)
         assert len(leased["deliveries"]) == 1
     finally:
@@ -115,6 +116,11 @@ async def test_single_use_token_admits_one_join(runtime_store):
         assert len(successes) == 1
         assert len(failures) == 1
         assert failures[0].code == "unauthorized"
+        present = [
+            await team._get_member("writer"),
+            await team._get_member("editor"),
+        ]
+        assert sum(1 for member in present if member is not None) == 1
     finally:
         await team.stop()
 

@@ -4,7 +4,8 @@ These benchmarks measure completed public Runtime operations, including memory
 and Redis storage and embedded and HTTP access. They are separate from the
 ordinary correctness suite under `tests/`. Discovery latency lives in the
 files below. Request/reply throughput lives in
-[request_reply/](request_reply/README.md).
+[request_reply/](request_reply/README.md). Public SDK collaboration lives in
+[public_sdk/](public_sdk/README.md).
 
 ## Run
 
@@ -22,21 +23,26 @@ uv run --no-sync pytest benchmarks/runtime/test_warm_find.py -q --benchmark-json
 | `test_warm_find.py` | Hashed search latency and loop responsiveness at 10, 100, 1,000 members |
 | `test_overlap.py` | Send, lease renewal, and expiry while discovery runs |
 | `test_neural.py` | Real local FastEmbed at 10 and 100; 1,000 is exploratory |
-| `test_stress.py` | 10,000 hashed members; responsiveness only |
+| `test_stress.py` | 10,000 hashed members; responsiveness only; opt-in |
 | `request_reply/` | `send` → `lease` → `reply` → `get_result` under concurrency |
+| `public_sdk/` | Deterministic BaseAgent/Team journeys: find, fanout, Thread, reconnect |
 
-Use `make perf` where Make is installed to run all six groups in separate,
-sequential processes. Otherwise run each path with the command above, or choose
-the branch in GitHub Actions → **Performance** → **Run workflow**. FastEmbed
-downloads its model on first use; no hosted provider or API key is needed.
-The request/reply group does not need embeddings.
+Use `make perf` where Make is installed to run the default groups in separate,
+sequential processes. `make perf-stress` runs the 10,000-member probe.
+Otherwise run each path with the command above, or choose the branch in
+GitHub Actions → **Performance** → **Run workflow**. FastEmbed downloads its
+model on first use; no hosted provider or API key is needed. The request/reply
+and public SDK groups do not need embeddings. Two-process Redis HTTP is off
+unless `AGENTCONNECT_REPLICA_BENCH=1`.
 
 ## Measurements and evidence
 
 pytest-benchmark owns timing, statistics, and JSON output. Warm find tests use
 20 rounds with one completed request per round. Request/reply exchange times one
 concurrent batch per cell and stores p50/p95/p99, round-trips/sec, and error
-rates on `extra_info`. Setup and warmup stay outside timed windows.
+rates on `extra_info`. Public SDK collaboration times one sequential batch of
+declared repetitions the same way. p99 is omitted when completed samples are
+under 100. Setup and warmup stay outside timed windows.
 A small `asyncio.Runner` adapter keeps each Team on one event loop. The separate
 10 ms loop probe measures extra scheduling delay while discovery work runs. Cold
 and update phase timings include that probe's final tick; their gate is loop lag,
@@ -50,10 +56,12 @@ budget or retry until green to hide a failure. Check the failed samples and host
 conditions; explain any rerun or changed workload.
 
 Performance runs automatically for relevant Runtime, benchmark, and dependency
-changes, and can be dispatched before a release. Each group runs even if an earlier
-group fails. Actions saves raw JSON samples and JUnit pass/fail reports as the
-`runtime-bench` artifact, including failures. Ordinary CI checks correctness on
-Python 3.11–3.14 with real Redis, plus schema, locks, imports, and distribution.
+changes, and can be dispatched before a release. Groups share CPU and Redis, so
+they run in sequence and stop after the first failure. Actions still uploads
+any JSON samples and JUnit reports collected so far as the `runtime-bench`
+artifact. Ordinary CI checks correctness on Python 3.11–3.14 with real Redis,
+plus schema, locks, imports, and distribution. Retrieval quality is a separate
+workflow; editing `benchmarks/discovery/` does not run these latency groups.
 
 Generated results are ignored by Git. [VALIDATION.md](VALIDATION.md) records
 accepted discovery-latency runs; [request_reply/RESULTS.md](request_reply/RESULTS.md)

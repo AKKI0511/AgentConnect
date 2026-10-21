@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
+
+if os.environ.get("AGENTCONNECT_STRESS_BENCH") != "1":
+    pytest.skip(
+        "10k hashed stress is opt-in; set AGENTCONNECT_STRESS_BENCH=1",
+        allow_module_level=True,
+    )
 from tests.support.budgets import STRESS_MEMBERS, extra_lag, loop_lag_budget_s
 from tests.support.runtime import join_roster, probe_during, start_team
 from tests.support.stores import open_store

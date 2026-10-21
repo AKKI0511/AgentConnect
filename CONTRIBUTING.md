@@ -15,9 +15,9 @@ Use your fork's URL if contributing through a fork. Pull requests target `main`.
 ## Tests and code style
 
 ```bash
-uv run --extra redis --extra embeddings --extra prebuilt pytest tests/ -q
-uvx ruff@latest check agentconnect tests examples experiments benchmarks
-uvx ruff@latest format --check agentconnect tests examples experiments benchmarks
+uv run --locked --extra redis --extra embeddings --extra prebuilt pytest tests/ -q
+uvx ruff@latest check agentconnect tests examples experiments benchmarks .github/scripts
+uvx ruff@latest format --check agentconnect tests examples experiments benchmarks .github/scripts
 ```
 
 A test file or directory can replace `tests/`. Routine tests do not need provider API keys. Remove `--check` from the format command to apply formatting. Optional Ruff commit hooks are available with `uvx pre-commit@latest install`.
@@ -37,12 +37,16 @@ Set `AGENTCONNECT_REQUIRE_REDIS=1` if a missing server should fail locally too.
 
 Routine tests do not run the full benchmark matrix. GitHub's **Performance**
 workflow runs for relevant Runtime and benchmark changes and supports manual runs.
-It checks discovery latency, overlapping messaging, event-loop responsiveness,
-and request/reply exchange throughput with pytest-benchmark, saving JSON
-measurements and JUnit results even on failure.
+It checks hashed and neural find latency, overlapping messaging, event-loop
+responsiveness, request/reply exchange, and public SDK collaboration with
+pytest-benchmark. Groups stop after a failure and still upload any JSON and
+JUnit collected. The 10,000-member stress probe is dispatch-only.
+Retrieval ranking is a separate Discovery quality workflow.
 See [Runtime benchmarks](benchmarks/runtime/README.md) for focused local commands
 and `make perf`. Request/reply steps are in
 [request_reply/README.md](benchmarks/runtime/request_reply/README.md).
+Collaboration steps are in
+[public_sdk/README.md](benchmarks/runtime/public_sdk/README.md).
 No benchmark dependency is added to a normal library install.
 
 ## Retrieval quality
@@ -61,11 +65,13 @@ uv run --no-sync python -m benchmarks.discovery.score
 
 Results are written to `benchmarks/discovery/artifacts/discovery-v1/`.
 Coverage@10 and MRR on the held-out shuffled split are the gates. Coverage@1,
-coverage@5, and slices are context. A miss names the need, the backend, and
-the rank of the acceptable recipient. A roster no larger than the cutoff
-cannot show a miss at that cutoff. A neural load failure or Directory fallback stays under `failed/` and is
-not filled in with hashed ranks. `score` exits non-zero when a required
-backend or a ranking gate fails.
+coverage@5, slices, and small-versus-large roster rows are context. A miss
+names the need, the backend, and the rank of the acceptable recipient. A
+roster no larger than the cutoff cannot show a miss at that cutoff. A neural
+load failure or Directory fallback stays under `failed/` and is not filled
+in with hashed ranks. `score` exits non-zero when a required backend or a
+ranking gate fails. GitHub's Discovery quality workflow runs the same
+commands on relevant paths.
 
 ## Dependency changes
 
@@ -82,7 +88,7 @@ uv lock --directory experiments/team_tools
 
 [`experiments/team_tools/`](experiments/team_tools/README.md) is a durable, harness-independent environment for judging Team MCP tools from a coding harness. It is not a user example, an automated benchmark, or a mandatory LLM run.
 
-Use it when advertised Team tools, their descriptions, or the ship-desk fixtures change. Start `uv run python team.py`, add the printed MCP URL with native MCP support, then follow `PROMPT.md` and `CHECKLIST.md`. Deterministic startup and fixture checks live in `tests/experiments/test_team_tools.py`.
+Use it when advertised Team tools, their descriptions, or the ship-desk fixtures change. Start `uv run python team.py`, add the printed MCP URL with native MCP support, then follow `PROMPT.md` and `CHECKLIST.md`. Startup, messaging and shutdown smoke checks run in `tests/experiments/test_team_tools.py`.
 
 ## Public API
 
@@ -98,15 +104,26 @@ Package boundaries and generated-file locations are listed in [AGENTS.md](AGENTS
 
 ## Documentation
 
-The public site lives in [`docs-v2/`](docs-v2/README.md). From that directory: `uv sync --locked`, `npm ci`, then `npm run dev` to preview or `npm run check` to validate. After SDK docstring edits, regenerate the Python reference with `npm run api`. The website includes the root [CHANGELOG.md](CHANGELOG.md), so release notes only need one edit. Hosted publishing is not configured by this repository's workflows. Handwritten pages remaining under `docs/source/` are an inactive migration reference.
+The public site lives in [`docs-v2/`](docs-v2/README.md). From that directory: `uv sync --locked`, `npm ci`, then `npm run dev` to preview or `npm run check` to validate. Preview CI generates the Python reference from the pull-request tree, then checks the site and uploads a preview artifact. It does not write `docs-release`.
+
+Production docs use `docs-release` and API from the published package. Retry
+**Docs release** with the original version, SHA, CI run ID and artifact ID.
+For guide corrections, choose `docs-only` and a full main SHA descended from
+the current guide source. Published Release assets support docs retries after
+CI artifact expiry. Older sources and conflicting same-version snapshots fail;
+identical reruns are no-ops. See [docs-v2/README.md](docs-v2/README.md) for host
+configuration. Release history lives in [CHANGELOG.md](CHANGELOG.md).
 
 ## Releases
 
 Version bumps belong on `release/*` pull requests. CI rejects version changes from other PR branches. Protect `main` with required pull requests and the `CI` check to enforce this policy; direct pushes bypass the PR branch check.
 
-After a version change reaches `main`, Release waits for successful CI on that exact push commit. CI builds the wheel and sdist, installs both outside the checkout, and retains those distributions with their commit, version, and SHA256 hashes for 90 days. Release downloads those tested artifacts without rebuilding. To retry, dispatch Release from `main` with the original successful **CI run ID**. An expired or missing artifact fails publication; recover the original files before retrying. Release pins the numeric artifact ID before verification and uses that same ID in every publication job, even if a later CI attempt uploads another artifact with the same name. Re-running failed CI jobs can reuse distributions from the successful package job.
-
-Release verifies the source workflow, push event, repository, main branch, successful conclusion, commit, version, filenames, hashes, and existing tag. Matching partial PyPI or GitHub uploads can be completed; conflicting files fail. Main CI runs have separate concurrency groups so later pushes cannot discard a pending version bump. Release runs queue serially.
+Release publishes the wheel and sdist tested by successful main CI, without
+rebuilding. It verifies commit, version, artifact identity and hashes; matching
+partial uploads can resume, while conflicts fail. CI artifacts last 90 days.
+To retry publication, dispatch **Release** from `main` with the original
+successful CI run ID. Missing artifacts must be recovered before publication.
+GitHub Release retains distributions and intent for durable docs retries.
 
 One-time setup before an authorized publication:
 
@@ -115,9 +132,8 @@ One-time setup before an authorized publication:
 3. Configure the PyPI Trusted Publisher for project `agentconnect`: GitHub organization `AKKI0511`, repository `AgentConnect`, workflow `release.yml`, environment `pypi-prod`.
 4. Claim the PyPI project name if it is still unclaimed.
 
-Contributor pull requests need no publish credentials. Publication requires this setup and separate authorization.
+Contributor pull requests need no publish credentials. Publication waits for approval from the `pypi-prod` environment reviewers.
 
-Workflows use verified moving major Action refs where upstream provides them. `astral-sh/setup-uv@v10.3.0` is the current stable exception because upstream publishes no `v10` alias; weekly Dependabot updates cover it. Its omitted `version` input selects latest stable uv. Independent checks and docs dependency installs use native parallel steps. Runtime benchmark phases share CPU and Redis, so they run sequentially, stop after failure, and upload any collected evidence even on failure.
 
 ## Pull requests
 

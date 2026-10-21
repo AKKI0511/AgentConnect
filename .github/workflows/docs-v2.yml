@@ -1,20 +1,25 @@
 name: Docs v2
 
-# Mintlify / generated-API checks for docs-v2/. Validates only; it does
-# not deploy.
+# Mintlify / generated-API preview. Generates the Python reference, then
+# validates the working tree. Uploads a preview artifact. It does not
+# write docs-release or deploy.
 
 on:
   pull_request:
     paths:
       - "docs-v2/**"
       - "agentconnect/**"
-      - ".github/workflows/docs-v2.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/**"
   push:
     branches: [main, team-restructure]
     paths:
       - "docs-v2/**"
       - "agentconnect/**"
-      - ".github/workflows/docs-v2.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/**"
   workflow_dispatch:
 
 concurrency:
@@ -49,6 +54,22 @@ jobs:
           - name: Sync Node docs tooling
             run: npm ci --prefix docs-v2
 
+      - name: Generate API reference
+        working-directory: docs-v2
+        run: npm run api
+
       - name: Docs-v2 checks
         working-directory: docs-v2
-        run: npm run check
+        run: npm run check -- --skip-stale
+
+      - name: Stage preview without install trees
+        if: always()
+        run: |
+          mkdir -p docs-preview
+          tar -C docs-v2 -cf - --exclude node_modules --exclude .venv --exclude .mintlify . | tar -C docs-preview -xf -
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: docs-v2-preview
+          path: docs-preview
+          retention-days: 14

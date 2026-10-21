@@ -21,6 +21,7 @@ import httpx
 
 from tests.support.budgets import (
     EXCHANGE_LEASE_RETRIES,
+    EXCHANGE_P99_MIN_SAMPLES,
     EXCHANGE_TRIP_TIMEOUT_S,
     EXCHANGE_WARMUP_TRIPS,
     percentile,
@@ -109,9 +110,14 @@ def summarize(
         "error_samples": samples,
         "wall_s": wall_s,
         "rps": (ok / wall_s) if wall_s > 0 else 0.0,
+        "percentiles_on": "completed_only",
+        "offered_denominator": "attempted",
+        "p99_supported": ok >= EXCHANGE_P99_MIN_SAMPLES,
         "p50_s": percentile(completed, 50) if completed else None,
         "p95_s": percentile(completed, 95) if completed else None,
-        "p99_s": percentile(completed, 99) if completed else None,
+        "p99_s": (
+            percentile(completed, 99) if ok >= EXCHANGE_P99_MIN_SAMPLES else None
+        ),
         "min_s": min(completed) if completed else None,
         "max_s": max(completed) if completed else None,
         "workload": (

@@ -8,7 +8,7 @@
 
 Gates apply to held-out shuffled needs whose acceptable set is non-empty: coverage@10 ≥ 0.9 and MRR ≥ 0.5. Coverage@1 and coverage@5 are reported, not gated. A roster no larger than k cannot show a coverage@k miss.
 
-## hashed — held-out shuffled
+## hashed: held-out shuffled
 
 Directory backend: `hashed`. Fallback: False.
 
@@ -20,6 +20,14 @@ Denominator: 47 needs with an acceptable recipient.
 | coverage@5 | 1.0000 |  |
 | coverage@10 | 1.0000 | 0.9 (pass) |
 | MRR | 0.9238 | 0.5 (pass) |
+
+Small-roster ordering (commerce, legal; size ≤ 10):
+
+Denominator 20. coverage@1 1.0000, MRR 1.0000, mean best rank 1.0000.
+
+Top-k on rosters larger than 10 (platform, research):
+
+Denominator 27. coverage@10 1.0000, MRR 0.8673.
 
 | Slice | Denominator | coverage@10 | MRR |
 | --- | --- | --- | --- |
@@ -39,7 +47,7 @@ Denominator: 47 needs with an acceptable recipient.
 
 Roster sizes: roster_commerce=10, roster_legal=8, roster_platform=24, roster_research=26
 
-## bm25 — held-out shuffled
+## bm25: held-out shuffled
 
 Denominator: 47 needs with an acceptable recipient.
 
@@ -49,6 +57,14 @@ Denominator: 47 needs with an acceptable recipient.
 | coverage@5 | 1.0000 |  |
 | coverage@10 | 1.0000 | 0.9 (pass) |
 | MRR | 0.9610 | 0.5 (pass) |
+
+Small-roster ordering (commerce, legal; size ≤ 10):
+
+Denominator 20. coverage@1 1.0000, MRR 1.0000, mean best rank 1.0000.
+
+Top-k on rosters larger than 10 (platform, research):
+
+Denominator 27. coverage@10 1.0000, MRR 0.9321.
 
 | Slice | Denominator | coverage@10 | MRR |
 | --- | --- | --- | --- |
@@ -68,7 +84,7 @@ Denominator: 47 needs with an acceptable recipient.
 
 Roster sizes: roster_commerce=10, roster_legal=8, roster_platform=24, roster_research=26
 
-## neural — held-out shuffled
+## neural: held-out shuffled
 
 Directory backend: `fastembed:BAAI/bge-small-en-v1.5`. Fallback: False.
 
@@ -80,6 +96,14 @@ Denominator: 47 needs with an acceptable recipient.
 | coverage@5 | 1.0000 |  |
 | coverage@10 | 1.0000 | 0.9 (pass) |
 | MRR | 0.9787 | 0.5 (pass) |
+
+Small-roster ordering (commerce, legal; size ≤ 10):
+
+Denominator 20. coverage@1 1.0000, MRR 1.0000, mean best rank 1.0000.
+
+Top-k on rosters larger than 10 (platform, research):
+
+Denominator 27. coverage@10 1.0000, MRR 0.9630.
 
 | Slice | Denominator | coverage@10 | MRR |
 | --- | --- | --- | --- |

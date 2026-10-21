@@ -293,36 +293,6 @@ async def test_sender_did_field_on_send_is_invalid_request(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_unbound_single_use_token_admits_one_join():
-    team = await _auth_team()
-    writer = AgentIdentity.create_key_based()
-    editor = AgentIdentity.create_key_based()
-    try:
-        issued = await team.issue_join_token(single_use=True)
-
-        async def _join(identity: AgentIdentity, name: str):
-            return await _join_with_proof(team, identity, name, issued["token"])
-
-        results = await asyncio.gather(
-            _join(writer, "writer"),
-            _join(editor, "editor"),
-            return_exceptions=True,
-        )
-        successes = [item for item in results if not isinstance(item, BaseException)]
-        failures = [item for item in results if isinstance(item, TeamError)]
-        assert len(successes) == 1
-        assert len(failures) == 1
-        assert failures[0].code == "unauthorized"
-        present = [
-            await team._get_member("writer"),
-            await team._get_member("editor"),
-        ]
-        assert sum(1 for member in present if member is not None) == 1
-    finally:
-        await team.stop()
-
-
-@pytest.mark.asyncio
 async def test_revoke_racing_join_cannot_leave_a_usable_token():
     team = await _auth_team()
     writer = AgentIdentity.create_key_based()

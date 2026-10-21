@@ -63,11 +63,31 @@ RETENTION_SLACK_BYTES = 4096
 EXCHANGE_CONCURRENCY = (1, 8, 32)
 EXCHANGE_REPLICA_CONCURRENCY = (8, 32)
 EXCHANGE_TRIPS_PER_PAIR = 20
+EXCHANGE_TRIPS_AT_ONE = 100
 EXCHANGE_WARMUP_TRIPS = 1
 EXCHANGE_TRIP_TIMEOUT_S = 15.0
 EXCHANGE_LEASE_RETRIES = 50
 EXCHANGE_ERROR_RATE = 0.0
 EXCHANGE_P95_STALL_S = 5.0
+EXCHANGE_P99_MIN_SAMPLES = 100
+
+# Public BaseAgent/Team collaboration. Deterministic handlers, no model.
+COLLAB_SPECIALISTS = 3
+COLLAB_REPETITIONS = 30
+COLLAB_WARMUP = 1
+COLLAB_TIMEOUT_S = 15.0
+COLLAB_ERROR_RATE = 0.0
+COLLAB_P95_STALL_S = 5.0
+COLLAB_P99_MIN_SAMPLES = 100
+COLLAB_HANDLER_DELAY_S = 0.0
+COLLAB_PAYLOAD_BYTES = 80
+
+
+def exchange_trips_per_pair(concurrency: int) -> int:
+    """More trips at N=1 so completed-only p99 has a stated sample floor."""
+    if concurrency == 1:
+        return EXCHANGE_TRIPS_AT_ONE
+    return EXCHANGE_TRIPS_PER_PAIR
 
 
 def exchange_zero_error_gated(store_kind: str, concurrency: int, replicas: int) -> bool:

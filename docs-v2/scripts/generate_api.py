@@ -56,7 +56,6 @@ CONFIG = {
 }
 
 
-
 def load_package(root: Path = ROOT, package: str = "agentconnect"):
     loader = GriffeLoader(
         search_paths=[root, *sys.path],
@@ -267,20 +266,38 @@ def _format_signature(name, function, line_length=88, **kwargs):
         return signature
     # Each parameter remains a Griffe expression. No Python text is reparsed.
     parameters = list(rendered.parameters)
-    if parameters and parameters[0].name in {"self", "cls"} and function.parent.is_class:
+    if (
+        parameters
+        and parameters[0].name in {"self", "cls"}
+        and function.parent.is_class
+    ):
         parameters = parameters[1:]
     parts = []
     for index, parameter in enumerate(parameters):
         kind = parameter.kind.value
-        if kind == "keyword-only" and (index == 0 or parameters[index - 1].kind.value not in {"keyword-only", "variadic positional"}):
+        if kind == "keyword-only" and (
+            index == 0
+            or parameters[index - 1].kind.value
+            not in {"keyword-only", "variadic positional"}
+        ):
             parts.append("*")
-        token = {"variadic positional": "*", "variadic keyword": "**"}.get(kind, "") + parameter.name
+        token = {"variadic positional": "*", "variadic keyword": "**"}.get(
+            kind, ""
+        ) + parameter.name
         if parameter.annotation is not None:
             token += f": {parameter.annotation}"
-        if parameter.default is not None and kind not in {"variadic positional", "variadic keyword"}:
-            token += (" = " if parameter.annotation is not None else "=") + str(parameter.default)
+        if parameter.default is not None and kind not in {
+            "variadic positional",
+            "variadic keyword",
+        }:
+            token += (" = " if parameter.annotation is not None else "=") + str(
+                parameter.default
+            )
         parts.append(token)
-        if kind == "positional-only" and (index + 1 == len(parameters) or parameters[index + 1].kind.value != "positional-only"):
+        if kind == "positional-only" and (
+            index + 1 == len(parameters)
+            or parameters[index + 1].kind.value != "positional-only"
+        ):
             parts.append("/")
     result = name + "(\n" + "".join(f"    {part},\n" for part in parts) + ")"
     if function.name != "__init__" and function.annotation:
@@ -332,9 +349,7 @@ _EXTERNAL_TYPES = {
 
 def _unique_doc_link(name: str) -> str | None:
     matches = {
-        url
-        for key, url in DOC_LINKS.items()
-        if key == name or key.endswith("." + name)
+        url for key, url in DOC_LINKS.items() if key == name or key.endswith("." + name)
     }
     if len(matches) == 1:
         return next(iter(matches))
@@ -346,7 +361,9 @@ def _type_href(name: str, canonical: str | None) -> str | None:
         return DOC_LINKS[canonical]
     quoted = name.strip("'\"")
     if quoted != name:
-        return _type_href(quoted, quoted if quoted.startswith("agentconnect.") else None)
+        return _type_href(
+            quoted, quoted if quoted.startswith("agentconnect.") else None
+        )
     unique = _unique_doc_link(name)
     if unique and ("." in name or name[:1].isupper()):
         return unique
@@ -361,7 +378,12 @@ def _type_href(name: str, canonical: str | None) -> str | None:
         leaf,
     }:
         return _STDLIB_TYPES[leaf]
-    if leaf in _EXTERNAL_TYPES and root in {"pydantic", "pydantic_settings", "fastapi", leaf}:
+    if leaf in _EXTERNAL_TYPES and root in {
+        "pydantic",
+        "pydantic_settings",
+        "fastapi",
+        leaf,
+    }:
         return _EXTERNAL_TYPES[leaf]
     return None
 
@@ -392,6 +414,7 @@ def _render_type(expr: object) -> str:
 def _annotation_links(expressions, owner=None):
     """One compact native reference list for annotations in a fenced signature."""
     links = {}
+
     def collect(expr):
         if isinstance(expr, (str, ExprName, ExprAttribute)):
             canonical = getattr(expr, "canonical_path", None)
@@ -402,6 +425,7 @@ def _annotation_links(expressions, owner=None):
             for part in expr.iterate(flat=False):
                 if isinstance(part, Expr):
                     collect(part)
+
     covered = {}
     if owner is not None and owner.docstring:
         for section in owner.docstring.parsed:
@@ -416,14 +440,24 @@ def _annotation_links(expressions, owner=None):
         links.pop(href, None)
     if not links:
         return ""
-    return "\n\n**Types:** " + ", ".join(f"[`{name}`]({url})" for url, name in links.items()) + "."
+    return (
+        "\n\n**Types:** "
+        + ", ".join(f"[`{name}`]({url})" for url, name in links.items())
+        + "."
+    )
 
 
 def _signature_markup(function, name: str):
     annotations = [parameter.annotation for parameter in function.parameters]
     if function.name != "__init__":
         annotations.append(function.annotation)
-    return "```python\n" + _format_signature(name, function) + "\n```" + _annotation_links(annotations, function) + "\n"
+    return (
+        "```python\n"
+        + _format_signature(name, function)
+        + "\n```"
+        + _annotation_links(annotations, function)
+        + "\n"
+    )
 
 
 def _property_signature(function):
@@ -573,11 +607,7 @@ def generate(output: Path, *, root: Path = ROOT) -> None:
     )
     pages = {}
     for name, module in modules.items():
-        title = (
-            "API reference"
-            if name == "agentconnect"
-            else name.rsplit(".", 1)[-1]
-        )
+        title = "API reference" if name == "agentconnect" else name.rsplit(".", 1)[-1]
         sidebar = (
             "Overview"
             if _is_package_group(name, set(modules))
@@ -690,8 +720,14 @@ def generate(output: Path, *, root: Path = ROOT) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DOCS)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="Directory that contains the agentconnect package to extract.",
+    )
     args = parser.parse_args()
-    generate(args.output)
+    generate(args.output, root=args.root.resolve())
 
 
 if __name__ == "__main__":

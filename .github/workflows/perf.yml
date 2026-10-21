@@ -2,23 +2,29 @@ name: Performance
 
 on:
   workflow_dispatch:
+    inputs:
+      stress:
+        description: "Run the optional 10,000-member hashed stress probe"
+        required: false
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "agentconnect/**"
-      - "benchmarks/**/*.py"
-      - "tests/support/**"
+      - "benchmarks/runtime/**"
+      - "tests/**"
       - "pyproject.toml"
       - "uv.lock"
-      - ".github/workflows/perf.yml"
+      - ".github/**"
   push:
     branches: [main, team-restructure]
     paths:
       - "agentconnect/**"
-      - "benchmarks/**/*.py"
-      - "tests/support/**"
+      - "benchmarks/runtime/**"
+      - "tests/**"
       - "pyproject.toml"
       - "uv.lock"
-      - ".github/workflows/perf.yml"
+      - ".github/**"
 
 concurrency:
   group: perf-${{ github.event.pull_request.number || github.ref }}
@@ -36,6 +42,7 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379/15
       AGENTCONNECT_REQUIRE_REDIS: "1"
       AGENTCONNECT_REQUIRE_NEURAL: "1"
+      AGENTCONNECT_STRESS_BENCH: ${{ github.event_name == 'workflow_dispatch' && inputs.stress && '1' || '' }}
       NO_PROXY: "127.0.0.1,localhost"
     services:
       redis:
@@ -85,6 +92,7 @@ jobs:
           --benchmark-json=benchmarks/runtime/results/neural.json
           --junitxml=benchmarks/runtime/results/neural.xml
       - name: Hashed stress
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.stress }}
         run: >
           uv run --no-sync pytest -q --benchmark-warmup=off
           benchmarks/runtime/test_stress.py
@@ -96,6 +104,12 @@ jobs:
           benchmarks/runtime/request_reply
           --benchmark-json=benchmarks/runtime/results/exchange.json
           --junitxml=benchmarks/runtime/results/exchange.xml
+      - name: Public SDK collaboration
+        run: >
+          uv run --no-sync pytest -q --benchmark-warmup=off
+          benchmarks/runtime/public_sdk
+          --benchmark-json=benchmarks/runtime/results/collaboration.json
+          --junitxml=benchmarks/runtime/results/collaboration.xml
       - uses: actions/upload-artifact@v7
         if: always()
         with:

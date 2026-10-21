@@ -2,8 +2,7 @@
 
 A durable, harness-independent environment for qualitative Team MCP
 tool-use research. It is not a user example, an automated benchmark, or
-a mandatory LLM release gate. CI checks deterministic startup, fixture
-behavior, and MCP reachability.
+a mandatory LLM release gate.
 
 ## When to run it
 

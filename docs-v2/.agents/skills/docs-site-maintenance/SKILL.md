@@ -5,7 +5,7 @@ description: Maintain this repository's Mintlify website, Python reference gener
 
 # Documentation site maintenance
 
-Work in `docs-v2/`; the SDK is `../agentconnect/`. This directory is the only active documentation site. Handwritten pages remaining under `../docs/source/` are an inactive migration reference. Renaming this directory to `docs/` later is a path-update change. Site maintenance must not require private plans or skills. Use public `python-api-reference` for SDK prose and `agent-tool-design` for tool interfaces. Human setup belongs in README.md; AGENTS.md routes agents; authoring policy stays out of website pages.
+Work in `docs-v2/`; the SDK is `../agentconnect/`. This directory is the only active documentation site. Handwritten pages remaining under `../docs/source/` are an inactive migration reference. Site maintenance must not require private plans or skills. Use public `python-api-reference` for SDK prose and `agent-tool-design` for tool interfaces. Human setup belongs in README.md; AGENTS.md routes agents; authoring policy stays out of website pages.
 
 ## Ownership and generation
 
@@ -41,9 +41,18 @@ On Windows, stop preview before editing/regenerating pages, then run `npm run de
 
 From `docs-v2/`: `uv sync --locked`, `npm ci`, then `npm run dev` (generates before preview). `npm run api` regenerates after SDK edits; reload, or follow the Windows restart rule above. `npm run check` verifies without fixing stale output. Do not implicitly install dependencies during checks or add another task runner. Keep dependency/lock changes together.
 
-Site logic stays here. `.github/workflows/docs-v2.yml` calls the same check and does not deploy. Root Makefile has no site targets. Exclude tooling/instructions through `.mintignore`.
+Site logic stays here. Root Makefile has no site targets. Exclude tooling and instructions through `.mintignore`.
 
-Commit generated MDX/navigation with their source; they are `linguist-generated`. CI rejects stale output rather than auto-committing or making a docs branch. Mintlify consumes the configured directory; a local npm hook does not prove hosted Python execution. Follow [Mintlify's generated-page pattern](https://www.mintlify.com/docs/create/reusable-snippets#generate-snippets-and-pages-from-yaml); do not ignore required pages before implementing and verifying a replacement deployment path.
+Preview CI generates and checks the checkout, then uploads a site artifact.
+Production snapshots use `docs-release`; configure Mintlify to that branch
+and `docs-v2/`. Workflow artifacts do not update the host.
+
+Docs release requires verified successful main CI, durable Release intent and
+distributions matching PyPI. Package source, supported API surface and Reference
+navigation stay bound to that release. Docs-only corrections may use later main
+guides, never an older guide source. Preserve provenance, fail closed on missing
+or invalid evidence, reject rollback/conflicting snapshots, and make identical
+reruns no-ops. Exclude install trees. Never expose unreleased API on production.
 
 ## Verification
 

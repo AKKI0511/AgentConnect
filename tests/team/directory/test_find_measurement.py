@@ -17,6 +17,7 @@ from tests.support.stores import open_store
 from tests.team.conftest import join_member, make_did
 
 from agentconnect.team.directory.embedder import HashedEmbedder
+from agentconnect.team.http import _HTTP_PREFIX
 
 pytestmark = pytest.mark.asyncio
 
@@ -52,22 +53,29 @@ async def test_http_find_burst_uses_http():
         origin = await team.serve()
         token = caller["session_token"]
         query = "similar paperwork"
-        calls = 0
-        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+        paths: list[str] = []
 
-            async def counted_find() -> dict:
-                nonlocal calls
-                calls += 1
-                return await http_find(client, origin, token, query)
+        async def record_request(request: httpx.Request) -> None:
+            paths.append(request.url.path)
 
+        async with httpx.AsyncClient(
+            timeout=60.0,
+            trust_env=False,
+            event_hooks={"request": [record_request]},
+        ) as client:
             for _ in range(HTTP_WARMUPS):
-                found = await counted_find()
+                found = await http_find(client, origin, token, query)
                 assert found["matches"]
             burst = await asyncio.gather(
-                *[counted_find() for _ in range(CONCURRENT_FINDERS)]
+                *[
+                    http_find(client, origin, token, query)
+                    for _ in range(CONCURRENT_FINDERS)
+                ]
             )
             assert all(item["matches"] for item in burst)
-        assert calls == HTTP_WARMUPS + CONCURRENT_FINDERS
+        expected = f"{_HTTP_PREFIX}/directory/find"
+        assert len(paths) == HTTP_WARMUPS + CONCURRENT_FINDERS
+        assert all(path == expected for path in paths)
     finally:
         await team.stop()
         await store.close()

@@ -191,12 +191,36 @@ def _metrics(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     for k in criteria.COVERAGE_KS:
         out[f"coverage_at_{k}"] = _coverage(ranks, k)
     out["mrr"] = _mrr(ranks)
+    known = [rank for rank in ranks if rank is not None]
+    out["mean_best_rank"] = (sum(known) / len(known)) if known else None
     out["recall_at_10_pass"] = (
         out["coverage_at_10"] is not None
         and out["coverage_at_10"] >= criteria.RECALL_AT_10_MIN
     )
     out["mrr_pass"] = out["mrr"] is not None and out["mrr"] >= criteria.MRR_MIN
     return out
+
+
+def _roster_reports(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Split small-roster ordering from top-k on rosters larger than k."""
+    small = [row for row in rows if row["roster_size"] <= criteria.SMALL_ROSTER_MAX]
+    large = [row for row in rows if row["roster_size"] > criteria.SMALL_ROSTER_MAX]
+    return {
+        "small_roster_ordering": {
+            **_metrics(small),
+            "roster_ids": sorted({row["roster_id"] for row in small}),
+            "note": (
+                "coverage@10 is tautological when every acceptable member "
+                "is on a roster no larger than 10; use coverage@1, MRR, "
+                "and mean best rank"
+            ),
+        },
+        "large_roster_topk": {
+            **_metrics(large),
+            "roster_ids": sorted({row["roster_id"] for row in large}),
+            "note": "coverage@10 and MRR on rosters larger than 10",
+        },
+    }
 
 
 def _slices(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -325,7 +349,7 @@ def _write_markdown(payload: dict[str, Any], path: Path) -> None:
             lines.append("")
             continue
         hold = block["held_out_shuffled"]
-        lines.append(f"## {backend} — held-out shuffled")
+        lines.append(f"## {backend}: held-out shuffled")
         lines.append("")
         if block.get("backend_name"):
             lines.append(
@@ -348,6 +372,25 @@ def _write_markdown(payload: dict[str, Any], path: Path) -> None:
         )
         mark = "pass" if hold["mrr_pass"] else "fail"
         lines.append(f"| MRR | {_fmt(hold['mrr'])} | {criteria.MRR_MIN} ({mark}) |")
+        lines.append("")
+        small = hold.get("small_roster_ordering") or {}
+        large = hold.get("large_roster_topk") or {}
+        lines.append("Small-roster ordering (commerce, legal; size ≤ 10):")
+        lines.append("")
+        lines.append(
+            f"Denominator {small.get('denominator', 0)}. "
+            f"coverage@1 {_fmt(small.get('coverage_at_1'))}, "
+            f"MRR {_fmt(small.get('mrr'))}, "
+            f"mean best rank {_fmt(small.get('mean_best_rank'))}."
+        )
+        lines.append("")
+        lines.append("Top-k on rosters larger than 10 (platform, research):")
+        lines.append("")
+        lines.append(
+            f"Denominator {large.get('denominator', 0)}. "
+            f"coverage@10 {_fmt(large.get('coverage_at_10'))}, "
+            f"MRR {_fmt(large.get('mrr'))}."
+        )
         lines.append("")
         lines.append("| Slice | Denominator | coverage@10 | MRR |")
         lines.append("| --- | --- | --- | --- |")
@@ -447,6 +490,7 @@ async def run() -> dict[str, Any]:
                     block[key] = _metrics(rows)
                     if split == "held_out" and shuffled:
                         block[key]["slices"] = _slices(rows)
+                        block[key].update(_roster_reports(rows))
                     if shuffled and split == "held_out":
                         failures.extend(
                             row

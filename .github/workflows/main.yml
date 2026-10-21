@@ -22,7 +22,27 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - name: Allow version bumps only on release/* branches
+        if: github.event_name == 'pull_request'
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, sys, tomllib
+          if os.environ["BRANCH_NAME"].startswith("release/"):
+              sys.exit(0)
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", f"origin/{os.environ['BASE_REF']}"], text=True
+          ).strip()
+          def version(rev):
+              raw = subprocess.check_output(["git", "show", f"{rev}:pyproject.toml"])
+              return tomllib.loads(raw.decode("utf-8"))["project"]["version"]
+          if version(base) != version("HEAD"):
+              sys.exit("Version changes in pyproject.toml belong on a release/* branch.")
+          PY
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
@@ -47,39 +67,8 @@ jobs:
           - name: Release flow tests
             run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
-  version-bump:
-    name: Release branch version
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Allow version bumps only on release/* branches
-        env:
-          BRANCH_NAME: ${{ github.head_ref }}
-          BASE_REF: ${{ github.base_ref }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          python3 - <<'PY'
-          import os, subprocess, sys, tomllib
-          if os.environ["EVENT_NAME"] != "pull_request":
-              sys.exit(0)
-          if os.environ["BRANCH_NAME"].startswith("release/"):
-              sys.exit(0)
-          base = subprocess.check_output(
-              ["git", "merge-base", "HEAD", f"origin/{os.environ['BASE_REF']}"], text=True
-          ).strip()
-          def version(rev):
-              raw = subprocess.check_output(["git", "show", f"{rev}:pyproject.toml"])
-              return tomllib.loads(raw.decode("utf-8"))["project"]["version"]
-          if version(base) != version("HEAD"):
-              sys.exit("Version changes in pyproject.toml belong on a release/* branch.")
-          PY
-
   types:
-    needs: [checks, version-bump]
+    needs: checks
     name: Framework types
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -94,7 +83,7 @@ jobs:
         run: uv run --locked --all-extras mypy
 
   tests:
-    needs: [checks, version-bump]
+    needs: checks
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -128,7 +117,7 @@ jobs:
       - run: uv run --no-sync pytest tests/ -q
 
   windows-imports:
-    needs: [checks, version-bump]
+    needs: checks
     name: Windows imports
     runs-on: windows-latest
     timeout-minutes: 15
@@ -143,7 +132,7 @@ jobs:
       - run: uv run --no-sync pytest tests/imports/ -q
 
   package:
-    needs: [checks, version-bump]
+    needs: checks
     name: Distribution install
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -275,7 +264,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [checks, version-bump, types, tests, windows-imports, package]
+    needs: [checks, types, tests, windows-imports, package]
     runs-on: ubuntu-latest
     steps:
       - name: Require successful jobs
@@ -285,7 +274,7 @@ jobs:
           python3 - <<'PY'
           import json, os, sys
           needs = json.loads(os.environ["NEEDS"])
-          required = ["checks", "version-bump", "types", "tests", "windows-imports", "package"]
+          required = ["checks", "types", "tests", "windows-imports", "package"]
           failed = [
               name
               for name, job in needs.items()

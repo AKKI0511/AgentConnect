@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from benchmarks.discovery.score import attribution_error, command_status, publish
+from benchmarks.discovery.score import (
+    attribution_error,
+    command_status,
+    publish,
+)
 from benchmarks.discovery import score
 
 

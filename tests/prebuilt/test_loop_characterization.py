@@ -285,15 +285,33 @@ async def test_several_tool_calls_in_one_message_run_in_order():
 
 
 @pytest.mark.asyncio
-async def test_max_rounds_exhausted_raises_tool_loop_exhausted():
+@pytest.mark.parametrize(
+    ("turns", "forbidden"),
+    [
+        pytest.param(
+            (
+                tool_turn("ping", "{}", content="keep going"),
+                tool_turn("ping", "{}", "c2", content="still going"),
+            ),
+            None,
+            id="with_text",
+        ),
+        pytest.param(
+            (
+                tool_turn("ping", "{}"),
+                tool_turn("ping", "{}", "c2"),
+            ),
+            "Stopped after",
+            id="without_text",
+        ),
+    ],
+)
+async def test_max_rounds_exhausted_raises_tool_loop_exhausted(turns, forbidden):
     from agentconnect.prebuilt.loop import ToolLoopExhausted
 
     with pytest.raises(ToolLoopExhausted) as exc:
         await run_tool_loop(
-            complete=scripted(
-                tool_turn("ping", "{}", content="keep going"),
-                tool_turn("ping", "{}", "c2", content="still going"),
-            ),
+            complete=scripted(*turns),
             model="recorded",
             messages=[{"role": "user", "content": "loop"}],
             tools=[PING],
@@ -301,25 +319,8 @@ async def test_max_rounds_exhausted_raises_tool_loop_exhausted():
         )
     assert exc.value.max_rounds == 2
     assert "exhausted" in str(exc.value).lower()
-
-
-@pytest.mark.asyncio
-async def test_max_rounds_exhausted_without_text_still_raises():
-    from agentconnect.prebuilt.loop import ToolLoopExhausted
-
-    with pytest.raises(ToolLoopExhausted) as exc:
-        await run_tool_loop(
-            complete=scripted(
-                tool_turn("ping", "{}"),
-                tool_turn("ping", "{}", "c2"),
-            ),
-            model="recorded",
-            messages=[{"role": "user", "content": "loop"}],
-            tools=[PING],
-            max_rounds=2,
-        )
-    assert exc.value.max_rounds == 2
-    assert "Stopped after" not in str(exc.value)
+    if forbidden is not None:
+        assert forbidden not in str(exc.value)
 
 
 @pytest.mark.asyncio

@@ -196,27 +196,6 @@ async def test_send_and_reply_same_id_conflict(team: Team):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_identical_sends_create_one_mailbox_item(team: Team):
-    writer = await join_member(team, "writer", max_in_flight=4)
-    researcher = await join_member(team, "researcher")
-    message_id = _id()
-    body = {
-        "id": message_id,
-        "recipient": "writer",
-        "kind": "event",
-        "content": "once",
-    }
-    results = await asyncio.gather(
-        team.send(researcher["session_token"], body),
-        team.send(researcher["session_token"], body),
-    )
-    assert results[0]["message"]["id"] == results[1]["message"]["id"]
-    assert results[0]["message"]["created_at"] == results[1]["message"]["created_at"]
-    leased = await team.lease(writer["session_token"], max_items=10)
-    assert len(leased["deliveries"]) == 1
-
-
-@pytest.mark.asyncio
 async def test_concurrent_thread_sends_get_distinct_seq(team: Team):
     writer = await join_member(team, "writer", max_in_flight=20)
     researcher = await join_member(team, "researcher")

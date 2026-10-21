@@ -1,0 +1,105 @@
+name: Docs release
+
+# Package provenance comes from durable, verified GitHub Release assets.
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+      run_id:
+        required: true
+        type: string
+      artifact_id:
+        required: true
+        type: string
+      mode:
+        required: false
+        type: string
+        default: publish
+      docs_source_sha:
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published version (major.minor.patch)"
+        required: true
+        type: string
+      sha:
+        description: "Exact published package SHA"
+        required: true
+        type: string
+      run_id:
+        description: "Original successful main CI run ID"
+        required: true
+        type: string
+      artifact_id:
+        description: "Original pinned distribution artifact ID (may be expired)"
+        required: true
+        type: string
+      mode:
+        description: "Promotion mode"
+        required: true
+        type: choice
+        options: [publish, retry, docs-only]
+        default: retry
+      docs_source_sha:
+        description: "Full guide commit SHA on main, for docs-only corrections"
+        required: false
+        type: string
+
+concurrency:
+  group: docs-release
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VERSION: ${{ inputs.version }}
+      SHA: ${{ inputs.sha }}
+      CI_RUN_ID: ${{ inputs.run_id }}
+      ARTIFACT_ID: ${{ inputs.artifact_id }}
+      DOCS_MODE: ${{ inputs.mode }}
+      DOCS_SOURCE_SHA: ${{ inputs.docs_source_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Verify provenance and guard promotion before tooling setup
+        run: |
+          export DOCS_WORK="$RUNNER_TEMP/docs-release-work"
+          echo "DOCS_WORK=$DOCS_WORK" >> "$GITHUB_ENV"
+          python3 .github/scripts/docs_release.py prepare
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "lts/*"
+      - parallel:
+          - name: Sync Python docs tooling
+            run: uv sync --locked --directory "$DOCS_WORK/guides/docs-v2"
+          - name: Sync Node docs tooling
+            run: npm ci --prefix "$DOCS_WORK/guides/docs-v2"
+      - name: Generate package API and validate guide snapshot
+        run: uv run --locked --directory "$DOCS_WORK/guides/docs-v2" python "$GITHUB_WORKSPACE/.github/scripts/docs_release.py" build
+      - name: Commit validated snapshot or retain identical snapshot
+        run: python3 .github/scripts/docs_release.py promote
+      - name: Push docs snapshot
+        run: git push origin refs/heads/docs-release:refs/heads/docs-release

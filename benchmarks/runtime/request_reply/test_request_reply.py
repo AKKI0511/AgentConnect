@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
@@ -9,8 +10,9 @@ from tests.support.budgets import (
     EXCHANGE_CONCURRENCY,
     EXCHANGE_ERROR_RATE,
     EXCHANGE_P95_STALL_S,
+    EXCHANGE_P99_MIN_SAMPLES,
     EXCHANGE_REPLICA_CONCURRENCY,
-    EXCHANGE_TRIPS_PER_PAIR,
+    exchange_trips_per_pair,
     exchange_zero_error_gated,
 )
 
@@ -28,23 +30,31 @@ def _run_cell(
     transport: str,
     concurrency: int,
     replicas: int,
+    trips: int | None = None,
 ) -> dict[str, Any]:
+    if trips is None:
+        trips = exchange_trips_per_pair(concurrency)
     bench = async_bridge.run(
         open_exchange(store_kind, transport, concurrency, replicas=replicas)
     )
     try:
 
         def timed():
-            return async_bridge.run(measure(bench, EXCHANGE_TRIPS_PER_PAIR))
+            return async_bridge.run(measure(bench, trips))
 
         summary = benchmark.pedantic(timed, rounds=1, warmup_rounds=0, iterations=1)
     finally:
         async_bridge.run(close_exchange(bench))
     gated = exchange_zero_error_gated(store_kind, concurrency, replicas)
     summary["gated"] = gated
+    summary["percentiles_on"] = "completed_only"
+    summary["offered_denominator"] = "attempted"
+    summary["p99_supported"] = int(summary["completed"]) >= EXCHANGE_P99_MIN_SAMPLES
+    if not summary["p99_supported"]:
+        summary["p99_s"] = None
     benchmark.extra_info.update(summary)
     attempted = int(summary["attempted"])
-    assert attempted == concurrency * EXCHANGE_TRIPS_PER_PAIR
+    assert attempted == concurrency * trips
     assert summary["completed"] > 0
     if not gated:
         return summary
@@ -72,6 +82,7 @@ def _run_cell(
 def test_request_reply_one_runtime(
     benchmark, async_bridge, store_kind: str, transport: str, concurrency: int
 ) -> None:
+    trips = exchange_trips_per_pair(concurrency)
     _run_cell(
         benchmark,
         async_bridge,
@@ -79,10 +90,15 @@ def test_request_reply_one_runtime(
         transport,
         concurrency,
         replicas=1,
+        trips=trips,
     )
 
 
 @pytest.mark.perf
+@pytest.mark.skipif(
+    os.environ.get("AGENTCONNECT_REPLICA_BENCH") != "1",
+    reason="two-process Redis HTTP is experimental two-process probe; set AGENTCONNECT_REPLICA_BENCH=1",
+)
 @pytest.mark.parametrize("concurrency", EXCHANGE_REPLICA_CONCURRENCY)
 def test_request_reply_two_replicas(benchmark, async_bridge, concurrency: int) -> None:
     _run_cell(

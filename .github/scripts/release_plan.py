@@ -118,13 +118,20 @@ def verify() -> None:
     run = gh("api", f"repos/{repository}/actions/runs/{os.environ['CI_RUN_ID']}")
     validate_run(run, repository)
     data = json.loads(Path("release-intent.json").read_text(encoding="utf-8"))
+    if validate_intent(data, run, local_dists()):
+        output(publish="true", version=data["version"], sha=data["sha"])
+    else:
+        output(publish="false")
+
+
+def validate_intent(data: dict, run: dict, files: dict[str, str]) -> bool:
+    """Shared CI and durable-release verification of the tested package identity."""
     if data.get("sha") != run["head_sha"]:
         fail("artifact commit differs from successful CI commit")
-    if data.get("files") != local_dists():
+    if data.get("files") != files:
         fail("distribution hashes differ from tested CI artifacts")
     if data.get("publish") is not True:
-        output(publish="false")
-        return
+        return False
     version = data["version"]
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         fail("only stable major.minor.patch versions can be published")
@@ -134,21 +141,35 @@ def verify() -> None:
         f"agentconnect-{version}.tar.gz",
         f"agentconnect-{version}-py3-none-any.whl",
     }
-    if set(local_dists()) != expected:
+    if set(files) != expected:
         fail("distribution filenames differ from release version")
     check_tag(version, data["sha"])
-    output(publish="true", version=version, sha=data["sha"])
+    return True
 
 
 def check_tag(version: str, sha: str) -> None:
-    tagged = subprocess.run(
-        ["git", "rev-parse", "--verify", f"refs/tags/v{version}^{{commit}}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if tagged.returncode == 0 and tagged.stdout.strip() != sha:
+    ref = f"refs/tags/v{version}"
+    exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", ref])
+    if exists.returncode == 1:
+        return
+    exists.check_returncode()
+    tagged = subprocess.check_output(
+        ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"], text=True
+    ).strip()
+    if tagged != sha:
         fail("existing release tag points to a different commit")
+
+
+def asset_bytes(repository: str, asset_id: int) -> bytes:
+    return subprocess.check_output(
+        [
+            "gh",
+            "api",
+            f"repos/{repository}/releases/assets/{asset_id}",
+            "--header",
+            "Accept: application/octet-stream",
+        ]
+    )
 
 
 def missing_files(local: dict[str, str], remote: dict[str, str]) -> list[str]:
@@ -177,10 +198,30 @@ def pypi_status() -> None:
 
 def github_release() -> None:
     version, sha = os.environ["VERSION"], os.environ["SHA"]
-    check_tag(version, sha)
-    tag = f"v{version}"
     repository = os.environ["GITHUB_REPOSITORY"]
-    # Distinguish absence from an auth/network error; never turn errors into creation.
+    run_id, artifact_id = os.environ["CI_RUN_ID"], os.environ["ARTIFACT_ID"]
+    run = gh("api", f"repos/{repository}/actions/runs/{run_id}")
+    validate_run(run, repository)
+    intent_path = Path("release-intent.json")
+    intent = json.loads(intent_path.read_text(encoding="utf-8"))
+    if not validate_intent(intent, run, local_dists()):
+        fail("release intent does not authorize publication")
+    if intent["version"] != version or intent["sha"] != sha:
+        fail("release identity differs from verified intent")
+    artifact = gh("api", f"repos/{repository}/actions/artifacts/{artifact_id}")
+    if (
+        str(artifact["id"]) != artifact_id
+        or artifact["name"] != "distributions"
+        or str(artifact["workflow_run"]["id"]) != run_id
+        or artifact["workflow_run"]["head_sha"] != sha
+    ):
+        fail("artifact does not belong to the verified CI run")
+    intent.update(ci_run_id=run_id, artifact_id=artifact_id)
+    intent_path.write_text(json.dumps(intent, sort_keys=True) + "\n", encoding="utf-8")
+    local = {**local_dists(), "release-intent.json": digest(intent_path)}
+    paths = {name: str(Path("dist") / name) for name in local_dists()}
+    paths["release-intent.json"] = str(intent_path)
+    tag = f"v{version}"
     result = subprocess.run(
         ["gh", "api", f"repos/{repository}/releases/tags/{tag}"],
         capture_output=True,
@@ -199,19 +240,21 @@ def github_release() -> None:
                 "--target",
                 sha,
                 "--generate-notes",
-                *[str(Path("dist") / name) for name in sorted(local_dists())],
+                *[paths[name] for name in sorted(local)],
             ],
             check=True,
         )
         return
-    assets = json.loads(result.stdout)["assets"]
+    payload = json.loads(result.stdout)
+    if payload["tag_name"] != tag or payload["draft"] or payload["prerelease"]:
+        fail("existing release is not a stable published release")
     remote = {}
-    for asset in assets:
+    for asset in payload["assets"]:
         value = asset.get("digest") or ""
         if not value.startswith("sha256:"):
             fail("existing GitHub asset has no comparable SHA256 digest")
         remote[asset["name"]] = value.removeprefix("sha256:")
-    missing = missing_files(local_dists(), remote)
+    missing = missing_files(local, remote)
     if missing:
         subprocess.run(
             [
@@ -219,7 +262,7 @@ def github_release() -> None:
                 "release",
                 "upload",
                 tag,
-                *[str(Path("dist") / name) for name in missing],
+                *[paths[name] for name in missing],
             ],
             check=True,
         )

@@ -45,57 +45,29 @@ For website work, follow [docs-v2/AGENTS.md](docs-v2/AGENTS.md).
 
 Website pages are self-contained. The root `CHANGELOG.md` is the canonical release history; other repository references use links.
 
-## Useful commands
+## Verification
 
-uv manages the library environment, standalone tools, and example projects. `uv sync` installs the default development group; extras add integrations. The Makefile offers optional shortcuts: check, format, test, perf.
+[CONTRIBUTING.md](CONTRIBUTING.md) has environment setup, checks, Redis,
+lockfiles and release procedures. Tests mirror the package tree.
 
-```bash
-uv sync --locked --extra redis --extra embeddings --extra prebuilt
-uv run --no-sync pytest tests/ -q
-uvx ruff@latest check agentconnect tests examples experiments benchmarks
-uvx ruff@latest format --check agentconnect tests examples experiments benchmarks
-```
+Runtime performance is separate from correctness and retrieval quality:
+[Runtime benchmarks](benchmarks/runtime/README.md),
+[request/reply](benchmarks/runtime/request_reply/README.md),
+[public SDK collaboration](benchmarks/runtime/public_sdk/README.md).
+Keep fixed budgets, real backends and failed evidence.
 
-Replace `tests/` with a file or directory for focused checks. Redis setup and
-lockfile refresh commands are in [CONTRIBUTING.md](CONTRIBUTING.md). Dependency,
-extra, or group changes must include all affected CI-checked locks: the root,
-`examples/quickstart`, `examples/recipes`, and `experiments/team_tools`.
+Run [discovery retrieval](benchmarks/discovery/README.md) locally when Profile
+text or Directory ranking changes. Keep failed neural loads in artifacts;
+do not substitute hashed ranks or retune gates after a run.
 
-Performance lives under `benchmarks/runtime/` and runs separately from ordinary
-CI. [Runtime benchmarks](benchmarks/runtime/README.md) explains the commands,
-fixed budgets, and artifacts. Preserve real-backend coverage and failed evidence.
-Request/reply throughput is [benchmarks/runtime/request_reply/](benchmarks/runtime/request_reply/README.md);
-it is not a discovery ranking run.
-
-Retrieval quality lives under `benchmarks/discovery/` and is also separate
-from ordinary CI. Run it when Profile text or Directory ranking changes, not
-for unrelated edits. [Discovery retrieval](benchmarks/discovery/README.md)
-has the setup, commands, artifact path, and how to read a miss. It does not
-need Redis or a chat-model credential. Keep a failed neural load in the
-artifact. Do not replace it with hashed ranks or retune the coverage@10 and
-MRR gates after seeing a run.
-
-Schema generation and freshness:
-
-```bash
-npm --prefix spec/schema ci
-npm --prefix spec/schema run generate
-npm --prefix spec/schema run check
-```
-
-Docs-v2 preview and checks:
-
-```bash
-uv sync --locked --directory docs-v2
-npm ci --prefix docs-v2
-npm --prefix docs-v2 run check
-```
-
-`npm --prefix docs-v2 run dev` previews locally. `.github/workflows/docs-v2.yml` validates only; it does not deploy.
+For schema changes, run `npm --prefix spec/schema ci`, then `npm --prefix
+spec/schema run generate` and `npm --prefix spec/schema run check`.
+For website changes, follow [docs-v2/AGENTS.md](docs-v2/AGENTS.md).
 
 ## Review context
 
-CI gates expensive jobs on formatting, lockfile/schema consistency, release-flow tests, and the release-branch version guard. It then checks framework types, supported Python versions, Windows imports, distribution installation, and Redis-backed Runtime tests on Linux. Release consumes the distributions from a successful main push CI run; retries name that original CI run ID. The current support matrix is in `.github/workflows/main.yml` and package metadata is in `pyproject.toml`. Preview documentation changes locally.
+The support matrix is in `.github/workflows/main.yml`; package metadata is
+in `pyproject.toml`. Report local results separately from hosted CI.
 
 Before committing Python or toolchain changes, run the full suite and both Ruff
 checks on the final changes. Verify compatibility-sensitive changes on the minimum

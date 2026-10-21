@@ -119,5 +119,25 @@ jobs:
         env:
           VERSION: ${{ needs.verify.outputs.version }}
           SHA: ${{ needs.verify.outputs.sha }}
+          CI_RUN_ID: ${{ needs.verify.outputs.run_id }}
+          ARTIFACT_ID: ${{ needs.verify.outputs.artifact_id }}
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/release_plan.py github-release
+
+  docs-release:
+    needs: [verify, github-release]
+    if: >-
+      !cancelled() && needs.verify.result == 'success' &&
+      needs.verify.outputs.publish == 'true' &&
+      needs.github-release.result == 'success'
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/docs-release.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.verify.outputs.version }}
+      sha: ${{ needs.verify.outputs.sha }}
+      run_id: ${{ needs.verify.outputs.run_id }}
+      artifact_id: ${{ needs.verify.outputs.artifact_id }}
+      mode: publish

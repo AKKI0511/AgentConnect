@@ -76,8 +76,11 @@ def pytest_benchmark_update_json(
     config, benchmarks, output_json: dict[str, Any]
 ) -> None:
     from tests.support.budgets import (
+        COLLAB_P95_STALL_S,
+        COLLAB_REPETITIONS,
         EXCHANGE_CONCURRENCY,
         EXCHANGE_P95_STALL_S,
+        EXCHANGE_TRIPS_AT_ONE,
         EXCHANGE_TRIPS_PER_PAIR,
         FIND_P95_S,
         LOOP_LAG_S_REBUILD,
@@ -113,5 +116,8 @@ def pytest_benchmark_update_json(
         "warm_samples": WARM_SAMPLES,
         "exchange_concurrency": list(EXCHANGE_CONCURRENCY),
         "exchange_trips_per_pair": EXCHANGE_TRIPS_PER_PAIR,
+        "exchange_trips_at_one": EXCHANGE_TRIPS_AT_ONE,
         "exchange_p95_stall_s": EXCHANGE_P95_STALL_S,
+        "collab_repetitions": COLLAB_REPETITIONS,
+        "collab_p95_stall_s": COLLAB_P95_STALL_S,
     }

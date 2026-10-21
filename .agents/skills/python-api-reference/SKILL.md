@@ -63,7 +63,7 @@ Prefer focused fragments. Provider authentication, startup, polling and scheduli
 
 1. Read signatures, behavior, inherited docs and overloads. Preserve runtime behavior, exports and tested tool/schema text. Compare annotations with implementations: prose naming a model does not repair an `Any`/`dict` contract. Report mismatches separately. Inspect schema descriptions when model docstrings feed tools.
 2. Edit authoritative sources using the configured docstring/link format. Avoid duplicating constructor parameters when the renderer merges them into the class.
-3. Regenerate and inspect whole pages, including unchanged members. Check signatures, links, code blocks, results, empty attribute sections and accidental internal helpers. Keep site markup out of Python snippets; distinguish existing surface problems from new defects.
+3. Preview and release workflows generate pages before checking. Locally run `npm run api` in `docs-v2` after docstring edits, then inspect whole pages, including unchanged members. Check signatures, links, code blocks, results, empty attribute sections and accidental internal helpers. Keep site markup out of Python snippets; distinguish existing surface problems from new defects. Do not edit generated MDX.
 4. Follow the user's verification scope. For prose-only edits, inspect source and output; do not add or run tests by habit. Exercise representative executable behavior when testing is authorized; compilation alone does not verify a fragment. Distinguish observed results from reported checks.
 5. Read the main journey and one method alone. Review all public symbols in scope, retaining good text and supported extension contracts. Preserve tool catalogs/prompts during reference-only work.
 

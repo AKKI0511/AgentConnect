@@ -173,9 +173,7 @@ def check_nav_shape() -> None:
             if isinstance(group, str) and group.startswith("agentconnect"):
                 _fail(f"group label still prefixed: {group}")
             if "root" in entry:
-                _fail(
-                    f"group {group!r} must not use root; Overview is the first page"
-                )
+                _fail(f"group {group!r} must not use root; Overview is the first page")
             pages = entry.get("pages") or []
             if not pages or not isinstance(pages[0], str):
                 _fail(f"group {group!r} first child must be the Overview page")
@@ -233,7 +231,12 @@ def _trees_equal(left: Path, right: Path) -> list[str]:
     return diffs
 
 
-def check_stale_and_deterministic(*, skip_deterministic: bool) -> None:
+def check_stale_and_deterministic(
+    *,
+    skip_deterministic: bool,
+    skip_stale: bool = False,
+    source_root: Path = ROOT,
+) -> None:
     if not API_DIR.exists() or not NAV_FILE.exists() or not ROOT_PAGE.exists():
         _fail("generated API reference missing; run npm run api (in docs-v2)")
 
@@ -245,27 +248,50 @@ def check_stale_and_deterministic(*, skip_deterministic: bool) -> None:
         _snapshot(before)
 
         subprocess.run(
-            [sys.executable, str(GENERATE), "--output", str(after1)],
+            [
+                sys.executable,
+                str(GENERATE),
+                "--root",
+                str(source_root),
+                "--output",
+                str(after1),
+            ],
             check=True,
             cwd=ROOT,
         )
-        if not skip_deterministic:
+        if not skip_deterministic and not skip_stale:
             subprocess.run(
-                [sys.executable, str(GENERATE), "--output", str(after2)],
+                [
+                    sys.executable,
+                    str(GENERATE),
+                    "--root",
+                    str(source_root),
+                    "--output",
+                    str(after2),
+                ],
                 check=True,
                 cwd=ROOT,
             )
 
-        stale = _trees_equal(before, after1)
-        if stale:
-            _fail(
-                "generated API reference is stale; run `npm run api (in docs-v2)` and commit.\n"
-                + "\n".join(stale[:20])
-            )
-        print("ok: generated API reference is up to date")
+        if not skip_stale:
+            stale = _trees_equal(before, after1)
+            if stale:
+                _fail(
+                    "generated API reference is stale; run `npm run api (in docs-v2)`.\n"
+                    + "\n".join(stale[:20])
+                )
+            print("ok: generated API reference is up to date")
+        else:
+            print("ok: skipped git freshness; generation already ran in this job")
 
         if not skip_deterministic:
-            drift = _trees_equal(after1, after2)
+            # CI already generated the working tree. Compare that first run
+            # with one regeneration instead of performing a third extraction.
+            drift = (
+                _trees_equal(before, after1)
+                if skip_stale
+                else _trees_equal(after1, after2)
+            )
             if drift:
                 _fail(
                     "API generation is not deterministic across consecutive runs.\n"
@@ -290,6 +316,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-mint", action="store_true")
     parser.add_argument("--skip-deterministic", action="store_true")
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        default=ROOT,
+        help="Package source tree used for API extraction (defaults to this checkout).",
+    )
+    parser.add_argument(
+        "--skip-stale",
+        action="store_true",
+        help="Working tree was generated in this job; skip git freshness.",
+    )
     parser.add_argument("--mint-only", action="store_true")
     args = parser.parse_args(argv)
 
@@ -302,7 +339,11 @@ def main(argv: list[str] | None = None) -> int:
         check_public_surface()
         check_nav_shape()
         check_example_fences()
-        check_stale_and_deterministic(skip_deterministic=args.skip_deterministic)
+        check_stale_and_deterministic(
+            skip_deterministic=args.skip_deterministic,
+            skip_stale=args.skip_stale,
+            source_root=args.source_root.resolve(),
+        )
         subprocess.run(["node", str(DOCS / "scripts" / "check_api.mjs")], check=True)
 
     if not args.skip_mint:

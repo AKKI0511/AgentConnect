@@ -19,6 +19,12 @@ uv run --no-sync python -m benchmarks.discovery.score
 Directory (hashed and FastEmbed) and a small BM25 baseline over the same
 Profile text.
 
+GitHub's **Discovery quality** workflow runs `check` then `score` when
+SDK, corpus, test, dependency or CI files change, and on manual
+dispatch. It sets `AGENTCONNECT_REQUIRE_NEURAL=1` so a failed FastEmbed
+load fails the job and still uploads `artifacts/discovery-v1/`. Runtime
+latency stays on the Performance workflow.
+
 ## Results
 
 Artifacts land in `artifacts/discovery-v1/`:
@@ -42,11 +48,12 @@ Coverage@k is the fraction of needs with a non-empty acceptable set whose
 best acceptable address is at rank k or better. MRR uses that same best
 rank. The denominator is the count of those needs, not the roster size.
 
-The held-out shuffled gates are coverage@10 ≥ 0.90 and MRR ≥ 0.50.
-Coverage@1 and coverage@5 are reported beside them and are not gates.
-When a roster has no more members than k, coverage@k cannot miss a member
-who is on that roster; use a larger roster before treating that figure as
-evidence. Slices show the same rates for one label at a time. A miss lists
+The held-out shuffled gates are coverage@10 ≥ 0.90 and MRR ≥ 0.50 on the
+full held-out set. Coverage@1 and coverage@5 are reported beside them and
+are not gates. Rosters of eight or ten cannot miss coverage@10 when every
+acceptable member is present; the report prints coverage@1, MRR, and mean
+best rank for those rosters, and coverage@10 plus MRR for rosters larger
+than 10. Slices show the same rates for one label at a time. A miss lists
 the need id, backend, best rank, acceptable addresses, and the top 10.
 
 Ranked output is a candidate list. It is not proof that a member can do
